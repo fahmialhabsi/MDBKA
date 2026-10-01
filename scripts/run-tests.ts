@@ -2101,5 +2101,120 @@ test("190. CSV/OCR lama tetap terhubung seperti sebelumnya", () => {
   assert(ocr.includes("parseOcrTextRich"), "jalur OCR berubah");
 });
 
+/* ---------------- Guard persen equity 3.1: TEST 191-197 ---------------- */
+/* Equity invalid tidak boleh mencetak undefined%/NaN%/Infinity%. */
+
+function riskWarningForEquity(equity: number): string | null {
+  const broker = { ...makeValidBroker(), equity };
+  const summary = validateAnalysisInputs(makeValidMarket("GBPUSD"), broker);
+  const found = summary.warnings.find((warning) => warning.field === "risk");
+  return found ? found.message : null;
+}
+
+function allValidationText(equity: number): string {
+  const broker = { ...makeValidBroker(), equity };
+  const summary = validateAnalysisInputs(makeValidMarket("GBPUSD"), broker);
+  return [...summary.errors, ...summary.warnings]
+    .map((item) => item.message)
+    .join("\n");
+}
+
+function requireRiskMessage(equity: number): string {
+  const message = riskWarningForEquity(equity);
+  if (message === null) {
+    throw new Error(`warning risiko hilang untuk equity=${equity}`);
+  }
+  return message;
+}
+
+test("191. equity 0 tidak menghasilkan undefined%", () => {
+  const message = requireRiskMessage(0);
+  assert(!message.includes("undefined%"), `masih ada undefined%: ${message}`);
+  assert(!message.includes("NaN%"), `ada NaN%: ${message}`);
+  assert(!message.includes("Infinity%"), `ada Infinity%: ${message}`);
+  assert(
+    message ===
+      "Risiko minimum lot belum dapat dibandingkan karena Equity USD belum diisi.",
+    `pesan=${message}`
+  );
+});
+
+test("192. equity NaN tidak menghasilkan NaN%", () => {
+  const message = requireRiskMessage(NaN);
+  assert(!message.includes("NaN%"), `ada NaN%: ${message}`);
+  assert(!message.includes("undefined%"), `ada undefined%: ${message}`);
+  assert(
+    message ===
+      "Risiko minimum lot belum dapat dibandingkan karena Equity USD belum diisi.",
+    `pesan=${message}`
+  );
+});
+
+test("193. equity negatif tidak menghasilkan persentase", () => {
+  const message = requireRiskMessage(-5);
+  assert(!message.includes("%"), `ada persentase: ${message}`);
+  assert(
+    message ===
+      "Risiko minimum lot belum dapat dibandingkan karena Equity USD belum diisi.",
+    `pesan=${message}`
+  );
+});
+
+test("194. equity valid menghasilkan persentase yang benar", () => {
+  const message = requireRiskMessage(8.99);
+  assert(message.includes("13.2% equity"), `persen salah: ${message}`);
+  assert(message.includes("sekitar $1.19"), `nominal salah: ${message}`);
+  assert(message.includes("melebihi batas $0.90"), `batas salah: ${message}`);
+  assert(!message.includes("undefined"), `ada undefined: ${message}`);
+});
+
+test("195. warning equity wajib tetap muncul", () => {
+  const summary = validateAnalysisInputs(
+    makeValidMarket("GBPUSD"),
+    { ...makeValidBroker(), equity: 0 }
+  );
+  assert(
+    summary.errors.some(
+      (error) =>
+        error.field === "equity" &&
+        error.message === "Equity harus lebih besar dari 0."
+    ),
+    "validasi equity wajib berubah/hilang"
+  );
+  assert(!summary.valid, "equity 0 dianggap valid");
+});
+
+test("196. tidak ada teks undefined% pada output validasi", () => {
+  for (const equity of [0, NaN, -1, -100]) {
+    const text = allValidationText(equity);
+    assert(!text.includes("undefined%"), `undefined% untuk equity=${equity}`);
+    assert(!text.includes("NaN%"), `NaN% untuk equity=${equity}`);
+    assert(!text.includes("Infinity%"), `Infinity% untuk equity=${equity}`);
+  }
+  const validText = allValidationText(8.99);
+  assert(!validText.includes("undefined"), "undefined bocor saat equity valid");
+});
+
+test("197. rumus persen equity valid tidak berubah", () => {
+  const summary = validateAnalysisInputs(
+    makeValidMarket("GBPUSD"),
+    { ...makeValidBroker(), equity: 8.99 }
+  );
+  const riskUsd = summary.minimumLotRiskUsd;
+  const riskPct = summary.minimumLotRiskPercent;
+  if (riskUsd === null || riskPct === null) {
+    throw new Error("risiko minimum hilang saat equity valid");
+  }
+  const expected = (riskUsd / 8.99) * 100;
+  assert(
+    Math.abs(riskPct - expected) < 0.000001,
+    "rumus persen berubah"
+  );
+  assert(
+    Math.abs(riskPct - 13.21) < 0.01,
+    `nilai persen=${riskPct}`
+  );
+});
+
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);
 if (failed > 0) process.exit(1);

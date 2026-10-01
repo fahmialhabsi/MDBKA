@@ -387,22 +387,29 @@ export function validateAnalysisInputs(
         broker.commission * broker.minLot
       : null;
 
+  // Equity hanya dapat dipakai sebagai pembanding bila finite dan > 0.
+  // NaN/0/negatif/Infinity membuat persen null agar pesan "belum dapat
+  // dibandingkan" yang tampil, bukan undefined%/NaN%/Infinity%.
+  const equityUsable =
+    Number.isFinite(broker.equity) && broker.equity > 0;
+
   const minimumLotRiskPercent =
-    minimumLotRiskUsd !== null && broker.equity > 0
+    minimumLotRiskUsd !== null && equityUsable
       ? (minimumLotRiskUsd / broker.equity) * 100
       : null;
 
   if (
     minimumLotRiskUsd !== null &&
-    minimumLotRiskUsd > maxRiskUsd
+    (!equityUsable || minimumLotRiskUsd > maxRiskUsd)
   ) {
-    warnings.push(
-      item(
-        "risk",
-        `Risiko minimum lot sekitar $${minimumLotRiskUsd.toFixed(2)} atau ${minimumLotRiskPercent?.toFixed(1)}% equity, melebihi batas $${maxRiskUsd.toFixed(2)}.`,
-        "warning"
-      )
-    );
+    // Guard: minimumLotRiskPercent hanya terisi bila equity valid (> 0).
+    // Tanpa guard, optional chaining mencetak "undefined%" saat equity
+    // kosong/0/NaN/negatif. Format dan angka saat equity valid tidak berubah.
+    const riskMessage =
+      minimumLotRiskPercent !== null
+        ? `Risiko minimum lot sekitar $${minimumLotRiskUsd.toFixed(2)} atau ${minimumLotRiskPercent.toFixed(1)}% equity, melebihi batas $${maxRiskUsd.toFixed(2)}.`
+        : "Risiko minimum lot belum dapat dibandingkan karena Equity USD belum diisi.";
+    warnings.push(item("risk", riskMessage, "warning"));
   }
 
   const summary: ValidationSummary = {
