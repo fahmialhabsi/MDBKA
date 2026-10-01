@@ -39,11 +39,12 @@ import type { BrokerId } from "./types/broker";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
 import {
   applyBrokerPreset,
-  applySwingLevels,
+  applyCsvSwingLevels,
   createEmptyMarketForSymbol,
   filterOcrPricesForSymbol,
   mergeValidOcrMarketData,
   RESET_MARKET_FIELDS,
+  type CsvSwingLevelMeta,
 } from "./lib/marketReset";
 import {
   buildBlockedReasons,
@@ -278,26 +279,58 @@ export default function App() {
     [market.symbol, clearAnalysisOutput],
   );
 
+  // Propagasi S/R CSV memakai state terbaru (functional update) agar tidak
+  // tertimpa OCR, efek simbol, reset CSV, atau render ulang. Level
+  // divalidasi terhadap simbol + broker aktif; penolakan tercatat di
+  // diagnostik DEV tanpa mengubah state.
   const handleDetectedLevels = useCallback(
-    (support: number, resistance: number, source?: string) => {
-      traceOcrStage("detected-levels", { support, resistance, source });
+    (
+      support: number,
+      resistance: number,
+      source?: string,
+      meta?: CsvSwingLevelMeta,
+    ) => {
+      traceOcrStage("detected-levels", {
+        support,
+        resistance,
+        source,
+        csvSymbol: meta?.csvSymbol ?? null,
+      });
 
       setMarket((previous) => {
-        const nextMarket = applySwingLevels(previous, support, resistance);
+        const activeSymbol = normalizeSymbol(previous.symbol);
+        const result = applyCsvSwingLevels(
+          previous,
+          {
+            support,
+            resistance,
+            csvSymbol: meta?.csvSymbol ?? "",
+            brokerId: meta?.brokerId,
+          },
+          { activeSymbol, activeBrokerId },
+        );
 
-        traceOcrStage("sr-applied", {
+        traceOcrStage("sr-propagation", {
+          activeSymbol,
+          csvSymbol: meta?.csvSymbol ?? "",
+          brokerId: activeBrokerId,
           detectedSupport: support,
           detectedResistance: resistance,
-          marketAfterUpdate: nextMarket,
+          appliedSupport: result.appliedSupport,
+          appliedResistance: result.appliedResistance,
+          previousSupport: previous.support,
+          previousResistance: previous.resistance,
+          rejectionReason: result.rejectionReason,
+          source: source ?? null,
         });
 
-        return nextMarket;
+        return result.market;
       });
       setSwingSource(source ?? null);
 
       clearAnalysisOutput();
     },
-    [clearAnalysisOutput],
+    [activeBrokerId, clearAnalysisOutput],
   );
 
   const handleCsvLoaded = useCallback((text: string, fileName: string) => {
@@ -594,6 +627,7 @@ export default function App() {
               symbol={market.symbol}
               currentPrice={market.bid > 0 ? market.bid : market.close}
               csvText={swingCsv}
+              brokerId={activeBrokerId}
                 onCsvTextChange={(text) => {
                   setSwingCsv(text);
                   setResult(null);

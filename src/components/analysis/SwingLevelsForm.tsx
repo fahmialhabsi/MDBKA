@@ -9,16 +9,21 @@ import {
   formatInstrumentPrice,
   getInstrumentProfile,
 } from "../../lib/instrumentConfig";
+import type { CsvSwingLevelMeta } from "../../lib/marketReset";
+import type { BrokerId } from "../../types/broker";
 
 interface Props {
   symbol: string;
   currentPrice: number;
   csvText: string;
+  /** Konteks broker aktif (pass-through diagnostik + guard apply). */
+  brokerId?: BrokerId;
   onCsvTextChange: (text: string) => void;
   onDetected: (
     support: number,
     resistance: number,
-    source: SwingLevelSource
+    source: SwingLevelSource,
+    meta: CsvSwingLevelMeta
   ) => void;
 }
 
@@ -33,6 +38,7 @@ export default function SwingLevelsForm({
   symbol,
   currentPrice,
   csvText,
+  brokerId,
   onCsvTextChange,
   onDetected,
 }: Props) {
@@ -129,19 +135,26 @@ export default function SwingLevelsForm({
 
     if (import.meta.env.DEV) {
       console.debug("[MDBKA S/R BROWSER]", {
-        symbol,
+        activeSymbol: symbol,
+        csvSymbol: symbol,
+        brokerId: brokerId ?? null,
         candleCount: candles.length,
         requestedStrength: strength,
         resolvedStrength: resolved.source,
         source: resolved.source,
+        detectedSupport: support,
+        detectedResistance: resistance,
         support,
         resistance,
         callbackCalled: true,
       });
     }
 
-    onDetected(support, resistance, resolved.source);
-  }, [candles.length, resolved, minimumCandles, onDetected, mismatch, symbol, strength]);
+    onDetected(support, resistance, resolved.source, {
+      csvSymbol: symbol,
+      brokerId,
+    });
+  }, [candles.length, resolved, minimumCandles, onDetected, mismatch, symbol, strength, brokerId]);
 
   function clearCsv() {
     onCsvTextChange("");

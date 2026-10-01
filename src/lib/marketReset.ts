@@ -1,4 +1,5 @@
 import type { BrokerSettings, MarketData } from "../types/analysis";
+import type { BrokerId } from "../types/broker";
 import {
   getInstrumentPreset,
   getInstrumentProfile,
@@ -150,7 +151,16 @@ export function mergeValidOcrMarketData(
   for (const field of PRICE_SCALE_FIELDS) {
     const value = kept[field];
 
-    if (value === undefined || value === 0) continue;
+    // Hanya angka finite non-nol yang disalin. null/NaN/undefined/0
+    // tidak boleh menghapus nilai valid (mis. S/R dari CSV), termasuk
+    // pada jalur simbol unknown yang mem-bypass filter skala.
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      value === 0
+    ) {
+      continue;
+    }
 
     merged[field] = value;
   }
@@ -189,8 +199,22 @@ export function mergeValidOcrMarketData(
 }
 
 /**
+ * Level S/R hanya usable bila berupa angka finite lebih besar dari 0.
+ * null/undefined/NaN/0/negatif tidak boleh menghapus nilai valid yang
+ * sudah ada (selaras dengan validator: S/R wajib finite dan > 0).
+ */
+function isUsableLevel(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value > 0
+  );
+}
+
+/**
  * Menerapkan Support/Resistance dari deteksi CSV ke state market.
- * Nilai null TIDAK menimpa nilai CSV sebelumnya (pertahankan previous).
+ * Nilai null/0/NaN/undefined/non-finite/negatif TIDAK menimpa nilai
+ * sebelumnya (pertahankan previous).
  * Mengembalikan referensi `previous` bila tidak ada perubahan.
  */
 export function applySwingLevels(
@@ -198,14 +222,12 @@ export function applySwingLevels(
   support: number | null,
   resistance: number | null
 ): MarketData {
-  const nextSupport =
-    support !== null && Number.isFinite(support)
-      ? support
-      : previous.support;
-  const nextResistance =
-    resistance !== null && Number.isFinite(resistance)
-      ? resistance
-      : previous.resistance;
+  const nextSupport = isUsableLevel(support)
+    ? support
+    : previous.support;
+  const nextResistance = isUsableLevel(resistance)
+    ? resistance
+    : previous.resistance;
 
   if (
     previous.support === nextSupport &&
@@ -215,6 +237,129 @@ export function applySwingLevels(
   }
 
   return { ...previous, support: nextSupport, resistance: nextResistance };
+}
+
+/**
+ * Meta konteks deteksi S/R: simbol (dan broker opsional) yang berlaku
+ * saat level dihitung. Diteruskan dari SwingLevelsForm via onDetected
+ * agar apply dapat menolak level kedaluwarsa/beda-simbol/beda-broker.
+ */
+export interface CsvSwingLevelMeta {
+  readonly csvSymbol: string;
+  readonly brokerId?: BrokerId;
+}
+
+/** Level hasil deteksi CSV sebelum diterapkan ke market. */
+export interface CsvSwingLevelInput extends CsvSwingLevelMeta {
+  readonly support: number | null;
+  readonly resistance: number | null;
+}
+
+/** Konteks aktif App pada saat apply (sumber kebenaran tunggal). */
+export interface SwingApplyContext {
+  readonly activeSymbol: string;
+  readonly activeBrokerId?: BrokerId;
+}
+
+/** Hasil apply bergaransi beserta alasan penolakan untuk diagnostik. */
+export interface SwingApplyResult {
+  readonly market: MarketData;
+  readonly applied: boolean;
+  readonly appliedSupport: number | null;
+  readonly appliedResistance: number | null;
+  readonly rejectionReason: string | null;
+}
+
+/**
+ * Menerapkan S/R CSV ke market hanya bila level valid dan konteks cocok:
+ * - simbol CSV (dinormalisasi) harus sama dengan simbol aktif;
+ * - bila kedua broker diketahui dan berbeda, level ditolak;
+ * - support/resistance harus finite dan > 0;
+ * - untuk simbol dikenal, level harus dalam skala instrumen.
+ * Mengembalikan market sebelumnya (referensi sama) bila ditolak, sehingga
+ * pemanggil dapat memakai diagnostik tanpa mengubah state.
+ */
+export function applyCsvSwingLevels(
+  previous: MarketData,
+  input: CsvSwingLevelInput,
+  context: SwingApplyContext
+): SwingApplyResult {
+  const csvSymbol = normalizeSymbol(input.csvSymbol);
+  const activeSymbol = normalizeSymbol(context.activeSymbol);
+
+  if (!csvSymbol || csvSymbol !== activeSymbol) {
+    return {
+      market: previous,
+      applied: false,
+      appliedSupport: null,
+      appliedResistance: null,
+      rejectionReason:
+        `Ditolak: level CSV untuk simbol ${csvSymbol || "(kosong)"} ` +
+        `tidak sesuai simbol aktif ${activeSymbol || "(kosong)"}.`,
+    };
+  }
+
+  if (
+    input.brokerId !== undefined &&
+    context.activeBrokerId !== undefined &&
+    input.brokerId !== context.activeBrokerId
+  ) {
+    return {
+      market: previous,
+      applied: false,
+      appliedSupport: null,
+      appliedResistance: null,
+      rejectionReason:
+        `Ditolak: level dari broker ${input.brokerId} tidak dipakai ` +
+        `untuk broker aktif ${context.activeBrokerId}. Ambil ulang data ` +
+        `dari terminal broker aktif.`,
+    };
+  }
+
+  if (!isUsableLevel(input.support) || !isUsableLevel(input.resistance)) {
+    return {
+      market: previous,
+      applied: false,
+      appliedSupport: null,
+      appliedResistance: null,
+      rejectionReason:
+        "Ditolak: Support/Resistance CSV tidak valid (harus angka finite > 0).",
+    };
+  }
+
+  const profile = getInstrumentProfile(activeSymbol);
+
+  if (
+    profile.category !== "unknown" &&
+    (input.support < profile.minPrice ||
+      input.support > profile.maxPrice ||
+      input.resistance < profile.minPrice ||
+      input.resistance > profile.maxPrice)
+  ) {
+    return {
+      market: previous,
+      applied: false,
+      appliedSupport: null,
+      appliedResistance: null,
+      rejectionReason:
+        `Ditolak: level di luar skala ${profile.symbol} ` +
+        `(${profile.minPrice}\u2013${profile.maxPrice}).`,
+    };
+  }
+
+  const market = applySwingLevels(
+    previous,
+    input.support,
+    input.resistance
+  );
+
+  return {
+    market,
+    applied: true,
+    appliedSupport: market.support,
+    appliedResistance: market.resistance,
+    rejectionReason: null,
+  };
 }
 
 /** Default strategi (bukan data broker): aman diisi saat belum ada nilai. */

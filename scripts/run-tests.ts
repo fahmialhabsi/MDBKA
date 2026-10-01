@@ -16,6 +16,7 @@ import {
 import {
   RESET_MARKET_FIELDS,
   applyBrokerPreset,
+  applyCsvSwingLevels,
   applySwingLevels,
   createEmptyMarketForSymbol,
   displayMarketNumber,
@@ -2214,6 +2215,308 @@ test("197. rumus persen equity valid tidak berubah", () => {
     Math.abs(riskPct - 13.21) < 0.01,
     `nilai persen=${riskPct}`
   );
+});
+
+/* ---------------- Propagasi S/R CSV ke market: TEST 198-209 ---------------- */
+
+function makeGbpCsvText(): string {
+  const rows = ["time,open,high,low,close"];
+  const closes = [
+    1.3250, 1.3260, 1.3240, 1.3270, 1.3230, 1.3280, 1.3220, 1.3290,
+    1.3210, 1.3300, 1.3245, 1.3265, 1.3235, 1.3275, 1.3225, 1.3285,
+    1.3215, 1.3295, 1.3255, 1.3262,
+  ];
+  closes.forEach((close, index) => {
+    rows.push(
+      `2026-10-01 01:${String(index).padStart(2, "0")},${(close - 0.0002).toFixed(5)},${(close + 0.0004).toFixed(5)},${(close - 0.0004).toFixed(5)},${close.toFixed(5)}`
+    );
+  });
+  return rows.join("\n");
+}
+
+function makeEmptySrMarket(): MarketData {
+  return { ...makeValidMarket("GBPUSD"), support: 0, resistance: 0 };
+}
+
+function readAppSrHandler(): string {
+  const src = readSrc("src/App.tsx");
+  const start = src.indexOf("const handleDetectedLevels");
+  assert(start >= 0, "handleDetectedLevels hilang dari App");
+  const end = src.indexOf("const handleCsvLoaded", start);
+  assert(end > start, "batas handler S/R tidak ditemukan");
+  return src.slice(start, end);
+}
+
+test("198. CSV valid menghitung Support dan Resistance", () => {
+  const parsed = parseCsvCandles(makeGbpCsvText());
+  assert(parsed.validRows >= 5, `validRows=${parsed.validRows}`);
+  assert(
+    checkInstrumentMismatch(parsed.candles, "GBPUSD", 1.32474) === null,
+    "CSV valid dianggap mismatch"
+  );
+  const resolved = resolveSwingLevels(parsed.candles, 1.32474, 2);
+  const support = resolved.support;
+  const resistance = resolved.resistance;
+  if (support === null || resistance === null) {
+    throw new Error("S/R CSV valid tidak terhitung");
+  }
+  assert(support > 0 && resistance > 0, "S/R harus lebih besar dari 0");
+  assert(support < resistance, "support harus di bawah resistance");
+});
+
+test("199. Support diterapkan ke market state", () => {
+  const previous = makeEmptySrMarket();
+  const result = applyCsvSwingLevels(
+    previous,
+    { support: 1.3211, resistance: 1.3299, csvSymbol: "GBPUSD" },
+    { activeSymbol: "GBPUSD" }
+  );
+  assert(result.applied, `ditolak: ${result.rejectionReason}`);
+  assert(result.rejectionReason === null, "alasan penolakan harus null");
+  assert(result.market.support === 1.3211, `support=${result.market.support}`);
+  assert(result.appliedSupport === 1.3211, "diagnostik support salah");
+  assert(result.market !== previous, "referensi market harus baru");
+});
+
+test("200. Resistance diterapkan ke market state", () => {
+  const previous = makeEmptySrMarket();
+  const result = applyCsvSwingLevels(
+    previous,
+    { support: 1.3211, resistance: 1.3299, csvSymbol: "GBPUSD" },
+    { activeSymbol: "GBPUSD" }
+  );
+  assert(result.applied, `ditolak: ${result.rejectionReason}`);
+  assert(
+    result.market.resistance === 1.3299,
+    `resistance=${result.market.resistance}`
+  );
+  assert(result.appliedResistance === 1.3299, "diagnostik resistance salah");
+});
+
+test("201. form market utama menampilkan nilai S/R yang diterapkan", () => {
+  assert(displayMarketNumber(1.3211) === "1.3211", "support tidak tampil");
+  assert(displayMarketNumber(1.3299) === "1.3299", "resistance tidak tampil");
+  assert(displayMarketNumber(0) === "", "0 harus tampil kosong");
+  const form = readSrc("src/components/extraction/ExtractedDataForm.tsx");
+  assert(form.includes('{ key: "support"'), "field support hilang dari form");
+  assert(
+    form.includes('{ key: "resistance"'),
+    "field resistance hilang dari form"
+  );
+  assert(
+    form.includes("displayMarketNumber(market[field.key])"),
+    "form tidak membaca dari market state"
+  );
+});
+
+test("202. validator membaca nilai S/R yang sama", () => {
+  const applied = applyCsvSwingLevels(
+    makeEmptySrMarket(),
+    { support: 1.3211, resistance: 1.3299, csvSymbol: "GBPUSD" },
+    { activeSymbol: "GBPUSD" }
+  );
+  assert(applied.applied, "apply gagal");
+  const summary = validateAnalysisInputs(applied.market, makeValidBroker());
+  assert(
+    !summary.errors.some(
+      (error) =>
+        error.field === "support" ||
+        error.field === "resistance" ||
+        error.field === "support-resistance"
+    ),
+    "validator menolak S/R yang sudah diterapkan"
+  );
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("validateAnalysisInputs(market, broker)"),
+    "validator tidak memakai market state yang sama"
+  );
+  assert(app.includes("market={market}"), "form tidak memakai market state");
+});
+
+test("203. S/R tetap ada setelah ekstraksi OCR", () => {
+  const applied = applyCsvSwingLevels(
+    makeEmptySrMarket(),
+    { support: 1.3211, resistance: 1.3299, csvSymbol: "GBPUSD" },
+    { activeSymbol: "GBPUSD" }
+  );
+  assert(applied.applied, "apply gagal");
+  const afterOcr = mergeValidOcrMarketData(applied.market, {
+    bid: 1.32474,
+    ask: 1.3248,
+    close: 1.32449,
+    cci: -197.12,
+  });
+  assert(afterOcr.support === 1.3211, "OCR menghapus support CSV");
+  assert(afterOcr.resistance === 1.3299, "OCR menghapus resistance CSV");
+  const hostile = mergeValidOcrMarketData(applied.market, {
+    close: 1.32449,
+    support: null as unknown as number,
+    resistance: NaN,
+  });
+  assert(hostile.support === 1.3211, "null menghapus support CSV");
+  assert(hostile.resistance === 1.3299, "NaN menghapus resistance CSV");
+});
+
+test("204. CSV simbol berbeda ditolak", () => {
+  const previous: MarketData = {
+    ...makeValidMarket("GBPUSD"),
+    support: 1.3211,
+    resistance: 1.3299,
+  };
+  const cross = applyCsvSwingLevels(
+    previous,
+    { support: 30500, resistance: 30600, csvSymbol: "US100" },
+    { activeSymbol: "GBPUSD" }
+  );
+  assert(!cross.applied, "level simbol berbeda diterapkan");
+  assert(cross.market === previous, "market berubah saat ditolak");
+  assert(
+    cross.rejectionReason !== null && cross.rejectionReason.includes("simbol"),
+    `alasan=${cross.rejectionReason}`
+  );
+  assert(previous.support === 1.3211, "S/R valid tertimpa");
+  const offScale = applyCsvSwingLevels(
+    previous,
+    { support: 30500, resistance: 30600, csvSymbol: "GBPUSD" },
+    { activeSymbol: "GBPUSD" }
+  );
+  assert(!offScale.applied, "level di luar skala diterapkan");
+  assert(
+    offScale.rejectionReason !== null &&
+      offScale.rejectionReason.includes("skala"),
+    `alasan=${offScale.rejectionReason}`
+  );
+});
+
+test("205. CSV broker berbeda ditolak bila konteks tersedia", () => {
+  const previous: MarketData = {
+    ...makeValidMarket("GBPUSD"),
+    support: 1.3211,
+    resistance: 1.3299,
+  };
+  const diff = applyCsvSwingLevels(
+    previous,
+    {
+      support: 1.3215,
+      resistance: 1.3295,
+      csvSymbol: "GBPUSD",
+      brokerId: "finex",
+    },
+    { activeSymbol: "GBPUSD", activeBrokerId: "orbitraderberjangka" }
+  );
+  assert(!diff.applied, "level broker berbeda diterapkan");
+  assert(diff.market === previous, "market berubah saat ditolak");
+  assert(
+    diff.rejectionReason !== null && diff.rejectionReason.includes("broker"),
+    `alasan=${diff.rejectionReason}`
+  );
+  const same = applyCsvSwingLevels(
+    previous,
+    {
+      support: 1.3215,
+      resistance: 1.3295,
+      csvSymbol: "GBPUSD",
+      brokerId: "finex",
+    },
+    { activeSymbol: "GBPUSD", activeBrokerId: "finex" }
+  );
+  assert(same.applied, `broker sama ditolak: ${same.rejectionReason}`);
+  const unknown = applyCsvSwingLevels(
+    previous,
+    { support: 1.3215, resistance: 1.3295, csvSymbol: "GBPUSD" },
+    { activeSymbol: "GBPUSD", activeBrokerId: "finex" }
+  );
+  assert(unknown.applied, "konteks tak lengkap ikut ditolak");
+});
+
+test("206. nilai null/0/NaN/negatif tidak menghapus S/R valid", () => {
+  const previous: MarketData = {
+    ...makeValidMarket("GBPUSD"),
+    support: 1.3211,
+    resistance: 1.3299,
+  };
+  const badValues: Array<number | null> = [null, 0, NaN, -1.5];
+  for (const bad of badValues) {
+    const next = applySwingLevels(previous, bad, bad);
+    assert(next === previous, `nilai ${bad} mengubah state`);
+    assert(next.support === 1.3211, `support terhapus oleh ${bad}`);
+    assert(next.resistance === 1.3299, `resistance terhapus oleh ${bad}`);
+  }
+  const zeroApply = applyCsvSwingLevels(
+    makeEmptySrMarket(),
+    { support: 0, resistance: 1.3299, csvSymbol: "GBPUSD" },
+    { activeSymbol: "GBPUSD" }
+  );
+  assert(!zeroApply.applied, "level 0 diterapkan");
+  assert(
+    zeroApply.rejectionReason !== null &&
+      zeroApply.rejectionReason.includes("valid"),
+    `alasan=${zeroApply.rejectionReason}`
+  );
+});
+
+test("207. pergantian simbol mengosongkan S/R", () => {
+  const previous: MarketData = {
+    ...makeValidMarket("GBPUSD"),
+    support: 1.3211,
+    resistance: 1.3299,
+  };
+  const next = createEmptyMarketForSymbol("US100", previous);
+  assert(next.symbol === "US100", `symbol=${next.symbol}`);
+  assert(next.support === 0, "support tidak dikosongkan");
+  assert(next.resistance === 0, "resistance tidak dikosongkan");
+  assert(next.timeframe === "H1", "timeframe harus dipertahankan");
+});
+
+test("208. diagnostik propagasi S/R lengkap dan terstruktur", () => {
+  const body = readAppSrHandler();
+  assert(body.includes("applyCsvSwingLevels"), "apply bergaransi hilang");
+  assert(body.includes("sr-propagation"), "trace propagasi hilang");
+  const fields = [
+    "activeSymbol",
+    "csvSymbol",
+    "detectedSupport",
+    "detectedResistance",
+    "appliedSupport",
+    "appliedResistance",
+    "previousSupport",
+    "previousResistance",
+    "rejectionReason",
+  ];
+  for (const field of fields) {
+    assert(body.includes(field), `field diagnostik hilang: ${field}`);
+  }
+  assert(
+    body.includes("setMarket((previous) =>"),
+    "apply tidak memakai state terbaru"
+  );
+  const form = readSrc("src/components/analysis/SwingLevelsForm.tsx");
+  assert(form.includes("csvSymbol"), "konteks simbol tidak diteruskan");
+  assert(
+    form.includes("onDetected(support, resistance, resolved.source, {"),
+    "meta deteksi tidak dikirim"
+  );
+});
+
+test("209. decision engine dan aturan S/R validator tidak berubah", () => {
+  const engine = readSrc("src/calculations/decisionEngine.ts");
+  assert(!engine.includes("BrokerId"), "engine tercemar tipe broker");
+  assert(!engine.includes("applyCsvSwingLevels"), "engine memakai apply CSV");
+  assert(!engine.includes("CsvSwing"), "engine tercemar tipe CSV");
+  const empty = validateAnalysisInputs(
+    makeEmptySrMarket(),
+    makeValidBroker()
+  );
+  assert(
+    empty.errors.some((error) => error.field === "support"),
+    "validator tidak lagi meminta support kosong"
+  );
+  assert(
+    empty.errors.some((error) => error.field === "resistance"),
+    "validator tidak lagi meminta resistance kosong"
+  );
+  assert(!empty.valid, "market tanpa S/R dianggap valid");
 });
 
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);
