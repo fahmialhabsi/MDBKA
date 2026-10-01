@@ -15,7 +15,14 @@
     "src/lib/csvCandleParser.ts",
     "src/lib/instrumentConfig.ts",
     "src/lib/instrumentMismatch.ts",
+    "src/lib/marketReset.ts",
     "src/calculations/swingDetector.ts",
+    "src/calculations/scaleValidator.ts",
+    "src/lib/validationView.ts",
+    "src/lib/regionSelection.ts",
+    "src/lib/priceParser.ts",
+    "src/lib/marketWatchParser.ts",
+    "src/components/extraction/ocrParser.ts",
     "src/calculations/inputValidator.ts",
     "src/types/analysis.ts"
   ]

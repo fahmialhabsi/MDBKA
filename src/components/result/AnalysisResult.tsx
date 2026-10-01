@@ -6,12 +6,13 @@
   TrendingUp
 } from "lucide-react";
 import type { AnalysisResult as ResultType, MarketData } from "../../types/analysis";
-import type { ScaleIssue } from "../../calculations/scaleValidator";
+import type { ValidationViewState } from "../../lib/validationView";
 
 interface Props {
   result: ResultType | null;
   market: MarketData;
-  scaleIssues: ScaleIssue[];
+  viewState: ValidationViewState;
+  blockedReasons?: string[] | null;
 }
 
 function money(value: number | null) {
@@ -26,8 +27,105 @@ function number(value: number | null, digits = 2) {
     : value.toFixed(digits);
 }
 
-export default function AnalysisResult({ result, market, scaleIssues }: Props) {
-  if (scaleIssues.length > 0) {
+const REQUIRED_SUMMARY = [
+  "Bid dan Ask",
+  "OHLC",
+  "MA50",
+  "ATR",
+  "Support dan Resistance"
+];
+
+export default function AnalysisResult({ result, market, viewState, blockedReasons }: Props) {
+  // Umpan balik klik Analisa yang eksplisit: selalu diutamakan bila ada.
+  if (blockedReasons && blockedReasons.length > 0) {
+    return (
+      <div className="space-y-4 rounded-3xl border border-amber-400/30 bg-amber-400/5 p-6">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-300">
+            Analisa ditahan
+          </p>
+          <h2 className="mt-1 text-2xl font-black text-amber-100">
+            Analisa belum dapat dilakukan
+          </h2>
+          <p className="mt-2 text-sm text-amber-100/80">
+            Lengkapi hal berikut lalu klik Analisa Sekarang lagi.
+          </p>
+        </div>
+
+        <ul className="list-disc space-y-1 pl-5 text-sm text-amber-100">
+          {blockedReasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  // Prioritas tampilan: data kosong bukan mismatch skala.
+  if (viewState.kind === "empty") {
+    return (
+      <div className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+            Menunggu data
+          </p>
+          <h2 className="mt-1 text-2xl font-black text-white">
+            Data belum lengkap
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
+            {viewState.symbol
+              ? `Masukkan atau impor data ${viewState.symbol} dari chart MT5. Field harga dan indikator masih kosong.`
+              : "Pilih simbol sebelum melakukan analisa."}
+          </p>
+        </div>
+
+        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-400">
+          {REQUIRED_SUMMARY.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  if (viewState.kind === "incomplete") {
+    return (
+      <div className="space-y-4 rounded-3xl border border-amber-400/30 bg-amber-400/5 p-6">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-300">
+            Data perlu dilengkapi
+          </p>
+          <h2 className="mt-1 text-2xl font-black text-amber-100">
+            Data belum lengkap
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-amber-100/80">
+            {`Lengkapi data ${viewState.symbol} sebelum melakukan analisa.`}
+          </p>
+        </div>
+
+        <details className="rounded-xl border border-white/10 bg-slate-950/40 p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-300">
+            Lihat field yang belum lengkap
+          </summary>
+
+          <div className="mt-3 space-y-2">
+            {viewState.issues.map((issue) => (
+              <div
+                key={`${issue.field}-${issue.message}`}
+                className="rounded-xl border border-amber-300/20 bg-slate-950/40 p-3 text-sm text-amber-100"
+              >
+                <strong>{issue.field}:</strong> {issue.message}
+              </div>
+            ))}
+          </div>
+        </details>
+      </div>
+    );
+  }
+
+  if (viewState.kind === "mismatch") {
+    const scaleIssues = viewState.issues;
+
     return (
       <div className="space-y-4 rounded-3xl border border-red-400/30 bg-red-400/10 p-6">
         <div>

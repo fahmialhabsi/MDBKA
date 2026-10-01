@@ -9,6 +9,25 @@ interface CsvFileConnectorProps {
 
 const AUTO_RELOAD_MS = 5000;
 
+type CsvPhase =
+  | "idle"
+  | "picking"
+  | "reading"
+  | "connected"
+  | "uploaded"
+  | "cancelled"
+  | "error";
+
+const PHASE_LABELS: Record<CsvPhase, string> = {
+  idle: "Siap memilih file",
+  picking: "Memilih file…",
+  reading: "Membaca CSV…",
+  connected: "CSV terhubung",
+  uploaded: "CSV diimpor satu kali",
+  cancelled: "Pemilihan dibatalkan",
+  error: "Gagal membaca CSV",
+};
+
 export default function CsvFileConnector({
   onCsvLoaded,
   onConnectionChange,
@@ -36,6 +55,10 @@ export default function CsvFileConnector({
   const [autoReload, setAutoReload] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  /** Mode sumber file: koneksi handle vs impor satu kali. */
+  const [mode, setMode] = useState<"connected" | "upload" | null>(null);
+  /** Fase interaksi terakhir: dibaca di UI sebagai status koneksi CSV. */
+  const [phase, setPhase] = useState<CsvPhase>("idle");
   const firstResetRef = useRef(true);
 
   // Buang koneksi file lama saat App meminta reset (ganti simbol / clear).
@@ -50,6 +73,8 @@ export default function CsvFileConnector({
     lastSizeRef.current = null;
     setFileName("");
     setIsConnected(false);
+    setMode(null);
+    setPhase("idle");
     setPermissionStatus("");
     setStatus("Belum ada file CSV yang terhubung.");
     onConnectionChangeRef.current?.("", false);
@@ -149,6 +174,7 @@ export default function CsvFileConnector({
     }
 
     setIsBusy(true);
+    setPhase("picking");
     try {
       const handles = await window.showOpenFilePicker({
         multiple: false,
@@ -163,15 +189,21 @@ export default function CsvFileConnector({
       });
 
       const handle = handles[0];
-      if (!handle) return;
+      if (!handle) {
+        setPhase("cancelled");
+        return;
+      }
 
+      setPhase("reading");
       fileHandleRef.current = handle;
       lastModifiedRef.current = null;
       lastSizeRef.current = null;
       setFileName(handle.name);
       setIsConnected(true);
+      setMode("connected");
 
       await readConnectedFile(true);
+      setPhase("connected");
       setStatus((prev) =>
         prev.startsWith("Izin")
           ? prev
@@ -179,9 +211,12 @@ export default function CsvFileConnector({
       );
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
+        // Pembatalan file picker: CSV lama dipertahankan, bukan sukses palsu.
+        setPhase("cancelled");
         setStatus("Pemilihan file dibatalkan.");
         return;
       }
+      setPhase("error");
       setStatus("File CSV gagal dihubungkan. Coba pilih ulang file.");
     } finally {
       setIsBusy(false);
@@ -194,9 +229,12 @@ export default function CsvFileConnector({
       return;
     }
     setIsBusy(true);
+    setPhase("reading");
     try {
       await readConnectedFile(true);
+      setPhase("connected");
     } catch {
+      setPhase("error");
       setStatus("CSV gagal dimuat ulang. Coba hubungkan ulang file.");
     } finally {
       setIsBusy(false);
@@ -204,7 +242,11 @@ export default function CsvFileConnector({
   }
 
   async function handleFallbackFile(file: File | undefined) {
-    if (!file) return;
+    if (!file) {
+      setPhase("cancelled");
+      setStatus("Pemilihan file dibatalkan.");
+      return;
+    }
     try {
       const text = await file.text();
       fileHandleRef.current = null;
@@ -212,6 +254,8 @@ export default function CsvFileConnector({
       lastSizeRef.current = file.size;
       setFileName(file.name);
       setIsConnected(true);
+      setMode("upload");
+      setPhase("uploaded");
       setPermissionStatus("Mode upload: izin browser tidak diperlukan.");
       onCsvLoadedRef.current(text, file.name);
       onConnectionChangeRef.current?.(file.name, true);
@@ -308,7 +352,17 @@ export default function CsvFileConnector({
 
       {fileName && isConnected ? (
         <p className="text-sm text-cyan-200">
-          File CSV aktif: <strong>{fileName}</strong>
+          File CSV aktif: <strong>{fileName}</strong>{" "}
+          {mode === "connected" && (
+            <span className="ml-1 rounded-full border border-cyan-400/30 px-2 py-0.5 text-xs">
+              mode terhubung
+            </span>
+          )}
+          {mode === "upload" && (
+            <span className="ml-1 rounded-full border border-white/20 px-2 py-0.5 text-xs text-slate-300">
+              impor satu kali
+            </span>
+          )}
         </p>
       ) : (
         <p className="text-sm text-slate-400">
@@ -322,6 +376,10 @@ export default function CsvFileConnector({
 
       <p className="text-sm text-slate-300">
         {isBusy ? "File sedang dimuat..." : status}
+      </p>
+
+      <p className="text-xs text-slate-400">
+        Status: {PHASE_LABELS[phase]}
       </p>
     </div>
   );

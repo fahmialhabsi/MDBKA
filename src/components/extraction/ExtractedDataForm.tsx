@@ -3,10 +3,16 @@ import {
   SUPPORTED_SYMBOLS,
   isSupportedSymbol,
 } from "../../lib/instrumentConfig";
+import {
+  displayMarketNumber,
+  parseMarketInput,
+} from "../../lib/marketReset";
+import { traceOcrStage } from "../../lib/debugTrace";
 
 interface Props {
   market: MarketData;
   onChange: (data: MarketData) => void;
+  onSymbolChange?: (symbol: string) => void;
 }
 
 type NumericField = Exclude<keyof MarketData, "symbol" | "timeframe">;
@@ -14,21 +20,22 @@ type NumericField = Exclude<keyof MarketData, "symbol" | "timeframe">;
 const numericFields: Array<{
   key: NumericField;
   label: string;
+  placeholder: string;
 }> = [
-  { key: "bid", label: "Bid" },
-  { key: "ask", label: "Ask" },
-  { key: "close", label: "Close" },
-  { key: "open", label: "Open" },
-  { key: "high", label: "High" },
-  { key: "low", label: "Low" },
-  { key: "ma50", label: "MA50" },
-  { key: "cci", label: "CCI(14)" },
-  { key: "rsi", label: "RSI(14)" },
-  { key: "macd", label: "MACD" },
-  { key: "macdSignal", label: "MACD Signal" },
-  { key: "atr", label: "ATR(14)" },
-  { key: "support", label: "Support" },
-  { key: "resistance", label: "Resistance" }
+  { key: "bid", label: "Bid", placeholder: "Masukkan Bid" },
+  { key: "ask", label: "Ask", placeholder: "Masukkan Ask" },
+  { key: "close", label: "Close", placeholder: "Masukkan Close" },
+  { key: "open", label: "Open", placeholder: "Masukkan Open" },
+  { key: "high", label: "High", placeholder: "Masukkan High" },
+  { key: "low", label: "Low", placeholder: "Masukkan Low" },
+  { key: "ma50", label: "MA50", placeholder: "Masukkan MA50" },
+  { key: "cci", label: "CCI(14)", placeholder: "Masukkan CCI" },
+  { key: "rsi", label: "RSI(14)", placeholder: "Masukkan RSI" },
+  { key: "macd", label: "MACD", placeholder: "Masukkan MACD" },
+  { key: "macdSignal", label: "MACD Signal", placeholder: "Masukkan MACD Signal" },
+  { key: "atr", label: "ATR(14)", placeholder: "Masukkan ATR" },
+  { key: "support", label: "Support", placeholder: "Masukkan Support" },
+  { key: "resistance", label: "Resistance", placeholder: "Masukkan Resistance" }
 ];
 
 const inputClassName =
@@ -36,7 +43,8 @@ const inputClassName =
 
 export default function ExtractedDataForm({
   market,
-  onChange
+  onChange,
+  onSymbolChange
 }: Props) {
   // Opsi dropdown dari satu sumber (instrumentConfig). Jika OCR mendeteksi
   // simbol di luar daftar (mis. NAS100), tampilkan nilai aktif agar tidak
@@ -51,6 +59,12 @@ export default function ExtractedDataForm({
   }
 
   function updateSymbol(nextSymbol: string) {
+    // Reset terpusat di App agar CSV, hasil, dan broker ikut menyesuaikan.
+    if (onSymbolChange) {
+      onSymbolChange(nextSymbol);
+      return;
+    }
+
     onChange({
       ...market,
       symbol: nextSymbol,
@@ -60,11 +74,31 @@ export default function ExtractedDataForm({
   }
 
   function updateNumber(key: NumericField, value: string) {
+    const parsed = parseMarketInput(value);
+
+    // Ketikan sementara ("-", ".") diabaikan agar pengguna bisa
+    // melanjutkan mengetik; state tetap number yang valid.
+    if (parsed === null) return;
+
     onChange({
       ...market,
-      [key]: Number(value)
+      [key]: parsed
     });
   }
+
+  traceOcrStage("form-render", {
+    symbol: market.symbol,
+    bid: market.bid,
+    ask: market.ask,
+    ma50: market.ma50,
+    support: market.support,
+    resistance: market.resistance,
+    displayBid: displayMarketNumber(market.bid),
+    displayAsk: displayMarketNumber(market.ask),
+    displayMa50: displayMarketNumber(market.ma50),
+    displaySupport: displayMarketNumber(market.support),
+    displayResistance: displayMarketNumber(market.resistance),
+  });
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -111,9 +145,10 @@ export default function ExtractedDataForm({
           </span>
 
           <input
-            value={String(market[field.key])}
+            value={displayMarketNumber(market[field.key])}
             type="number"
             step="any"
+            placeholder={field.placeholder}
             onChange={(event) =>
               updateNumber(field.key, event.target.value)
             }

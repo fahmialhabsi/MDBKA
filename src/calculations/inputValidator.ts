@@ -3,6 +3,7 @@
   MarketData
 } from "../types/analysis";
 import { getInstrumentProfile } from "../lib/instrumentConfig";
+import { traceOcrStage } from "../lib/debugTrace";
 
 export type ValidationSeverity = "error" | "warning";
 
@@ -404,7 +405,7 @@ export function validateAnalysisInputs(
     );
   }
 
-  return {
+  const summary: ValidationSummary = {
     valid: errors.length === 0,
     errors,
     warnings,
@@ -414,5 +415,16 @@ export function validateAnalysisInputs(
     minimumLotRiskUsd,
     minimumLotRiskPercent
   };
+
+  traceOcrStage("validate", {
+    symbol: market.symbol,
+    valid: summary.valid,
+    errorFields: errors.map((error) => error.field),
+    warningFields: warnings.map((warning) => warning.field),
+    bid: market.bid,
+    ask: market.ask,
+  });
+
+  return summary;
 }
 

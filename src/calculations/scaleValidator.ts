@@ -4,17 +4,26 @@ import {
   normalizeSymbol
 } from "../lib/instrumentConfig";
 
+export type ScaleIssueCode = "missing" | "scale-mismatch" | "structure";
+
 export interface ScaleIssue {
   field: string;
   message: string;
   severity: "error" | "warning";
+  /**
+   * Klasifikasi untuk prioritas tampilan:
+   * - "missing": field 0/belum valid (bukan mismatch instrumen),
+   * - "scale-mismatch": angka nonzero di luar skala profil,
+   * - "structure": relasi invalid antar field yang sudah terisi.
+   */
+  code: ScaleIssueCode;
 }
 
 export function detectScaleMismatch(
   market: MarketData
 ): ScaleIssue[] {
   const preset = getInstrumentPreset(market.symbol);
-  const code = normalizeSymbol(market.symbol);
+  const normalized = normalizeSymbol(market.symbol);
   const issues: ScaleIssue[] = [];
 
   const values: Array<[string, number]> = [
@@ -29,12 +38,13 @@ export function detectScaleMismatch(
     ["Resistance", market.resistance]
   ];
 
-  if (code === "UNKNOWN") {
+  if (normalized === "UNKNOWN") {
     issues.push({
       field: "symbol",
       message:
         "Instrumen belum dikenali. Periksa skala harga dan parameter broker secara manual.",
-      severity: "warning"
+      severity: "warning",
+      code: "structure"
     });
 
     return issues;
@@ -45,7 +55,8 @@ export function detectScaleMismatch(
       issues.push({
         field,
         message: `${field} belum diisi dengan angka valid.`,
-        severity: "error"
+        severity: "error",
+        code: "missing"
       });
       continue;
     }
@@ -57,24 +68,41 @@ export function detectScaleMismatch(
           `${field} = ${value} tidak sesuai skala ${preset.symbol}. ` +
           `Contoh nilai yang benar: ${preset.expectedPriceExample}. ` +
           `Kemungkinan data instrumen lain masih tercampur.`,
-        severity: "error"
+        severity: "error",
+        code: "scale-mismatch"
       });
     }
   }
 
-  if (market.ask <= market.bid) {
+  // Relasi struktural hanya dinilai bila kedua field sudah terisi;
+  // field kosong (0) sudah dilaporkan sebagai "missing", bukan mismatch.
+  if (
+    Number.isFinite(market.ask) &&
+    Number.isFinite(market.bid) &&
+    market.ask > 0 &&
+    market.bid > 0 &&
+    market.ask <= market.bid
+  ) {
     issues.push({
       field: "Bid/Ask",
       message: "Ask harus lebih besar daripada Bid.",
-      severity: "error"
+      severity: "error",
+      code: "structure"
     });
   }
 
-  if (market.support >= market.resistance) {
+  if (
+    Number.isFinite(market.support) &&
+    Number.isFinite(market.resistance) &&
+    market.support > 0 &&
+    market.resistance > 0 &&
+    market.support >= market.resistance
+  ) {
     issues.push({
       field: "Support/Resistance",
       message: "Support harus lebih rendah daripada resistance.",
-      severity: "error"
+      severity: "error",
+      code: "structure"
     });
   }
 

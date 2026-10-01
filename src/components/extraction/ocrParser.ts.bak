@@ -566,6 +566,34 @@ export function parseOcrTextRich(
   }
   warnings.push(...maResult.warnings);
 
+  // Indikator dibaca dari baris labelnya masing-masing (bukan first-match
+  // teks datar yang bisa mengambil angka sumbu chart).
+  const cciParsed = parseSignedIndicatorLine(dwText, /\bCCI\b/i);
+  if (cciParsed.value !== null) {
+    data.cci = cciParsed.value;
+    if (cciParsed.value > 0 && !cciParsed.signExplicit) {
+      warnings.push(
+        "Tanda negatif CCI tidak terbaca. Periksa dan koreksi manual."
+      );
+    }
+  }
+
+  const rsiParsed = parseSignedIndicatorLine(dwText, /\bRSI\b/i, {
+    min: 0,
+    max: 100,
+  });
+  if (rsiParsed.value !== null) data.rsi = rsiParsed.value;
+
+  const atrParsed = parseSignedIndicatorLine(dwText, /\bATR\b/i);
+  if (atrParsed.value !== null) data.atr = atrParsed.value;
+
+  const macdParsed = parseSignedIndicatorLine(dwText, /\bMACD\b/i);
+  if (macdParsed.value !== null) data.macd = macdParsed.value;
+
+  const signalParsed = parseSignedIndicatorLine(dwText, /\bSignal\b/i);
+  const signalValue = signalParsed.value ?? secondNumberOnMacdLine(dwText);
+  if (signalValue !== null) data.macdSignal = signalValue;
+
   // Indikator dibaca dari baris labelnya (bukan first-match teks datar
   // yang bisa mengambil angka sumbu chart). Tanda -/+ yang terpisah
   // dari angka tetap dikenali agar minus tidak hilang diam-diam.

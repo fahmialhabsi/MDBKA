@@ -4,15 +4,39 @@ declare const require: {
 };
 
 import { parseCsvCandles, parseCsvNumber } from "../src/lib/csvCandleParser";
-import { detectSwingLevels, type Candle } from "../src/calculations/swingDetector";
+import { detectExtremeLevels, detectSwingLevels, resolveSwingLevels, type Candle } from "../src/calculations/swingDetector";
 import { checkInstrumentMismatch } from "../src/lib/instrumentMismatch";
 import {
   SUPPORTED_SYMBOLS,
+  getInstrumentPreset,
   getInstrumentProfile,
   isSupportedSymbol,
   normalizeSymbol,
 } from "../src/lib/instrumentConfig";
+import {
+  RESET_MARKET_FIELDS,
+  applyBrokerPreset,
+  applySwingLevels,
+  createEmptyMarketForSymbol,
+  displayMarketNumber,
+  filterOcrPricesForSymbol,
+  isMarketEmptyForSymbol,
+  mergeValidOcrMarketData,
+  parseMarketInput,
+} from "../src/lib/marketReset";
 import { validateAnalysisInputs } from "../src/calculations/inputValidator";
+import { detectScaleMismatch } from "../src/calculations/scaleValidator";
+import { getValidationViewState, buildBlockedReasons } from "../src/lib/validationView";
+import {
+  REGION_MIN_SIZE,
+  canvasPointFromClient,
+  clamp,
+  convertToNaturalCoords,
+  isRegionBigEnough,
+  normalizeRegion,
+} from "../src/lib/regionSelection";
+import { parseMarketWatchBidAsk, normalizeBigOcrNumber } from "../src/lib/marketWatchParser";
+import { parseMaValue, parseOcrTextRich, combineRegionTexts } from "../src/components/extraction/ocrParser";
 import type { BrokerSettings, MarketData } from "../src/types/analysis";
 
 let passed = 0;
@@ -314,9 +338,50 @@ test("34. App: csvText, onDetected stabil, reset simbol, analisa diblokir", () =
   assert(src.includes("handleDetectedLevels = useCallback"), "onDetected tidak stabil");
   assert(src.includes("setCsvResetKey"), "reset koneksi simbol hilang");
   assert(src.includes("support: 0"), "reset S/R hilang");
+  // Kontrak blokir analisa: runAnalysis mendelegasikan ke buildBlockedReasons
+  // dengan state terbaru dan berhenti sebelum decision engine saat diblokir.
+  assert(src.includes("buildBlockedReasons({"), "delegasi blokir hilang");
+  assert(src.includes("if (reasons)"), "early return blokir hilang");
+  assert(src.includes("blockedReasons={blockedReasons}"), "alasan tak sampai hasil");
+
+  // Perilaku: validasi invalid -> diblokir.
+  const invalidMarket = makeValidMarket("");
+  const invalidValidation = validateAnalysisInputs(invalidMarket, makeValidBroker());
+  assert(!invalidValidation.valid, "fixture invalid harus invalid");
   assert(
-    src.includes("!validation.valid || scaleIssues.length > 0"),
-    "blokir analisa hilang"
+    buildBlockedReasons({
+      market: invalidMarket,
+      broker: makeValidBroker(),
+      validation: invalidValidation,
+      scaleIssues: [],
+    }) !== null,
+    "validasi invalid tidak memblokir"
+  );
+
+  // Perilaku: scale mismatch -> diblokir.
+  const mismatchedMarket = makeValidMarket("US100");
+  const mismatchedIssues = detectScaleMismatch(mismatchedMarket);
+  assert(mismatchedIssues.length > 0, "fixture mismatch harus bermasalah");
+  assert(
+    buildBlockedReasons({
+      market: mismatchedMarket,
+      broker: makeValidBroker(),
+      validation: validateAnalysisInputs(mismatchedMarket, makeValidBroker()),
+      scaleIssues: mismatchedIssues,
+    }) !== null,
+    "scale mismatch tidak memblokir"
+  );
+
+  // Perilaku: data fully valid -> tidak diblokir, decision engine boleh jalan.
+  const okMarket = makeValidMarket("GBPUSD");
+  assert(
+    buildBlockedReasons({
+      market: okMarket,
+      broker: makeValidBroker(),
+      validation: validateAnalysisInputs(okMarket, makeValidBroker()),
+      scaleIssues: detectScaleMismatch(okMarket),
+    }) === null,
+    "data valid ikut diblokir"
   );
 });
 
@@ -444,11 +509,1209 @@ test("44. pergantian simbol mereset CSV, S/R, dan hasil di App", () => {
   assert(src.includes("setResult(null)") && src.includes("setConfirmed(false)"), "reset hasil hilang");
 });
 
-test("45. preset broker mengikuti simbol baru", () => {
+test("45. preset broker terpusat mengikuti simbol baru", () => {
   const src = readSrc("src/App.tsx");
-  assert(src.includes("pointValue: preset.defaultPointValue"), "pointValue preset hilang");
-  assert(src.includes("contractSize: preset.contractSize"), "contractSize preset hilang");
-  assert(src.includes("buffer: preset.defaultBuffer"), "buffer preset hilang");
+  assert(src.includes("applyBrokerPreset"), "preset terpusat hilang");
+  assert(src.includes("contractSize"), "contractSize preset hilang");
+  assert(src.includes("buffer"), "buffer preset hilang");
+});
+
+/* ---------------- Reset pergantian simbol: pure + kontrak ---------------- */
+
+function makeUs100Market(): MarketData {
+  return {
+    ...makeValidMarket("US100"),
+    bid: 30480.1,
+    ask: 30480.9,
+    close: 30480.5,
+    open: 30475.2,
+    high: 30540.0,
+    low: 30450.0,
+    ma50: 30390.75,
+    cci: 120.5,
+    rsi: 62,
+    macd: 12.5,
+    macdSignal: 10.25,
+    atr: 85.5,
+    support: 30450.0,
+    resistance: 30540.0,
+  };
+}
+
+test("46. GBPUSD ke US100 mengosongkan semua harga dan indikator", () => {
+  const next = createEmptyMarketForSymbol("US100", makeValidMarket("GBPUSD"));
+  assert(next.symbol === "US100", `symbol=${next.symbol}`);
+  assert(next.timeframe === "H1", "timeframe harus dipertahankan");
+  for (const field of RESET_MARKET_FIELDS) {
+    assert(next[field] === 0, `${field}=${next[field]}`);
+  }
+});
+
+test("47. US100 ke GBPUSD mengosongkan semua harga dan indikator", () => {
+  const next = createEmptyMarketForSymbol("GBPUSD", makeUs100Market());
+  assert(next.symbol === "GBPUSD", `symbol=${next.symbol}`);
+  for (const field of RESET_MARKET_FIELDS) {
+    assert(next[field] === 0, `${field}=${next[field]}`);
+  }
+});
+
+test("48. reset tidak mengisi harga contoh instrumen baru", () => {
+  const next = createEmptyMarketForSymbol("US100", makeValidMarket("GBPUSD"));
+  for (const field of RESET_MARKET_FIELDS) {
+    assert(Number.isFinite(next[field]), `${field} tidak finite`);
+    assert(next[field] === 0, `${field} bukan 0 (fiktif?)`);
+  }
+});
+
+test("49. simbol sama tidak mereset data", () => {
+  const previous = makeUs100Market();
+  assert(createEmptyMarketForSymbol("US100", previous) === previous, "referensi berubah");
+  assert(isMarketEmptyForSymbol(makeValidMarket(""), "") === false, "simbol beda dianggap kosong");
+});
+
+test("50. adapter tampilan dan input angka", () => {
+  assert(displayMarketNumber(0) === "", "0 harus tampil kosong");
+  assert(displayMarketNumber(1.5) === "1.5", "nilai tampil salah");
+  assert(parseMarketInput("") === 0, "kosong harus 0");
+  assert(parseMarketInput("1,5") === 1.5, "koma desimal gagal");
+  assert(parseMarketInput("-1.5") === -1.5, "negatif gagal");
+  assert(parseMarketInput("-") === null, "'-' harus ditahan");
+  assert(parseMarketInput("abc") === null, "invalid harus ditahan");
+});
+
+test("51. harga OCR lintas skala dibuang, indikator dipertahankan", () => {
+  const gbp = makeValidMarket("GBPUSD");
+  const { kept, droppedCount } = filterOcrPricesForSymbol(gbp, "US100");
+  assert(droppedCount === 9, `dropped=${droppedCount}`);
+  assert(kept.bid === undefined, "bid GBPUSD lolos ke US100");
+  assert(kept.cci === gbp.cci, "indikator ikut dibuang");
+  const us = makeUs100Market();
+  const ok = filterOcrPricesForSymbol(us, "US100");
+  assert(ok.droppedCount === 0, "harga US100 valid dibuang");
+  const unknown = filterOcrPricesForSymbol(gbp, "XYZ");
+  assert(unknown.droppedCount === 0, "simbol unknown harus lewat ke validator");
+});
+
+test("52. preset broker berbeda per simbol termasuk buffer", () => {
+  const us100 = getInstrumentPreset("US100");
+  const gbp = getInstrumentPreset("GBPUSD");
+  assert(us100.defaultBuffer === 10, `buffer US100=${us100.defaultBuffer}`);
+  assert(gbp.defaultBuffer === 0.00005, `buffer GBPUSD=${gbp.defaultBuffer}`);
+});
+
+test("53. App: handler simbol terpusat menolak kosong dan ganda", () => {
+  const src = readSrc("src/App.tsx");
+  assert(src.includes("handleSymbolChange"), "handler hilang");
+  assert(src.includes("if (!normalized) return;"), "guard kosong hilang");
+  assert(src.includes("createEmptyMarketForSymbol"), "helper reset tidak dipakai");
+  assert(src.includes("Simbol berubah menjadi"), "notice hilang");
+});
+
+test("54. form: select memakai callback dan adapter", () => {
+  const src = readSrc("src/components/extraction/ExtractedDataForm.tsx");
+  assert(src.includes("onSymbolChange"), "prop callback hilang");
+  assert(src.includes("displayMarketNumber"), "adapter tampil hilang");
+  assert(src.includes("parseMarketInput"), "adapter input hilang");
+});
+
+test("55. App: peringatan OCR lintas simbol ditampilkan", () => {
+  const src = readSrc("src/App.tsx");
+  assert(src.includes("filterOcrPricesForSymbol"), "filter OCR tidak dipakai");
+  assert(src.includes("Data OCR tidak sesuai dengan simbol"), "pesan OCR hilang");
+  assert(src.includes("ocrWarning"), "state peringatan hilang");
+});
+
+/* ---------------- Tampilan kosong + adapter: TEST 56-64 ---------------- */
+
+test("56. displayMarketNumber(0) menghasilkan string kosong", () => {
+  assert(displayMarketNumber(0) === "", "0 harus tampil kosong");
+});
+
+test("57. displayMarketNumber(1.32474) menghasilkan angka benar", () => {
+  assert(displayMarketNumber(1.32474) === "1.32474", "tampilan GBPUSD salah");
+});
+
+test("58. displayMarketNumber(30590.29) menghasilkan angka benar", () => {
+  assert(displayMarketNumber(30590.29) === "30590.29", "tampilan US100 salah");
+});
+
+test("59. parseMarketInput(\"\") menghasilkan 0", () => {
+  assert(parseMarketInput("") === 0, "kosong harus 0");
+});
+
+test("60. parseMarketInput(\"1.32474\") menghasilkan 1.32474", () => {
+  assert(parseMarketInput("1.32474") === 1.32474, "parse GBPUSD salah");
+});
+
+test("61. parseMarketInput(\"30590.29\") menghasilkan 30590.29", () => {
+  assert(parseMarketInput("30590.29") === 30590.29, "parse US100 salah");
+});
+
+test("62. parseMarketInput(\"-197.12\") menghasilkan -197.12", () => {
+  assert(parseMarketInput("-197.12") === -197.12, "negatif CCI gagal");
+});
+
+test("63. createEmptyMarketForSymbol menghasilkan semua field 0", () => {
+  const next = createEmptyMarketForSymbol("US100", makeValidMarket("GBPUSD"));
+  assert(next.symbol === "US100", `symbol=${next.symbol}`);
+  assert(next.bid === 0, `bid=${next.bid}`);
+  assert(next.ask === 0, `ask=${next.ask}`);
+  assert(next.close === 0, `close=${next.close}`);
+  assert(next.open === 0, `open=${next.open}`);
+  assert(next.high === 0, `high=${next.high}`);
+  assert(next.low === 0, `low=${next.low}`);
+  assert(next.ma50 === 0, `ma50=${next.ma50}`);
+  assert(next.cci === 0, `cci=${next.cci}`);
+  assert(next.rsi === 0, `rsi=${next.rsi}`);
+  assert(next.macd === 0, `macd=${next.macd}`);
+  assert(next.macdSignal === 0, `macdSignal=${next.macdSignal}`);
+  assert(next.atr === 0, `atr=${next.atr}`);
+  assert(next.support === 0, `support=${next.support}`);
+  assert(next.resistance === 0, `resistance=${next.resistance}`);
+});
+
+test("64. reset tidak mengisi harga contoh instrumen baru", () => {
+  const toUs100 = createEmptyMarketForSymbol("US100", makeValidMarket("GBPUSD"));
+  const toGbp = createEmptyMarketForSymbol("GBPUSD", makeUs100Market());
+  for (const target of [toUs100, toGbp]) {
+    for (const field of RESET_MARKET_FIELDS) {
+      assert(target[field] === 0, `${target.symbol}.${field}=${target[field]}`);
+    }
+  }
+  assert(
+    toUs100.bid !== 1.32474 && toGbp.close !== 30480.5,
+    "harga contoh instrumen lama terbawa ke simbol baru"
+  );
+});
+
+test("65. form memakai adapter kosong dan placeholder per-field", () => {
+  const src = readSrc("src/components/extraction/ExtractedDataForm.tsx");
+  assert(src.includes("displayMarketNumber(market[field.key])"), "adapter tampil hilang");
+  assert(!src.includes('placeholder="0"'), "placeholder 0 masih ada");
+  assert(src.includes('placeholder: "Masukkan Bid"'), "placeholder Bid hilang");
+  assert(src.includes('placeholder: "Masukkan Support"'), "placeholder Support hilang");
+});
+
+test("66. kartu validasi memakai viewState terpusat", () => {
+  const src = readSrc("src/components/analysis/ValidationSummaryCard.tsx");
+  assert(src.includes("Data belum lengkap"), "judul ringkas hilang");
+  assert(src.includes("Lihat rincian pemeriksaan"), "details hilang");
+  assert(src.includes("viewState"), "viewState tidak dipakai kartu");
+});
+
+/* ---------------- Prioritas tampilan validasi: TEST 67-72 ---------------- */
+
+function makeEmptyMarket(symbol: string): MarketData {
+  return {
+    symbol,
+    timeframe: "H1",
+    bid: 0,
+    ask: 0,
+    close: 0,
+    open: 0,
+    high: 0,
+    low: 0,
+    ma50: 0,
+    cci: 0,
+    rsi: 0,
+    macd: 0,
+    macdSignal: 0,
+    atr: 0,
+    support: 0,
+    resistance: 0,
+  };
+}
+
+test("67. US100 kosong total berstatus data kosong, bukan mismatch", () => {
+  const market = makeEmptyMarket("US100");
+  const issues = detectScaleMismatch(market);
+  assert(issues.length > 0, "seharusnya ada isu missing agar prioritas teruji");
+  assert(
+    issues.every((issue) => issue.code === "missing"),
+    "isu kosong tidak boleh berkode mismatch"
+  );
+  const state = getValidationViewState({
+    isEmpty: true,
+    symbol: "US100",
+    scaleIssues: issues,
+    valid: false,
+  });
+  assert(state.kind === "empty", `kind=${state.kind}`);
+});
+
+test("68. GBPUSD kosong total berstatus data kosong, bukan mismatch", () => {
+  const market = makeEmptyMarket("GBPUSD");
+  const issues = detectScaleMismatch(market);
+  const state = getValidationViewState({
+    isEmpty: true,
+    symbol: "GBPUSD",
+    scaleIssues: issues,
+    valid: false,
+  });
+  assert(state.kind === "empty", `kind=${state.kind}`);
+});
+
+test("69. US100 terisi Bid/Ask saja berstatus belum lengkap", () => {
+  const market: MarketData = { ...makeEmptyMarket("US100"), bid: 30590, ask: 30593 };
+  const issues = detectScaleMismatch(market);
+  const state = getValidationViewState({
+    isEmpty: isMarketEmptyForSymbol(market, "US100"),
+    symbol: "US100",
+    scaleIssues: issues,
+    valid: false,
+  });
+  assert(state.kind === "incomplete", `kind=${state.kind}`);
+});
+
+test("70. US100 berisi harga 1.32 berstatus mismatch nyata", () => {
+  const market: MarketData = {
+    ...makeUs100Market(),
+    bid: 1.32474,
+    ask: 1.3248,
+    close: 1.32449,
+  };
+  const issues = detectScaleMismatch(market);
+  assert(
+    issues.some((issue) => issue.code === "scale-mismatch"),
+    "mismatch nyata tidak terdeteksi"
+  );
+  const state = getValidationViewState({
+    isEmpty: false,
+    symbol: "US100",
+    scaleIssues: issues,
+    valid: false,
+  });
+  assert(state.kind === "mismatch", `kind=${state.kind}`);
+});
+
+test("71. GBPUSD berisi harga 30590 berstatus mismatch nyata", () => {
+  const market: MarketData = {
+    ...makeValidMarket("GBPUSD"),
+    bid: 30590.29,
+    ask: 30593.04,
+  };
+  const issues = detectScaleMismatch(market);
+  assert(
+    issues.some((issue) => issue.code === "scale-mismatch"),
+    "mismatch nyata tidak terdeteksi"
+  );
+  const state = getValidationViewState({
+    isEmpty: false,
+    symbol: "GBPUSD",
+    scaleIssues: issues,
+    valid: false,
+  });
+  assert(state.kind === "mismatch", `kind=${state.kind}`);
+});
+
+test("72. isEmpty diprioritaskan di atas scaleIssues", () => {
+  const state = getValidationViewState({
+    isEmpty: true,
+    symbol: "US100",
+    scaleIssues: [
+      { field: "Bid", message: "salah skala", severity: "error", code: "scale-mismatch" },
+    ],
+    valid: false,
+  });
+  assert(state.kind === "empty", `kind=${state.kind}`);
+});
+
+/* ---------------- OCR Market Watch: TEST 73-86 ---------------- */
+
+test("73. Market Watch US100 titik desimal + kolom change", () => {
+  const quote = parseMarketWatchBidAsk("US100 30582.83 30585.58 0.43%", "US100");
+  assert(quote.bid === 30582.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30585.58, `ask=${quote.ask}`);
+});
+
+test("74. Market Watch US100 koma desimal", () => {
+  const quote = parseMarketWatchBidAsk("US100 30582,83 30585,58 0,43%", "US100");
+  assert(quote.bid === 30582.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30585.58, `ask=${quote.ask}`);
+});
+
+test("75. baris GBPUSD diabaikan saat simbol aktif US100", () => {
+  const text = "GBPUSD 1.32200 1.32206\nUS100 30582.83 30585.58";
+  const quote = parseMarketWatchBidAsk(text, "US100");
+  assert(quote.bid === 30582.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30585.58, `ask=${quote.ask}`);
+});
+
+test("76. alias USTEC/NAS100 dinormalisasi ke grup US100", () => {
+  const fromUstec = parseMarketWatchBidAsk("USTEC 30582.83 30585.58", "US100");
+  assert(fromUstec.bid === 30582.83, `bid=${fromUstec.bid}`);
+  const nasLine = parseMarketWatchBidAsk("US100 30582.83 30585.58", "NAS100");
+  assert(nasLine.ask === 30585.58, `ask=${nasLine.ask}`);
+});
+
+test("77. hanya baris GBPUSD saat aktif US100 menghasilkan null", () => {
+  const quote = parseMarketWatchBidAsk("GBPUSD 1.32200 1.32206", "US100");
+  assert(quote.bid === null && quote.ask === null, "harus null");
+  assert(quote.warnings.length > 0, "warning hilang");
+});
+
+test("78. Bid/Ask terbalik ditolak", () => {
+  const quote = parseMarketWatchBidAsk("US100 30585.58 30582.83", "US100");
+  assert(quote.bid === null && quote.ask === null, "harus null");
+});
+
+test("79. satu angka setelah simbol menghasilkan null", () => {
+  const quote = parseMarketWatchBidAsk("US100 30582.83", "US100");
+  assert(quote.bid === null && quote.ask === null, "harus null");
+});
+
+test("80. harga 1.32 untuk US100 ditolak sebagai mismatch", () => {
+  const quote = parseMarketWatchBidAsk("US100 1.32474 1.32480", "US100");
+  assert(quote.bid === null && quote.ask === null, "harus null");
+});
+
+test("81. Bid/Ask terintegrasi ke partial MarketData berlabel", () => {
+  const rich = parseOcrTextRich(
+    "US100 30582.83 30585.58\nOpen: 30480 High: 30540 Low: 30450 Close: 30520",
+    { activeSymbol: "US100" }
+  );
+  assert(rich.data.bid === 30582.83, `bid=${rich.data.bid}`);
+  assert(rich.data.ask === 30585.58, `ask=${rich.data.ask}`);
+  assert(rich.sourceLabels.bid === "Market Watch", "sumber bid hilang");
+  assert(rich.sourceLabels.ask === "Market Watch", "sumber ask hilang");
+});
+
+test("82. RSI tak ditemukan tidak membuat default", () => {
+  const rich = parseOcrTextRich("US100 30582.83 30585.58", { activeSymbol: "US100" });
+  assert(rich.data.rsi === undefined, `rsi=${rich.data.rsi}`);
+  assert(rich.missingFields.includes("rsi"), "rsi hilang dari missing");
+});
+
+test("83. MA50 tak ditemukan tetap missing", () => {
+  const rich = parseOcrTextRich("US100 30582.83 30585.58", { activeSymbol: "US100" });
+  assert(rich.data.ma50 === undefined, `ma50=${rich.data.ma50}`);
+  assert(rich.missingFields.includes("ma50"), "ma50 hilang dari missing");
+});
+
+test("84. CCI negatif tetap terbaca", () => {
+  const rich = parseOcrTextRich("CCI(14): -197.12", { activeSymbol: "GBPUSD" });
+  assert(rich.data.cci === -197.12, `cci=${rich.data.cci}`);
+});
+
+test("85. MACD dan Signal dipisahkan", () => {
+  const rich = parseOcrTextRich(
+    "MACD(12,26,9): 0.00041 0.00027",
+    { activeSymbol: "GBPUSD" }
+  );
+  assert(rich.data.macd === 0.00041, `macd=${rich.data.macd}`);
+  assert(rich.data.macdSignal === 0.00027, `signal=${rich.data.macdSignal}`);
+});
+
+test("86. warning sumber Market Watch dibuat", () => {
+  const rich = parseOcrTextRich("US100 30582.83 30585.58", { activeSymbol: "US100" });
+  assert(
+    rich.warnings.some((warning) => warning.includes("Market Watch")),
+    "warning sumber hilang"
+  );
+});
+
+/* ---------------- Integrasi OCR/CSV/broker: TEST 87-103 ---------------- */
+
+function makeEmptyBroker(): BrokerSettings {
+  return {
+    equity: 0,
+    riskPercent: 0,
+    minLot: 0,
+    lotStep: 0,
+    pointValue: 0,
+    contractSize: 0,
+    commission: 0,
+    slippage: 0,
+    buffer: 0,
+    atrMultiplier: 0,
+    targetRR: 0,
+  };
+}
+
+test("87. Market Watch US100 30625.83/30628.58 diterima", () => {
+  const quote = parseMarketWatchBidAsk("US100 30625.83 30628.58", "US100");
+  assert(quote.bid === 30625.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30628.58, `ask=${quote.ask}`);
+  assert(quote.source === "market-watch", `source=${quote.source}`);
+});
+
+test("88. Market Watch koma desimal 30625,83 diterima", () => {
+  const quote = parseMarketWatchBidAsk("US100 30625,83 30628,58 0,57%", "US100");
+  assert(quote.bid === 30625.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30628.58, `ask=${quote.ask}`);
+});
+
+test("89. MA(50) 30449.559 diterima dari baris label", () => {
+  for (const label of ["MA(50)", "MA 50", "Moving Average"]) {
+    const parsed = parseMaValue(`${label} 30449.559`, "US100");
+    assert(parsed.value === 30449.559, `${label}: ${parsed.value}`);
+  }
+  const missing = parseMaValue("Open: 30480 High: 30540", "US100");
+  assert(missing.value === null, "tanpa label harus null");
+});
+
+test("90. OCR tanpa Bid/Ask tidak menghapus nilai lama", () => {
+  const previous: MarketData = { ...makeUs100Market(), bid: 30625.83, ask: 30628.58 };
+  const merged = mergeValidOcrMarketData(previous, { close: 30667.33 });
+  assert(merged.bid === 30625.83, `bid=${merged.bid}`);
+  assert(merged.ask === 30628.58, `ask=${merged.ask}`);
+  assert(merged.close === 30667.33, `close=${merged.close}`);
+});
+
+test("91. OCR tanpa MA50 tidak menghapus MA50 lama", () => {
+  const previous: MarketData = { ...makeUs100Market(), ma50: 30449.559 };
+  const merged = mergeValidOcrMarketData(previous, { close: 30667.33 });
+  assert(merged.ma50 === 30449.559, `ma50=${merged.ma50}`);
+});
+
+test("92. OCR tanpa S/R tidak menghapus S/R dari CSV", () => {
+  const previous: MarketData = {
+    ...makeUs100Market(),
+    support: 30362.82,
+    resistance: 30878.58,
+  };
+  const merged = mergeValidOcrMarketData(previous, {
+    bid: 30625.83,
+    ask: 30628.58,
+    close: 30667.33,
+  });
+  assert(merged.support === 30362.82, `support=${merged.support}`);
+  assert(merged.resistance === 30878.58, `resistance=${merged.resistance}`);
+});
+
+test("93. S/R CSV masuk ke MarketData via applySwingLevels", () => {
+  const previous = makeUs100Market();
+  const next = applySwingLevels(previous, 30362.82, 30878.58);
+  assert(next.support === 30362.82, `support=${next.support}`);
+  assert(next.resistance === 30878.58, `resistance=${next.resistance}`);
+  assert(applySwingLevels(next, 30362.82, 30878.58) === next, "nilai sama harus referensi sama");
+});
+
+test("94. OCR berikutnya mempertahankan S/R CSV", () => {
+  const withLevels = applySwingLevels(makeUs100Market(), 30362.82, 30878.58);
+  const merged = mergeValidOcrMarketData(withLevels, {
+    bid: 30625.83,
+    ask: 30628.58,
+    ma50: 30449.559,
+  });
+  assert(merged.support === 30362.82, `support=${merged.support}`);
+  assert(merged.resistance === 30878.58, `resistance=${merged.resistance}`);
+  assert(merged.ma50 === 30449.559, `ma50=${merged.ma50}`);
+});
+
+test("95. CSV mismatch tidak mengisi S/R", () => {
+  const gbpCandles = parseCsvCandles(
+    "time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449"
+  ).candles;
+  const mismatch = checkInstrumentMismatch(gbpCandles, "US100", 30500);
+  assert(mismatch !== null, "mismatch harus terdeteksi");
+  // Konsumen wajib melewati onDetected saat mismatch: tidak ada pemanggilan.
+  let called = false;
+  if (!mismatch) {
+    applySwingLevels(makeUs100Market(), 1.32443, 1.32507);
+    called = true;
+  }
+  assert(!called, "onDetected tidak boleh dipanggil saat mismatch");
+});
+
+test("96. merge menolak Bid 1.32 untuk US100 dan mempertahankan lama", () => {
+  const previous: MarketData = { ...makeUs100Market(), bid: 30625.83, ask: 30628.58 };
+  const merged = mergeValidOcrMarketData(previous, { bid: 1.32474, ask: 1.3248 });
+  assert(merged.bid === 30625.83, `bid=${merged.bid}`);
+  assert(merged.ask === 30628.58, `ask=${merged.ask}`);
+});
+
+test("97. preset broker US100 tanpa contract size GBPUSD", () => {
+  const applied = applyBrokerPreset(makeEmptyBroker(), "US100");
+  assert(applied.contractSize === 1, `contractSize=${applied.contractSize}`);
+  assert(applied.pointValue === 1, `pointValue=${applied.pointValue}`);
+  assert(applied.buffer === 10, `buffer=${applied.buffer}`);
+  assert(applied.minLot === 0.01, `minLot=${applied.minLot}`);
+  assert(applied.equity === 0, "equity tidak boleh ditebak");
+  const kept = applyBrokerPreset(
+    { ...makeEmptyBroker(), pointValue: 5, minLot: 0.1 },
+    "US100"
+  );
+  assert(kept.minLot === 0.1, "nilai pengguna tertimpa");
+});
+
+test("98. screenshot tanpa equity tidak mengisi broker", () => {
+  const rich = parseOcrTextRich(
+    "US100 30625.83 30628.58\nOpen: 30581.90 High: 30678.21",
+    { activeSymbol: "US100" }
+  );
+  assert(!("equity" in rich.data), "equity bocor ke data OCR");
+  assert(!("pointValue" in rich.data), "pointValue bocor ke data OCR");
+  assert(!("contractSize" in rich.data), "contractSize bocor ke data OCR");
+});
+
+test("99. field broker berlabel verifikasi", () => {
+  const src = readSrc("src/components/analysis/BrokerSettingsForm.tsx");
+  assert(src.includes("perlu verifikasi broker"), "label verifikasi hilang");
+  assert(src.includes("Wajib diisi dari akun"), "label akun hilang");
+  assert(src.includes("Gunakan preset"), "tombol preset hilang");
+});
+
+test("100. pergantian simbol membersihkan market dan CSV via App", () => {
+  const src = readSrc("src/App.tsx");
+  assert(src.includes("applyBrokerPreset"), "preset terpusat hilang");
+  assert(src.includes("mergeValidOcrMarketData"), "merge aman hilang");
+  assert(src.includes("handleSymbolChange"), "handler simbol hilang");
+  assert(src.includes('setSwingCsv("")'), "reset CSV hilang");
+});
+
+test("101. angka OCR tanpa separator dinormalisasi via profil", () => {
+  assert(normalizeBigOcrNumber("3062583", "US100") === 30625.83, "normalisasi gagal");
+  const quote = parseMarketWatchBidAsk("US100 3062583 3062858", "US100");
+  assert(quote.bid === 30625.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30628.58, `ask=${quote.ask}`);
+});
+
+test("102. normalisasi mengikuti integer terpanjang se-skala", () => {
+  assert(normalizeBigOcrNumber("304327", "US100") === 30432.7, "304327 salah");
+  assert(normalizeBigOcrNumber("304789", "US100") === 30478.9, "304789 salah");
+  assert(normalizeBigOcrNumber("5000000", "US100") === 50000, "5000000 salah");
+  assert(normalizeBigOcrNumber("132", "US100") === null, "1.32 bukan harga US100");
+  assert(normalizeBigOcrNumber("3062583", "GBPUSD") === null, "30.6 bukan harga GBPUSD");
+});
+
+test("103. fallback One-Click SELL/BUY berlabel jelas", () => {
+  const quote = parseMarketWatchBidAsk("SELL 30625.83 BUY 30628.58", "US100");
+  assert(quote.bid === 30625.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30628.58, `ask=${quote.ask}`);
+  assert(quote.source === "one-click", `source=${quote.source}`);
+});
+
+/* ---------------- Root-cause OCR + swing fallback: TEST 104-120 ---------------- */
+
+const SCREENSHOT_OCR = [
+  "AUDCAD 0.91234 0.91240",
+  "US100 30572.11 30574.86",
+  "Date 2026.10.01",
+  "Time 13:00",
+  "Open 30581.90",
+  "High 30678.21",
+  "Low 30512.12",
+  "Close 30667.33",
+  "MA(50) 30449.559",
+  "CCI(14) 16.68",
+  "ATR(14) 108.27",
+  "MACD(12,26,9) 60.765",
+  "Signal 67.812",
+  "RSI(14) 57.77",
+].join("\n");
+
+test("104. activeSymbol US100 mengalahkan OCR AUDCAD", () => {
+  const rich = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
+  assert(rich.data.symbol === "US100", `symbol=${rich.data.symbol}`);
+  assert(rich.debug.selectedSymbol === "US100", "debug salah");
+  assert(rich.debug.detectedSymbols.includes("AUDCAD"), "AUDCAD harus terdeteksi");
+  assert(rich.debug.detectedSymbols.includes("US100"), "US100 harus terdeteksi");
+});
+
+test("105. Market Watch memilih baris US100 meski AUDCAD lebih dulu", () => {
+  const rich = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
+  assert(rich.data.bid === 30572.11, `bid=${rich.data.bid}`);
+  assert(rich.data.ask === 30574.86, `ask=${rich.data.ask}`);
+  assert(
+    rich.debug.chosenMarketWatchLine !== undefined &&
+      rich.debug.chosenMarketWatchLine.includes("US100"),
+    "baris terpilih bukan US100"
+  );
+});
+
+test("106. OHLC Data Window terisi penuh", () => {
+  const rich = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
+  assert(rich.data.open === 30581.9, `open=${rich.data.open}`);
+  assert(rich.data.high === 30678.21, `high=${rich.data.high}`);
+  assert(rich.data.low === 30512.12, `low=${rich.data.low}`);
+  assert(rich.data.close === 30667.33, `close=${rich.data.close}`);
+});
+
+test("107. MA50 screenshot terbaca", () => {
+  const rich = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
+  assert(rich.data.ma50 === 30449.559, `ma50=${rich.data.ma50}`);
+});
+
+test("108. CCI screenshot terbaca", () => {
+  const rich = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
+  assert(rich.data.cci === 16.68, `cci=${rich.data.cci}`);
+});
+
+test("109. RSI screenshot terbaca tanpa default", () => {
+  const rich = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
+  assert(rich.data.rsi === 57.77, `rsi=${rich.data.rsi}`);
+});
+
+test("110. ATR screenshot terbaca", () => {
+  const rich = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
+  assert(rich.data.atr === 108.27, `atr=${rich.data.atr}`);
+});
+
+test("111. MACD dan Signal screenshot terpisah", () => {
+  const rich = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
+  assert(rich.data.macd === 60.765, `macd=${rich.data.macd}`);
+  assert(rich.data.macdSignal === 67.812, `signal=${rich.data.macdSignal}`);
+});
+
+test("112. satu field gagal tidak menghapus field valid lain", () => {
+  const previous = makeUs100Market();
+  const merged = mergeValidOcrMarketData(previous, {
+    bid: 1.32474,
+    close: 30667.33,
+    cci: 16.68,
+  });
+  assert(merged.bid === previous.bid, "bid valid lama ikut terhapus");
+  assert(merged.close === 30667.33, "close valid tidak masuk");
+  assert(merged.cci === 16.68, "cci valid tidak masuk");
+});
+
+test("113. S/R CSV bertahan setelah OCR ulang", () => {
+  const withLevels = applySwingLevels(makeUs100Market(), 30362.82, 30878.58);
+  const ocr = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
+  const merged = mergeValidOcrMarketData(withLevels, ocr.data);
+  assert(merged.support === 30362.82, `support=${merged.support}`);
+  assert(merged.resistance === 30878.58, `resistance=${merged.resistance}`);
+  assert(merged.close === 30667.33, "close OCR tidak masuk");
+});
+
+function makeRisingCandles(count: number, base: number): Candle[] {
+  const candles: Candle[] = [];
+  for (let i = 0; i < count; i++) {
+    candles.push({
+      time: `t${i}`,
+      open: base - 90 + i * 10,
+      high: base + i * 10,
+      low: base - 100 + i * 10,
+      close: base - 80 + i * 10,
+    });
+  }
+  return candles;
+}
+
+function makeSharpValleyCandles(): Candle[] {
+  const rows: Array<[number, number]> = [
+    [140, 50],
+    [112, 100],
+    [130, 90],
+    [115, 100],
+    [142, 55],
+    [118, 60],
+    [150, 45],
+  ];
+  return rows.map(([high, low], index) => ({
+    time: `t${index}`,
+    open: low + 1,
+    high,
+    low,
+    close: high - 1,
+  }));
+}
+
+test("114. 50 candle tanpa swing strength 2 memberi alasan", () => {
+  const candles = makeRisingCandles(50, 30500);
+  const resolved = resolveSwingLevels(candles, 30525, 2);
+  assert(resolved.triedStrengths.includes(2), "strength 2 tidak dicoba");
+  assert(resolved.source === "extreme", `source=${resolved.source}`);
+  assert(resolved.support === 30400, `support=${resolved.support}`);
+  assert(resolved.resistance === 30990, `resistance=${resolved.resistance}`);
+});
+
+test("115. fallback strength 1 menghasilkan level bila tersedia", () => {
+  const candles = makeSharpValleyCandles();
+  const resolved = resolveSwingLevels(candles, 100, 2);
+  assert(resolved.source === "strength-1", `source=${resolved.source}`);
+  assert(resolved.support === 90, `support=${resolved.support}`);
+  assert(resolved.resistance === 130, `resistance=${resolved.resistance}`);
+});
+
+test("116. legacy parseOcrText tanpa RSI tetap undefined", () => {
+  const { parseOcrText } = require("../src/components/extraction/ocrParser") as unknown as {
+    parseOcrText(text: string, previous: MarketData): Partial<MarketData>;
+  };
+  const data = parseOcrText("US100 30582.83 30585.58", makeValidMarket("US100"));
+  assert(data.rsi === undefined, `rsi=${data.rsi}`);
+});
+
+test("117. tidak ada AUDCAD pada hasil saat aktif US100", () => {
+  const rich = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
+  assert(rich.data.symbol === "US100", "simbol hasil bukan US100");
+  assert(
+    !rich.warnings.some((warning) => warning.includes("AUDCAD")),
+    "warning menyebut AUDCAD sebagai aktif"
+  );
+  assert(
+    !rich.debug.marketWatchCandidateLines.some((line) => line.includes("AUDCAD")),
+    "kandidat Market Watch tercampur"
+  );
+});
+
+test("118. debug pipeline memuat seluruh field", () => {
+  const rich = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
+  const debug = rich.debug;
+  assert(debug.selectedSymbol === "US100", "selectedSymbol salah");
+  assert(debug.parsedBid === 30572.11, `parsedBid=${debug.parsedBid}`);
+  assert(debug.parsedAsk === 30574.86, `parsedAsk=${debug.parsedAsk}`);
+  assert(debug.parsedOpen === 30581.9, `parsedOpen=${debug.parsedOpen}`);
+  assert(debug.parsedHigh === 30678.21, `parsedHigh=${debug.parsedHigh}`);
+  assert(debug.parsedLow === 30512.12, `parsedLow=${debug.parsedLow}`);
+  assert(debug.parsedClose === 30667.33, `parsedClose=${debug.parsedClose}`);
+  assert(debug.parsedMa50 === 30449.559, `parsedMa50=${debug.parsedMa50}`);
+  assert(debug.parsedCci === 16.68, `parsedCci=${debug.parsedCci}`);
+  assert(debug.parsedRsi === 57.77, `parsedRsi=${debug.parsedRsi}`);
+  assert(debug.parsedAtr === 108.27, `parsedAtr=${debug.parsedAtr}`);
+  assert(debug.parsedMacd === 60.765, `parsedMacd=${debug.parsedMacd}`);
+  assert(debug.parsedSignal === 67.812, `parsedSignal=${debug.parsedSignal}`);
+});
+
+test("119. extreme fallback memakai low min dan high max", () => {
+  const candles = makeRisingCandles(20, 30500);
+  const extreme = detectExtremeLevels(candles, 30600);
+  const lows = candles.map((candle) => candle.low).filter((low) => low < 30600);
+  const highs = candles.map((candle) => candle.high).filter((high) => high > 30600);
+  assert(extreme.support === Math.min(...lows), "support bukan low terendah");
+  assert(extreme.resistance === Math.max(...highs), "resistance bukan high tertinggi");
+  const resolved = resolveSwingLevels(candles, 30600, 2);
+  assert(resolved.source === "extreme", `source=${resolved.source}`);
+});
+
+test("120. mismatch CSV tetap memblokir pengisian S/R", () => {
+  const gbpCandles = parseCsvCandles(
+    "time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449"
+  ).candles;
+  const mismatch = checkInstrumentMismatch(gbpCandles, "US100", 30500);
+  assert(mismatch !== null, "mismatch harus ada");
+  const before = makeUs100Market();
+  const after = mismatch ? before : applySwingLevels(before, 1.32443, 1.32507);
+  assert(after === before, "S/R mismatch tidak boleh masuk");
+});
+
+/* ---------------- Diagnosis end-to-end: TEST 121-138 ---------------- */
+
+const SCREENSHOT2_OCR = [
+  "AUDCAD 0.91210 0.91216",
+  "US100 30573.83 30576.58",
+  "Date 2026.10.01",
+  "Time 13:05",
+  "Open 30667.96",
+  "High 30669.83",
+  "Low 30543.71",
+  "Close 30609.71",
+  "MA(50) 30455.737",
+  "CCI(14) -3.84",
+  "ATR(14) 109.13",
+  "MACD(12,26,9) 55.624",
+  "Signal 68.512",
+  "RSI(14) 53.57",
+].join("\n");
+
+test("121. Market Watch normal + header Daily Change", () => {
+  const quote = parseMarketWatchBidAsk(
+    "Symbol Bid Ask Daily Change\nUS100 30573.83 30576.58 0.40%",
+    "US100"
+  );
+  assert(quote.bid === 30573.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30576.58, `ask=${quote.ask}`);
+  assert(quote.source === "market-watch", `source=${quote.source}`);
+});
+
+test("122. Market Watch koma desimal 30573,83", () => {
+  const quote = parseMarketWatchBidAsk("US100 30573,83 30576,58 0,40%", "US100");
+  assert(quote.bid === 30573.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30576.58, `ask=${quote.ask}`);
+});
+
+test("123. Market Watch digit desimal dipisah OCR", () => {
+  const quote = parseMarketWatchBidAsk("US100 30573 83 30576 58", "US100");
+  assert(quote.bid === 30573.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30576.58, `ask=${quote.ask}`);
+});
+
+test("124. digit dipisah + header + change", () => {
+  const quote = parseMarketWatchBidAsk(
+    "Symbol Bid Ask Daily Change\nUS100 30573 83 30576 58 0.40%",
+    "US100"
+  );
+  assert(quote.bid === 30573.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30576.58, `ask=${quote.ask}`);
+});
+
+test("125. AUDCAD dulu, US100 tetap dipilih", () => {
+  const quote = parseMarketWatchBidAsk(
+    "AUDCAD 0.91210 0.91216\nUS100 30573.83 30576.58",
+    "US100"
+  );
+  assert(quote.bid === 30573.83, `bid=${quote.bid}`);
+  assert(quote.ask === 30576.58, `ask=${quote.ask}`);
+  assert(
+    quote.candidateLines.length === 1 && quote.candidateLines[0].includes("US100"),
+    "kandidat tercampur"
+  );
+});
+
+test("126. merge mempertahankan simbol manual US100", () => {
+  const merged = mergeValidOcrMarketData(makeUs100Market(), {
+    symbol: "AUDCAD",
+    cci: 5,
+  });
+  assert(merged.symbol === "US100", `symbol=${merged.symbol}`);
+  assert(merged.cci === 5, "indikator valid tidak masuk");
+});
+
+test("127. pipeline memberi Bid 30573.83", () => {
+  const rich = parseOcrTextRich(SCREENSHOT2_OCR, { activeSymbol: "US100" });
+  assert(rich.data.bid === 30573.83, `bid=${rich.data.bid}`);
+  assert(rich.debug.parsedBid === 30573.83, "debug salah");
+});
+
+test("128. pipeline memberi Ask 30576.58", () => {
+  const rich = parseOcrTextRich(SCREENSHOT2_OCR, { activeSymbol: "US100" });
+  assert(rich.data.ask === 30576.58, `ask=${rich.data.ask}`);
+  assert(rich.debug.parsedAsk === 30576.58, "debug salah");
+});
+
+test("129. semua varian label MA(50) terbaca", () => {
+  for (const label of ["MA(50)", "MA (50)", "MA ( 50 )", "MA 50", "Moving Average (50)"]) {
+    const parsed = parseMaValue(`${label} 30455.737`, "US100");
+    assert(parsed.value === 30455.737, `${label}: ${parsed.value}`);
+  }
+});
+
+test("130. applySwingLevels null mempertahankan nilai lama", () => {
+  const previous: MarketData = { ...makeUs100Market(), support: 30362.82, resistance: 30878.58 };
+  const next = applySwingLevels(previous, null, null);
+  assert(next === previous, "referensi harus sama");
+});
+
+test("131. undefined eksplisit tidak menghapus S/R", () => {
+  const previous: MarketData = { ...makeUs100Market(), support: 30362.82, resistance: 30878.58 };
+  const merged = mergeValidOcrMarketData(previous, {
+    support: undefined,
+    resistance: undefined,
+    close: 30609.71,
+  });
+  assert(merged.support === 30362.82, "support terhapus");
+  assert(merged.resistance === 30878.58, "resistance terhapus");
+});
+
+test("132. display Bid/Ask tidak kosong saat valid", () => {
+  assert(displayMarketNumber(30573.83) === "30573.83", "bid tampil kosong");
+  assert(displayMarketNumber(30576.58) === "30576.58", "ask tampil kosong");
+});
+
+test("133. display MA50/Support/Resistance tidak kosong", () => {
+  assert(displayMarketNumber(30455.737) === "30455.737", "ma50 kosong");
+  assert(displayMarketNumber(30362.82) === "30362.82", "support kosong");
+  assert(displayMarketNumber(30878.58) === "30878.58", "resistance kosong");
+});
+
+function makeFullUs100Market(): MarketData {
+  return {
+    symbol: "US100",
+    timeframe: "H1",
+    bid: 30573.83,
+    ask: 30576.58,
+    close: 30609.71,
+    open: 30667.96,
+    high: 30669.83,
+    low: 30543.71,
+    ma50: 30455.737,
+    cci: -3.84,
+    rsi: 53.57,
+    macd: 55.624,
+    macdSignal: 68.512,
+    atr: 109.13,
+    support: 30362.82,
+    resistance: 30878.58,
+  };
+}
+
+function makeFullUs100Broker(): BrokerSettings {
+  return {
+    equity: 1000,
+    riskPercent: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    pointValue: 1,
+    contractSize: 1,
+    commission: 0,
+    slippage: 0,
+    buffer: 10,
+    atrMultiplier: 1.2,
+    targetRR: 1.5,
+  };
+}
+
+test("134. validator menerima semua nilai valid", () => {
+  const result = validateAnalysisInputs(makeFullUs100Market(), makeFullUs100Broker());
+  assert(result.valid, `tidak valid: ${result.errors.map((e) => e.message).join("; ")}`);
+});
+
+test("135. teks kosong tidak menghasilkan default fiktif", () => {
+  const rich = parseOcrTextRich("", { activeSymbol: "US100" });
+  assert(rich.data.bid === undefined, "bid fiktif");
+  assert(rich.data.ask === undefined, "ask fiktif");
+  assert(rich.data.rsi === undefined, "rsi fiktif");
+  assert(rich.data.symbol === "US100", "simbol aktif hilang");
+  assert(rich.missingFields.includes("bid"), "missing bid hilang");
+});
+
+test("136. tombol SELL/BUY tak dipakai bila baris US100 terlihat", () => {
+  const quote = parseMarketWatchBidAsk("US100 oops\nSELL 30573.83 BUY 30576.58", "US100");
+  assert(quote.bid === null && quote.ask === null, "tombol tak boleh dipakai");
+});
+
+test("137. tidak ada AUDCAD pada hasil activeSymbol US100", () => {
+  const rich = parseOcrTextRich(SCREENSHOT2_OCR, { activeSymbol: "US100" });
+  assert(rich.data.symbol === "US100", "simbol bukan US100");
+  assert(
+    !rich.warnings.some((warning) => warning.includes("AUDCAD")),
+    "warning menyebut AUDCAD"
+  );
+});
+
+test("138. debug Market Watch memuat token dan alasan", () => {
+  const quote = parseMarketWatchBidAsk("US100 30573.83 30576.58", "US100");
+  assert(quote.debug.candidateTokens.includes("30573.83"), "token hilang");
+  assert(quote.debug.normalizedCandidates.includes(30573.83), "normalisasi hilang");
+  assert(quote.debug.chosenBid === 30573.83, "chosenBid hilang");
+  assert(quote.debug.chosenAsk === 30576.58, "chosenAsk hilang");
+  assert(quote.debug.rejectionReason === null, "rejectionReason harus null");
+});
+
+/* ---------------- Fixture OCR browser + kontrak handler ---------------- */
+
+const FIXTURE_A = [
+  "US100 30573 83 30576 58 0.40%",
+  "Data Window",
+  "MA(50)",
+  "30455.737",
+].join("\n");
+
+const FIXTURE_B = [
+  "AUDCAD 0.91210 0.91216",
+  "EURUSD 1.08520 1.08526",
+  "US100 30573.83 30576.58",
+].join("\n");
+
+const FIXTURE_C = ["MA ( 50 )", "30455.737"].join("\n");
+
+test("139. Fixture A: digit desimal terpisah + MA lookahead", () => {
+  const rich = parseOcrTextRich(FIXTURE_A, { activeSymbol: "US100" });
+  assert(rich.data.bid === 30573.83, `bid=${rich.data.bid}`);
+  assert(rich.data.ask === 30576.58, `ask=${rich.data.ask}`);
+  assert(rich.data.ma50 === 30455.737, `ma50=${rich.data.ma50}`);
+  assert(rich.data.symbol === "US100", "simbol bukan US100");
+});
+
+test("140. Fixture B: AUDCAD/EURUSD diabaikan", () => {
+  const rich = parseOcrTextRich(FIXTURE_B, { activeSymbol: "US100" });
+  assert(rich.data.bid === 30573.83, `bid=${rich.data.bid}`);
+  assert(rich.data.ask === 30576.58, `ask=${rich.data.ask}`);
+  assert(rich.debug.selectedSymbol === "US100", "selected salah");
+});
+
+test("141. Fixture C: MA label spasi + angka beda baris", () => {
+  const parsed = parseMaValue(FIXTURE_C, "US100");
+  assert(parsed.value === 30455.737, `ma50=${parsed.value}`);
+});
+
+test("142. kontrak: extractor teruskan activeSymbol form", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("normalizeSymbol(market.symbol)"), "simbol form tidak dinormalisasi");
+  assert(src.includes("activeSymbol,"), "activeSymbol tidak diteruskan");
+  assert(!src.includes("detectedSymbols[0]"), "simbol OCR pertama dipakai");
+});
+
+test("143. kontrak: handleExtracted tanpa reset saat simbol beda", () => {
+  const src = readSrc("src/App.tsx");
+  const start = src.indexOf("const handleExtracted");
+  const end = src.indexOf("const handleDetectedLevels");
+  assert(start >= 0 && end > start, "handleExtracted hilang");
+  const body = src.slice(start, end);
+  assert(!body.includes("handleSymbolChange"), "reset terpanggil");
+  assert(!body.includes("createEmptyMarketForSymbol"), "reset terpanggil");
+  assert(!body.includes("setSwingCsv"), "CSV ikut direset");
+  assert(body.includes("mergeValidOcrMarketData"), "merge aman hilang");
+});
+
+test("144. kontrak: onDetected membawa sumber level", () => {
+  const appSrc = readSrc("src/App.tsx");
+  assert(appSrc.includes("setSwingSource"), "sumber S/R tidak disimpan");
+  const formSrc = readSrc("src/components/analysis/SwingLevelsForm.tsx");
+  assert(formSrc.includes("resolved.source"), "sumber tidak diteruskan");
+});
+
+test("145. kontrak: panel diagnostik development-only", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("Diagnostik OCR"), "panel hilang");
+  assert(src.includes("isDebugTraceEnabled()"), "tidak development-only");
+  assert(src.includes("swingSource"), "S/R source hilang dari panel");
+});
+
+test("146. kontrak: region crop + gabungan teks", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("marketWatchText"), "region MW hilang");
+  assert(src.includes("dataWindowText"), "region DW hilang");
+  assert(src.includes("Ekstrak dari Region"), "tombol region hilang");
+  assert(
+    combineRegionTexts("US100 1 2", "Open 3") === "US100 1 2\nOpen 3",
+    "gabung region salah"
+  );
+  assert(combineRegionTexts("", "Open 3") === "Open 3", "region kosong salah");
+});
+
+test("147. region: MW hanya dari teks region", () => {
+  const rich = parseOcrTextRich("GBPUSD 1.32200 1.32206", {
+    activeSymbol: "US100",
+    marketWatchText: "US100 30573.83 30576.58",
+    dataWindowText: "Open 30581.90",
+  });
+  assert(rich.data.bid === 30573.83, `bid=${rich.data.bid}`);
+  assert(rich.data.open === 30581.9, `open=${rich.data.open}`);
+  assert(rich.debug.chosenMarketWatchLine === "US100 30573.83 30576.58", "baris MW salah");
+});
+
+/* ---------------- Region selection: TEST 148-167 ---------------- */
+
+test("148. tombol Market Watch mengatur activeRegion", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes('onClick={() => setActiveRegion("marketWatch")}'), "handler MW hilang");
+});
+
+test("149. tombol Data Window mengatur activeRegion", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes('onClick={() => setActiveRegion("dataWindow")}'), "handler DW hilang");
+});
+
+test("150. semua tombol region bertipe button", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  const buttons = src.match(/<button/g) ?? [];
+  const typed = src.match(/type="button"/g) ?? [];
+  assert(buttons.length > 0 && typed.length >= buttons.length, "ada tombol tanpa type");
+});
+
+test("151. canvas menerima pointer events saat mode aktif", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes('pointerEvents: activeRegion ? "auto" : "none"'), "pointer-events tidak terikat mode");
+});
+
+test("152. canvas nonaktif pointer-events saat mode null", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("onPointerDown={handlePointerDown}"), "handler down hilang");
+  assert(src.includes("if (!activeRegion) return;"), "guard mode hilang");
+});
+
+test("153. pointer down memulai seleksi", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("setIsSelecting(true)"), "flag seleksi hilang");
+  assert(src.includes("setSelectionStart(point)"), "start hilang");
+  assert(src.includes("setPointerCapture"), "capture hilang");
+});
+
+test("154. pointer move menggambar kotak", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("onPointerMove={handlePointerMove}"), "handler move hilang");
+  assert(src.includes("setSelectionCurrent("), "update berjalan hilang");
+  assert(src.includes("normalizeRegion(selectionStart, selectionCurrent)"), "preview tidak digambar");
+});
+
+test("155. pointer up menyimpan region", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("onPointerUp={handlePointerUp}"), "handler up hilang");
+  assert(src.includes("onPointerCancel={handlePointerCancel}"), "cancel hilang");
+  assert(src.includes("setMarketWatchRegion(region)"), "simpan MW hilang");
+  assert(src.includes("setDataWindowRegion(region)"), "simpan DW hilang");
+});
+
+test("156. region dinormalisasi positif", () => {
+  const region = normalizeRegion({ x: 90, y: 80 }, { x: 10, y: 20 });
+  assert(region.x === 10 && region.y === 20, "origin salah");
+  assert(region.width === 80 && region.height === 60, "dimensi salah");
+});
+
+test("157. region terlalu kecil ditolak", () => {
+  assert(!isRegionBigEnough({ x: 0, y: 0, width: 9, height: 50 }), "9px lolos");
+  assert(!isRegionBigEnough({ x: 0, y: 0, width: 50, height: 5 }), "5px lolos");
+  assert(isRegionBigEnough({ x: 0, y: 0, width: REGION_MIN_SIZE, height: REGION_MIN_SIZE }), "batas pas ditolak");
+});
+
+test("158. Market Watch region disimpan", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes('kind === "marketWatch"'), "cabang MW hilang");
+});
+
+test("159. Data Window region disimpan", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("setDataWindowRegion"), "cabang DW hilang");
+});
+
+test("160. Ekstrak aktif setelah kedua region tersedia", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("!marketWatchRegion || !dataWindowRegion"), "gate kedua region hilang");
+  assert(src.includes("Pilih kedua region sebelum mengekstrak."), "hint hilang");
+});
+
+test("161. Reset Region menghapus kedua region", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  const start = src.indexOf("function clearRegions");
+  assert(start >= 0, "clearRegions hilang");
+  const body = src.slice(start, src.indexOf("}", src.indexOf("setOcrSource", start)) + 1);
+  assert(body.includes("setMarketWatchRegion(null)"), "MW tidak dibersihkan");
+  assert(body.includes("setDataWindowRegion(null)"), "DW tidak dibersihkan");
+  assert(body.includes("setActiveRegion(null)"), "mode tidak dibersihkan");
+});
+
+test("162. ResizeObserver memperbarui ukuran canvas", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("new ResizeObserver"), "observer hilang");
+  assert(src.includes("devicePixelRatio"), "dpr hilang");
+  assert(src.includes("observer.disconnect()"), "cleanup hilang");
+});
+
+test("163. koordinat tampilan ke gambar asli", () => {
+  const natural = convertToNaturalCoords(
+    { x: 10, y: 20, width: 100, height: 50 },
+    { width: 200, height: 100 },
+    { width: 800, height: 400 }
+  );
+  assert(natural.x === 40 && natural.y === 80, "origin salah");
+  assert(natural.width === 400 && natural.height === 200, "skala salah");
+  const zero = convertToNaturalCoords(
+    { x: 1, y: 1, width: 1, height: 1 },
+    { width: 0, height: 0 },
+    { width: 800, height: 400 }
+  );
+  assert(zero.width === 0, "pembagi nol tidak aman");
+});
+
+test("164. activeRegion tidak reset saat tombol diklik", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  const mwClick = 'onClick={() => setActiveRegion("marketWatch")}';
+  const dwClick = 'onClick={() => setActiveRegion("dataWindow")}';
+  assert(src.includes(mwClick) && src.includes(dwClick), "klik tidak set mode");
+});
+
+test("165. titik canvas dijepit ke batas", () => {
+  const point = canvasPointFromClient(999, -5, { left: 10, top: 10, width: 100, height: 50 });
+  assert(point.x === 100 && point.y === 0, "clamp salah");
+  assert(clamp(5, 0, 10) === 5 && clamp(-1, 0, 10) === 0 && clamp(99, 0, 10) === 10, "clamp salah");
+});
+
+test("166. overlay tidak tertutup elemen lain", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("relative inline-block"), "wrapper relative hilang");
+  assert(src.includes("absolute inset-0 z-20"), "overlay tidak di atas");
+});
+
+test("167. cursor crosshair dan status visual mode", () => {
+  const src = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(src.includes("cursor-crosshair"), "cursor hilang");
+  assert(src.includes('data-testid="region-status"'), "testid status hilang");
+  assert(src.includes('data-testid="market-watch-region"'), "testid MW hilang");
+  assert(src.includes('data-testid="data-window-region"'), "testid DW hilang");
+  assert(src.includes("Mode aktif: seret kotak Market Watch"), "pesan mode MW hilang");
+  assert(src.includes("Mode aktif: seret kotak Data Window"), "pesan mode DW hilang");
 });
 
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);

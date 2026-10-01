@@ -26,10 +26,23 @@ import AnalysisResult from "./components/result/AnalysisResult";
 import { analyzeMarket } from "./calculations/decisionEngine";
 import { detectScaleMismatch } from "./calculations/scaleValidator";
 import { validateAnalysisInputs } from "./calculations/inputValidator";
-import { getInstrumentPreset, normalizeSymbol } from "./lib/instrumentConfig";
+import { normalizeSymbol } from "./lib/instrumentConfig";
+import { traceOcrStage } from "./lib/debugTrace";
 
 import type { BrokerSettings, MarketData } from "./types/analysis";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
+import {
+  applyBrokerPreset,
+  applySwingLevels,
+  createEmptyMarketForSymbol,
+  filterOcrPricesForSymbol,
+  mergeValidOcrMarketData,
+  RESET_MARKET_FIELDS,
+} from "./lib/marketReset";
+import {
+  buildBlockedReasons,
+  getValidationViewState,
+} from "./lib/validationView";
 
 const initialMarket: MarketData = {
   symbol: "GBPUSD",
@@ -105,6 +118,10 @@ export default function App() {
   const [market, setMarket] = useState<MarketData>(initialMarket);
   const [broker, setBroker] = useState<BrokerSettings>(initialBroker);
   const [rawOcr, setRawOcr] = useState("");
+  const [symbolNotice, setSymbolNotice] = useState("");
+  const [ocrWarning, setOcrWarning] = useState("");
+  const [swingSource, setSwingSource] = useState<string | null>(null);
+  const [blockedReasons, setBlockedReasons] = useState<string[] | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [result, setResult] = useState<ReturnType<typeof analyzeMarket> | null>(
     null,
@@ -124,8 +141,34 @@ export default function App() {
     [market, broker],
   );
 
+  const isMarketEmpty = useMemo(
+    () => RESET_MARKET_FIELDS.every((field) => market[field] === 0),
+    [market],
+  );
+
+  // Satu sumber prioritas tampilan: kosong > mismatch nyata >
+  // belum lengkap > invalid > valid. Data kosong bukan mismatch.
+  const viewState = useMemo(
+    () =>
+      getValidationViewState({
+        isEmpty: isMarketEmpty,
+        symbol: market.symbol,
+        scaleIssues,
+        valid: validation.valid,
+      }),
+    [isMarketEmpty, market.symbol, scaleIssues, validation.valid],
+  );
+
+  const clearAnalysisOutput = useCallback(() => {
+    setResult(null);
+    setConfirmed(false);
+    setBlockedReasons(null);
+  }, []);
+
   // Menyesuaikan parameter broker ketika simbol diganti.
   // CSV instrumen lama tidak boleh dipakai untuk simbol baru.
+  // Pengosongan field harga dimiliki handleSymbolChange; effect ini hanya
+  // menyesuaikan turunan (broker/CSV/hasil) agar tidak ada dua sumber reset.
   useEffect(() => {
     const symbol = normalizeSymbol(market.symbol);
 
@@ -133,95 +176,124 @@ export default function App() {
 
     if (symbol === lastSymbol.current) return;
 
-    const preset = getInstrumentPreset(symbol);
-
-    setBroker((previous) => ({
-      ...previous,
-      pointValue: preset.defaultPointValue,
-      contractSize: preset.contractSize,
-      buffer: preset.defaultBuffer,
-    }));
+    setBroker((previous) => applyBrokerPreset(previous, symbol));
 
     setSwingCsv("");
     setConnectedCsvName("");
     setCsvResetKey((previous) => previous + 1);
-    setMarket((previous) => {
-      if (previous.support === 0 && previous.resistance === 0) {
-        return previous;
-      }
-      return {
-        ...previous,
-        support: 0,
-        resistance: 0,
-      };
-    });
-    setResult(null);
-    setConfirmed(false);
+    setOcrWarning("");
+    setSwingSource(null);
+    clearAnalysisOutput();
 
     lastSymbol.current = symbol;
-  }, [market.symbol]);
+  }, [market.symbol, clearAnalysisOutput]);
+
+  // Satu-satunya jalur reset saat pengguna mengganti simbol: kosongkan
+  // semua harga/indikator (tanpa angka fiktif) lalu tampilkan instruksi.
+  const handleSymbolChange = useCallback(
+    (nextSymbol: string) => {
+      const normalized = normalizeSymbol(nextSymbol);
+
+      if (!normalized) return;
+
+      if (normalizeSymbol(market.symbol) === normalized) return;
+
+      setMarket((previous) =>
+        createEmptyMarketForSymbol(normalized, previous),
+      );
+      setSymbolNotice(
+        `Simbol berubah menjadi ${normalized}. Masukkan atau impor data ${normalized} dari chart MT5.`,
+      );
+    },
+    [market.symbol],
+  );
 
   const handleExtracted = useCallback(
     (data: Partial<MarketData>, rawText: string) => {
+      const currentSym = normalizeSymbol(market.symbol);
+      const requestedSym =
+        data.symbol !== undefined ? normalizeSymbol(data.symbol) : "";
+
+      // Pilihan manual pengguna menang; usulan OCR dipakai hanya bila
+      // belum ada pilihan simbol.
+      const finalSym = currentSym || requestedSym || "";
+
+      const { kept, droppedCount } = filterOcrPricesForSymbol(data, finalSym);
+
+      // Merge aman: OCR parsial tidak boleh menghapus nilai valid
+      // (mis. S/R dari CSV) dengan field kosong.
       setMarket((previous) => {
-        const merged = {
-          ...previous,
-          ...data,
-        };
+        const nextMarket = mergeValidOcrMarketData(previous, data);
 
-        // OCR boleh mengusulkan simbol, tetapi tidak boleh menimpa
-        // pilihan dropdown pengguna secara diam-diam.
-        if (data.symbol !== undefined) {
-          const incoming = normalizeSymbol(data.symbol);
-          const current = normalizeSymbol(previous.symbol);
+        traceOcrStage("handle-extracted", {
+          activeSymbol: finalSym,
+          receivedFields: Object.keys(data),
+          droppedCount,
+          previousMarket: previous,
+          nextMarket,
+        });
 
-          if (!incoming) {
-            merged.symbol = previous.symbol;
-          } else if (current && incoming !== current) {
-            merged.symbol = previous.symbol;
-          } else {
-            merged.symbol = incoming;
-          }
-        }
-
-        return merged;
+        return nextMarket;
       });
+
+      if (droppedCount > 0 && finalSym) {
+        setOcrWarning(
+          `Data OCR tidak sesuai dengan simbol ${finalSym}. ` +
+            `${droppedCount} harga di luar skala diabaikan; periksa manual.`,
+        );
+      } else {
+        setOcrWarning("");
+      }
+
+      // OCR yang cocok dengan simbol aktif menutup notice pergantian simbol.
+      const hasNewData =
+        RESET_MARKET_FIELDS.some((field) => kept[field] !== undefined) ||
+        kept.timeframe !== undefined;
+
+      if (
+        finalSym &&
+        requestedSym === finalSym &&
+        currentSym === finalSym &&
+        hasNewData
+      ) {
+        setSymbolNotice("");
+      }
+
       setRawOcr(rawText);
-      setConfirmed(false);
-      setResult(null);
+      clearAnalysisOutput();
     },
-    [],
+    [market.symbol, clearAnalysisOutput],
   );
 
   const handleDetectedLevels = useCallback(
-    (support: number, resistance: number) => {
+    (support: number, resistance: number, source?: string) => {
+      traceOcrStage("detected-levels", { support, resistance, source });
+
       setMarket((previous) => {
-        if (
-          previous.support === support &&
-          previous.resistance === resistance
-        ) {
-          return previous;
-        }
+        const nextMarket = applySwingLevels(previous, support, resistance);
 
-        return {
-          ...previous,
-          support,
-          resistance,
-        };
+        traceOcrStage("sr-applied", {
+          detectedSupport: support,
+          detectedResistance: resistance,
+          marketAfterUpdate: nextMarket,
+        });
+
+        return nextMarket;
       });
+      setSwingSource(source ?? null);
 
-      setResult(null);
-      setConfirmed(false);
+      clearAnalysisOutput();
     },
-    [],
+    [clearAnalysisOutput],
   );
 
   const handleCsvLoaded = useCallback((text: string, fileName: string) => {
     setSwingCsv(text);
     setConnectedCsvName(fileName);
-    setResult(null);
-    setConfirmed(false);
-  }, []);
+    setSymbolNotice("");
+    setSwingSource(null);
+    clearAnalysisOutput();
+  }, [clearAnalysisOutput]);
 
   const handleConnectionChange = useCallback(
     (fileName: string, connected: boolean) => {
@@ -230,13 +302,39 @@ export default function App() {
     [],
   );
 
+  const handleApplyBrokerPreset = useCallback(() => {
+    setBroker((previous) =>
+      applyBrokerPreset(previous, normalizeSymbol(market.symbol)),
+    );
+    clearAnalysisOutput();
+  }, [market.symbol, clearAnalysisOutput]);
+
   function runAnalysis() {
-    if (!validation.valid || scaleIssues.length > 0) {
+    traceOcrStage("analyze-input", {
+      bid: market.bid,
+      ask: market.ask,
+      ma50: market.ma50,
+      cci: market.cci,
+      support: market.support,
+      resistance: market.resistance,
+      equity: broker.equity,
+    });
+
+    const reasons = buildBlockedReasons({
+      market,
+      broker,
+      validation,
+      scaleIssues,
+    });
+
+    if (reasons) {
+      setBlockedReasons(reasons);
       setConfirmed(false);
       setResult(null);
       return;
     }
 
+    setBlockedReasons(null);
     setConfirmed(true);
     setResult(analysis);
   }
@@ -246,11 +344,14 @@ export default function App() {
     setMarket(emptyMarket);
     setBroker(emptyBroker);
     setRawOcr("");
+    setSymbolNotice("");
+    setOcrWarning("");
+    setSwingSource(null);
     setSwingCsv("");
     setConnectedCsvName("");
     setCsvResetKey((previous) => previous + 1);
-    setConfirmed(false);
-    setResult(null);
+    clearAnalysisOutput();
+    lastSymbol.current = "";
   }
 
   function resetToDefault() {
@@ -258,11 +359,13 @@ export default function App() {
     setMarket(initialMarket);
     setBroker(initialBroker);
     setRawOcr("");
+    setSymbolNotice("");
+    setOcrWarning("");
+    setSwingSource(null);
     setSwingCsv("");
     setConnectedCsvName("");
     setCsvResetKey((previous) => previous + 1);
-    setConfirmed(false);
-    setResult(null);
+    clearAnalysisOutput();
     lastSymbol.current = initialMarket.symbol;
   }
 
@@ -320,16 +423,19 @@ export default function App() {
                   setImage(nextImage);
                   setResult(null);
                   setConfirmed(false);
+                  setBlockedReasons(null);
                 }}
               />
 
               {image && (
                 <div className="mt-5">
-                  <OcrExtractor
-                    image={image}
-                    market={market}
-                    onExtracted={handleExtracted}
-                  />
+                    <OcrExtractor
+                      key={image}
+                      image={image}
+                      market={market}
+                      swingSource={swingSource}
+                      onExtracted={handleExtracted}
+                    />
                 </div>
               )}
 
@@ -339,10 +445,28 @@ export default function App() {
                     Lihat teks OCR mentah
                   </summary>
 
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (navigator.clipboard) {
+                        void navigator.clipboard.writeText(rawOcr);
+                      }
+                    }}
+                    className="mt-3 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-white/5"
+                  >
+                    Salin teks OCR
+                  </button>
+
                   <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-slate-400">
                     {rawOcr}
                   </pre>
                 </details>
+              )}
+
+              {ocrWarning && (
+                <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
+                  {ocrWarning}
+                </p>
               )}
             </Panel>
 
@@ -355,10 +479,19 @@ export default function App() {
                 market={market}
                 onChange={(nextMarket) => {
                   setMarket(nextMarket);
+                  setSymbolNotice("");
                   setConfirmed(false);
                   setResult(null);
+                  setBlockedReasons(null);
                 }}
+                onSymbolChange={handleSymbolChange}
               />
+
+              {symbolNotice && (
+                <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
+                  {symbolNotice}
+                </div>
+              )}
             </Panel>
 
             <Panel
@@ -373,7 +506,9 @@ export default function App() {
                   setBroker(nextBroker);
                   setResult(null);
                   setConfirmed(false);
+                  setBlockedReasons(null);
                 }}
+                onApplyPreset={handleApplyBrokerPreset}
               />
             </Panel>
 
@@ -393,17 +528,19 @@ export default function App() {
               symbol={market.symbol}
               currentPrice={market.bid > 0 ? market.bid : market.close}
               csvText={swingCsv}
-              onCsvTextChange={(text) => {
-                setSwingCsv(text);
-                setResult(null);
-                setConfirmed(false);
-              }}
+                onCsvTextChange={(text) => {
+                  setSwingCsv(text);
+                  setResult(null);
+                  setConfirmed(false);
+                  setBlockedReasons(null);
+                }}
               onDetected={handleDetectedLevels}
             />
 
             <ValidationSummaryCard
               validation={validation}
               symbol={market.symbol}
+              viewState={viewState}
             />
 
             <p className="text-sm font-semibold text-slate-300">
@@ -449,7 +586,8 @@ export default function App() {
               <AnalysisResult
                 result={result}
                 market={market}
-                scaleIssues={scaleIssues}
+                viewState={viewState}
+                blockedReasons={blockedReasons}
               />
             </Panel>
           </aside>

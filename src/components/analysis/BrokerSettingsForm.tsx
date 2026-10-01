@@ -1,85 +1,115 @@
 ﻿import type { BrokerSettings } from "../../types/analysis";
 import { getInstrumentProfile } from "../../lib/instrumentConfig";
+import {
+  displayMarketNumber,
+  parseMarketInput,
+} from "../../lib/marketReset";
 
 interface Props {
   broker: BrokerSettings;
   symbol: string;
   onChange: (data: BrokerSettings) => void;
+  onApplyPreset?: () => void;
 }
+
+type FieldSource = "preset" | "account" | "strategy" | "optional";
 
 const fields: Array<{
   key: keyof BrokerSettings;
   label: string;
   help: string;
+  source: FieldSource;
 }> = [
   {
     key: "equity",
     label: "Equity USD",
-    help: "Saldo/equity akun saat ini."
+    help: "Saldo/equity akun saat ini.",
+    source: "account"
   },
   {
     key: "riskPercent",
     label: "Risiko maksimum %",
-    help: "Contoh: 10 berarti 10%."
+    help: "Contoh: 10 berarti 10%.",
+    source: "strategy"
   },
   {
     key: "minLot",
     label: "Minimum lot",
-    help: "Contoh broker: 0.01."
+    help: "Contoh broker: 0.01.",
+    source: "preset"
   },
   {
     key: "lotStep",
     label: "Lot step",
-    help: "Contoh broker: 0.01."
+    help: "Contoh broker: 0.01.",
+    source: "preset"
   },
   {
     key: "pointValue",
     label: "Nilai perubahan harga / 1 lot USD",
-    help: "Wajib dicek dari spesifikasi broker (berbeda untuk forex vs indeks)."
+    help: "Wajib dicek dari spesifikasi broker (berbeda untuk forex vs indeks).",
+    source: "preset"
   },
   {
     key: "contractSize",
     label: "Contract size",
-    help: "Wajib dicek dari spesifikasi broker (forex umumnya 100000)."
+    help: "Wajib dicek dari spesifikasi broker (forex umumnya 100000).",
+    source: "preset"
   },
   {
     key: "commission",
     label: "Komisi USD / lot",
-    help: "Isi 0 bila tidak ada."
+    help: "Isi 0 bila tidak ada.",
+    source: "optional"
   },
   {
     key: "slippage",
     label: "Cadangan slippage point",
-    help: "Tambahan konservatif."
+    help: "Tambahan konservatif.",
+    source: "optional"
   },
   {
     key: "buffer",
     label: "Buffer struktur point",
-    help: "Jarak di luar swing."
+    help: "Jarak di luar swing.",
+    source: "preset"
   },
   {
     key: "atrMultiplier",
     label: "Pengali ATR",
-    help: "Default 1.2."
+    help: "Default 1.2.",
+    source: "strategy"
   },
   {
     key: "targetRR",
     label: "Target RR",
-    help: "Default 1.5."
+    help: "Default 1.5.",
+    source: "strategy"
   }
 ];
+
+const SOURCE_LABELS: Record<FieldSource, string> = {
+  preset: "Diisi otomatis dari preset • perlu verifikasi broker",
+  account: "Wajib diisi dari akun (bukan dari screenshot)",
+  strategy: "Default strategi",
+  optional: "0 berarti tidak ada/belum dimasukkan",
+};
 
 export default function BrokerSettingsForm({
   broker,
   symbol,
-  onChange
+  onChange,
+  onApplyPreset
 }: Props) {
   function update(key: keyof BrokerSettings, value: string) {
-    const numeric = Number(value);
+    const parsed = parseMarketInput(value);
+
+    // Ketikan sementara diabaikan; state tidak pernah NaN/undefined.
+    if (parsed === null) return;
 
     onChange({
       ...broker,
-      [key]: Number.isFinite(numeric) ? numeric : NaN
+      [key]: parsed
     });
   }
 
@@ -91,6 +121,16 @@ export default function BrokerSettingsForm({
         {brokerNote}
       </p>
 
+      {onApplyPreset && (
+        <button
+          type="button"
+          onClick={onApplyPreset}
+          className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
+        >
+          {`Gunakan preset ${symbol || "instrumen"}`}
+        </button>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {fields.map((field) => (
         <label key={field.key} className="space-y-2">
@@ -101,7 +141,8 @@ export default function BrokerSettingsForm({
           <input
             type="number"
             step="any"
-            value={broker[field.key]}
+            value={displayMarketNumber(broker[field.key])}
+            placeholder={`Masukkan ${field.label}`}
             onChange={(event) =>
               update(field.key, event.target.value)
             }
@@ -110,6 +151,10 @@ export default function BrokerSettingsForm({
 
           <span className="block text-xs text-slate-500">
             {field.help}
+          </span>
+
+          <span className="block text-[11px] text-cyan-200/70">
+            {SOURCE_LABELS[field.source]}
           </span>
         </label>
       ))}

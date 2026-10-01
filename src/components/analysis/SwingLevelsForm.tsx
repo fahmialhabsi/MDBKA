@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { detectSwingLevels } from "../../calculations/swingDetector";
+import {
+  resolveSwingLevels,
+  type SwingLevelSource,
+} from "../../calculations/swingDetector";
 import { parseCsvCandles } from "../../lib/csvCandleParser";
 import { checkInstrumentMismatch } from "../../lib/instrumentMismatch";
 import {
@@ -12,8 +15,19 @@ interface Props {
   currentPrice: number;
   csvText: string;
   onCsvTextChange: (text: string) => void;
-  onDetected: (support: number, resistance: number) => void;
+  onDetected: (
+    support: number,
+    resistance: number,
+    source: SwingLevelSource
+  ) => void;
 }
+
+const SOURCE_LABELS: Record<Exclude<SwingLevelSource, "none">, string> = {
+  "strength-1": "Swing strength 1",
+  "strength-2": "Swing strength 2",
+  "strength-3": "Swing strength 3",
+  extreme: "Extreme fallback",
+};
 
 export default function SwingLevelsForm({
   symbol,
@@ -36,14 +50,14 @@ export default function SwingLevelsForm({
     [candles, symbol, currentPrice],
   );
 
-  const detectedLevels = useMemo(() => {
+  const resolved = useMemo(() => {
     if (candles.length < minimumCandles) {
       return null;
     }
 
     if (mismatch) return null;
 
-    return detectSwingLevels(candles, currentPrice, strength);
+    return resolveSwingLevels(candles, currentPrice, strength);
   }, [candles, currentPrice, strength, minimumCandles, mismatch]);
 
   // Pesan status diturunkan (derived) langsung dari data saat render,
@@ -62,11 +76,17 @@ export default function SwingLevelsForm({
       return `CSV terbaca, tetapi baru ${candles.length} candle valid. Minimal ${minimumCandles} candle diperlukan.`;
     }
 
-    if (!detectedLevels) {
-      return "Menyiapkan deteksi swing...";
+    if (!resolved || resolved.source === "none") {
+      const tried = resolved && resolved.triedStrengths.length > 0
+        ? `strength ${resolved.triedStrengths.join(", ")}`
+        : `strength ${strength}`;
+      return (
+        `${candles.length} candle valid, tetapi tidak ada swing ${tried} ` +
+        "yang memenuhi syarat. Tambahkan candle atau periksa harga referensi."
+      );
     }
 
-    const { support, resistance } = detectedLevels;
+    const { support, resistance } = resolved;
 
     if (support === null || resistance === null) {
       return "Support/Resistance belum lengkap. Swing belum lengkap \u2014 tambahkan candle sebelum dan sesudah swing, lalu periksa kembali level.";
@@ -75,7 +95,8 @@ export default function SwingLevelsForm({
     const profile = getInstrumentProfile(symbol);
 
     return (
-      `Support dan Resistance berhasil diperbarui \u2014 Support: ${formatInstrumentPrice(
+      `Support dan Resistance berhasil diperbarui dari CSV ${candles.length} candle ` +
+      `(${SOURCE_LABELS[resolved.source]}) \u2014 Support: ${formatInstrumentPrice(
         support,
         symbol,
       )}, Resistance: ${formatInstrumentPrice(resistance, symbol)} (${
@@ -88,7 +109,8 @@ export default function SwingLevelsForm({
     mismatch,
     candles.length,
     minimumCandles,
-    detectedLevels,
+    resolved,
+    strength,
     symbol,
   ]);
 
@@ -99,14 +121,27 @@ export default function SwingLevelsForm({
 
     if (candles.length < minimumCandles) return;
 
-    if (!detectedLevels) return;
+    if (!resolved || resolved.source === "none") return;
 
-    const { support, resistance } = detectedLevels;
+    const { support, resistance } = resolved;
 
     if (support === null || resistance === null) return;
 
-    onDetected(support, resistance);
-  }, [candles.length, detectedLevels, minimumCandles, onDetected, mismatch]);
+    if (import.meta.env.DEV) {
+      console.debug("[MDBKA S/R BROWSER]", {
+        symbol,
+        candleCount: candles.length,
+        requestedStrength: strength,
+        resolvedStrength: resolved.source,
+        source: resolved.source,
+        support,
+        resistance,
+        callbackCalled: true,
+      });
+    }
+
+    onDetected(support, resistance, resolved.source);
+  }, [candles.length, resolved, minimumCandles, onDetected, mismatch, symbol, strength]);
 
   function clearCsv() {
     onCsvTextChange("");
