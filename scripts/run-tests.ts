@@ -38,6 +38,18 @@ import {
 import { parseMarketWatchBidAsk, normalizeBigOcrNumber } from "../src/lib/marketWatchParser";
 import { parseMaValue, parseOcrTextRich, combineRegionTexts } from "../src/components/extraction/ocrParser";
 import type { BrokerSettings, MarketData } from "../src/types/analysis";
+import type { BrokerProfile } from "../src/types/broker";
+import {
+  BROKER_PROFILES,
+  DEFAULT_BROKER_ID,
+  FINEX_BROKER_ID,
+  ORBITRADER_BROKER_ID,
+  ORBITRADER_VERIFICATION_NOTE,
+  createBrokerContext,
+  getBrokerProfile,
+  isSupportedBrokerId,
+  resolveBrokerSymbol,
+} from "../src/lib/brokerRegistry";
 
 let passed = 0;
 let failed = 0;
@@ -1712,6 +1724,143 @@ test("167. cursor crosshair dan status visual mode", () => {
   assert(src.includes('data-testid="data-window-region"'), "testid DW hilang");
   assert(src.includes("Mode aktif: seret kotak Market Watch"), "pesan mode MW hilang");
   assert(src.includes("Mode aktif: seret kotak Data Window"), "pesan mode DW hilang");
+});
+
+/* ---------------- Fondasi registry broker terisolasi: TEST 168-176 ---------------- */
+/* Tahap 2: hanya menguji fondasi registry; perilaku Finex lama tidak diubah. */
+
+test("168. broker default adalah Finex", () => {
+  assert(DEFAULT_BROKER_ID === "finex", `default=${DEFAULT_BROKER_ID}`);
+  assert(DEFAULT_BROKER_ID === FINEX_BROKER_ID, "default bukan FINEX_BROKER_ID");
+  assert(isSupportedBrokerId(DEFAULT_BROKER_ID), "default tidak didukung");
+});
+
+test("169. Finex terdaftar di registry", () => {
+  assert(isSupportedBrokerId(FINEX_BROKER_ID), "finex tidak didukung");
+  assert(isSupportedBrokerId("finex"), "string finex tidak didukung");
+  const profile = getBrokerProfile(FINEX_BROKER_ID);
+  assert(profile.id === "finex", `id=${profile.id}`);
+});
+
+test("170. OrbiTraderBerjangka terdaftar di registry", () => {
+  assert(isSupportedBrokerId(ORBITRADER_BROKER_ID), "otb tidak didukung");
+  const profile = getBrokerProfile(ORBITRADER_BROKER_ID);
+  assert(profile.id === "orbitraderberjangka", `id=${profile.id}`);
+  assert(profile.label === "OrbiTraderBerjangka", `label=${profile.label}`);
+});
+
+test("171. broker id invalid ditolak", () => {
+  assert(!isSupportedBrokerId("invalid-broker"), "id asing diterima");
+  assert(!isSupportedBrokerId(""), "string kosong diterima");
+  assert(!isSupportedBrokerId("FINEX"), "varian kapital diterima");
+  let threw = false;
+  try {
+    getBrokerProfile("invalid-broker");
+  } catch {
+    threw = true;
+  }
+  assert(threw, "getBrokerProfile tidak menolak id invalid");
+});
+
+test("172. profile Finex memiliki label yang benar", () => {
+  const profile = getBrokerProfile("finex");
+  assert(profile.label === "Finex", `label=${profile.label}`);
+});
+
+test("173. profile OTB memiliki catatan perlu verifikasi", () => {
+  const profile = getBrokerProfile("orbitraderberjangka");
+  assert(
+    profile.note.includes(ORBITRADER_VERIFICATION_NOTE),
+    `note=${profile.note}`
+  );
+  assert(
+    profile.note.includes("Perlu verifikasi dari Specification OrbiTraderBerjangka."),
+    "catatan verifikasi hilang"
+  );
+});
+
+test("174. profile OTB tidak memakai angka preset Finex", () => {
+  const otb = getBrokerProfile("orbitraderberjangka");
+  assert(otb.instruments.length === 0, `instruments=${otb.instruments.length}`);
+  assert(!("pointValue" in otb), "pointValue bocor ke profil OTB");
+  assert(!("contractSize" in otb), "contractSize bocor ke profil OTB");
+  assert(!("spread" in otb), "spread bocor ke profil OTB");
+  assert(!("leverage" in otb), "leverage bocor ke profil OTB");
+  assert(!("margin" in otb), "margin bocor ke profil OTB");
+  assert(
+    !JSON.stringify(otb).includes("100000"),
+    "angka preset Finex terbawa ke profil OTB"
+  );
+  // Adapter Finex: nilai berasal dari instrumentConfig, bukan salinan.
+  const finex = getBrokerProfile("finex");
+  assert(
+    finex.instruments.length === SUPPORTED_SYMBOLS.length,
+    `instruments=${finex.instruments.length}`
+  );
+  const gbp = finex.instruments.find((preset) => preset.symbol === "GBPUSD");
+  assert(gbp !== undefined, "preset GBPUSD hilang dari profil Finex");
+  assert(
+    gbp !== undefined && gbp.contractSize === getInstrumentProfile("GBPUSD").contractSize,
+    "preset Finex tidak identik dengan instrumentConfig"
+  );
+});
+
+test("175. object registry tidak boleh dimutasi oleh pemanggil", () => {
+  assert(Object.isFrozen(BROKER_PROFILES), "BROKER_PROFILES tidak dibekukan");
+  const finex = getBrokerProfile("finex");
+  assert(Object.isFrozen(finex), "profil Finex tidak dibekukan");
+  assert(Object.isFrozen(finex.instruments), "instrumen Finex tidak dibekukan");
+  const otb = getBrokerProfile("orbitraderberjangka");
+  assert(Object.isFrozen(otb), "profil OTB tidak dibekukan");
+
+  const mutable = BROKER_PROFILES as unknown as Array<BrokerProfile>;
+  const before = mutable.length;
+  let pushThrew = false;
+  try {
+    mutable.push(finex);
+  } catch {
+    pushThrew = true;
+  }
+  assert(
+    pushThrew || mutable.length === before,
+    "registry berhasil dimutasi via push"
+  );
+  assert(BROKER_PROFILES.length === 2, `jumlah profil=${BROKER_PROFILES.length}`);
+
+  const writable = finex as unknown as { label: string };
+  let labelThrew = false;
+  try {
+    writable.label = "Diubah";
+  } catch {
+    labelThrew = true;
+  }
+  assert(finex.label === "Finex", `label berubah menjadi ${finex.label}`);
+  assert(typeof labelThrew === "boolean", "flag mutasi label invalid");
+});
+
+test("176. helper simbol preservatif dan perilaku Finex lama utuh", () => {
+  // brokerSymbol menyimpan nama asli; tidak memakai normalizeSymbol.
+  const context = createBrokerContext("GBPUSD.pro");
+  assert(context.brokerId === "finex", `brokerId=${context.brokerId}`);
+  assert(context.brokerSymbol === "GBPUSD.pro", `brokerSymbol=${context.brokerSymbol}`);
+  assert(context.instrumentFamily === undefined, "family harus opsional");
+  const withFamily = createBrokerContext("US100", "index");
+  assert(withFamily.instrumentFamily === "index", "family hilang");
+  const resolved = resolveBrokerSymbol("US100.cash", "index");
+  assert(resolved.brokerSymbol === "US100.cash", "nama asli diubah");
+  assert(resolved.instrumentFamily === "index", "family hilang");
+
+  // Perilaku lama tidak berubah: normalizeSymbol dan preset Finex utuh.
+  assert(normalizeSymbol("GBPUSD.pro") === "GBPUSD", "normalizeSymbol berubah");
+  assert(normalizeSymbol("USTEC") === "US100", "alias US100 berubah");
+  assert(
+    getInstrumentProfile("GBPUSD").contractSize === 100000,
+    "preset Finex berubah"
+  );
+  assert(
+    getInstrumentProfile("US100").defaultBuffer === 10,
+    "preset US100 berubah"
+  );
 });
 
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);

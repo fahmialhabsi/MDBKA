@@ -24,6 +24,8 @@
     "src/lib/marketWatchParser.ts",
     "src/components/extraction/ocrParser.ts",
     "src/calculations/inputValidator.ts",
-    "src/types/analysis.ts"
+    "src/types/analysis.ts",
+    "src/types/broker.ts",
+    "src/lib/brokerRegistry.ts"
   ]
 }
