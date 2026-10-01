@@ -1,0 +1,5 @@
+﻿{
+  "riskPercent": 10,
+  "targetRR": 1.5,
+  "defaultTimeframe": "H1"
+}

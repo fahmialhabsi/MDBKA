@@ -1,0 +1,58 @@
+﻿export type Decision = "BELI" | "JUAL" | "TUNGGU";
+
+export interface MarketData {
+  symbol: string;
+  timeframe: string;
+  bid: number;
+  ask: number;
+  close: number;
+  open: number;
+  high: number;
+  low: number;
+  ma50: number;
+  cci: number;
+  rsi: number;
+  macd: number;
+  macdSignal: number;
+  atr: number;
+  support: number;
+  resistance: number;
+}
+
+export interface BrokerSettings {
+  equity: number;
+  riskPercent: number;
+  minLot: number;
+  lotStep: number;
+  pointValue: number;
+  contractSize: number;
+  commission: number;
+  slippage: number;
+  buffer: number;
+  atrMultiplier: number;
+  targetRR: number;
+}
+
+export interface AnalysisResult {
+  decision: Decision;
+  score: number;
+  trendScore: number;
+  cciScore: number;
+  macdScore: number;
+  rsiScore: number;
+  entry: number;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  riskDistance: number | null;
+  targetDistance: number | null;
+  maxRiskUsd: number;
+  riskAtMinLot: number | null;
+  theoreticalLot: number | null;
+  suggestedLot: number | null;
+  riskPercentAtMinLot: number | null;
+  riskStatus: string;
+  explanation: string;
+  factors: string[];
+  warnings: string[];
+}
+

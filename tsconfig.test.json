@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "outDir": "./dist-tests",
+    "rootDir": ".",
+    "moduleResolution": "node",
+    "noEmitOnError": true
+  },
+  "include": [
+    "scripts/run-tests.ts",
+    "src/lib/csvCandleParser.ts",
+    "src/lib/instrumentConfig.ts",
+    "src/lib/instrumentMismatch.ts",
+    "src/calculations/swingDetector.ts",
+    "src/calculations/inputValidator.ts",
+    "src/types/analysis.ts"
+  ]
+}

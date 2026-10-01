@@ -1,0 +1,6 @@
+﻿{
+  "symbol": "US100",
+  "timeframe": "H1",
+  "isExample": true,
+  "warning": "Nilai broker harus diverifikasi sebelum digunakan."
+}
