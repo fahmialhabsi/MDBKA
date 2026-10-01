@@ -1863,5 +1863,243 @@ test("176. helper simbol preservatif dan perilaku Finex lama utuh", () => {
   );
 });
 
+/* ---------------- Dropdown broker Tahap 3: TEST 177-190 ---------------- */
+/* Dropdown hanya mengubah konteks + tampilan; hasil Finex tidak berubah. */
+
+function readAppBrokerHandler(): string {
+  const src = readSrc("src/App.tsx");
+  const start = src.indexOf("const handleBrokerChange");
+  assert(start >= 0, "handleBrokerChange hilang dari App");
+  const end = src.indexOf("\n  function runAnalysis", start);
+  assert(end > start, "batas handler tidak ditemukan");
+  return src.slice(start, end);
+}
+
+test("177. BrokerSelector memiliki option Finex", () => {
+  const src = readSrc("src/components/analysis/BrokerSelector.tsx");
+  assert(src.includes("<select"), "select broker hilang");
+  assert(src.includes("<option"), "option broker hilang");
+  assert(src.includes("BROKER_PROFILES"), "opsi tidak dari registry");
+  assert(src.includes("profile.label"), "label opsi tidak dari profil");
+  assert(
+    BROKER_PROFILES.some(
+      (profile) => profile.id === "finex" && profile.label === "Finex"
+    ),
+    "registry tidak menyediakan option Finex"
+  );
+  assert(src.includes('data-testid="broker-selector"'), "testid hilang");
+});
+
+test("178. BrokerSelector memiliki option OrbiTraderBerjangka", () => {
+  assert(
+    BROKER_PROFILES.some(
+      (profile) =>
+        profile.id === "orbitraderberjangka" &&
+        profile.label === "OrbiTraderBerjangka"
+    ),
+    "registry tidak menyediakan option OrbiTraderBerjangka"
+  );
+  const src = readSrc("src/components/analysis/BrokerSelector.tsx");
+  assert(src.includes("isSupportedBrokerId"), "guard id broker hilang");
+  assert(src.includes("Broker / Trader aktif"), "label dropdown hilang");
+});
+
+test("179. default broker adalah Finex", () => {
+  assert(DEFAULT_BROKER_ID === "finex", `default=${DEFAULT_BROKER_ID}`);
+  assert(DEFAULT_BROKER_ID === FINEX_BROKER_ID, "default bukan FINEX");
+  const src = readSrc("src/App.tsx");
+  assert(
+    src.includes("useState<BrokerId>(DEFAULT_BROKER_ID)"),
+    "state broker tidak memakai DEFAULT_BROKER_ID"
+  );
+});
+
+test("180. App menggunakan DEFAULT_BROKER_ID dan state tunggal", () => {
+  const src = readSrc("src/App.tsx");
+  assert(src.includes("DEFAULT_BROKER_ID"), "konstanta default tidak dipakai");
+  assert(src.includes("activeBrokerId"), "state broker aktif hilang");
+  assert(src.includes("setActiveBrokerId"), "setter broker aktif hilang");
+  assert(
+    src.includes('import type { BrokerId } from "./types/broker"'),
+    "tipe BrokerId tidak dipakai App"
+  );
+});
+
+test("181. label broker aktif berasal dari state", () => {
+  const selector = readSrc("src/components/analysis/BrokerSelector.tsx");
+  assert(selector.includes("Broker aktif:"), "badge broker hilang");
+  assert(selector.includes("{activeLabel}"), "badge bukan dari state/props");
+  assert(
+    selector.includes("getBrokerProfile(value).label"),
+    "label badge bukan dari profil state"
+  );
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("value={activeBrokerId}"), "selector tidak dari state");
+  assert(
+    app.includes("getBrokerProfile(activeBrokerId).label"),
+    "label App bukan dari state"
+  );
+  assert(
+    app.includes("Sumber broker: {activeBrokerLabel}"),
+    "label konteks CSV bukan dari state"
+  );
+});
+
+test("182. handleBrokerChange tersedia dan terhubung", () => {
+  const src = readSrc("src/App.tsx");
+  assert(
+    src.includes("const handleBrokerChange = useCallback"),
+    "handler tidak stabil (useCallback hilang)"
+  );
+  assert(
+    src.includes("onChange={handleBrokerChange}"),
+    "selector tidak terhubung ke handler"
+  );
+  const body = readAppBrokerHandler();
+  assert(body.includes("setActiveBrokerId"), "handler tidak mengubah state");
+  assert(
+    body.includes("if (nextBrokerId === activeBrokerId) return;"),
+    "guard broker sama hilang"
+  );
+});
+
+test("183. pergantian broker membersihkan hasil analisis lama", () => {
+  const body = readAppBrokerHandler();
+  assert(body.includes("clearAnalysisOutput()"), "hasil lama tidak dibersihkan");
+  assert(body.includes('setSwingCsv("")'), "CSV lama tidak diputus");
+  assert(body.includes('setConnectedCsvName("")'), "nama CSV lama tersisa");
+  assert(body.includes("setCsvResetKey"), "reset koneksi CSV hilang");
+  assert(body.includes("setBrokerNotice("), "notifikasi broker hilang");
+  assert(body.includes("setOcrWarning"), "warning lama tidak dibersihkan");
+});
+
+test("184. pergantian broker tidak memodifikasi decision engine", () => {
+  const body = readAppBrokerHandler();
+  assert(!body.includes("analyzeMarket"), "handler menyentuh decision engine");
+  assert(!body.includes("setMarket("), "handler mengubah data market");
+  assert(!body.includes("setBroker("), "handler mengubah setting broker");
+  const engine = readSrc("src/calculations/decisionEngine.ts");
+  assert(!engine.includes("BrokerId"), "engine tercemar tipe broker");
+  assert(!engine.includes("brokerRegistry"), "engine tercemar registry");
+  assert(!engine.includes("orbitraderberjangka"), "engine menyebut OTB");
+});
+
+test("185. pergantian broker tidak memodifikasi preset Finex", () => {
+  const body = readAppBrokerHandler();
+  assert(!body.includes("applyBrokerPreset"), "handler menulis preset");
+  assert(!body.includes("pointValue"), "handler menulis pointValue");
+  assert(!body.includes("contractSize"), "handler menulis contractSize");
+  assert(!body.includes("100000"), "handler menulis angka preset");
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("pointValue: 100000"),
+    "nilai awal Finex berubah/hilang"
+  );
+  assert(
+    getInstrumentProfile("GBPUSD").contractSize === 100000,
+    "preset Finex berubah"
+  );
+  assert(
+    getInstrumentProfile("US100").defaultBuffer === 10,
+    "preset US100 berubah"
+  );
+});
+
+test("186. OTB tidak menerima angka Finex sebagai preset", () => {
+  const otb = getBrokerProfile("orbitraderberjangka");
+  assert(otb.instruments.length === 0, "preset OTB terisi");
+  assert(
+    !JSON.stringify(otb).includes("100000"),
+    "angka Finex bocor ke profil OTB"
+  );
+  const body = readAppBrokerHandler();
+  assert(!body.includes("100000"), "angka Finex ditulis saat ganti broker");
+  assert(
+    body.includes("Preset instrumen belum diaktifkan"),
+    "status kosong OTB hilang dari notifikasi"
+  );
+});
+
+test("187. OTB menampilkan status perlu verifikasi", () => {
+  const selector = readSrc("src/components/analysis/BrokerSelector.tsx");
+  assert(
+    selector.includes("harus diverifikasi dari terminal OrbiTraderBerjangka"),
+    "keterangan OTB hilang dari selector"
+  );
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("Preset instrumen belum diaktifkan"),
+    "notifikasi OTB hilang dari App"
+  );
+  assert(
+    app.includes("Ambil ulang data market dari terminal OrbiTraderBerjangka"),
+    "warning ambil ulang data hilang"
+  );
+  const form = readSrc("src/components/analysis/BrokerSettingsForm.tsx");
+  assert(
+    form.includes("Parameter OrbiTraderBerjangka belum diverifikasi"),
+    "warning OTB hilang dari form"
+  );
+  assert(
+    form.includes("menu Specification pada MetaTrader OrbiTraderBerjangka"),
+    "rujukan Specification hilang"
+  );
+});
+
+test("188. Finex tetap menjadi jalur default", () => {
+  assert(DEFAULT_BROKER_ID === FINEX_BROKER_ID, "default bukan Finex");
+  assert(isSupportedBrokerId("finex"), "finex tidak didukung");
+  const body = readAppBrokerHandler();
+  assert(
+    body.includes("Gunakan screenshot, CSV, dan parameter dari terminal Finex"),
+    "notifikasi kembali ke Finex hilang"
+  );
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("setActiveBrokerId(DEFAULT_BROKER_ID)"),
+    "reset tidak kembali ke Finex"
+  );
+  const selector = readSrc("src/components/analysis/BrokerSelector.tsx");
+  assert(
+    selector.includes("Gunakan data dari terminal Finex"),
+    "keterangan Finex hilang"
+  );
+});
+
+test("189. tidak ada duplicate activeBrokerId state", () => {
+  const app = readSrc("src/App.tsx");
+  const stateCount = app.split("const [activeBrokerId").length - 1;
+  assert(stateCount === 1, `state ganda: ${stateCount}`);
+  const hookCount = app.split("useState<BrokerId>").length - 1;
+  assert(hookCount === 1, `hook broker ganda: ${hookCount}`);
+  const selector = readSrc("src/components/analysis/BrokerSelector.tsx");
+  assert(!selector.includes("setActiveBrokerId"), "anak menulis state broker");
+  assert(!selector.includes("useState<BrokerId>"), "anak punya state broker");
+  const form = readSrc("src/components/analysis/BrokerSettingsForm.tsx");
+  assert(!form.includes("setActiveBrokerId"), "form menulis state broker");
+  assert(form.includes("brokerId?:"), "prop broker form hilang");
+});
+
+test("190. CSV/OCR lama tetap terhubung seperti sebelumnya", () => {
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("onCsvLoaded={handleCsvLoaded}"), "CSV loader lepas");
+  assert(
+    app.includes("onConnectionChange={handleConnectionChange}"),
+    "status koneksi CSV lepas"
+  );
+  assert(app.includes("onExtracted={handleExtracted}"), "OCR lepas");
+  assert(app.includes("mergeValidOcrMarketData"), "merge aman OCR hilang");
+  assert(app.includes("filterOcrPricesForSymbol"), "filter OCR hilang");
+  assert(
+    app.includes("Atur parameter broker dan risiko — "),
+    "judul dinamis form hilang"
+  );
+  assert(app.includes("brokerId={activeBrokerId}"), "prop broker form hilang");
+  const csv = readSrc("src/components/analysis/CsvFileConnector.tsx");
+  assert(csv.includes("Hubungkan CSV MT5"), "tombol CSV hilang");
+  const ocr = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(ocr.includes("parseOcrTextRich"), "jalur OCR berubah");
+});
+
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);
 if (failed > 0) process.exit(1);

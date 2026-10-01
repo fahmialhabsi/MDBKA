@@ -1,4 +1,5 @@
 ﻿import type { BrokerSettings } from "../../types/analysis";
+import type { BrokerId } from "../../types/broker";
 import { getInstrumentProfile } from "../../lib/instrumentConfig";
 import {
   displayMarketNumber,
@@ -8,6 +9,8 @@ import {
 interface Props {
   broker: BrokerSettings;
   symbol: string;
+  /** Konteks broker aktif (display only). Tidak mengubah rumus/nilai. */
+  brokerId?: BrokerId;
   onChange: (data: BrokerSettings) => void;
   onApplyPreset?: () => void;
 }
@@ -98,6 +101,7 @@ const SOURCE_LABELS: Record<FieldSource, string> = {
 export default function BrokerSettingsForm({
   broker,
   symbol,
+  brokerId,
   onChange,
   onApplyPreset
 }: Props) {
@@ -120,6 +124,13 @@ export default function BrokerSettingsForm({
       <p className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100">
         {brokerNote}
       </p>
+
+      {brokerId === "orbitraderberjangka" && (
+        <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-xs leading-5 text-amber-100">
+          Parameter OrbiTraderBerjangka belum diverifikasi. Isi berdasarkan
+          menu Specification pada MetaTrader OrbiTraderBerjangka.
+        </p>
+      )}
 
       {onApplyPreset && (
         <button

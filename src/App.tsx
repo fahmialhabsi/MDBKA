@@ -18,6 +18,7 @@ import {
 import ScreenshotDropzone from "./components/screenshot/ScreenshotDropzone";
 import OcrExtractor from "./components/extraction/OcrExtractor";
 import ExtractedDataForm from "./components/extraction/ExtractedDataForm";
+import BrokerSelector from "./components/analysis/BrokerSelector";
 import BrokerSettingsForm from "./components/analysis/BrokerSettingsForm";
 import ValidationSummaryCard from "./components/analysis/ValidationSummaryCard";
 import SwingLevelsForm from "./components/analysis/SwingLevelsForm";
@@ -28,8 +29,13 @@ import { detectScaleMismatch } from "./calculations/scaleValidator";
 import { validateAnalysisInputs } from "./calculations/inputValidator";
 import { normalizeSymbol } from "./lib/instrumentConfig";
 import { traceOcrStage } from "./lib/debugTrace";
+import {
+  DEFAULT_BROKER_ID,
+  getBrokerProfile,
+} from "./lib/brokerRegistry";
 
 import type { BrokerSettings, MarketData } from "./types/analysis";
+import type { BrokerId } from "./types/broker";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
 import {
   applyBrokerPreset,
@@ -117,6 +123,10 @@ export default function App() {
   const [image, setImage] = useState<string | null>(null);
   const [market, setMarket] = useState<MarketData>(initialMarket);
   const [broker, setBroker] = useState<BrokerSettings>(initialBroker);
+  // Tahap 3: satu-satunya sumber kebenaran broker aktif. Default Finex.
+  const [activeBrokerId, setActiveBrokerId] =
+    useState<BrokerId>(DEFAULT_BROKER_ID);
+  const [brokerNotice, setBrokerNotice] = useState("");
   const [rawOcr, setRawOcr] = useState("");
   const [symbolNotice, setSymbolNotice] = useState("");
   const [ocrWarning, setOcrWarning] = useState("");
@@ -164,6 +174,9 @@ export default function App() {
     setConfirmed(false);
     setBlockedReasons(null);
   }, []);
+
+  // Label broker aktif selalu berasal dari state (bukan hard-code).
+  const activeBrokerLabel = getBrokerProfile(activeBrokerId).label;
 
   // Menyesuaikan parameter broker ketika simbol diganti.
   // CSV instrumen lama tidak boleh dipakai untuk simbol baru.
@@ -309,6 +322,29 @@ export default function App() {
     clearAnalysisOutput();
   }, [market.symbol, clearAnalysisOutput]);
 
+  // Tahap 3: ganti konteks broker saja. Tidak menyentuh data market,
+  // pengaturan broker (equity/risiko/preset), parser, atau rumus analisis.
+  // Hanya membersihkan output lama dan koneksi CSV broker sebelumnya.
+  // Tidak ada angka OTB yang diisi otomatis.
+  const handleBrokerChange = useCallback(
+    (nextBrokerId: BrokerId) => {
+      if (nextBrokerId === activeBrokerId) return;
+
+      setActiveBrokerId(nextBrokerId);
+      setSwingCsv("");
+      setConnectedCsvName("");
+      setCsvResetKey((previous) => previous + 1);
+      setOcrWarning("");
+      setBrokerNotice(
+        nextBrokerId === "orbitraderberjangka"
+          ? "Broker aktif: OrbiTraderBerjangka. Preset instrumen belum diaktifkan. Verifikasi simbol dan parameter broker dari Specification OrbiTraderBerjangka terlebih dahulu."
+          : "Broker aktif: Finex. Gunakan screenshot, CSV, dan parameter dari terminal Finex.",
+      );
+      clearAnalysisOutput();
+    },
+    [activeBrokerId, clearAnalysisOutput],
+  );
+
   function runAnalysis() {
     traceOcrStage("analyze-input", {
       bid: market.bid,
@@ -343,6 +379,8 @@ export default function App() {
     setImage(null);
     setMarket(emptyMarket);
     setBroker(emptyBroker);
+    setActiveBrokerId(DEFAULT_BROKER_ID);
+    setBrokerNotice("");
     setRawOcr("");
     setSymbolNotice("");
     setOcrWarning("");
@@ -358,6 +396,8 @@ export default function App() {
     setImage(null);
     setMarket(initialMarket);
     setBroker(initialBroker);
+    setActiveBrokerId(DEFAULT_BROKER_ID);
+    setBrokerNotice("");
     setRawOcr("");
     setSymbolNotice("");
     setOcrWarning("");
@@ -408,6 +448,27 @@ export default function App() {
               dapat Anda ubah.
             </p>
           </div>
+        </section>
+
+        <section className="rounded-3xl border border-white/10 bg-white/[0.035] p-5 shadow-2xl shadow-black/10 lg:p-6">
+          <BrokerSelector
+            value={activeBrokerId}
+            onChange={handleBrokerChange}
+          />
+
+          {activeBrokerId === "orbitraderberjangka" && (
+            <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
+              Data Finex tidak otomatis valid untuk OrbiTraderBerjangka.
+              Ambil ulang data market dari terminal OrbiTraderBerjangka dan
+              konfirmasi ulang sebelum analisa.
+            </p>
+          )}
+
+          {brokerNotice && (
+            <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/50 p-3 text-sm text-slate-300">
+              {brokerNotice}
+            </p>
+          )}
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
@@ -496,12 +557,13 @@ export default function App() {
 
             <Panel
               icon={<ShieldCheck size={20} />}
-              title="3. Atur parameter broker dan risiko"
+              title={`3. Atur parameter broker dan risiko — ${activeBrokerLabel}`}
               description="Nilai point dan contract size wajib diverifikasi dari broker."
             >
               <BrokerSettingsForm
                 broker={broker}
                 symbol={market.symbol}
+                brokerId={activeBrokerId}
                 onChange={(nextBroker) => {
                   setBroker(nextBroker);
                   setResult(null);
@@ -523,6 +585,10 @@ export default function App() {
                 File CSV aktif: {connectedCsvName}
               </p>
             )}
+
+            <p className="text-xs text-slate-500">
+              Sumber broker: {activeBrokerLabel}
+            </p>
 
             <SwingLevelsForm
               symbol={market.symbol}
