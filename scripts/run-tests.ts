@@ -2686,7 +2686,7 @@ test("217. OTB preset dipilih bila broker orbitraderberjangka", () => {
   assert(applied.lotStep === 0.1, `lotStep=${applied.lotStep}`);
   assert(applied.buffer === 0, "buffer OTB dikarang (tidak ada datanya)");
   assert(applied.equity === 0, "equity ikut ditebak");
-  assert(applied.commission === 0, "komisi ikut ditebak");
+  assert(applied.commission === 33, `komisi OTB tidak terisi: ${applied.commission}`);
   assert(applied.slippage === 0, "slippage ikut ditebak");
   assert(applied.riskPercent === 10, "default strategi tidak diisi");
 });
@@ -3246,6 +3246,90 @@ test("244. OTB_PRESETS berisi 3 preset terverifikasi", () => {
   assert(eurchf.currencyProfit === "CHF", "profit currency bukan CHF");
   assert(eurchf.contractCurrency === "EUR", "contract currency bukan EUR");
   assert(eurchf.swapLong === -1.75 && eurchf.swapShort === -1.25, "swap salah");
+});
+
+/* ---------------- Komisi OTB auto-fill 5B: TEST 245-250 ---------------- */
+
+function otbBrokerWithCommission(commission: number): BrokerSettings {
+  return { ...makeValidBroker(), commission };
+}
+
+test("245. komisi GBPUSD_ORB auto-fill 33", () => {
+  const applied = applyBrokerPreset(
+    makeEmptyBroker(),
+    "GBPUSD_ORB",
+    "orbitraderberjangka"
+  );
+  assert(applied.commission === 33, `komisi=${applied.commission}`);
+});
+
+test("246. komisi AUDCAD_ORB auto-fill 33", () => {
+  const applied = applyBrokerPreset(
+    makeEmptyBroker(),
+    "AUDCAD_ORB",
+    "orbitraderberjangka"
+  );
+  assert(applied.commission === 33, `komisi=${applied.commission}`);
+});
+
+test("247. komisi EURCHF_ORB auto-fill 33", () => {
+  const applied = applyBrokerPreset(
+    makeEmptyBroker(),
+    "EURCHF_ORB",
+    "orbitraderberjangka"
+  );
+  assert(applied.commission === 33, `komisi=${applied.commission}`);
+});
+
+test("248. komisi simbol OTB TBD tetap kosong", () => {
+  const previous = makeEmptyBroker();
+  const result = applyBrokerPreset(
+    previous,
+    "AUDCHF_ORB",
+    "orbitraderberjangka"
+  );
+  assert(result === previous, "preset TBD ikut mengisi");
+  assert(result.commission === 0, "komisi berubah tanpa preset");
+});
+
+test("249. komisi Finex tetap manual tanpa auto-fill", () => {
+  const viaDefault = applyBrokerPreset(makeEmptyBroker(), "GBPUSD");
+  assert(viaDefault.commission === 0, "Finex ikut auto-fill komisi");
+  const viaFinex = applyBrokerPreset(makeEmptyBroker(), "GBPUSD", "finex");
+  assert(viaFinex.commission === 0, "jalur finex ikut auto-fill komisi");
+});
+
+test("250. user bisa override komisi OTB + guard info menyimpang", () => {
+  const kept = applyBrokerPreset(
+    otbBrokerWithCommission(50),
+    "GBPUSD_ORB",
+    "orbitraderberjangka"
+  );
+  assert(kept.commission === 50, "override komisi pengguna tertimpa");
+  const warned = validateAnalysisInputs(
+    { ...makeValidMarket("GBPUSD"), symbol: "GBPUSD_ORB" },
+    otbBrokerWithCommission(50),
+    "orbitraderberjangka"
+  );
+  const info = warned.warnings.find((item) => item.field === "commission");
+  assert(info !== undefined, "info penyimpangan komisi hilang");
+  if (info === undefined) {
+    throw new Error("info penyimpangan komisi hilang");
+  }
+  assert(info.message.includes("33"), `pesan=${info.message}`);
+  assert(
+    !warned.errors.some((item) => item.field === "commission"),
+    "info komisi berubah menjadi error pemblokir"
+  );
+  const exact = validateAnalysisInputs(
+    { ...makeValidMarket("GBPUSD"), symbol: "GBPUSD_ORB" },
+    otbBrokerWithCommission(33),
+    "orbitraderberjangka"
+  );
+  assert(
+    !exact.warnings.some((item) => item.field === "commission"),
+    "komisi sesuai spec ikut diperingatkan"
+  );
 });
 
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);

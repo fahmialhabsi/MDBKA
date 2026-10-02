@@ -368,6 +368,32 @@ export function validateAnalysisInputs(
     );
   }
 
+  // Tahap 5B: info non-blokir bila komisi menyimpang dari spesifikasi OTB
+  // terverifikasi. Tidak force nilai; 0/edits manual tetap sah.
+  if (
+    brokerId === ORBITRADER_BROKER_ID &&
+    Number.isFinite(broker.commission) &&
+    broker.commission >= 0
+  ) {
+    const otbCommission =
+      getOtbInstrumentProfile(market.symbol)?.commission?.pricePerLot;
+
+    if (
+      otbCommission !== undefined &&
+      broker.commission !== otbCommission
+    ) {
+      warnings.push(
+        item(
+          "commission",
+          `Komisi ${broker.commission} berbeda dari spesifikasi ` +
+            `OrbiTraderBerjangka (${otbCommission} USD/lot). ` +
+            `Pastikan sesuai akun sebelum order.`,
+          "warning"
+        )
+      );
+    }
+  }
+
   if (!Number.isFinite(broker.slippage) || broker.slippage < 0) {
     errors.push(
       item(

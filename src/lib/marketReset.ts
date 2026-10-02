@@ -405,8 +405,9 @@ function needsFill(value: number): boolean {
  *   terverifikasi; buffer dipertahankan (tidak ada data buffer OTB).
  * - Simbol OTB tak terverifikasi: kembalikan `previous` (referensi sama,
  *   tanpa partial apply, tanpa fallback Finex).
- * - Default strategi hanya diisi bila kosong/invalid; equity/komisi/
- *   slippage TIDAK disentuh (wajib input/konfirmasi manual).
+ * - Default strategi hanya diisi bila kosong/invalid; equity/slippage
+ *   TIDAK disentuh (wajib input/konfirmasi manual). Komisi OTB diisi dari
+ *   preset terverifikasi bila kosong (user override dipertahankan).
  */
 export function applyBrokerPreset(
   previous: BrokerSettings,
@@ -424,6 +425,10 @@ export function applyBrokerPreset(
       ...previous,
       pointValue: calculateOtbTickValue(otb),
       contractSize: otb.contractSize,
+      commission:
+        otb.commission !== null && needsFill(previous.commission)
+          ? otb.commission.pricePerLot
+          : previous.commission,
       riskPercent: needsFill(previous.riskPercent)
         ? STRATEGY_DEFAULTS.riskPercent
         : previous.riskPercent,
