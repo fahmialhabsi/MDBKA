@@ -9,7 +9,7 @@ import {
   DEFAULT_BROKER_ID,
   ORBITRADER_BROKER_ID,
 } from "./brokerRegistry";
-import { exactOtbSymbol } from "./brokerSymbols";
+import { exactOtbSymbol, isOtbSymbolVerified } from "./brokerSymbols";
 import {
   calculateOtbTickValue,
   getOtbInstrumentProfile,
@@ -400,11 +400,14 @@ function needsFill(value: number): boolean {
  * - Finex (default): pointValue/contractSize/buffer mengikuti preset
  *   instrumentConfig; perilaku lama byte-identik.
  * - OrbiTraderBerjangka: lookup EXACT (tanpa normalizeSymbol agar
- *   "GBPUSD_ORB" tidak terpangkas menjadi "GBPUSD"); pointValue dari
- *   kalkulator tick OTB, contractSize/minLot/lotStep dari preset
- *   terverifikasi; buffer dipertahankan (tidak ada data buffer OTB).
- * - Simbol OTB tak terverifikasi: kembalikan `previous` (referensi sama,
- *   tanpa partial apply, tanpa fallback Finex).
+ *   "GBPUSD_ORB" tidak terpangkas menjadi "GBPUSD"); HANYA simbol
+ *   terverifikasi (lihat VERIFIED_OTB_SYMBOLS) yang memakai preset:
+ *   pointValue dari kalkulator tick OTB, contractSize/minLot/lotStep
+ *   dari preset terverifikasi; buffer dipertahankan.
+ * - Simbol OTB pending (objek preset ada sebagai fixture tapi belum
+ *   terverifikasi): kembalikan `previous` (referensi sama, tanpa
+ *   partial apply, tanpa fallback Finex). Pengguna mengisi manual
+ *   dari Specification; warning tampil via hasOtbPresetForSymbol.
  * - Default strategi hanya diisi bila kosong/invalid; equity/slippage
  *   TIDAK disentuh (wajib input/konfirmasi manual). Komisi OTB diisi dari
  *   preset terverifikasi bila kosong (user override dipertahankan).
@@ -415,6 +418,12 @@ export function applyBrokerPreset(
   brokerId: BrokerId = DEFAULT_BROKER_ID
 ): BrokerSettings {
   if (brokerId === ORBITRADER_BROKER_ID) {
+    // Kebijakan verifikasi: preset otomatis hanya untuk simbol
+    // terverifikasi. Simbol pending tidak memakai angka fixture.
+    if (!isOtbSymbolVerified(symbol)) {
+      return previous;
+    }
+
     const otb = getOtbInstrumentProfile(symbol);
 
     if (otb === null) {

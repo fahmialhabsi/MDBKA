@@ -31,11 +31,35 @@ export const OTB_ALL_SYMBOLS = [
   "USDCAD_ORB",
 ] as const;
 
-/** True bila preset OTB cukup lengkap untuk ditampilkan/dipakai. */
+/**
+ * Simbol OTB yang presetnya terverifikasi dari Specification broker.
+ * Kebijakan verifikasi: HANYA GBPUSD_ORB. Simbol lain di OTB_ALL_SYMBOLS
+ * tetap tampil di dropdown (pending) tetapi wajib menampilkan warning
+ * dan TIDAK memakai preset otomatis sampai data Specification lengkap.
+ * Untuk memverifikasi simbol baru: tambahkan di sini + lengkapi test.
+ */
+export const VERIFIED_OTB_SYMBOLS: readonly string[] = Object.freeze([
+  "GBPUSD_ORB",
+]);
+
+/** True bila simbol OTB terverifikasi (exact, case-sensitive). */
+export function isOtbSymbolVerified(symbol: string): boolean {
+  return (VERIFIED_OTB_SYMBOLS as readonly string[]).includes(symbol);
+}
+
+/**
+ * True bila preset OTB boleh dipakai tanpa warning: objek preset ada,
+ * field dasar valid, DAN simbol terverifikasi. Objek preset yang ada di
+ * kode untuk simbol pending adalah fixture/data-layer (untuk kalkulasi
+ * murni seperti swap), bukan dasar auto-fill atau klaim terverifikasi.
+ */
 function isCompleteOtbPreset(symbol: string): boolean {
   const preset = getOtbInstrumentProfile(symbol);
   return (
-    preset !== null && preset.digits > 0 && preset.contractSize > 0
+    preset !== null &&
+    preset.digits > 0 &&
+    preset.contractSize > 0 &&
+    isOtbSymbolVerified(symbol)
   );
 }
 

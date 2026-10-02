@@ -4,6 +4,7 @@
 } from "../types/analysis";
 import type { BrokerId } from "../types/broker";
 import { ORBITRADER_BROKER_ID } from "../lib/brokerRegistry";
+import { isOtbSymbolVerified } from "../lib/brokerSymbols";
 import { getOtbInstrumentProfile } from "../lib/otbInstrumentConfig";
 import { getInstrumentProfile } from "../lib/instrumentConfig";
 import { traceOcrStage } from "../lib/debugTrace";
@@ -302,13 +303,14 @@ export function validateAnalysisInputs(
   }
 
   // Tahap 4B: minimum lot khusus OTB sebagai warning non-blokir (tidak
-  // force naik). Hanya bila broker aktif OTB, minLot valid > 0, dan ada
-  // preset OTB terverifikasi untuk simbol exact. Tanpa preset: tidak ada
-  // guard (tidak boleh mengarang batas).
+  // force naik). Hanya bila broker aktif OTB, minLot valid > 0, dan
+  // simbol TERVERIFIKASI (lihat VERIFIED_OTB_SYMBOLS). Simbol pending
+  // memakai angka fixture di kode — tidak boleh dijadikan batas warning.
   if (
     brokerId === ORBITRADER_BROKER_ID &&
     Number.isFinite(broker.minLot) &&
-    broker.minLot > 0
+    broker.minLot > 0 &&
+    isOtbSymbolVerified(market.symbol)
   ) {
     const otbMinimum = getOtbInstrumentProfile(market.symbol)?.minVolume;
 
@@ -368,12 +370,15 @@ export function validateAnalysisInputs(
     );
   }
 
-  // Tahap 5B: info non-blokir bila komisi menyimpang dari spesifikasi OTB
-  // terverifikasi. Tidak force nilai; 0/edits manual tetap sah.
+  // Tahap 5B: info non-blokir bila komisi menyimpang dari spesifikasi
+  // OTB terverifikasi. Hanya untuk simbol terverifikasi: field komisi
+  // pada simbol pending adalah fixture (bukan spec), sehingga tidak
+  // boleh dijadikan pembanding. Tidak force nilai; 0/edits manual sah.
   if (
     brokerId === ORBITRADER_BROKER_ID &&
     Number.isFinite(broker.commission) &&
-    broker.commission >= 0
+    broker.commission >= 0 &&
+    isOtbSymbolVerified(market.symbol)
   ) {
     const otbCommission =
       getOtbInstrumentProfile(market.symbol)?.commission?.pricePerLot;
