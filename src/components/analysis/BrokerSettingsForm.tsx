@@ -1,6 +1,7 @@
 ﻿import type { BrokerSettings } from "../../types/analysis";
 import type { BrokerId } from "../../types/broker";
 import { getInstrumentProfile } from "../../lib/instrumentConfig";
+import { hasOtbPresetForSymbol } from "../../lib/brokerSymbols";
 import {
   displayMarketNumber,
   parseMarketInput,
@@ -125,12 +126,13 @@ export default function BrokerSettingsForm({
         {brokerNote}
       </p>
 
-      {brokerId === "orbitraderberjangka" && (
-        <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-xs leading-5 text-amber-100">
-          Parameter OrbiTraderBerjangka belum diverifikasi. Isi berdasarkan
-          menu Specification pada MetaTrader OrbiTraderBerjangka.
-        </p>
-      )}
+      {brokerId === "orbitraderberjangka" &&
+        !hasOtbPresetForSymbol(symbol, brokerId) && (
+          <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-xs leading-5 text-amber-100">
+            Parameter OrbiTraderBerjangka belum diverifikasi. Isi berdasarkan
+            menu Specification pada MetaTrader OrbiTraderBerjangka.
+          </p>
+        )}
 
       {onApplyPreset && (
         <button

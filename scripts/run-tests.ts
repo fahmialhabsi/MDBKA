@@ -56,6 +56,11 @@ import {
   calculateOtbTickValue,
   getOtbInstrumentProfile,
 } from "../src/lib/otbInstrumentConfig";
+import {
+  canonicalSymbolForBroker,
+  getAvailableSymbols,
+  hasOtbPresetForSymbol,
+} from "../src/lib/brokerSymbols";
 
 let passed = 0;
 let failed = 0;
@@ -2836,6 +2841,213 @@ test("225. signature applyBrokerPreset aman + call site meneruskan broker", () =
     app.includes("belum terverifikasi di"),
     "pesan preset OTB hilang"
   );
+});
+
+/* ---------------- Dropdown & warning kondisional 4C: TEST 226-235 ---------------- */
+
+test("226. dropdown Finex menampilkan US100 dan GBPUSD", () => {
+  const finex = getAvailableSymbols("finex");
+  assert(
+    JSON.stringify(finex) === JSON.stringify([...SUPPORTED_SYMBOLS]),
+    "daftar Finex berubah"
+  );
+  assert(finex.includes("US100"), "US100 hilang dari dropdown Finex");
+  assert(finex.includes("GBPUSD"), "GBPUSD hilang dari dropdown Finex");
+  assert(
+    JSON.stringify(getAvailableSymbols()) === JSON.stringify(finex),
+    "default tanpa broker bukan jalur Finex"
+  );
+  const form = readSrc("src/components/extraction/ExtractedDataForm.tsx");
+  assert(form.includes("SUPPORTED_SYMBOLS"), "form lepas dari daftar Finex");
+  assert(form.includes("symbolOptions.map"), "render opsi hilang");
+});
+
+test("227. dropdown OTB menampilkan GBPUSD_ORB berpreset lengkap", () => {
+  const otb = getAvailableSymbols("orbitraderberjangka");
+  assert(otb.length === 1, `daftar OTB=${JSON.stringify(otb)}`);
+  assert(otb[0] === "GBPUSD_ORB", "GBPUSD_ORB hilang dari dropdown OTB");
+});
+
+test("228. dropdown OTB tidak menampilkan simbol tanpa preset", () => {
+  const otb = getAvailableSymbols("orbitraderberjangka");
+  assert(!otb.includes("EURUSD_ORB"), "simbol invented tampil di OTB");
+  assert(!otb.includes("GBPUSD"), "simbol Finex tampil di OTB");
+  assert(!otb.includes("US100"), "US100 tampil di OTB");
+  assert(
+    !hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka"),
+    "simbol invented dianggap terverifikasi"
+  );
+  assert(
+    !hasOtbPresetForSymbol("GBPUSD", "orbitraderberjangka"),
+    "simbol Finex dianggap preset OTB"
+  );
+});
+
+test("229. pindah Finex ke OTB mengubah daftar dropdown", () => {
+  const finex = getAvailableSymbols("finex");
+  const otb = getAvailableSymbols("orbitraderberjangka");
+  assert(
+    JSON.stringify(finex) !== JSON.stringify(otb),
+    "daftar tidak berubah saat broker berganti"
+  );
+  const form = readSrc("src/components/extraction/ExtractedDataForm.tsx");
+  assert(
+    form.includes("getAvailableSymbols(brokerId)"),
+    "form tidak menurunkan opsi dari broker aktif"
+  );
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("<ExtractedDataForm") &&
+      app.includes("brokerId={activeBrokerId}"),
+    "App tidak meneruskan broker ke form simbol"
+  );
+});
+
+test("230. kembali OTB ke Finex memulihkan dropdown Finex", () => {
+  const finex = getAvailableSymbols("finex");
+  assert(!finex.includes("GBPUSD_ORB"), "simbol OTB bocor ke Finex");
+  assert(finex.length === 10, `daftar Finex=${finex.length}`);
+  assert(finex.includes("US100") && finex.includes("GBPUSD"), "daftar rusak");
+});
+
+test("231. dropdown tidak mencampur simbol Finex dan OTB", () => {
+  for (const symbol of getAvailableSymbols("orbitraderberjangka")) {
+    assert(
+      !isSupportedSymbol(symbol),
+      `simbol Finex ${symbol} tercampur di OTB`
+    );
+  }
+  for (const symbol of getAvailableSymbols("finex")) {
+    assert(
+      getOtbInstrumentProfile(symbol) === null,
+      `preset OTB ${symbol} tercampur di Finex`
+    );
+  }
+});
+
+test("232. warning verifikasi tidak tampil untuk simbol Finex", () => {
+  assert(hasOtbPresetForSymbol("GBPUSD", "finex") === true, "Finex ditandai");
+  assert(hasOtbPresetForSymbol("GBPUSD") === true, "default ditandai");
+  assert(hasOtbPresetForSymbol("US100", "finex") === true, "US100 ditandai");
+  const form = readSrc("src/components/analysis/BrokerSettingsForm.tsx");
+  assert(
+    form.includes("!hasOtbPresetForSymbol(symbol, brokerId)"),
+    "warning form tidak kondisional preset"
+  );
+});
+
+test("233. warning hilang untuk GBPUSD_ORB dan validator menerima", () => {
+  assert(
+    hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
+    "GBPUSD_ORB dianggap belum terverifikasi"
+  );
+  const summary = validateAnalysisInputs(
+    { ...makeValidMarket("GBPUSD"), symbol: "GBPUSD_ORB" },
+    makeValidBroker(),
+    "orbitraderberjangka"
+  );
+  assert(
+    !summary.errors.some((error) => error.field === "symbol"),
+    "simbol OTB terverifikasi ditolak validator"
+  );
+  const closed = validateAnalysisInputs(
+    { ...makeValidMarket("GBPUSD"), symbol: "GBPUSD_ORB" },
+    makeValidBroker()
+  );
+  // Tanpa konteks broker: GBPUSD_ORB dinilai sebagai keluarga GBPUSD via
+  // normalizeSymbol (perilaku lama; skala identik) — bukan error simbol.
+  // Fail-closed tetap dijaga di jalur preset (220/221), guard min-lot
+  // (223), dan dropdown (228/231) yang memakai exact match.
+  assert(
+    !closed.errors.some((error) => error.field === "symbol"),
+    "keluarga skala GBPUSD ikut ditolak"
+  );
+});
+
+test("234. warning tampil untuk simbol OTB tanpa preset", () => {
+  assert(
+    hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka") === false,
+    "simbol invented lolos guard"
+  );
+  // Preset tidak ter-apply (penolakan yang berlaku, tanpa partial):
+  const previous = makeValidBroker();
+  assert(
+    applyBrokerPreset(previous, "EURUSD_ORB", "orbitraderberjangka") ===
+      previous,
+    "preset unverified ter-apply"
+  );
+  // Validator menilainya sebagai keluarga EURUSD (skala sama via
+  // normalizeSymbol) — bukan error simbol; pembeda unverified adalah
+  // notice UI + tanpa preset fill.
+  const summary = validateAnalysisInputs(
+    { ...makeValidMarket("GBPUSD"), symbol: "EURUSD_ORB" },
+    makeValidBroker(),
+    "orbitraderberjangka"
+  );
+  assert(
+    !summary.errors.some((error) => error.field === "symbol"),
+    "keluarga skala EURUSD ikut ditolak"
+  );
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("otbPresetMissingNotice") &&
+      app.includes("belum terverifikasi di"),
+    "notice preset hilang dari App"
+  );
+  // Simbol di luar keluarga mana pun tetap ditolak walau broker OTB:
+  const xyz = validateAnalysisInputs(
+    { ...makeValidMarket("GBPUSD"), symbol: "XYZ" },
+    makeValidBroker(),
+    "orbitraderberjangka"
+  );
+  assert(
+    xyz.errors.some((error) => error.field === "symbol"),
+    "simbol asing lolos di mode OTB"
+  );
+});
+
+test("235. memilih simbol dropdown mengubah simbol state secara exact", () => {
+  assert(
+    canonicalSymbolForBroker("GBPUSD_ORB", "orbitraderberjangka") ===
+      "GBPUSD_ORB",
+    "suffiks _ORB terpangkas"
+  );
+  assert(
+    canonicalSymbolForBroker("gbpusd_orb", "orbitraderberjangka") ===
+      "GBPUSD_ORB",
+    "kapital OTB tidak dinormalisasi"
+  );
+  assert(
+    canonicalSymbolForBroker("GBPUSD.pro", "finex") === "GBPUSD",
+    "jalur Finex berubah"
+  );
+  assert(
+    canonicalSymbolForBroker("GBPUSD.pro") === "GBPUSD",
+    "default tanpa broker berubah"
+  );
+  assert(
+    canonicalSymbolForBroker("", "orbitraderberjangka") === "",
+    "simbol kosong lolos"
+  );
+  const form = readSrc("src/components/extraction/ExtractedDataForm.tsx");
+  assert(
+    form.includes("updateSymbol(event.target.value)"),
+    "select tidak meneruskan pilihan"
+  );
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("onSymbolChange={handleSymbolChange}"),
+    "form simbol lepas dari handler"
+  );
+  const start = app.indexOf("const handleSymbolChange");
+  const end = app.indexOf("const handleExtracted", start);
+  assert(start >= 0 && end > start, "handler simbol hilang");
+  const body = app.slice(start, end);
+  assert(
+    body.includes("canonicalSymbolForBroker"),
+    "handler tidak memakai kanonikalisasi per broker"
+  );
+  assert(body.includes("createEmptyMarketForSymbol"), "reset hilang");
 });
 
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);

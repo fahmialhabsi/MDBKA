@@ -1,8 +1,9 @@
 ﻿import type { MarketData } from "../../types/analysis";
+import type { BrokerId } from "../../types/broker";
 import {
   SUPPORTED_SYMBOLS,
-  isSupportedSymbol,
 } from "../../lib/instrumentConfig";
+import { getAvailableSymbols } from "../../lib/brokerSymbols";
 import {
   displayMarketNumber,
   parseMarketInput,
@@ -11,6 +12,8 @@ import { traceOcrStage } from "../../lib/debugTrace";
 
 interface Props {
   market: MarketData;
+  /** Konteks broker aktif (display only): menentukan daftar simbol. */
+  brokerId?: BrokerId;
   onChange: (data: MarketData) => void;
   onSymbolChange?: (symbol: string) => void;
 }
@@ -43,14 +46,21 @@ const inputClassName =
 
 export default function ExtractedDataForm({
   market,
+  brokerId,
   onChange,
   onSymbolChange
 }: Props) {
-  // Opsi dropdown dari satu sumber (instrumentConfig). Jika OCR mendeteksi
-  // simbol di luar daftar (mis. NAS100), tampilkan nilai aktif agar tidak
-  // kosong, tetapi value tetap kode simbol.
-  const symbolOptions: string[] = [...SUPPORTED_SYMBOLS];
-  if (market.symbol && !isSupportedSymbol(market.symbol)) {
+  // Opsi dropdown mengikuti broker aktif dari satu sumber per broker:
+  // Finex = SUPPORTED_SYMBOLS (instrumentConfig, perilaku lama);
+  // OTB = hanya simbol berpreset lengkap. Jika simbol aktif di luar
+  // daftar (mis. NAS100 via OCR, atau simbol Finex saat baru pindah ke
+  // OTB), tampilkan nilai aktif agar select tidak kosong, tetapi value
+  // tetap kode simbol.
+  const symbolOptions: string[] =
+    brokerId === "orbitraderberjangka"
+      ? [...getAvailableSymbols(brokerId)]
+      : [...SUPPORTED_SYMBOLS];
+  if (market.symbol && !symbolOptions.includes(market.symbol)) {
     symbolOptions.push(market.symbol);
   }
 
