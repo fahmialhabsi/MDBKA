@@ -41,7 +41,7 @@ const tseslint = rootRequire("typescript-eslint");
 
 export default tseslint.config(
   {
-    ignores: ["dist/", "dist-tests/", "node_modules/"],
+    ignores: ["dist/", "dist-tests/", "dist-server/", "node_modules/"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

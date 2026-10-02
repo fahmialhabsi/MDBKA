@@ -77,6 +77,10 @@ import {
   getTripleSwapLabel,
   isWednesday,
 } from "../src/services/dateService";
+import {
+  MT5LogReader,
+  parseEquityFromText,
+} from "../server/services/mt5LogReader";
 
 let passed = 0;
 let failed = 0;
@@ -4348,6 +4352,142 @@ test("304. swapCost terintegrasi triple-swap (Rabu x3)", () => {
   );
   const comp = readSrc("src/components/result/AnalysisResult.tsx");
   assert(comp.includes("getTripleSwapLabel"), "label triple hilang di UI");
+});
+
+/* Tahap 5E-STEP2: Node.js Backend + Live Equity (5 test: 305-309).
+ * Runner proyek sinkron (tanpa supertest/vitest), sehingga route HTTP
+ * diuji via kontrak sumber + pipeline refresh sinkron MT5LogReader
+ * (tanpa membuka port). decisionEngine & test 1-304 tidak disentuh. */
+
+const nodeFs = require("node:fs") as unknown as {
+  readFileSync(path: string, encoding: string): string;
+  writeFileSync(f: string, d: string): void;
+  mkdtempSync(prefix: string): string;
+  rmSync(path: string, opts: unknown): void;
+};
+const nodeOs = require("node:os") as unknown as { tmpdir(): string };
+const nodePath = require("node:path") as unknown as {
+  join(...parts: string[]): string;
+};
+
+function makeTempLogDir(): string {
+  return nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), "mdbka-equity-"));
+}
+
+function removeTempDir(dir: string): void {
+  nodeFs.rmSync(dir, { recursive: true, force: true });
+}
+
+test("305. MT5LogReader init aman: path hilang -> null, file valid -> snapshot", () => {
+  const missing = new MT5LogReader(
+    nodePath.join("tidak-ada-mdbka", "missing.log")
+  );
+  assert(missing.getLatest() === null, "path hilang harus null");
+  assert(missing.refresh() === null, "refresh path hilang harus null");
+
+  const dir = makeTempLogDir();
+  try {
+    const file = nodePath.join(dir, "20261002.log");
+    (nodeFs as { writeFileSync(f: string, d: string): void }).writeFileSync(
+      file,
+      "2026.10.02 10:00:00 Trade opened #1\nBalance: 1000.50\nEquity: 1050.75\n"
+    );
+    const reader = new MT5LogReader(file);
+    const snap = reader.refresh();
+    if (snap === null) throw new Error("snapshot null untuk file valid");
+    assert(Math.abs(snap.balance - 1000.5) < 1e-9, `balance=${snap.balance}`);
+    assert(Math.abs(snap.equity - 1050.75) < 1e-9, `equity=${snap.equity}`);
+    assert(snap.timestamp.length > 0 && snap.lastModified.length > 0, "waktu kosong");
+  } finally {
+    removeTempDir(dir);
+  }
+});
+
+test("306. parseEquityFromText: Balance/Equity akurat + last-wins + profit derivasi", () => {
+  const parsed = parseEquityFromText(
+    "Balance: 1000.50\nEquity: 1050.75\n"
+  );
+  if (parsed === null) throw new Error("parse null untuk input valid");
+  assert(Math.abs(parsed.balance - 1000.5) < 1e-9, `balance=${parsed.balance}`);
+  assert(Math.abs(parsed.equity - 1050.75) < 1e-9, `equity=${parsed.equity}`);
+  assert(Math.abs(parsed.profit - 50.25) < 1e-9, `profit=${parsed.profit}`);
+  // Last wins: baris terakhir menang.
+  const repeated = parseEquityFromText(
+    "Balance: 100.00\nBalance: 1200.00\nEquity: 1300.00\n"
+  );
+  if (repeated === null) throw new Error("parse repeated null");
+  assert(Math.abs(repeated.balance - 1200) < 1e-9, `last-wins=${repeated.balance}`);
+  // Tanpa angka relevan -> null (bukan 0 fiktif).
+  assert(parseEquityFromText("hello world\n") === null, "teks acak harus null");
+});
+
+test("307. refresh() deteksi perubahan file -> onUpdate push snapshot baru", () => {
+  const dir = makeTempLogDir();
+  try {
+    const file = nodePath.join(dir, "live.log");
+    (nodeFs as { writeFileSync(f: string, d: string): void }).writeFileSync(
+      file,
+      "Balance: 1000.00\nEquity: 1010.00\n"
+    );
+    const reader = new MT5LogReader(file);
+    reader.refresh();
+    const received: number[] = [];
+    const unsubscribe = reader.onUpdate((snap) => {
+      received.push(snap.equity);
+    });
+    // Tulis ulang tanpa perubahan -> tidak ada push (dedup).
+    reader.refresh();
+    assert(received.length === 0, `dedup gagal, push=${received.length}`);
+    // Tulis equity baru -> satu push dengan angka baru.
+    (nodeFs as { writeFileSync(f: string, d: string): void }).writeFileSync(
+      file,
+      "Balance: 1000.00\nEquity: 1200.00\n"
+    );
+    reader.refresh();
+    assert(received.length === 1, `push=${received.length}, harus 1`);
+    assert(Math.abs(received[0] - 1200) < 1e-9, `equity push=${received[0]}`);
+    unsubscribe();
+    // Setelah unsubscribe tidak ada push lagi.
+    (nodeFs as { writeFileSync(f: string, d: string): void }).writeFileSync(
+      file,
+      "Balance: 1000.00\nEquity: 1300.00\n"
+    );
+    reader.refresh();
+    assert(received.length === 1, "unsubscribe gagal");
+  } finally {
+    removeTempDir(dir);
+  }
+});
+
+test("308. equityRoutes kontrak: /latest + /stream SSE + heartbeat + error path", () => {
+  const src = readSrc("server/routes/equityRoutes.ts");
+  assert(src.includes('"/latest"'), "route /latest hilang");
+  assert(src.includes('"/stream"'), "route /stream hilang");
+  assert(src.includes("text/event-stream"), "header SSE hilang");
+  assert(src.includes("data: "), "format SSE data: hilang");
+  assert(src.includes("heartbeat"), "heartbeat 30s hilang");
+  assert(src.includes("404"), "404 saat belum ada data hilang");
+  assert(src.includes("500"), "error handling 500 hilang");
+  const appSrc = readSrc("server/app.ts");
+  assert(appSrc.includes('"/health"'), "health check hilang");
+  assert(appSrc.includes('"/api/equity"'), "mount /api/equity hilang");
+});
+
+test("309. CORS localhost:5173 + frontend SSE wiring + LiveEquity terpasang", () => {
+  const appSrc = readSrc("server/app.ts");
+  assert(appSrc.includes("cors"), "middleware cors hilang");
+  assert(appSrc.includes("http://localhost:5173"), "origin 5173 hilang");
+  const hook = readSrc("src/hooks/useEquityStream.ts");
+  assert(hook.includes("EventSource"), "SSE EventSource hilang di hook");
+  assert(hook.includes("/api/equity/stream"), "URL stream hilang di hook");
+  assert(hook.includes("/api/equity/latest"), "fallback polling latest hilang");
+  assert(hook.includes("setInterval"), "fallback interval hilang");
+  const panel = readSrc("src/components/result/LiveEquity.tsx");
+  assert(panel.includes('data-testid="live-equity"'), "testid live-equity hilang");
+  assert(panel.includes("useEquityStream"), "hook tak dipakai panel");
+  const resultSrc = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(resultSrc.includes("LiveEquity"), "LiveEquity tak terpasang di hasil");
+  assert(resultSrc.includes("/lot (profit"), "label swap legacy hilang (regresi)");
 });
 
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);

@@ -12,6 +12,7 @@ import type { ValidationViewState } from "../../lib/validationView";
 import { attachSwapToResult } from "../../calculations/attachSwapToResult";
 import { getTripleSwapLabel } from "../../services/dateService";
 import type { ExchangeRates } from "../../services/fxRateService";
+import { LiveEquity } from "./LiveEquity";
 
 interface Props {
   result: ResultType | null;
@@ -316,6 +317,9 @@ export default function AnalysisResult({ result, market, viewState, blockedReaso
         <Metric label="Lot teoritis" value={number(result.theoreticalLot, 4)} />
         <Metric label="Lot disarankan" value={number(result.suggestedLot, 4)} />
       </div>
+
+      {/* Tahap 5E-STEP2: live equity MT5 (info-only, tak mengubah keputusan). */}
+      <LiveEquity />
 
       {showSwapBlock && (
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">

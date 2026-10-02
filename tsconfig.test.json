@@ -32,6 +32,8 @@
     "src/lib/brokerSymbols.ts",
     "src/lib/otbInstrumentConfig.ts",
     "src/services/fxRateService.ts",
-    "src/services/dateService.ts"
+    "src/services/dateService.ts",
+    "server/types/equity.ts",
+    "server/services/mt5LogReader.ts"
   ]
 }
