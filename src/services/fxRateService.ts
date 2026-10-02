@@ -136,5 +136,5 @@ export function convertToUSD(
     return amount;
   }
 
-  return amount / rate;
+  return (amount / rate) * rates.USD;
 }

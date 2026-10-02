@@ -1,4 +1,4 @@
-﻿import type { BrokerSettings } from "../../types/analysis";
+import type { BrokerSettings } from "../../types/analysis";
 import type { BrokerId } from "../../types/broker";
 import { getInstrumentProfile } from "../../lib/instrumentConfig";
 import { hasOtbPresetForSymbol } from "../../lib/brokerSymbols";
@@ -50,7 +50,7 @@ const fields: Array<{
   },
   {
     key: "pointValue",
-    label: "Nilai perubahan harga / 1 lot USD",
+    label: "Tick value / 1 lot (Profit Currency)",
     help: "Wajib dicek dari spesifikasi broker (berbeda untuk forex vs indeks).",
     source: "preset"
   },

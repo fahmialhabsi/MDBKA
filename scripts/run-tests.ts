@@ -4458,20 +4458,20 @@ test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   assert(rates.EUR === 1.0, "EUR base berubah");
 });
 
-test("289. convertToUSD(100 AUD) ≈ 60.56 USD", () => {
+test("289. convertToUSD(100 AUD) ≈ 65.59 USD", () => {
   const usd = convertToUSD(100, "AUD", FALLBACK_RATES);
-  assert(Math.abs(usd - 100 / 1.6512) < 1e-9, `usd=${usd}`);
-  assert(Math.abs(usd - 60.5622) < 0.01, `usd=${usd} (≈60.56 spec)`);
+  assert(Math.abs(usd - (100 / 1.6512) * 1.0831) < 1e-9, `usd=${usd}`);
+  assert(Math.abs(usd - 65.5947) < 0.01, `usd=${usd} (≈60.56 spec)`);
 });
 
-test("290. convertToUSD(-431.7 AUD) ≈ -261.44 USD (AUDCHF swap)", () => {
+test("290. convertToUSD(-431.7 AUD) ≈ -283.17 USD (AUDCHF swap)", () => {
   const usd = convertToUSD(-431.7, "AUD", FALLBACK_RATES);
-  assert(Math.abs(usd - -261.4423) < 0.01, `usd=${usd}`);
+  assert(Math.abs(usd - -283.1724) < 0.01, `usd=${usd}`);
 });
 
 test("291. convertToUSD(-49 JPY) ≈ -0.304 USD (AUDJPY swap)", () => {
   const usd = convertToUSD(-49, "JPY", FALLBACK_RATES);
-  assert(Math.abs(usd - -0.3039) < 0.001, `usd=${usd}`);
+  assert(Math.abs(usd - -0.3291) < 0.001, `usd=${usd}`);
   assert(
     convertToUSD(10, "USD", FALLBACK_RATES) === 10,
     "USD passthrough rusak",
@@ -4500,7 +4500,7 @@ test("292. attachSwapToResult dengan fxRates → swapCostInUSD populated", () =>
     "swapCostInUSD tidak terisi",
   );
   assert(
-    Math.abs((attached.swapDetail.swapCostInUSD ?? 0) - -261.4423) < 0.01,
+    Math.abs((attached.swapDetail.swapCostInUSD ?? 0) - -283.1724) < 0.01,
     `usd=${attached.swapDetail.swapCostInUSD}`,
   );
   assert(
@@ -4573,7 +4573,7 @@ test("296. Display memo USD (dari AUD @1.6512)", () => {
     `(dari ${d.swapCostInContractBaseCurrency.toFixed(1)} ` +
     `${d.contractBaseCurrency} @${(d.fxRate ?? 0).toFixed(4)})`;
   // Koreksi pembulatan spec: -431.7/1.6512 = -261.4462 → toFixed(2) = -261.45.
-  assert(memo.includes("-261.45 USD"), `memo=${memo}`);
+  assert(memo.includes("-283.17 USD"), `memo=${memo}`);
   assert(memo.includes("-431.7 AUD"), `memo=${memo}`);
   assert(memo.includes("@1.6512"), `memo=${memo}`);
   const src = readSrc("src/components/result/AnalysisResult.tsx");

@@ -1,4 +1,4 @@
-﻿import {
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -30,7 +30,7 @@ import { validateAnalysisInputs } from "./calculations/inputValidator";
 import { normalizeSymbol } from "./lib/instrumentConfig";
 import { traceOcrStage } from "./lib/debugTrace";
 import {
-  DEFAULT_BROKER_ID,
+  DEFAULT_BROKER_ID, ORBITRADER_BROKER_ID,
   getBrokerProfile,
 } from "./lib/brokerRegistry";
 import {
@@ -39,6 +39,7 @@ import {
   hasOtbPresetForSymbol,
 } from "./lib/brokerSymbols";
 
+import { getOtbInstrumentProfile } from "./lib/otbInstrumentConfig";
 import type { BrokerSettings, MarketData } from "./types/analysis";
 import type { BrokerId } from "./types/broker";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
@@ -56,7 +57,7 @@ import {
   getValidationViewState,
 } from "./lib/validationView";
 import {
-  fetchECBRates,
+  fetchECBRates, convertToUSD,
   type ExchangeRates,
 } from "./services/fxRateService";
 
@@ -166,10 +167,17 @@ export default function App() {
     [market, broker, activeBrokerId],
   );
 
-  const analysis = useMemo(
-    () => analyzeMarket(market, broker),
-    [market, broker],
-  );
+  const analysis = useMemo(() => {
+    let effectiveBroker = broker;
+    if (activeBrokerId === ORBITRADER_BROKER_ID && fxRates !== null) {
+      const otb = getOtbInstrumentProfile(market.symbol);
+      if (otb !== null && otb.currencyProfit !== "USD") {
+        const usdPointValue = convertToUSD(broker.pointValue, otb.currencyProfit, fxRates);
+        effectiveBroker = { ...broker, pointValue: usdPointValue };
+      }
+    }
+    return analyzeMarket(market, effectiveBroker);
+  }, [market, broker, activeBrokerId, fxRates]);
 
   const isMarketEmpty = useMemo(
     () => RESET_MARKET_FIELDS.every((field) => market[field] === 0),
