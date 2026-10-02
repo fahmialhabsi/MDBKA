@@ -34,7 +34,10 @@
     "src/services/fxRateService.ts",
     "src/services/dateService.ts",
     "src/services/quotesLogReader.test.ts",
+    "src/hooks/useQuotesStream.ts",
+    "src/hooks/useQuotesStream.test.ts",
     "server/types/equity.ts",
+    "server/types/quotes.ts",
     "server/services/mt5LogReader.ts",
     "server/services/quotesLogReader.ts"
   ]

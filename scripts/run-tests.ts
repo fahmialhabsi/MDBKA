@@ -4821,7 +4821,10 @@ test("309. CORS localhost:5173 + frontend SSE wiring + LiveEquity terpasang", ()
   );
 });
 
-// Test 310-317: QuotesLogReader
+// Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream):
+// SATU runner async utama dengan SATU process.exit. Dua IIFE terpisah
+// dilarang (balapan exit + ringkasan ganda). Jumlah stream dibaca dari
+// QUOTES_STREAM_TEST_COUNT agar tidak hard-code di dua tempat.
 (async () => {
   try {
     const allPassed = await runQuotesLogReaderTests();
@@ -4835,24 +4838,26 @@ test("309. CORS localhost:5173 + frontend SSE wiring + LiveEquity terpasang", ()
     failed += 8;
   }
 
+  try {
+    const {
+      QUOTES_STREAM_TEST_COUNT,
+      runQuotesStreamTests,
+    } = await import("../src/hooks/useQuotesStream.test");
+    const allPassed = await runQuotesStreamTests();
+    if (allPassed) {
+      passed += QUOTES_STREAM_TEST_COUNT;
+    } else {
+      failed += QUOTES_STREAM_TEST_COUNT;
+    }
+  } catch (e) {
+    console.error("✗ Quotes stream test suite error:", e);
+    // Import gagal -> count tak terbaca; samakan dengan
+    // QUOTES_STREAM_TEST_COUNT di src/hooks/useQuotesStream.test.ts.
+    failed += 12;
+  }
+
   console.log(
     `\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`,
   );
   process.exit(failed > 0 ? 1 : 0);
-})();
-
-// Test 318-323: useQuotesStream + LiveQuotes
-(async () => {
-  try {
-    const { runQuotesStreamTests } = await import('../src/hooks/useQuotesStream.test');
-    const allPassed = await runQuotesStreamTests();
-    if (allPassed) {
-      passed += 6;
-    } else {
-      failed += 6;
-    }
-  } catch (e) {
-    console.error("✗ Quotes stream test suite error:", e);
-    failed += 6;
-  }
 })();

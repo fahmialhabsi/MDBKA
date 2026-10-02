@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { QuotesLogReader } from "../services/quotesLogReader";
-import { QuotesResponse } from "../types/quotes";
+import { QuotesResponse, type QuoteSseEnvelope } from "../types/quotes";
 
 export function createQuotesRoutes(quotesReader: QuotesLogReader): Router {
   const router = Router();
@@ -45,18 +45,22 @@ export function createQuotesRoutes(quotesReader: QuotesLogReader): Router {
       res.setHeader("X-Accel-Buffering", "no");
 
       const initialQuotes = quotesReader.getLatestBySymbol(symbol, limit);
-      res.write(
-        `data: ${JSON.stringify({ type: "init", data: initialQuotes })}\n\n`,
-      );
+      const initEnvelope: QuoteSseEnvelope = {
+        type: "init",
+        data: initialQuotes,
+      };
+      res.write(`data: ${JSON.stringify(initEnvelope)}\n\n`);
 
       const unsubscribe = quotesReader.onUpdate((allQuotes) => {
         const symbolQuotes = allQuotes.filter((q) => q.symbol === symbol);
         const latest = symbolQuotes.slice(-1)[0];
 
         if (latest) {
-          res.write(
-            `data: ${JSON.stringify({ type: "update", data: latest })}\n\n`,
-          );
+          const updateEnvelope: QuoteSseEnvelope = {
+            type: "update",
+            data: latest,
+          };
+          res.write(`data: ${JSON.stringify(updateEnvelope)}\n\n`);
         }
       });
 
