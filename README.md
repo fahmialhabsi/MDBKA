@@ -59,7 +59,33 @@ npm run dev
 - OCR: regex + region-based text extraction
 - CSV: Papa Parse (50+ candle validation)
 - FX Rate: ECB free API (fallback hardcoded)
-- Test: 296/296 lolos (zero regression)
+- Test: 309/309 lolos (zero regression)
+
+## 🔌 Tahap 5E-STEP2: Live Equity (Node.js Backend)
+
+### Running
+```bash
+# Terminal 1+2 sekaligus:
+npm run dev:both
+
+# Atau terpisah:
+npm run dev              # Frontend 5173
+npm run dev:backend      # Backend 3000 (tsx watch server/index.ts)
+```
+
+### MT5 Integration
+- Backend memantau log MT5 di `process.env.MT5_LOG_PATH`
+  (file `.log` atau direktori `logs/`; default
+  `AppData\Roaming\MetaTrader 5`). Lihat `.env.example`.
+- Real-time balance/equity via SSE ke frontend, fallback polling
+  5 dtk bila SSE putus. Tanpa log valid → API 404 (tanpa crash).
+- Panel `LiveEquity` tampil di hasil analisa (info-only, tidak
+  mengubah keputusan BELI/JUAL/TUNGGU maupun lot).
+
+### API
+- GET `/api/equity/latest` — snapshot terakhir (404 bila belum ada data)
+- GET `/api/equity/stream` — SSE stream + heartbeat 30 dtk
+- GET `/health` — liveness probe
 
 ## 📝 Version
 
