@@ -13,6 +13,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createApp } from "./app";
 import { MT5LogReader } from "./services/mt5LogReader";
+import { QuotesLogReader } from "./services/quotesLogReader";
 
 dotenv.config();
 
@@ -26,11 +27,26 @@ const defaultLogDir = path.join(
 );
 
 const logPath = process.env.MT5_LOG_PATH ?? defaultLogDir;
+const quotesLogPath =
+  process.env.QUOTES_LOG_PATH ??
+  path.join(
+    os.homedir(),
+    "AppData",
+    "Roaming",
+    "MetaQuotes",
+    "Terminal",
+    "D0E8209F77C8CF37AD8BF550E51FF075",
+    "MQL5",
+    "Files",
+    "quotes.csv",
+  );
 
 const reader = new MT5LogReader(logPath);
+const quotesReader = new QuotesLogReader(quotesLogPath);
+
 const stopWatching = reader.startWatching();
 
-const app = createApp(reader);
+const app = createApp(reader, quotesReader);
 
 // Polling startup: tunggu data pertama kali tersedia
 async function startServer() {
@@ -44,6 +60,10 @@ async function startServer() {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     attempts++;
   }
+
+  await quotesReader.init().catch(() => {
+    console.log(`⚠ Quotes reader will retry when file unlocks`);
+  });
 
   const server = app.listen(PORT, () => {
     const latest = reader.getLatest();
@@ -66,6 +86,7 @@ const serverPromise = startServer();
 function shutdown(): void {
   stopWatching();
   reader.stopWatching();
+  quotesReader.destroy();
   serverPromise
     .then((server) => {
       server.close(() => {

@@ -9,11 +9,17 @@ import express, { type Express } from "express";
 import cors from "cors";
 import type { MT5LogReader } from "./services/mt5LogReader";
 import { createEquityRoutes } from "./routes/equityRoutes";
+import { createQuotesRoutes } from "./routes/quotesRoutes";
 
 /** Origin frontend Vite yang diizinkan (B2: browser → backend). */
 export const FRONTEND_ORIGIN = "http://localhost:5173";
 
-export function createApp(reader: MT5LogReader): Express {
+import type { QuotesLogReader } from "./services/quotesLogReader";
+
+export function createApp(
+  reader: MT5LogReader,
+  quotesReader: QuotesLogReader,
+): Express {
   const app = express();
   app.use(cors({ origin: FRONTEND_ORIGIN }));
   app.use(express.json());
@@ -23,6 +29,7 @@ export function createApp(reader: MT5LogReader): Express {
   });
 
   app.use("/api/equity", createEquityRoutes(reader));
+  app.use("/api/quotes", createQuotesRoutes(quotesReader));
 
   return app;
 }
