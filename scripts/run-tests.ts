@@ -2614,7 +2614,8 @@ test("213. simbol OTB tak terverifikasi mengembalikan null", () => {
     getOtbInstrumentProfile("gbpusd_orb") === null,
     "lookup harus exact (case-sensitive)"
   );
-  assert(Object.keys(OTB_PRESETS).length === 3, "preset fiktif terdaftar");
+  // 5D-EXT1: 3 flat + 10 percentage = 13 preset.
+  assert(Object.keys(OTB_PRESETS).length === 13, "preset fiktif terdaftar");
   assert(
     getOtbInstrumentProfile("AUDCAD_ORB") !== null,
     "preset AUDCAD_ORB hilang"
@@ -2891,18 +2892,24 @@ test("227. dropdown OTB menampilkan 13 simbol broker", () => {
 });
 
 test("228. simbol TBD tampil di dropdown tetapi tanpa preset", () => {
+  // 5D-EXT1: 10 simbol pending kini berpreset (13/13 terverifikasi);
+  // guard TBD diuji via simbol invented di luar dropdown.
   const otb = getAvailableSymbols("orbitraderberjangka");
-  assert(otb.includes("AUDCHF_ORB"), "TBD tidak terdaftar di dropdown");
+  assert(otb.includes("AUDCHF_ORB"), "AUDCHF_ORB tidak terdaftar di dropdown");
   assert(
-    !hasOtbPresetForSymbol("AUDCHF_ORB", "orbitraderberjangka"),
-    "TBD dianggap terverifikasi"
+    hasOtbPresetForSymbol("AUDCHF_ORB", "orbitraderberjangka"),
+    "AUDCHF_ORB harus terverifikasi (5D-EXT1)"
+  );
+  assert(
+    !hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka"),
+    "TBD invented dianggap terverifikasi"
   );
   assert(
     !hasOtbPresetForSymbol("GBPUSD", "orbitraderberjangka"),
     "simbol Finex dianggap preset OTB"
   );
   assert(
-    getOtbInstrumentProfile("AUDCHF_ORB") === null,
+    getOtbInstrumentProfile("EURUSD_ORB") === null,
     "preset fiktif untuk TBD"
   );
 });
@@ -3159,6 +3166,13 @@ test("239. dropdown OTB 13 simbol termasuk 3 berpreset", () => {
   assert(symbols.includes("GBPUSD_ORB"), "GBPUSD_ORB missing");
   assert(symbols.includes("AUDCAD_ORB"), "AUDCAD_ORB missing");
   assert(symbols.includes("EURCHF_ORB"), "EURCHF_ORB missing");
+  // 5D-EXT1: seluruh 13 kini berpreset (3 flat + 10 percentage).
+  for (const symbol of symbols) {
+    assert(
+      hasOtbPresetForSymbol(symbol, "orbitraderberjangka"),
+      `${symbol} belum berpreset`
+    );
+  }
 });
 
 test("240. banner saran tampil untuk GBPUSD_ORB saat broker Finex", () => {
@@ -3216,19 +3230,25 @@ test("243. hasOtbPresetForSymbol true hanya 3 terverifikasi", () => {
     hasOtbPresetForSymbol("EURCHF_ORB", "orbitraderberjangka") === true,
     "EURCHF_ORB harus terverifikasi"
   );
+  // 5D-EXT1: 10 simbol pending kini terverifikasi; TBD diuji via invented.
   assert(
-    hasOtbPresetForSymbol("AUDCHF_ORB", "orbitraderberjangka") === false,
-    "AUDCHF_ORB should be false (TBD)"
+    hasOtbPresetForSymbol("AUDCHF_ORB", "orbitraderberjangka") === true,
+    "AUDCHF_ORB harus terverifikasi (5D-EXT1)"
   );
   assert(
-    hasOtbPresetForSymbol("AUDJPY_ORB", "orbitraderberjangka") === false,
-    "AUDJPY_ORB should be false (TBD)"
+    hasOtbPresetForSymbol("AUDJPY_ORB", "orbitraderberjangka") === true,
+    "AUDJPY_ORB harus terverifikasi (5D-EXT1)"
+  );
+  assert(
+    hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka") === false,
+    "EURUSD_ORB invented harus false (TBD)"
   );
 });
 
 test("244. OTB_PRESETS berisi 3 preset terverifikasi", () => {
   const keys = Object.keys(OTB_PRESETS);
-  assert(keys.length === 3, `expected 3 presets, got ${keys.length}`);
+  // 5D-EXT1: 3 flat + 10 percentage = 13 preset.
+  assert(keys.length === 13, `expected 13 presets, got ${keys.length}`);
   assert(keys.includes("GBPUSD_ORB"), "GBPUSD_ORB hilang dari preset");
   assert(keys.includes("AUDCAD_ORB"), "AUDCAD_ORB hilang dari preset");
   assert(keys.includes("EURCHF_ORB"), "EURCHF_ORB hilang dari preset");
@@ -3285,9 +3305,10 @@ test("247. komisi EURCHF_ORB auto-fill 33", () => {
 
 test("248. komisi simbol OTB TBD tetap kosong", () => {
   const previous = makeEmptyBroker();
+  // 5D-EXT1: AUDCHF_ORB kini berpreset → TBD diuji via invented EURUSD_ORB.
   const result = applyBrokerPreset(
     previous,
-    "AUDCHF_ORB",
+    "EURUSD_ORB",
     "orbitraderberjangka"
   );
   assert(result === previous, "preset TBD ikut mengisi");
@@ -3468,7 +3489,7 @@ test("256. non-OTB/TBD/invalid mengembalikan null", () => {
   );
   assert(
     calculateSwapCost({
-      symbol: "AUDCHF_ORB",
+      symbol: "NZDUSD_ORB",
       brokerId: "orbitraderberjangka",
       direction: "long",
       lot: 0.1,
@@ -3643,7 +3664,7 @@ test("262. Finex blind + null-safety attach", () => {
   assert(
     attachSwapToResult(makeAnalysisResult("BELI", 0.1), {
       ...base,
-      symbol: "AUDCHF_ORB",
+      symbol: "NZDUSD_ORB",
     }) === null,
     "simbol TBD ikut ter-attach"
   );
@@ -3665,6 +3686,315 @@ test("262. Finex blind + null-safety attach", () => {
   assert(
     src.includes('brokerId === "orbitraderberjangka"'),
     "blok swap tidak digate broker OTB"
+  );
+});
+
+/* ---------------- Swap dual-mode 5D-EXT1: TEST 263-278 ---------------- */
+/* Flat = swapPerDayUSD × lot × days. Percentage = contractSize × currentPrice × (pct/100) × lot × days. */
+
+test("263. flat GBPUSD_ORB BELI 1 lot 1 hari → -2.25 USD", () => {
+  const cost = requireSwapCost({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 1,
+  });
+  assert(cost.swapType === "flat", `swapType=${cost.swapType}`);
+  assert(
+    Math.abs(cost.swapCost - -2.25) < 1e-9,
+    `swapCost=${cost.swapCost}`
+  );
+  assert(
+    Math.abs(cost.swapCostInContractBaseCurrency - -2.25) < 1e-9,
+    "alias kontrak-base salah"
+  );
+  assert(cost.contractBaseCurrency === "USD", "flat base bukan USD");
+  assert(cost.profitCurrency === "USD", "profit currency salah");
+  assert(cost.swapPerDayUSD === -2.25, "swapPerDayUSD salah");
+  assert(cost.direction === "long" && cost.directionInput === "BELI", "arah salah");
+});
+
+test("264. flat AUDCAD_ORB JUAL 2 lot 2 hari → -9.0 (koreksi spec -1.5)", () => {
+  const cost = requireSwapCost({
+    symbol: "AUDCAD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "JUAL",
+    lot: 2,
+    holdingDays: 2,
+  });
+  assert(cost.swapType === "flat", "bukan flat");
+  assert(cost.swapPerDayUSD === -2.25, "rate short salah");
+  assert(
+    Math.abs(cost.swapCost - -9.0) < 1e-9,
+    `swapCost=${cost.swapCost} (spec -1.5 salah hitung: -2.25×2×2=-9.0)`
+  );
+  assert(cost.contractBaseCurrency === "USD", "flat base bukan USD");
+  assert(cost.profitCurrency === "CAD", "profit CAD salah");
+});
+
+test("265. flat EURCHF_ORB holdingDays=0 → 0 intraday", () => {
+  const cost = requireSwapCost({
+    symbol: "EURCHF_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 0,
+  });
+  assert(cost.swapCost === 0, `swapCost=${cost.swapCost}`);
+  assert(cost.swapCostInContractBaseCurrency === 0, "alias tidak nol");
+  assert(cost.holdingDays === 0, "holdingDays tidak bergema");
+});
+
+test("266. percentage AUDCHF_ORB BELI 0.5 lot price=0.5756 → -431.7 AUD", () => {
+  const cost = requireSwapCost({
+    symbol: "AUDCHF_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 0.5,
+    holdingDays: 1,
+    currentPrice: 0.5756,
+  });
+  assert(cost.swapType === "percentage", `swapType=${cost.swapType}`);
+  assert(
+    Math.abs(cost.swapCost - -431.7) < 1e-6,
+    `swapCost=${cost.swapCost} (spec -863.4 lupa ×lot 0.5)`
+  );
+  assert(cost.contractBaseCurrency === "AUD", "base bukan AUD");
+  assert(cost.profitCurrency === "CHF", "profit bukan CHF");
+  assert(cost.swapPercentage === -1.5, "swapPercentage salah");
+  assert(cost.contractSize === 100000, "contractSize salah");
+});
+
+test("267. percentage AUDCHF_ORB JUAL 0.5 lot → sama -431.7 AUD", () => {
+  const cost = requireSwapCost({
+    symbol: "AUDCHF_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "JUAL",
+    lot: 0.5,
+    holdingDays: 1,
+    currentPrice: 0.5756,
+  });
+  assert(
+    Math.abs(cost.swapCost - -431.7) < 1e-6,
+    `swapCost=${cost.swapCost}`
+  );
+  assert(cost.direction === "short", "JUAL tidak ke short");
+  assert(cost.swapPercentage === -1.5, "long/short sama -1.5");
+});
+
+test("268. percentage AUDJPY_ORB JUAL 1 lot price=0.009325 3 hari → -48.95625", () => {
+  const cost = requireSwapCost({
+    symbol: "AUDJPY_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "JUAL",
+    lot: 1,
+    holdingDays: 3,
+    currentPrice: 0.009325,
+  });
+  assert(cost.swapPercentage === -1.75, "rate short salah");
+  assert(
+    Math.abs(cost.swapCost - -48.95625) < 1e-6,
+    `swapCost=${cost.swapCost} (≈-49 spec)`
+  );
+  assert(cost.contractBaseCurrency === "AUD", "base bukan AUD");
+  assert(cost.profitCurrency === "JPY", "profit bukan JPY");
+});
+
+test("269. percentage AUDNZD_ORB BELI 2 lot price=0.4950 2 hari → -2475", () => {
+  const cost = requireSwapCost({
+    symbol: "AUDNZD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 2,
+    holdingDays: 2,
+    currentPrice: 0.495,
+  });
+  assert(
+    Math.abs(cost.swapCost - -2475) < 1e-6,
+    `swapCost=${cost.swapCost}`
+  );
+  assert(cost.profitCurrency === "NZD", "profit bukan NZD");
+});
+
+test("270. percentage AUDUSD_ORB holdingDays=0 → 0", () => {
+  const cost = requireSwapCost({
+    symbol: "AUDUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 0,
+    currentPrice: 0.65,
+  });
+  assert(cost.swapCost === 0, `swapCost=${cost.swapCost}`);
+  assert(cost.swapType === "percentage", "tipe harus percentage");
+});
+
+test("271. percentage holdingDays negatif → 0", () => {
+  const cost = requireSwapCost({
+    symbol: "AUDUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: -2,
+    currentPrice: 0.65,
+  });
+  assert(cost.swapCost === 0, "holding negatif berbiaya");
+  assert(cost.holdingDays === 0, "tidak ternormalisasi ke 0");
+});
+
+test("272. broker Finex → null", () => {
+  assert(
+    calculateSwapCost({
+      symbol: "GBPUSD_ORB",
+      brokerId: "finex",
+      direction: "BELI",
+      lot: 1,
+      holdingDays: 1,
+    }) === null,
+    "Finex berbiaya swap"
+  );
+});
+
+test("273. simbol TBD → null", () => {
+  assert(
+    calculateSwapCost({
+      symbol: "NZDUSD_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "BELI",
+      lot: 1,
+      holdingDays: 1,
+      currentPrice: 0.6,
+    }) === null,
+    "simbol TBD ikut terhitung"
+  );
+});
+
+test("274. direction TUNGGU → null", () => {
+  assert(
+    calculateSwapCost({
+      symbol: "GBPUSD_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "TUNGGU",
+      lot: 1,
+      holdingDays: 1,
+    }) === null,
+    "TUNGGU berbiaya"
+  );
+});
+
+test("275. lot=0 → null", () => {
+  assert(
+    calculateSwapCost({
+      symbol: "GBPUSD_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "BELI",
+      lot: 0,
+      holdingDays: 1,
+    }) === null,
+    "lot 0 terhitung"
+  );
+});
+
+test("276. percentage tanpa currentPrice → null (graceful)", () => {
+  assert(
+    calculateSwapCost({
+      symbol: "AUDCHF_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "BELI",
+      lot: 0.5,
+      holdingDays: 1,
+    }) === null,
+    "tanpa price ikut terhitung"
+  );
+  assert(
+    calculateSwapCost({
+      symbol: "AUDCHF_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "BELI",
+      lot: 0.5,
+      holdingDays: 1,
+      currentPrice: NaN,
+    }) === null,
+    "price NaN ikut terhitung"
+  );
+  assert(
+    calculateSwapCost({
+      symbol: "AUDCHF_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "BELI",
+      lot: 0.5,
+      holdingDays: 1,
+      currentPrice: 0,
+    }) === null,
+    "price 0 ikut terhitung"
+  );
+});
+
+test("277. swapType auto-detect dari preset (tanpa override manual)", () => {
+  const flat = requireSwapCost({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 1,
+  });
+  assert(flat.swapType === "flat", "flat tidak terdeteksi");
+  assert(flat.swapPerDayUSD !== undefined, "flat tanpa swapPerDayUSD");
+  assert(flat.swapPercentage === undefined, "flat bocor percentage");
+  const pct = requireSwapCost({
+    symbol: "AUDCHF_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 1,
+    currentPrice: 0.5756,
+  });
+  assert(pct.swapType === "percentage", "percentage tidak terdeteksi");
+  assert(pct.swapPercentage !== undefined, "pct tanpa swapPercentage");
+  assert(pct.swapPerDayUSD === undefined, "pct bocor flat");
+  const gbp = getOtbInstrumentProfile("GBPUSD_ORB");
+  if (gbp === null || gbp.swapType !== "flat") {
+    throw new Error("preset flat hilang");
+  }
+});
+
+test("278. return format validation (semua field baru hadir)", () => {
+  const cost = requireSwapCost({
+    symbol: "AUDCHF_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 0.5,
+    holdingDays: 1,
+    currentPrice: 0.5756,
+  });
+  assert(typeof cost.directionInput === "string", "directionInput hilang");
+  assert(typeof cost.swapCostInContractBaseCurrency === "number", "field baru hilang");
+  assert(typeof cost.contractBaseCurrency === "string", "base hilang");
+  assert(typeof cost.profitCurrency === "string", "profit hilang");
+  assert(typeof cost.swapType === "string", "swapType hilang");
+  assert(typeof cost.contractSize === "number", "contractSize hilang");
+  assert(typeof cost.swapPercentage === "number", "swapPercentage hilang");
+  assert(typeof cost.symbol === "string", "symbol hilang");
+  assert(typeof cost.swapCost === "number", "alias legacy hilang");
+  const attached = attachSwapToResult(makeAnalysisResult("BELI", 0.5), {
+    symbol: "AUDCHF_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 0.5,
+    holdingDays: 1,
+    currentPrice: 0.5756,
+  });
+  if (attached === null || attached.swapDetail === null) {
+    throw new Error("attach percentage null");
+  }
+  assert(
+    Math.abs(attached.swapDetail.swapCost - -431.7) < 1e-6,
+    "attach tidak meneruskan field baru"
+  );
+  assert(
+    attached.swapDetail.contractBaseCurrency === "AUD",
+    "attach base salah"
   );
 });
 
