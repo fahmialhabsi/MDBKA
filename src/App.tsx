@@ -33,6 +33,7 @@ import {
   DEFAULT_BROKER_ID,
   getBrokerProfile,
 } from "./lib/brokerRegistry";
+import { getOtbInstrumentProfile } from "./lib/otbInstrumentConfig";
 
 import type { BrokerSettings, MarketData } from "./types/analysis";
 import type { BrokerId } from "./types/broker";
@@ -139,12 +140,13 @@ export default function App() {
   );
 
   const lastSymbol = useRef(initialMarket.symbol);
+  const lastBroker = useRef<BrokerId>(DEFAULT_BROKER_ID);
 
   const scaleIssues = useMemo(() => detectScaleMismatch(market), [market]);
 
   const validation = useMemo(
-    () => validateAnalysisInputs(market, broker),
-    [market, broker],
+    () => validateAnalysisInputs(market, broker, activeBrokerId),
+    [market, broker, activeBrokerId],
   );
 
   const analysis = useMemo(
@@ -179,18 +181,38 @@ export default function App() {
   // Label broker aktif selalu berasal dari state (bukan hard-code).
   const activeBrokerLabel = getBrokerProfile(activeBrokerId).label;
 
-  // Menyesuaikan parameter broker ketika simbol diganti.
+  // Tahap 4B: status preset OTB diturunkan saat render (bukan setState
+  // dalam effect). Simbol dicocokkan EXACT (tanpa normalizeSymbol agar
+  // suffiks _ORB tidak terpangkas).
+  const otbPresetMissingNotice =
+    activeBrokerId === "orbitraderberjangka" &&
+    market.symbol.trim() !== "" &&
+    getOtbInstrumentProfile(market.symbol.trim()) === null
+      ? `Simbol ${market.symbol.trim()} belum terverifikasi di ` +
+        `OrbiTraderBerjangka. Preset instrumen belum diaktifkan. ` +
+        `Verifikasi simbol dan parameter broker dari Specification ` +
+        `OrbiTraderBerjangka terlebih dahulu.`
+      : null;
+
+  // Menyesuaikan parameter broker ketika simbol atau broker aktif diganti.
   // CSV instrumen lama tidak boleh dipakai untuk simbol baru.
   // Pengosongan field harga dimiliki handleSymbolChange; effect ini hanya
   // menyesuaikan turunan (broker/CSV/hasil) agar tidak ada dua sumber reset.
+  // Tahap 4B: preset diterapkan berdasar broker aktif; simbol OTB tanpa
+  // preset terverifikasi tidak mengubah setting (apply = no-op) + notifikasi.
   useEffect(() => {
     const symbol = normalizeSymbol(market.symbol);
 
     if (!symbol) return;
 
-    if (symbol === lastSymbol.current) return;
+    const symbolChanged = symbol !== lastSymbol.current;
+    const brokerChanged = activeBrokerId !== lastBroker.current;
 
-    setBroker((previous) => applyBrokerPreset(previous, symbol));
+    if (!symbolChanged && !brokerChanged) return;
+
+    setBroker((previous) =>
+      applyBrokerPreset(previous, symbol, activeBrokerId),
+    );
 
     setSwingCsv("");
     setConnectedCsvName("");
@@ -200,7 +222,8 @@ export default function App() {
     clearAnalysisOutput();
 
     lastSymbol.current = symbol;
-  }, [market.symbol, clearAnalysisOutput]);
+    lastBroker.current = activeBrokerId;
+  }, [market.symbol, activeBrokerId, clearAnalysisOutput]);
 
   // Satu-satunya jalur reset saat pengguna mengganti simbol: kosongkan
   // semua harga/indikator (tanpa angka fiktif) lalu tampilkan instruksi.
@@ -350,10 +373,14 @@ export default function App() {
 
   const handleApplyBrokerPreset = useCallback(() => {
     setBroker((previous) =>
-      applyBrokerPreset(previous, normalizeSymbol(market.symbol)),
+      applyBrokerPreset(
+        previous,
+        normalizeSymbol(market.symbol),
+        activeBrokerId,
+      ),
     );
     clearAnalysisOutput();
-  }, [market.symbol, clearAnalysisOutput]);
+  }, [market.symbol, activeBrokerId, clearAnalysisOutput]);
 
   // Tahap 3: ganti konteks broker saja. Tidak menyentuh data market,
   // pengaturan broker (equity/risiko/preset), parser, atau rumus analisis.
@@ -423,6 +450,7 @@ export default function App() {
     setCsvResetKey((previous) => previous + 1);
     clearAnalysisOutput();
     lastSymbol.current = "";
+    lastBroker.current = DEFAULT_BROKER_ID;
   }
 
   function resetToDefault() {
@@ -440,6 +468,7 @@ export default function App() {
     setCsvResetKey((previous) => previous + 1);
     clearAnalysisOutput();
     lastSymbol.current = initialMarket.symbol;
+    lastBroker.current = DEFAULT_BROKER_ID;
   }
 
   return (
@@ -500,6 +529,12 @@ export default function App() {
           {brokerNotice && (
             <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/50 p-3 text-sm text-slate-300">
               {brokerNotice}
+            </p>
+          )}
+
+          {otbPresetMissingNotice && (
+            <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
+              {otbPresetMissingNotice}
             </p>
           )}
         </section>
