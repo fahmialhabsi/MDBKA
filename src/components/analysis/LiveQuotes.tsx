@@ -25,18 +25,16 @@ export function LiveQuotes({ symbol }: LiveQuotesProps) {
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">Bid:</span>
             <span className="font-mono font-semibold text-blue-600">
-              {quote.bid.toFixed(5)}
+              {quote.bid ? quote.bid.toFixed(5) : "-"}
             </span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">Ask:</span>
             <span className="font-mono font-semibold text-green-600">
-              {quote.ask.toFixed(5)}
+              {quote.ask ? quote.ask.toFixed(5) : "-"}
             </span>
           </div>
-          <div className="mt-2 text-xs text-gray-500">
-            {quote.timestamp}
-          </div>
+          <div className="mt-2 text-xs text-gray-500">{quote.timestamp}</div>
         </div>
       ) : (
         <p className="text-xs text-gray-500">Menunggu data...</p>
