@@ -26,6 +26,7 @@
     "src/calculations/inputValidator.ts",
     "src/types/analysis.ts",
     "src/types/broker.ts",
-    "src/lib/brokerRegistry.ts"
+    "src/lib/brokerRegistry.ts",
+    "src/lib/otbInstrumentConfig.ts"
   ]
 }

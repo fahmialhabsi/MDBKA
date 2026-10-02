@@ -51,6 +51,11 @@ import {
   isSupportedBrokerId,
   resolveBrokerSymbol,
 } from "../src/lib/brokerRegistry";
+import {
+  OTB_PRESETS,
+  calculateOtbTickValue,
+  getOtbInstrumentProfile,
+} from "../src/lib/otbInstrumentConfig";
 
 let passed = 0;
 let failed = 0;
@@ -2517,6 +2522,116 @@ test("209. decision engine dan aturan S/R validator tidak berubah", () => {
     "validator tidak lagi meminta resistance kosong"
   );
   assert(!empty.valid, "market tanpa S/R dianggap valid");
+});
+
+/* ---------------- Preset OTB terverifikasi 4A: TEST 210-215 ---------------- */
+/* Data only, isolated: belum di-wire ke preset/validator/registry. */
+
+function requireOtbPreset(symbol: string) {
+  const preset = getOtbInstrumentProfile(symbol);
+  if (preset === null) {
+    throw new Error(`preset OTB hilang untuk simbol ${symbol}`);
+  }
+  return preset;
+}
+
+test("210. OTB preset GBPUSD_ORB ada dan beda dari Finex", () => {
+  const otb = requireOtbPreset("GBPUSD_ORB");
+  assert(otb.symbol === "GBPUSD_ORB", `symbol=${otb.symbol}`);
+  assert(otb.digits === 5, `digits=${otb.digits}`);
+  assert(otb.contractSize === 100000, `contractSize=${otb.contractSize}`);
+  assert(otb.spreadMode === "floating", `spreadMode=${otb.spreadMode}`);
+  assert(otb.stopsLevel === 20, `stopsLevel=${otb.stopsLevel}`);
+  assert(otb.tickSize === 0.00001, `tickSize=${otb.tickSize}`);
+  assert(
+    otb.tickSize !== getInstrumentProfile("GBPUSD").pipSize,
+    "tickSize OTB sama dengan pipSize Finex"
+  );
+  assert(Object.isFrozen(otb), "preset OTB tidak dibekukan");
+});
+
+test("211. OTB initialMargin terpisah dari tick value", () => {
+  const otb = requireOtbPreset("GBPUSD_ORB");
+  assert(otb.initialMargin === 100000, `initialMargin=${otb.initialMargin}`);
+  assert(
+    otb.maintenanceMargin === 100000,
+    `maintenanceMargin=${otb.maintenanceMargin}`
+  );
+  assert(otb.tickValue === null, "tickValue harus TBD (null)");
+  const tickValue = calculateOtbTickValue(otb);
+  assert(tickValue === 1, `tickValue=${tickValue}`);
+  assert(
+    tickValue !== otb.initialMargin,
+    "tick value sama dengan initial margin"
+  );
+});
+
+test("212. OTB minVolume 0.1 dengan batas volume utuh", () => {
+  const otb = requireOtbPreset("GBPUSD_ORB");
+  assert(otb.minVolume === 0.1, `minVolume=${otb.minVolume}`);
+  assert(otb.volumeStep === 0.1, `volumeStep=${otb.volumeStep}`);
+  assert(otb.maxVolume === 10, `maxVolume=${otb.maxVolume}`);
+  assert(otb.calculationMode === "Forex", `mode=${otb.calculationMode}`);
+  assert(otb.currencyProfit === "USD", "currency profit bukan USD");
+  assert(otb.currencyMargin === "USD", "currency margin bukan USD");
+  assert(otb.commission !== null, "komisi hilang");
+  if (otb.commission === null) {
+    throw new Error("komisi OTB hilang");
+  }
+  assert(otb.commission.pricePerLot === 33, "komisi bukan 33 USD/lot");
+  assert(
+    otb.commission.volumeMin === 0.01 && otb.commission.volumeMax === 1000,
+    "rentang volume komisi salah"
+  );
+  assert(otb.hedgedMargin === 50000, `hedgedMargin=${otb.hedgedMargin}`);
+});
+
+test("213. simbol OTB tak terverifikasi mengembalikan null", () => {
+  assert(
+    getOtbInstrumentProfile("EURUSD_ORB") === null,
+    "simbol tak terverifikasi mengembalikan preset"
+  );
+  assert(
+    getOtbInstrumentProfile("GBPUSD") === null,
+    "nama simbol Finex bocor ke preset OTB"
+  );
+  assert(getOtbInstrumentProfile("") === null, "simbol kosong lolos");
+  assert(
+    getOtbInstrumentProfile("gbpusd_orb") === null,
+    "lookup harus exact (case-sensitive)"
+  );
+  assert(Object.keys(OTB_PRESETS).length === 1, "preset fiktif terdaftar");
+  assert(
+    getBrokerProfile("orbitraderberjangka").instruments.length === 0,
+    "registry OTB teraktivasi prematur (wiring = 4B)"
+  );
+});
+
+test("214. kalkulator tick value terkunci + swap tersimpan", () => {
+  const otb = requireOtbPreset("GBPUSD_ORB");
+  assert(
+    calculateOtbTickValue(otb) === otb.tickSize * otb.contractSize,
+    "rumus tick value berubah"
+  );
+  assert(calculateOtbTickValue(otb) === 1, "tick value bukan 1.00 USD");
+  assert(otb.swapLong === -2.25, `swapLong=${otb.swapLong}`);
+  assert(otb.swapShort === -0.75, `swapShort=${otb.swapShort}`);
+});
+
+test("215. preset Finex byte-identik setelah modul OTB", () => {
+  assert(
+    getInstrumentProfile("GBPUSD").contractSize === 100000,
+    "contractSize Finex berubah"
+  );
+  assert(
+    getInstrumentProfile("GBPUSD").pipSize === 0.0001,
+    "pipSize Finex berubah"
+  );
+  assert(
+    getInstrumentProfile("US100").defaultBuffer === 10,
+    "preset US100 berubah"
+  );
+  assert(SUPPORTED_SYMBOLS.length === 10, "daftar simbol Finex berubah");
 });
 
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);
