@@ -33,7 +33,9 @@
     "src/lib/otbInstrumentConfig.ts",
     "src/services/fxRateService.ts",
     "src/services/dateService.ts",
+    "src/services/quotesLogReader.test.ts",
     "server/types/equity.ts",
-    "server/services/mt5LogReader.ts"
+    "server/services/mt5LogReader.ts",
+    "server/services/quotesLogReader.ts"
   ]
 }

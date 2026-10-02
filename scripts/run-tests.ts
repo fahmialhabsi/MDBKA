@@ -4,7 +4,12 @@ declare const require: {
 };
 
 import { parseCsvCandles, parseCsvNumber } from "../src/lib/csvCandleParser";
-import { detectExtremeLevels, detectSwingLevels, resolveSwingLevels, type Candle } from "../src/calculations/swingDetector";
+import {
+  detectExtremeLevels,
+  detectSwingLevels,
+  resolveSwingLevels,
+  type Candle,
+} from "../src/calculations/swingDetector";
 import { checkInstrumentMismatch } from "../src/lib/instrumentMismatch";
 import {
   SUPPORTED_SYMBOLS,
@@ -27,7 +32,10 @@ import {
 } from "../src/lib/marketReset";
 import { validateAnalysisInputs } from "../src/calculations/inputValidator";
 import { detectScaleMismatch } from "../src/calculations/scaleValidator";
-import { getValidationViewState, buildBlockedReasons } from "../src/lib/validationView";
+import {
+  getValidationViewState,
+  buildBlockedReasons,
+} from "../src/lib/validationView";
 import {
   REGION_MIN_SIZE,
   canvasPointFromClient,
@@ -36,8 +44,15 @@ import {
   isRegionBigEnough,
   normalizeRegion,
 } from "../src/lib/regionSelection";
-import { parseMarketWatchBidAsk, normalizeBigOcrNumber } from "../src/lib/marketWatchParser";
-import { parseMaValue, parseOcrTextRich, combineRegionTexts } from "../src/components/extraction/ocrParser";
+import {
+  parseMarketWatchBidAsk,
+  normalizeBigOcrNumber,
+} from "../src/lib/marketWatchParser";
+import {
+  parseMaValue,
+  parseOcrTextRich,
+  combineRegionTexts,
+} from "../src/components/extraction/ocrParser";
 import type { BrokerSettings, MarketData } from "../src/types/analysis";
 import type { BrokerProfile } from "../src/types/broker";
 import {
@@ -81,6 +96,7 @@ import {
   MT5LogReader,
   parseEquityFromText,
 } from "../server/services/mt5LogReader";
+import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 
 let passed = 0;
 let failed = 0;
@@ -92,7 +108,9 @@ function test(name: string, fn: () => void): void {
     console.log(`ok - ${name}`);
   } catch (error) {
     failed += 1;
-    console.log(`FAIL - ${name}: ${error instanceof Error ? error.message : String(error)}`);
+    console.log(
+      `FAIL - ${name}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -100,7 +118,13 @@ function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
 }
 
-function makeCandle(time: string, open: number, high: number, low: number, close: number): Candle {
+function makeCandle(
+  time: string,
+  open: number,
+  high: number,
+  low: number,
+  close: number,
+): Candle {
   return { time, open, high, low, close };
 }
 
@@ -108,7 +132,7 @@ function makeCandle(time: string, open: number, high: number, low: number, close
 
 test("1. header + format titik tanggal", () => {
   const r = parseCsvCandles(
-    "time,open,high,low,close\n2026.09.30 12:00,30347.16,30367.13,30314.24,30340.33"
+    "time,open,high,low,close\n2026.09.30 12:00,30347.16,30367.13,30314.24,30340.33",
   );
   assert(r.headerDetected, "header tidak terdeteksi");
   assert(r.validRows === 1, `validRows=${r.validRows}`);
@@ -117,14 +141,16 @@ test("1. header + format titik tanggal", () => {
 
 test("2. header + format dash tanggal", () => {
   const r = parseCsvCandles(
-    "time,open,high,low,close\n2026-10-01 01:00,30480,30540,30450,30520"
+    "time,open,high,low,close\n2026-10-01 01:00,30480,30540,30450,30520",
   );
   assert(r.validRows === 1, `validRows=${r.validRows}`);
   assert(r.candles[0].time === "2026-10-01 01:00", "time salah");
 });
 
 test("3. tanggal dan jam dipisah koma", () => {
-  const r = parseCsvCandles("2026.09.30,12:00,30347.16,30367.13,30314.24,30340.33");
+  const r = parseCsvCandles(
+    "2026.09.30,12:00,30347.16,30367.13,30314.24,30340.33",
+  );
   assert(r.validRows === 1, `validRows=${r.validRows}`);
   assert(r.candles[0].time === "2026.09.30 12:00", `time=${r.candles[0].time}`);
   assert(r.candles[0].close === 30340.33, "close salah");
@@ -132,20 +158,22 @@ test("3. tanggal dan jam dipisah koma", () => {
 
 test("4. separator titik koma", () => {
   const r = parseCsvCandles(
-    "time;open;high;low;close\n2026.09.30 12:00;30347.16;30367.13;30314.24;30340.33"
+    "time;open;high;low;close\n2026.09.30 12:00;30347.16;30367.13;30314.24;30340.33",
   );
   assert(r.separator === ";", `separator=${r.separator}`);
   assert(r.validRows === 1, `validRows=${r.validRows}`);
 });
 
 test("5. BOM UTF-8 dihapus", () => {
-  const r = parseCsvCandles("﻿time,open,high,low,close\n2026-10-01 01:00,30480,30540,30450,30520");
+  const r = parseCsvCandles(
+    "﻿time,open,high,low,close\n2026-10-01 01:00,30480,30540,30450,30520",
+  );
   assert(r.validRows === 1, `validRows=${r.validRows}`);
 });
 
 test("6. baris kosong diabaikan", () => {
   const r = parseCsvCandles(
-    "time,open,high,low,close\n\n2026-10-01 01:00,30480,30540,30450,30520\n\n"
+    "time,open,high,low,close\n\n2026-10-01 01:00,30480,30540,30450,30520\n\n",
   );
   assert(r.totalRows === 1, `totalRows=${r.totalRows}`);
   assert(r.validRows === 1, `validRows=${r.validRows}`);
@@ -153,7 +181,7 @@ test("6. baris kosong diabaikan", () => {
 
 test("7. baris invalid dilewati dan dihitung", () => {
   const r = parseCsvCandles(
-    "time,open,high,low,close\nbaris-rusak\n2026-10-01 01:00,30480,30540,30450,30520\n1,2,3"
+    "time,open,high,low,close\nbaris-rusak\n2026-10-01 01:00,30480,30540,30450,30520\n1,2,3",
   );
   assert(r.validRows === 1, `validRows=${r.validRows}`);
   assert(r.invalidRows === 2, `invalidRows=${r.invalidRows}`);
@@ -162,7 +190,7 @@ test("7. baris invalid dilewati dan dihitung", () => {
 
 test("8. kolom volume tambahan diabaikan", () => {
   const r = parseCsvCandles(
-    "time,open,high,low,close,tick_volume,spread,real_volume\n2026-10-01 01:00,30480,30540,30450,30520,120,5,0"
+    "time,open,high,low,close,tick_volume,spread,real_volume\n2026-10-01 01:00,30480,30540,30450,30520,120,5,0",
   );
   assert(r.validRows === 1, `validRows=${r.validRows}`);
   assert(r.candles[0].close === 30520, "close salah");
@@ -172,7 +200,9 @@ test("9. 50 candle US100 valid", () => {
   const rows = ["time,open,high,low,close"];
   for (let i = 0; i < 50; i++) {
     const base = 30000 + i * 10;
-    rows.push(`2026.09.30 12:${String(i).padStart(2, "0")},${base},${base + 30},${base - 30},${base + 5}`);
+    rows.push(
+      `2026.09.30 12:${String(i).padStart(2, "0")},${base},${base + 30},${base - 30},${base + 5}`,
+    );
   }
   const r = parseCsvCandles(rows.join("\n"));
   assert(r.validRows === 50, `validRows=${r.validRows}`);
@@ -183,47 +213,62 @@ test("10. 50 candle GBPUSD valid", () => {
   const rows = ["time,open,high,low,close"];
   for (let i = 0; i < 50; i++) {
     const open = 1.32 + i * 0.0001;
-    rows.push(`2026-10-01 01:${String(i).padStart(2, "0")},${open.toFixed(5)},${(open + 0.0005).toFixed(5)},${(open - 0.0005).toFixed(5)},${(open + 0.0001).toFixed(5)}`);
+    rows.push(
+      `2026-10-01 01:${String(i).padStart(2, "0")},${open.toFixed(5)},${(open + 0.0005).toFixed(5)},${(open - 0.0005).toFixed(5)},${(open + 0.0001).toFixed(5)}`,
+    );
   }
   const r = parseCsvCandles(rows.join("\n"));
   assert(r.validRows === 50, `validRows=${r.validRows}`);
 });
 
 test("11. mismatch US100 vs GBPUSD terdeteksi via helper", () => {
-  const gbp = parseCsvCandles("time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449");
+  const gbp = parseCsvCandles(
+    "time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449",
+  );
   assert(
     checkInstrumentMismatch(gbp.candles, "US100", 30500) !== null,
-    "mismatch US100 tidak terdeteksi"
+    "mismatch US100 tidak terdeteksi",
   );
   assert(
     checkInstrumentMismatch(gbp.candles, "GBPUSD", 1.3248) === null,
-    "GBPUSD valid dianggap mismatch"
+    "GBPUSD valid dianggap mismatch",
   );
 });
 
 test("12. OHLC tidak valid (non-numerik) dilewati", () => {
-  const r = parseCsvCandles("time,open,high,low,close\n2026-10-01 01:00,abc,30540,30450,30520");
+  const r = parseCsvCandles(
+    "time,open,high,low,close\n2026-10-01 01:00,abc,30540,30450,30520",
+  );
   assert(r.validRows === 0, `validRows=${r.validRows}`);
   assert(r.invalidRows === 1, `invalidRows=${r.invalidRows}`);
 });
 
 test("13. high lebih kecil dari close dilewati", () => {
-  const r = parseCsvCandles("time,open,high,low,close\n2026-10-01 01:00,30480,30400,30450,30520");
+  const r = parseCsvCandles(
+    "time,open,high,low,close\n2026-10-01 01:00,30480,30400,30450,30520",
+  );
   assert(r.validRows === 0, `validRows=${r.validRows}`);
 });
 
 test("14. low lebih besar dari open dilewati", () => {
-  const r = parseCsvCandles("time,open,high,low,close\n2026-10-01 01:00,30480,30540,30500,30520");
+  const r = parseCsvCandles(
+    "time,open,high,low,close\n2026-10-01 01:00,30480,30540,30500,30520",
+  );
   assert(r.validRows === 0, `validRows=${r.validRows}`);
 });
 
 test("15. decimal point MT5 dibaca benar", () => {
   assert(parseCsvNumber("30347.16", ",") === 30347.16, "titik desimal rusak");
-  assert(parseCsvNumber("30347,16", ";") === 30347.16, "koma desimal (;) rusak");
+  assert(
+    parseCsvNumber("30347,16", ";") === 30347.16,
+    "koma desimal (;) rusak",
+  );
 });
 
 test("16. quote pada field diabaikan", () => {
-  const r = parseCsvCandles('"time","open","high","low","close"\n"2026-10-01 01:00","30480","30540","30450","30520"');
+  const r = parseCsvCandles(
+    '"time","open","high","low","close"\n"2026-10-01 01:00","30480","30540","30450","30520"',
+  );
   assert(r.validRows === 1, `validRows=${r.validRows}`);
 });
 
@@ -256,7 +301,10 @@ function swingFixture(): Candle[] {
 test("19. candle kurang dari minimum -> null", () => {
   const few = swingFixture().slice(0, 3);
   const r = detectSwingLevels(few, 106, 2);
-  assert(r.support === null && r.resistance === null, `dapat ${r.support}/${r.resistance}`);
+  assert(
+    r.support === null && r.resistance === null,
+    `dapat ${r.support}/${r.resistance}`,
+  );
 });
 
 test("20. support valid di bawah harga", () => {
@@ -268,7 +316,10 @@ test("20. support valid di bawah harga", () => {
 test("21. resistance valid di atas harga", () => {
   const r = detectSwingLevels(swingFixture(), 106, 2);
   assert(r.resistance === 110, `resistance=${r.resistance}`);
-  assert(r.resistance !== null && r.resistance > 106, "resistance harus di atas harga");
+  assert(
+    r.resistance !== null && r.resistance > 106,
+    "resistance harus di atas harga",
+  );
 });
 
 test("22. support null saat harga di bawah semua swing", () => {
@@ -317,32 +368,48 @@ test("28. helper menerima candle US100 untuk simbol US100", () => {
   const rows = ["time,open,high,low,close"];
   for (let i = 0; i < 10; i++) {
     const base = 30000 + i * 10;
-    rows.push(`2026.09.30 12:0${i},${base},${base + 30},${base - 30},${base + 5}`);
+    rows.push(
+      `2026.09.30 12:0${i},${base},${base + 30},${base - 30},${base + 5}`,
+    );
   }
   const r = parseCsvCandles(rows.join("\n"));
   assert(r.validRows === 10, `validRows=${r.validRows}`);
-  assert(checkInstrumentMismatch(r.candles, "US100", 30500) === null, "US100 valid ditolak");
+  assert(
+    checkInstrumentMismatch(r.candles, "US100", 30500) === null,
+    "US100 valid ditolak",
+  );
 });
 
 test("29. helper menolak candle GBPUSD untuk simbol US100", () => {
-  const r = parseCsvCandles("time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449");
+  const r = parseCsvCandles(
+    "time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449",
+  );
   const msg = checkInstrumentMismatch(r.candles, "US100", 30500);
   assert(msg !== null && msg.includes("US100"), `pesan=${msg}`);
 });
 
 test("30. helper menolak candle US100 untuk simbol GBPUSD", () => {
-  const r = parseCsvCandles("time,open,high,low,close\n2026.09.30 12:00,30347.16,30367.13,30314.24,30340.33");
+  const r = parseCsvCandles(
+    "time,open,high,low,close\n2026.09.30 12:00,30347.16,30367.13,30314.24,30340.33",
+  );
   const msg = checkInstrumentMismatch(r.candles, "GBPUSD", 1.3248);
   assert(msg !== null && msg.includes("GBPUSD"), `pesan=${msg}`);
 });
 
 test("31. helper tidak memblokir simbol unknown", () => {
-  const r = parseCsvCandles("time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449");
-  assert(checkInstrumentMismatch(r.candles, "SIMBOLANEH", 1.3248) === null, "unknown diblokir");
+  const r = parseCsvCandles(
+    "time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449",
+  );
+  assert(
+    checkInstrumentMismatch(r.candles, "SIMBOLANEH", 1.3248) === null,
+    "unknown diblokir",
+  );
 });
 
 test("32. saat mismatch, level lama tidak dipakai (onDetected dilewati)", () => {
-  const r = parseCsvCandles("time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449");
+  const r = parseCsvCandles(
+    "time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449",
+  );
   const mismatch = checkInstrumentMismatch(r.candles, "US100", 30500);
   let forwarded: [number, number] | null = null;
   // Replika guard di SwingLevelsForm: jangan panggil onDetected saat mismatch.
@@ -355,7 +422,10 @@ test("32. saat mismatch, level lama tidak dipakai (onDetected dilewati)", () => 
     }
   }
   assert(mismatch !== null, "mismatch harus terdeteksi dulu");
-  assert(forwarded === null, "level lama/salah tidak boleh diteruskan saat mismatch");
+  assert(
+    forwarded === null,
+    "level lama/salah tidak boleh diteruskan saat mismatch",
+  );
 });
 
 /* Uji kontrak UI statis (tanpa runner UI): diverifikasi dari source. */
@@ -369,27 +439,45 @@ test("33. CsvFileConnector: tombol, fallback, cleanup, reload terkunci koneksi",
   assert(src.includes("Hubungkan CSV MT5"), "tombol hubungkan hilang");
   assert(src.includes("Muat Ulang CSV"), "tombol reload hilang");
   assert(src.includes("Muat ulang otomatis"), "checkbox hilang");
-  assert(src.includes('type="file"') && src.includes('accept=".csv'), "fallback upload hilang");
+  assert(
+    src.includes('type="file"') && src.includes('accept=".csv'),
+    "fallback upload hilang",
+  );
   assert(src.includes("clearInterval"), "cleanup interval hilang");
-  assert(src.includes("disabled={!isConnected"), "reload harus terkunci isConnected");
-  assert(!src.includes("disabled={!fileName"), "disabled tidak boleh memakai ref/state mentah");
+  assert(
+    src.includes("disabled={!isConnected"),
+    "reload harus terkunci isConnected",
+  );
+  assert(
+    !src.includes("disabled={!fileName"),
+    "disabled tidak boleh memakai ref/state mentah",
+  );
 });
 
 test("34. App: csvText, onDetected stabil, reset simbol, analisa diblokir", () => {
   const src = readSrc("src/App.tsx");
   assert(src.includes("csvText={swingCsv}"), "csvText tidak dari App");
-  assert(src.includes("handleDetectedLevels = useCallback"), "onDetected tidak stabil");
+  assert(
+    src.includes("handleDetectedLevels = useCallback"),
+    "onDetected tidak stabil",
+  );
   assert(src.includes("setCsvResetKey"), "reset koneksi simbol hilang");
   assert(src.includes("support: 0"), "reset S/R hilang");
   // Kontrak blokir analisa: runAnalysis mendelegasikan ke buildBlockedReasons
   // dengan state terbaru dan berhenti sebelum decision engine saat diblokir.
   assert(src.includes("buildBlockedReasons({"), "delegasi blokir hilang");
   assert(src.includes("if (reasons)"), "early return blokir hilang");
-  assert(src.includes("blockedReasons={blockedReasons}"), "alasan tak sampai hasil");
+  assert(
+    src.includes("blockedReasons={blockedReasons}"),
+    "alasan tak sampai hasil",
+  );
 
   // Perilaku: validasi invalid -> diblokir.
   const invalidMarket = makeValidMarket("");
-  const invalidValidation = validateAnalysisInputs(invalidMarket, makeValidBroker());
+  const invalidValidation = validateAnalysisInputs(
+    invalidMarket,
+    makeValidBroker(),
+  );
   assert(!invalidValidation.valid, "fixture invalid harus invalid");
   assert(
     buildBlockedReasons({
@@ -398,7 +486,7 @@ test("34. App: csvText, onDetected stabil, reset simbol, analisa diblokir", () =
       validation: invalidValidation,
       scaleIssues: [],
     }) !== null,
-    "validasi invalid tidak memblokir"
+    "validasi invalid tidak memblokir",
   );
 
   // Perilaku: scale mismatch -> diblokir.
@@ -412,7 +500,7 @@ test("34. App: csvText, onDetected stabil, reset simbol, analisa diblokir", () =
       validation: validateAnalysisInputs(mismatchedMarket, makeValidBroker()),
       scaleIssues: mismatchedIssues,
     }) !== null,
-    "scale mismatch tidak memblokir"
+    "scale mismatch tidak memblokir",
   );
 
   // Perilaku: data fully valid -> tidak diblokir, decision engine boleh jalan.
@@ -424,13 +512,16 @@ test("34. App: csvText, onDetected stabil, reset simbol, analisa diblokir", () =
       validation: validateAnalysisInputs(okMarket, makeValidBroker()),
       scaleIssues: detectScaleMismatch(okMarket),
     }) === null,
-    "data valid ikut diblokir"
+    "data valid ikut diblokir",
   );
 });
 
 test("35. SwingLevelsForm: guard mismatch memblokir deteksi", () => {
   const src = readSrc("src/components/analysis/SwingLevelsForm.tsx");
-  assert(src.includes("checkInstrumentMismatch"), "helper mismatch tidak dipakai");
+  assert(
+    src.includes("checkInstrumentMismatch"),
+    "helper mismatch tidak dipakai",
+  );
   assert(src.includes("if (mismatch) return"), "guard mismatch hilang");
 });
 
@@ -477,7 +568,10 @@ test("36. dropdown memakai satu daftar berisi US100 dan GBPUSD", () => {
   assert(SUPPORTED_SYMBOLS.length === 10, `jumlah=${SUPPORTED_SYMBOLS.length}`);
   assert(isSupportedSymbol("US100"), "US100 hilang dari daftar");
   assert(isSupportedSymbol("GBPUSD"), "GBPUSD hilang dari daftar");
-  assert(new Set(SUPPORTED_SYMBOLS).size === SUPPORTED_SYMBOLS.length, "ada duplikat");
+  assert(
+    new Set(SUPPORTED_SYMBOLS).size === SUPPORTED_SYMBOLS.length,
+    "ada duplikat",
+  );
 });
 
 test("37. preset US100 tidak memakai harga/satuan GBPUSD", () => {
@@ -488,8 +582,14 @@ test("37. preset US100 tidak memakai harga/satuan GBPUSD", () => {
   const us100 = getInstrumentProfile("US100");
   const gbp = getInstrumentProfile("GBPUSD");
   assert(us100.minPrice > gbp.maxPrice, "rentang US100/GBPUSD tumpang tindih");
-  assert(us100.defaultPointValue !== gbp.defaultPointValue, "pointValue US100 sama dengan GBPUSD");
-  assert(us100.contractSize !== gbp.contractSize, "contractSize US100 sama dengan GBPUSD");
+  assert(
+    us100.defaultPointValue !== gbp.defaultPointValue,
+    "pointValue US100 sama dengan GBPUSD",
+  );
+  assert(
+    us100.contractSize !== gbp.contractSize,
+    "contractSize US100 sama dengan GBPUSD",
+  );
   assert(us100.spreadLabel === "index points", `label=${us100.spreadLabel}`);
   assert(gbp.spreadLabel === "pip", `label=${gbp.spreadLabel}`);
 });
@@ -507,35 +607,57 @@ test("39. simbol kosong tidak dapat dianalisis", () => {
   const result = validateAnalysisInputs(makeValidMarket(""), makeValidBroker());
   assert(!result.valid, "simbol kosong dianggap valid");
   assert(
-    result.errors.some((e) => e.message === "Pilih simbol sebelum melakukan analisa."),
-    "pesan simbol kosong salah"
+    result.errors.some(
+      (e) => e.message === "Pilih simbol sebelum melakukan analisa.",
+    ),
+    "pesan simbol kosong salah",
   );
 });
 
 test("40. simbol tak dikenal diblokir dengan pesan daftar", () => {
-  const result = validateAnalysisInputs(makeValidMarket("XYZ"), makeValidBroker());
+  const result = validateAnalysisInputs(
+    makeValidMarket("XYZ"),
+    makeValidBroker(),
+  );
   assert(!result.valid, "simbol aneh dianggap valid");
   assert(
-    result.errors.some((e) => e.message === "Simbol belum dikenali. Pilih simbol dari daftar."),
-    "pesan simbol aneh salah"
+    result.errors.some(
+      (e) => e.message === "Simbol belum dikenali. Pilih simbol dari daftar.",
+    ),
+    "pesan simbol aneh salah",
   );
 });
 
 test("41. simbol dropdown valid lolos cek simbol", () => {
-  const result = validateAnalysisInputs(makeValidMarket("GBPUSD"), makeValidBroker());
+  const result = validateAnalysisInputs(
+    makeValidMarket("GBPUSD"),
+    makeValidBroker(),
+  );
   assert(
     !result.errors.some((e) => e.field === "symbol"),
-    "GBPUSD kena error simbol"
+    "GBPUSD kena error simbol",
   );
 });
 
 test("42. ExtractedDataForm: select tersimpan sebagai kode simbol", () => {
   const src = readSrc("src/components/extraction/ExtractedDataForm.tsx");
   assert(src.includes("<select"), "select simbol hilang");
-  assert(src.includes("SUPPORTED_SYMBOLS") && src.includes("symbolOptions.map"), "opsi tidak dari daftar tunggal");
-  assert(src.includes('<option value="">Pilih instrumen</option>'), "placeholder hilang");
-  assert(src.includes("support: 0") && src.includes("resistance: 0"), "reset S/R hilang");
-  assert(!src.includes("US100 —") && !src.includes("value=\"US100 —"), "label tersimpan ke state");
+  assert(
+    src.includes("SUPPORTED_SYMBOLS") && src.includes("symbolOptions.map"),
+    "opsi tidak dari daftar tunggal",
+  );
+  assert(
+    src.includes('<option value="">Pilih instrumen</option>'),
+    "placeholder hilang",
+  );
+  assert(
+    src.includes("support: 0") && src.includes("resistance: 0"),
+    "reset S/R hilang",
+  );
+  assert(
+    !src.includes("US100 —") && !src.includes('value="US100 —'),
+    "label tersimpan ke state",
+  );
 });
 
 test("43. tidak ada daftar simbol ganda di ocrParser", () => {
@@ -548,8 +670,14 @@ test("44. pergantian simbol mereset CSV, S/R, dan hasil di App", () => {
   const src = readSrc("src/App.tsx");
   assert(src.includes('setSwingCsv("")'), "reset CSV hilang");
   assert(src.includes('setConnectedCsvName("")'), "reset nama file hilang");
-  assert(src.includes("support: 0") && src.includes("resistance: 0"), "reset S/R hilang");
-  assert(src.includes("setResult(null)") && src.includes("setConfirmed(false)"), "reset hasil hilang");
+  assert(
+    src.includes("support: 0") && src.includes("resistance: 0"),
+    "reset S/R hilang",
+  );
+  assert(
+    src.includes("setResult(null)") && src.includes("setConfirmed(false)"),
+    "reset hasil hilang",
+  );
 });
 
 test("45. preset broker terpusat mengikuti simbol baru", () => {
@@ -608,8 +736,14 @@ test("48. reset tidak mengisi harga contoh instrumen baru", () => {
 
 test("49. simbol sama tidak mereset data", () => {
   const previous = makeUs100Market();
-  assert(createEmptyMarketForSymbol("US100", previous) === previous, "referensi berubah");
-  assert(isMarketEmptyForSymbol(makeValidMarket(""), "") === false, "simbol beda dianggap kosong");
+  assert(
+    createEmptyMarketForSymbol("US100", previous) === previous,
+    "referensi berubah",
+  );
+  assert(
+    isMarketEmptyForSymbol(makeValidMarket(""), "") === false,
+    "simbol beda dianggap kosong",
+  );
 });
 
 test("50. adapter tampilan dan input angka", () => {
@@ -646,7 +780,10 @@ test("53. App: handler simbol terpusat menolak kosong dan ganda", () => {
   const src = readSrc("src/App.tsx");
   assert(src.includes("handleSymbolChange"), "handler hilang");
   assert(src.includes("if (!normalized) return;"), "guard kosong hilang");
-  assert(src.includes("createEmptyMarketForSymbol"), "helper reset tidak dipakai");
+  assert(
+    src.includes("createEmptyMarketForSymbol"),
+    "helper reset tidak dipakai",
+  );
   assert(src.includes("Simbol berubah menjadi"), "notice hilang");
 });
 
@@ -660,7 +797,10 @@ test("54. form: select memakai callback dan adapter", () => {
 test("55. App: peringatan OCR lintas simbol ditampilkan", () => {
   const src = readSrc("src/App.tsx");
   assert(src.includes("filterOcrPricesForSymbol"), "filter OCR tidak dipakai");
-  assert(src.includes("Data OCR tidak sesuai dengan simbol"), "pesan OCR hilang");
+  assert(
+    src.includes("Data OCR tidak sesuai dengan simbol"),
+    "pesan OCR hilang",
+  );
   assert(src.includes("ocrWarning"), "state peringatan hilang");
 });
 
@@ -678,19 +818,19 @@ test("58. displayMarketNumber(30590.29) menghasilkan angka benar", () => {
   assert(displayMarketNumber(30590.29) === "30590.29", "tampilan US100 salah");
 });
 
-test("59. parseMarketInput(\"\") menghasilkan 0", () => {
+test('59. parseMarketInput("") menghasilkan 0', () => {
   assert(parseMarketInput("") === 0, "kosong harus 0");
 });
 
-test("60. parseMarketInput(\"1.32474\") menghasilkan 1.32474", () => {
+test('60. parseMarketInput("1.32474") menghasilkan 1.32474', () => {
   assert(parseMarketInput("1.32474") === 1.32474, "parse GBPUSD salah");
 });
 
-test("61. parseMarketInput(\"30590.29\") menghasilkan 30590.29", () => {
+test('61. parseMarketInput("30590.29") menghasilkan 30590.29', () => {
   assert(parseMarketInput("30590.29") === 30590.29, "parse US100 salah");
 });
 
-test("62. parseMarketInput(\"-197.12\") menghasilkan -197.12", () => {
+test('62. parseMarketInput("-197.12") menghasilkan -197.12', () => {
   assert(parseMarketInput("-197.12") === -197.12, "negatif CCI gagal");
 });
 
@@ -714,7 +854,10 @@ test("63. createEmptyMarketForSymbol menghasilkan semua field 0", () => {
 });
 
 test("64. reset tidak mengisi harga contoh instrumen baru", () => {
-  const toUs100 = createEmptyMarketForSymbol("US100", makeValidMarket("GBPUSD"));
+  const toUs100 = createEmptyMarketForSymbol(
+    "US100",
+    makeValidMarket("GBPUSD"),
+  );
   const toGbp = createEmptyMarketForSymbol("GBPUSD", makeUs100Market());
   for (const target of [toUs100, toGbp]) {
     for (const field of RESET_MARKET_FIELDS) {
@@ -723,16 +866,22 @@ test("64. reset tidak mengisi harga contoh instrumen baru", () => {
   }
   assert(
     toUs100.bid !== 1.32474 && toGbp.close !== 30480.5,
-    "harga contoh instrumen lama terbawa ke simbol baru"
+    "harga contoh instrumen lama terbawa ke simbol baru",
   );
 });
 
 test("65. form memakai adapter kosong dan placeholder per-field", () => {
   const src = readSrc("src/components/extraction/ExtractedDataForm.tsx");
-  assert(src.includes("displayMarketNumber(market[field.key])"), "adapter tampil hilang");
+  assert(
+    src.includes("displayMarketNumber(market[field.key])"),
+    "adapter tampil hilang",
+  );
   assert(!src.includes('placeholder="0"'), "placeholder 0 masih ada");
   assert(src.includes('placeholder: "Masukkan Bid"'), "placeholder Bid hilang");
-  assert(src.includes('placeholder: "Masukkan Support"'), "placeholder Support hilang");
+  assert(
+    src.includes('placeholder: "Masukkan Support"'),
+    "placeholder Support hilang",
+  );
 });
 
 test("66. kartu validasi memakai viewState terpusat", () => {
@@ -771,7 +920,7 @@ test("67. US100 kosong total berstatus data kosong, bukan mismatch", () => {
   assert(issues.length > 0, "seharusnya ada isu missing agar prioritas teruji");
   assert(
     issues.every((issue) => issue.code === "missing"),
-    "isu kosong tidak boleh berkode mismatch"
+    "isu kosong tidak boleh berkode mismatch",
   );
   const state = getValidationViewState({
     isEmpty: true,
@@ -795,7 +944,11 @@ test("68. GBPUSD kosong total berstatus data kosong, bukan mismatch", () => {
 });
 
 test("69. US100 terisi Bid/Ask saja berstatus belum lengkap", () => {
-  const market: MarketData = { ...makeEmptyMarket("US100"), bid: 30590, ask: 30593 };
+  const market: MarketData = {
+    ...makeEmptyMarket("US100"),
+    bid: 30590,
+    ask: 30593,
+  };
   const issues = detectScaleMismatch(market);
   const state = getValidationViewState({
     isEmpty: isMarketEmptyForSymbol(market, "US100"),
@@ -816,7 +969,7 @@ test("70. US100 berisi harga 1.32 berstatus mismatch nyata", () => {
   const issues = detectScaleMismatch(market);
   assert(
     issues.some((issue) => issue.code === "scale-mismatch"),
-    "mismatch nyata tidak terdeteksi"
+    "mismatch nyata tidak terdeteksi",
   );
   const state = getValidationViewState({
     isEmpty: false,
@@ -836,7 +989,7 @@ test("71. GBPUSD berisi harga 30590 berstatus mismatch nyata", () => {
   const issues = detectScaleMismatch(market);
   assert(
     issues.some((issue) => issue.code === "scale-mismatch"),
-    "mismatch nyata tidak terdeteksi"
+    "mismatch nyata tidak terdeteksi",
   );
   const state = getValidationViewState({
     isEmpty: false,
@@ -852,7 +1005,12 @@ test("72. isEmpty diprioritaskan di atas scaleIssues", () => {
     isEmpty: true,
     symbol: "US100",
     scaleIssues: [
-      { field: "Bid", message: "salah skala", severity: "error", code: "scale-mismatch" },
+      {
+        field: "Bid",
+        message: "salah skala",
+        severity: "error",
+        code: "scale-mismatch",
+      },
     ],
     valid: false,
   });
@@ -862,13 +1020,19 @@ test("72. isEmpty diprioritaskan di atas scaleIssues", () => {
 /* ---------------- OCR Market Watch: TEST 73-86 ---------------- */
 
 test("73. Market Watch US100 titik desimal + kolom change", () => {
-  const quote = parseMarketWatchBidAsk("US100 30582.83 30585.58 0.43%", "US100");
+  const quote = parseMarketWatchBidAsk(
+    "US100 30582.83 30585.58 0.43%",
+    "US100",
+  );
   assert(quote.bid === 30582.83, `bid=${quote.bid}`);
   assert(quote.ask === 30585.58, `ask=${quote.ask}`);
 });
 
 test("74. Market Watch US100 koma desimal", () => {
-  const quote = parseMarketWatchBidAsk("US100 30582,83 30585,58 0,43%", "US100");
+  const quote = parseMarketWatchBidAsk(
+    "US100 30582,83 30585,58 0,43%",
+    "US100",
+  );
   assert(quote.bid === 30582.83, `bid=${quote.bid}`);
   assert(quote.ask === 30585.58, `ask=${quote.ask}`);
 });
@@ -911,7 +1075,7 @@ test("80. harga 1.32 untuk US100 ditolak sebagai mismatch", () => {
 test("81. Bid/Ask terintegrasi ke partial MarketData berlabel", () => {
   const rich = parseOcrTextRich(
     "US100 30582.83 30585.58\nOpen: 30480 High: 30540 Low: 30450 Close: 30520",
-    { activeSymbol: "US100" }
+    { activeSymbol: "US100" },
   );
   assert(rich.data.bid === 30582.83, `bid=${rich.data.bid}`);
   assert(rich.data.ask === 30585.58, `ask=${rich.data.ask}`);
@@ -920,13 +1084,17 @@ test("81. Bid/Ask terintegrasi ke partial MarketData berlabel", () => {
 });
 
 test("82. RSI tak ditemukan tidak membuat default", () => {
-  const rich = parseOcrTextRich("US100 30582.83 30585.58", { activeSymbol: "US100" });
+  const rich = parseOcrTextRich("US100 30582.83 30585.58", {
+    activeSymbol: "US100",
+  });
   assert(rich.data.rsi === undefined, `rsi=${rich.data.rsi}`);
   assert(rich.missingFields.includes("rsi"), "rsi hilang dari missing");
 });
 
 test("83. MA50 tak ditemukan tetap missing", () => {
-  const rich = parseOcrTextRich("US100 30582.83 30585.58", { activeSymbol: "US100" });
+  const rich = parseOcrTextRich("US100 30582.83 30585.58", {
+    activeSymbol: "US100",
+  });
   assert(rich.data.ma50 === undefined, `ma50=${rich.data.ma50}`);
   assert(rich.missingFields.includes("ma50"), "ma50 hilang dari missing");
 });
@@ -937,19 +1105,20 @@ test("84. CCI negatif tetap terbaca", () => {
 });
 
 test("85. MACD dan Signal dipisahkan", () => {
-  const rich = parseOcrTextRich(
-    "MACD(12,26,9): 0.00041 0.00027",
-    { activeSymbol: "GBPUSD" }
-  );
+  const rich = parseOcrTextRich("MACD(12,26,9): 0.00041 0.00027", {
+    activeSymbol: "GBPUSD",
+  });
   assert(rich.data.macd === 0.00041, `macd=${rich.data.macd}`);
   assert(rich.data.macdSignal === 0.00027, `signal=${rich.data.macdSignal}`);
 });
 
 test("86. warning sumber Market Watch dibuat", () => {
-  const rich = parseOcrTextRich("US100 30582.83 30585.58", { activeSymbol: "US100" });
+  const rich = parseOcrTextRich("US100 30582.83 30585.58", {
+    activeSymbol: "US100",
+  });
   assert(
     rich.warnings.some((warning) => warning.includes("Market Watch")),
-    "warning sumber hilang"
+    "warning sumber hilang",
   );
 });
 
@@ -979,7 +1148,10 @@ test("87. Market Watch US100 30625.83/30628.58 diterima", () => {
 });
 
 test("88. Market Watch koma desimal 30625,83 diterima", () => {
-  const quote = parseMarketWatchBidAsk("US100 30625,83 30628,58 0,57%", "US100");
+  const quote = parseMarketWatchBidAsk(
+    "US100 30625,83 30628,58 0,57%",
+    "US100",
+  );
   assert(quote.bid === 30625.83, `bid=${quote.bid}`);
   assert(quote.ask === 30628.58, `ask=${quote.ask}`);
 });
@@ -994,7 +1166,11 @@ test("89. MA(50) 30449.559 diterima dari baris label", () => {
 });
 
 test("90. OCR tanpa Bid/Ask tidak menghapus nilai lama", () => {
-  const previous: MarketData = { ...makeUs100Market(), bid: 30625.83, ask: 30628.58 };
+  const previous: MarketData = {
+    ...makeUs100Market(),
+    bid: 30625.83,
+    ask: 30628.58,
+  };
   const merged = mergeValidOcrMarketData(previous, { close: 30667.33 });
   assert(merged.bid === 30625.83, `bid=${merged.bid}`);
   assert(merged.ask === 30628.58, `ask=${merged.ask}`);
@@ -1027,7 +1203,10 @@ test("93. S/R CSV masuk ke MarketData via applySwingLevels", () => {
   const next = applySwingLevels(previous, 30362.82, 30878.58);
   assert(next.support === 30362.82, `support=${next.support}`);
   assert(next.resistance === 30878.58, `resistance=${next.resistance}`);
-  assert(applySwingLevels(next, 30362.82, 30878.58) === next, "nilai sama harus referensi sama");
+  assert(
+    applySwingLevels(next, 30362.82, 30878.58) === next,
+    "nilai sama harus referensi sama",
+  );
 });
 
 test("94. OCR berikutnya mempertahankan S/R CSV", () => {
@@ -1044,7 +1223,7 @@ test("94. OCR berikutnya mempertahankan S/R CSV", () => {
 
 test("95. CSV mismatch tidak mengisi S/R", () => {
   const gbpCandles = parseCsvCandles(
-    "time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449"
+    "time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449",
   ).candles;
   const mismatch = checkInstrumentMismatch(gbpCandles, "US100", 30500);
   assert(mismatch !== null, "mismatch harus terdeteksi");
@@ -1058,8 +1237,15 @@ test("95. CSV mismatch tidak mengisi S/R", () => {
 });
 
 test("96. merge menolak Bid 1.32 untuk US100 dan mempertahankan lama", () => {
-  const previous: MarketData = { ...makeUs100Market(), bid: 30625.83, ask: 30628.58 };
-  const merged = mergeValidOcrMarketData(previous, { bid: 1.32474, ask: 1.3248 });
+  const previous: MarketData = {
+    ...makeUs100Market(),
+    bid: 30625.83,
+    ask: 30628.58,
+  };
+  const merged = mergeValidOcrMarketData(previous, {
+    bid: 1.32474,
+    ask: 1.3248,
+  });
   assert(merged.bid === 30625.83, `bid=${merged.bid}`);
   assert(merged.ask === 30628.58, `ask=${merged.ask}`);
 });
@@ -1073,7 +1259,7 @@ test("97. preset broker US100 tanpa contract size GBPUSD", () => {
   assert(applied.equity === 0, "equity tidak boleh ditebak");
   const kept = applyBrokerPreset(
     { ...makeEmptyBroker(), pointValue: 5, minLot: 0.1 },
-    "US100"
+    "US100",
   );
   assert(kept.minLot === 0.1, "nilai pengguna tertimpa");
 });
@@ -1081,7 +1267,7 @@ test("97. preset broker US100 tanpa contract size GBPUSD", () => {
 test("98. screenshot tanpa equity tidak mengisi broker", () => {
   const rich = parseOcrTextRich(
     "US100 30625.83 30628.58\nOpen: 30581.90 High: 30678.21",
-    { activeSymbol: "US100" }
+    { activeSymbol: "US100" },
   );
   assert(!("equity" in rich.data), "equity bocor ke data OCR");
   assert(!("pointValue" in rich.data), "pointValue bocor ke data OCR");
@@ -1104,7 +1290,10 @@ test("100. pergantian simbol membersihkan market dan CSV via App", () => {
 });
 
 test("101. angka OCR tanpa separator dinormalisasi via profil", () => {
-  assert(normalizeBigOcrNumber("3062583", "US100") === 30625.83, "normalisasi gagal");
+  assert(
+    normalizeBigOcrNumber("3062583", "US100") === 30625.83,
+    "normalisasi gagal",
+  );
   const quote = parseMarketWatchBidAsk("US100 3062583 3062858", "US100");
   assert(quote.bid === 30625.83, `bid=${quote.bid}`);
   assert(quote.ask === 30628.58, `ask=${quote.ask}`);
@@ -1114,8 +1303,14 @@ test("102. normalisasi mengikuti integer terpanjang se-skala", () => {
   assert(normalizeBigOcrNumber("304327", "US100") === 30432.7, "304327 salah");
   assert(normalizeBigOcrNumber("304789", "US100") === 30478.9, "304789 salah");
   assert(normalizeBigOcrNumber("5000000", "US100") === 50000, "5000000 salah");
-  assert(normalizeBigOcrNumber("132", "US100") === null, "1.32 bukan harga US100");
-  assert(normalizeBigOcrNumber("3062583", "GBPUSD") === null, "30.6 bukan harga GBPUSD");
+  assert(
+    normalizeBigOcrNumber("132", "US100") === null,
+    "1.32 bukan harga US100",
+  );
+  assert(
+    normalizeBigOcrNumber("3062583", "GBPUSD") === null,
+    "30.6 bukan harga GBPUSD",
+  );
 });
 
 test("103. fallback One-Click SELL/BUY berlabel jelas", () => {
@@ -1148,8 +1343,14 @@ test("104. activeSymbol US100 mengalahkan OCR AUDCAD", () => {
   const rich = parseOcrTextRich(SCREENSHOT_OCR, { activeSymbol: "US100" });
   assert(rich.data.symbol === "US100", `symbol=${rich.data.symbol}`);
   assert(rich.debug.selectedSymbol === "US100", "debug salah");
-  assert(rich.debug.detectedSymbols.includes("AUDCAD"), "AUDCAD harus terdeteksi");
-  assert(rich.debug.detectedSymbols.includes("US100"), "US100 harus terdeteksi");
+  assert(
+    rich.debug.detectedSymbols.includes("AUDCAD"),
+    "AUDCAD harus terdeteksi",
+  );
+  assert(
+    rich.debug.detectedSymbols.includes("US100"),
+    "US100 harus terdeteksi",
+  );
 });
 
 test("105. Market Watch memilih baris US100 meski AUDCAD lebih dulu", () => {
@@ -1159,7 +1360,7 @@ test("105. Market Watch memilih baris US100 meski AUDCAD lebih dulu", () => {
   assert(
     rich.debug.chosenMarketWatchLine !== undefined &&
       rich.debug.chosenMarketWatchLine.includes("US100"),
-    "baris terpilih bukan US100"
+    "baris terpilih bukan US100",
   );
 });
 
@@ -1269,10 +1470,14 @@ test("115. fallback strength 1 menghasilkan level bila tersedia", () => {
 });
 
 test("116. legacy parseOcrText tanpa RSI tetap undefined", () => {
-  const { parseOcrText } = require("../src/components/extraction/ocrParser") as unknown as {
-    parseOcrText(text: string, previous: MarketData): Partial<MarketData>;
-  };
-  const data = parseOcrText("US100 30582.83 30585.58", makeValidMarket("US100"));
+  const { parseOcrText } =
+    require("../src/components/extraction/ocrParser") as unknown as {
+      parseOcrText(text: string, previous: MarketData): Partial<MarketData>;
+    };
+  const data = parseOcrText(
+    "US100 30582.83 30585.58",
+    makeValidMarket("US100"),
+  );
   assert(data.rsi === undefined, `rsi=${data.rsi}`);
 });
 
@@ -1281,11 +1486,13 @@ test("117. tidak ada AUDCAD pada hasil saat aktif US100", () => {
   assert(rich.data.symbol === "US100", "simbol hasil bukan US100");
   assert(
     !rich.warnings.some((warning) => warning.includes("AUDCAD")),
-    "warning menyebut AUDCAD sebagai aktif"
+    "warning menyebut AUDCAD sebagai aktif",
   );
   assert(
-    !rich.debug.marketWatchCandidateLines.some((line) => line.includes("AUDCAD")),
-    "kandidat Market Watch tercampur"
+    !rich.debug.marketWatchCandidateLines.some((line) =>
+      line.includes("AUDCAD"),
+    ),
+    "kandidat Market Watch tercampur",
   );
 });
 
@@ -1311,16 +1518,21 @@ test("119. extreme fallback memakai low min dan high max", () => {
   const candles = makeRisingCandles(20, 30500);
   const extreme = detectExtremeLevels(candles, 30600);
   const lows = candles.map((candle) => candle.low).filter((low) => low < 30600);
-  const highs = candles.map((candle) => candle.high).filter((high) => high > 30600);
+  const highs = candles
+    .map((candle) => candle.high)
+    .filter((high) => high > 30600);
   assert(extreme.support === Math.min(...lows), "support bukan low terendah");
-  assert(extreme.resistance === Math.max(...highs), "resistance bukan high tertinggi");
+  assert(
+    extreme.resistance === Math.max(...highs),
+    "resistance bukan high tertinggi",
+  );
   const resolved = resolveSwingLevels(candles, 30600, 2);
   assert(resolved.source === "extreme", `source=${resolved.source}`);
 });
 
 test("120. mismatch CSV tetap memblokir pengisian S/R", () => {
   const gbpCandles = parseCsvCandles(
-    "time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449"
+    "time,open,high,low,close\n2026-10-01 01:00,1.32474,1.32507,1.32443,1.32449",
   ).candles;
   const mismatch = checkInstrumentMismatch(gbpCandles, "US100", 30500);
   assert(mismatch !== null, "mismatch harus ada");
@@ -1351,7 +1563,7 @@ const SCREENSHOT2_OCR = [
 test("121. Market Watch normal + header Daily Change", () => {
   const quote = parseMarketWatchBidAsk(
     "Symbol Bid Ask Daily Change\nUS100 30573.83 30576.58 0.40%",
-    "US100"
+    "US100",
   );
   assert(quote.bid === 30573.83, `bid=${quote.bid}`);
   assert(quote.ask === 30576.58, `ask=${quote.ask}`);
@@ -1359,7 +1571,10 @@ test("121. Market Watch normal + header Daily Change", () => {
 });
 
 test("122. Market Watch koma desimal 30573,83", () => {
-  const quote = parseMarketWatchBidAsk("US100 30573,83 30576,58 0,40%", "US100");
+  const quote = parseMarketWatchBidAsk(
+    "US100 30573,83 30576,58 0,40%",
+    "US100",
+  );
   assert(quote.bid === 30573.83, `bid=${quote.bid}`);
   assert(quote.ask === 30576.58, `ask=${quote.ask}`);
 });
@@ -1373,7 +1588,7 @@ test("123. Market Watch digit desimal dipisah OCR", () => {
 test("124. digit dipisah + header + change", () => {
   const quote = parseMarketWatchBidAsk(
     "Symbol Bid Ask Daily Change\nUS100 30573 83 30576 58 0.40%",
-    "US100"
+    "US100",
   );
   assert(quote.bid === 30573.83, `bid=${quote.bid}`);
   assert(quote.ask === 30576.58, `ask=${quote.ask}`);
@@ -1382,13 +1597,14 @@ test("124. digit dipisah + header + change", () => {
 test("125. AUDCAD dulu, US100 tetap dipilih", () => {
   const quote = parseMarketWatchBidAsk(
     "AUDCAD 0.91210 0.91216\nUS100 30573.83 30576.58",
-    "US100"
+    "US100",
   );
   assert(quote.bid === 30573.83, `bid=${quote.bid}`);
   assert(quote.ask === 30576.58, `ask=${quote.ask}`);
   assert(
-    quote.candidateLines.length === 1 && quote.candidateLines[0].includes("US100"),
-    "kandidat tercampur"
+    quote.candidateLines.length === 1 &&
+      quote.candidateLines[0].includes("US100"),
+    "kandidat tercampur",
   );
 });
 
@@ -1414,20 +1630,34 @@ test("128. pipeline memberi Ask 30576.58", () => {
 });
 
 test("129. semua varian label MA(50) terbaca", () => {
-  for (const label of ["MA(50)", "MA (50)", "MA ( 50 )", "MA 50", "Moving Average (50)"]) {
+  for (const label of [
+    "MA(50)",
+    "MA (50)",
+    "MA ( 50 )",
+    "MA 50",
+    "Moving Average (50)",
+  ]) {
     const parsed = parseMaValue(`${label} 30455.737`, "US100");
     assert(parsed.value === 30455.737, `${label}: ${parsed.value}`);
   }
 });
 
 test("130. applySwingLevels null mempertahankan nilai lama", () => {
-  const previous: MarketData = { ...makeUs100Market(), support: 30362.82, resistance: 30878.58 };
+  const previous: MarketData = {
+    ...makeUs100Market(),
+    support: 30362.82,
+    resistance: 30878.58,
+  };
   const next = applySwingLevels(previous, null, null);
   assert(next === previous, "referensi harus sama");
 });
 
 test("131. undefined eksplisit tidak menghapus S/R", () => {
-  const previous: MarketData = { ...makeUs100Market(), support: 30362.82, resistance: 30878.58 };
+  const previous: MarketData = {
+    ...makeUs100Market(),
+    support: 30362.82,
+    resistance: 30878.58,
+  };
   const merged = mergeValidOcrMarketData(previous, {
     support: undefined,
     resistance: undefined,
@@ -1486,8 +1716,14 @@ function makeFullUs100Broker(): BrokerSettings {
 }
 
 test("134. validator menerima semua nilai valid", () => {
-  const result = validateAnalysisInputs(makeFullUs100Market(), makeFullUs100Broker());
-  assert(result.valid, `tidak valid: ${result.errors.map((e) => e.message).join("; ")}`);
+  const result = validateAnalysisInputs(
+    makeFullUs100Market(),
+    makeFullUs100Broker(),
+  );
+  assert(
+    result.valid,
+    `tidak valid: ${result.errors.map((e) => e.message).join("; ")}`,
+  );
 });
 
 test("135. teks kosong tidak menghasilkan default fiktif", () => {
@@ -1500,7 +1736,10 @@ test("135. teks kosong tidak menghasilkan default fiktif", () => {
 });
 
 test("136. tombol SELL/BUY tak dipakai bila baris US100 terlihat", () => {
-  const quote = parseMarketWatchBidAsk("US100 oops\nSELL 30573.83 BUY 30576.58", "US100");
+  const quote = parseMarketWatchBidAsk(
+    "US100 oops\nSELL 30573.83 BUY 30576.58",
+    "US100",
+  );
   assert(quote.bid === null && quote.ask === null, "tombol tak boleh dipakai");
 });
 
@@ -1509,14 +1748,17 @@ test("137. tidak ada AUDCAD pada hasil activeSymbol US100", () => {
   assert(rich.data.symbol === "US100", "simbol bukan US100");
   assert(
     !rich.warnings.some((warning) => warning.includes("AUDCAD")),
-    "warning menyebut AUDCAD"
+    "warning menyebut AUDCAD",
   );
 });
 
 test("138. debug Market Watch memuat token dan alasan", () => {
   const quote = parseMarketWatchBidAsk("US100 30573.83 30576.58", "US100");
   assert(quote.debug.candidateTokens.includes("30573.83"), "token hilang");
-  assert(quote.debug.normalizedCandidates.includes(30573.83), "normalisasi hilang");
+  assert(
+    quote.debug.normalizedCandidates.includes(30573.83),
+    "normalisasi hilang",
+  );
   assert(quote.debug.chosenBid === 30573.83, "chosenBid hilang");
   assert(quote.debug.chosenAsk === 30576.58, "chosenAsk hilang");
   assert(quote.debug.rejectionReason === null, "rejectionReason harus null");
@@ -1561,7 +1803,10 @@ test("141. Fixture C: MA label spasi + angka beda baris", () => {
 
 test("142. kontrak: extractor teruskan activeSymbol form", () => {
   const src = readSrc("src/components/extraction/OcrExtractor.tsx");
-  assert(src.includes("normalizeSymbol(market.symbol)"), "simbol form tidak dinormalisasi");
+  assert(
+    src.includes("normalizeSymbol(market.symbol)"),
+    "simbol form tidak dinormalisasi",
+  );
   assert(src.includes("activeSymbol,"), "activeSymbol tidak diteruskan");
   assert(!src.includes("detectedSymbols[0]"), "simbol OCR pertama dipakai");
 });
@@ -1599,7 +1844,7 @@ test("146. kontrak: region crop + gabungan teks", () => {
   assert(src.includes("Ekstrak dari Region"), "tombol region hilang");
   assert(
     combineRegionTexts("US100 1 2", "Open 3") === "US100 1 2\nOpen 3",
-    "gabung region salah"
+    "gabung region salah",
   );
   assert(combineRegionTexts("", "Open 3") === "Open 3", "region kosong salah");
 });
@@ -1612,36 +1857,54 @@ test("147. region: MW hanya dari teks region", () => {
   });
   assert(rich.data.bid === 30573.83, `bid=${rich.data.bid}`);
   assert(rich.data.open === 30581.9, `open=${rich.data.open}`);
-  assert(rich.debug.chosenMarketWatchLine === "US100 30573.83 30576.58", "baris MW salah");
+  assert(
+    rich.debug.chosenMarketWatchLine === "US100 30573.83 30576.58",
+    "baris MW salah",
+  );
 });
 
 /* ---------------- Region selection: TEST 148-167 ---------------- */
 
 test("148. tombol Market Watch mengatur activeRegion", () => {
   const src = readSrc("src/components/extraction/OcrExtractor.tsx");
-  assert(src.includes('onClick={() => setActiveRegion("marketWatch")}'), "handler MW hilang");
+  assert(
+    src.includes('onClick={() => setActiveRegion("marketWatch")}'),
+    "handler MW hilang",
+  );
 });
 
 test("149. tombol Data Window mengatur activeRegion", () => {
   const src = readSrc("src/components/extraction/OcrExtractor.tsx");
-  assert(src.includes('onClick={() => setActiveRegion("dataWindow")}'), "handler DW hilang");
+  assert(
+    src.includes('onClick={() => setActiveRegion("dataWindow")}'),
+    "handler DW hilang",
+  );
 });
 
 test("150. semua tombol region bertipe button", () => {
   const src = readSrc("src/components/extraction/OcrExtractor.tsx");
   const buttons = src.match(/<button/g) ?? [];
   const typed = src.match(/type="button"/g) ?? [];
-  assert(buttons.length > 0 && typed.length >= buttons.length, "ada tombol tanpa type");
+  assert(
+    buttons.length > 0 && typed.length >= buttons.length,
+    "ada tombol tanpa type",
+  );
 });
 
 test("151. canvas menerima pointer events saat mode aktif", () => {
   const src = readSrc("src/components/extraction/OcrExtractor.tsx");
-  assert(src.includes('pointerEvents: activeRegion ? "auto" : "none"'), "pointer-events tidak terikat mode");
+  assert(
+    src.includes('pointerEvents: activeRegion ? "auto" : "none"'),
+    "pointer-events tidak terikat mode",
+  );
 });
 
 test("152. canvas nonaktif pointer-events saat mode null", () => {
   const src = readSrc("src/components/extraction/OcrExtractor.tsx");
-  assert(src.includes("onPointerDown={handlePointerDown}"), "handler down hilang");
+  assert(
+    src.includes("onPointerDown={handlePointerDown}"),
+    "handler down hilang",
+  );
   assert(src.includes("if (!activeRegion) return;"), "guard mode hilang");
 });
 
@@ -1654,15 +1917,24 @@ test("153. pointer down memulai seleksi", () => {
 
 test("154. pointer move menggambar kotak", () => {
   const src = readSrc("src/components/extraction/OcrExtractor.tsx");
-  assert(src.includes("onPointerMove={handlePointerMove}"), "handler move hilang");
+  assert(
+    src.includes("onPointerMove={handlePointerMove}"),
+    "handler move hilang",
+  );
   assert(src.includes("setSelectionCurrent("), "update berjalan hilang");
-  assert(src.includes("normalizeRegion(selectionStart, selectionCurrent)"), "preview tidak digambar");
+  assert(
+    src.includes("normalizeRegion(selectionStart, selectionCurrent)"),
+    "preview tidak digambar",
+  );
 });
 
 test("155. pointer up menyimpan region", () => {
   const src = readSrc("src/components/extraction/OcrExtractor.tsx");
   assert(src.includes("onPointerUp={handlePointerUp}"), "handler up hilang");
-  assert(src.includes("onPointerCancel={handlePointerCancel}"), "cancel hilang");
+  assert(
+    src.includes("onPointerCancel={handlePointerCancel}"),
+    "cancel hilang",
+  );
   assert(src.includes("setMarketWatchRegion(region)"), "simpan MW hilang");
   assert(src.includes("setDataWindowRegion(region)"), "simpan DW hilang");
 });
@@ -1676,7 +1948,15 @@ test("156. region dinormalisasi positif", () => {
 test("157. region terlalu kecil ditolak", () => {
   assert(!isRegionBigEnough({ x: 0, y: 0, width: 9, height: 50 }), "9px lolos");
   assert(!isRegionBigEnough({ x: 0, y: 0, width: 50, height: 5 }), "5px lolos");
-  assert(isRegionBigEnough({ x: 0, y: 0, width: REGION_MIN_SIZE, height: REGION_MIN_SIZE }), "batas pas ditolak");
+  assert(
+    isRegionBigEnough({
+      x: 0,
+      y: 0,
+      width: REGION_MIN_SIZE,
+      height: REGION_MIN_SIZE,
+    }),
+    "batas pas ditolak",
+  );
 });
 
 test("158. Market Watch region disimpan", () => {
@@ -1691,15 +1971,24 @@ test("159. Data Window region disimpan", () => {
 
 test("160. Ekstrak aktif setelah kedua region tersedia", () => {
   const src = readSrc("src/components/extraction/OcrExtractor.tsx");
-  assert(src.includes("!marketWatchRegion || !dataWindowRegion"), "gate kedua region hilang");
-  assert(src.includes("Pilih kedua region sebelum mengekstrak."), "hint hilang");
+  assert(
+    src.includes("!marketWatchRegion || !dataWindowRegion"),
+    "gate kedua region hilang",
+  );
+  assert(
+    src.includes("Pilih kedua region sebelum mengekstrak."),
+    "hint hilang",
+  );
 });
 
 test("161. Reset Region menghapus kedua region", () => {
   const src = readSrc("src/components/extraction/OcrExtractor.tsx");
   const start = src.indexOf("function clearRegions");
   assert(start >= 0, "clearRegions hilang");
-  const body = src.slice(start, src.indexOf("}", src.indexOf("setOcrSource", start)) + 1);
+  const body = src.slice(
+    start,
+    src.indexOf("}", src.indexOf("setOcrSource", start)) + 1,
+  );
   assert(body.includes("setMarketWatchRegion(null)"), "MW tidak dibersihkan");
   assert(body.includes("setDataWindowRegion(null)"), "DW tidak dibersihkan");
   assert(body.includes("setActiveRegion(null)"), "mode tidak dibersihkan");
@@ -1716,14 +2005,14 @@ test("163. koordinat tampilan ke gambar asli", () => {
   const natural = convertToNaturalCoords(
     { x: 10, y: 20, width: 100, height: 50 },
     { width: 200, height: 100 },
-    { width: 800, height: 400 }
+    { width: 800, height: 400 },
   );
   assert(natural.x === 40 && natural.y === 80, "origin salah");
   assert(natural.width === 400 && natural.height === 200, "skala salah");
   const zero = convertToNaturalCoords(
     { x: 1, y: 1, width: 1, height: 1 },
     { width: 0, height: 0 },
-    { width: 800, height: 400 }
+    { width: 800, height: 400 },
   );
   assert(zero.width === 0, "pembagi nol tidak aman");
 });
@@ -1736,9 +2025,17 @@ test("164. activeRegion tidak reset saat tombol diklik", () => {
 });
 
 test("165. titik canvas dijepit ke batas", () => {
-  const point = canvasPointFromClient(999, -5, { left: 10, top: 10, width: 100, height: 50 });
+  const point = canvasPointFromClient(999, -5, {
+    left: 10,
+    top: 10,
+    width: 100,
+    height: 50,
+  });
   assert(point.x === 100 && point.y === 0, "clamp salah");
-  assert(clamp(5, 0, 10) === 5 && clamp(-1, 0, 10) === 0 && clamp(99, 0, 10) === 10, "clamp salah");
+  assert(
+    clamp(5, 0, 10) === 5 && clamp(-1, 0, 10) === 0 && clamp(99, 0, 10) === 10,
+    "clamp salah",
+  );
 });
 
 test("166. overlay tidak tertutup elemen lain", () => {
@@ -1753,8 +2050,14 @@ test("167. cursor crosshair dan status visual mode", () => {
   assert(src.includes('data-testid="region-status"'), "testid status hilang");
   assert(src.includes('data-testid="market-watch-region"'), "testid MW hilang");
   assert(src.includes('data-testid="data-window-region"'), "testid DW hilang");
-  assert(src.includes("Mode aktif: seret kotak Market Watch"), "pesan mode MW hilang");
-  assert(src.includes("Mode aktif: seret kotak Data Window"), "pesan mode DW hilang");
+  assert(
+    src.includes("Mode aktif: seret kotak Market Watch"),
+    "pesan mode MW hilang",
+  );
+  assert(
+    src.includes("Mode aktif: seret kotak Data Window"),
+    "pesan mode DW hilang",
+  );
 });
 
 /* ---------------- Fondasi registry broker terisolasi: TEST 168-176 ---------------- */
@@ -1762,7 +2065,10 @@ test("167. cursor crosshair dan status visual mode", () => {
 
 test("168. broker default adalah Finex", () => {
   assert(DEFAULT_BROKER_ID === "finex", `default=${DEFAULT_BROKER_ID}`);
-  assert(DEFAULT_BROKER_ID === FINEX_BROKER_ID, "default bukan FINEX_BROKER_ID");
+  assert(
+    DEFAULT_BROKER_ID === FINEX_BROKER_ID,
+    "default bukan FINEX_BROKER_ID",
+  );
   assert(isSupportedBrokerId(DEFAULT_BROKER_ID), "default tidak didukung");
 });
 
@@ -1802,11 +2108,13 @@ test("173. profile OTB memiliki catatan perlu verifikasi", () => {
   const profile = getBrokerProfile("orbitraderberjangka");
   assert(
     profile.note.includes(ORBITRADER_VERIFICATION_NOTE),
-    `note=${profile.note}`
+    `note=${profile.note}`,
   );
   assert(
-    profile.note.includes("Perlu verifikasi dari Specification OrbiTraderBerjangka."),
-    "catatan verifikasi hilang"
+    profile.note.includes(
+      "Perlu verifikasi dari Specification OrbiTraderBerjangka.",
+    ),
+    "catatan verifikasi hilang",
   );
 });
 
@@ -1820,19 +2128,20 @@ test("174. profile OTB tidak memakai angka preset Finex", () => {
   assert(!("margin" in otb), "margin bocor ke profil OTB");
   assert(
     !JSON.stringify(otb).includes("100000"),
-    "angka preset Finex terbawa ke profil OTB"
+    "angka preset Finex terbawa ke profil OTB",
   );
   // Adapter Finex: nilai berasal dari instrumentConfig, bukan salinan.
   const finex = getBrokerProfile("finex");
   assert(
     finex.instruments.length === SUPPORTED_SYMBOLS.length,
-    `instruments=${finex.instruments.length}`
+    `instruments=${finex.instruments.length}`,
   );
   const gbp = finex.instruments.find((preset) => preset.symbol === "GBPUSD");
   assert(gbp !== undefined, "preset GBPUSD hilang dari profil Finex");
   assert(
-    gbp !== undefined && gbp.contractSize === getInstrumentProfile("GBPUSD").contractSize,
-    "preset Finex tidak identik dengan instrumentConfig"
+    gbp !== undefined &&
+      gbp.contractSize === getInstrumentProfile("GBPUSD").contractSize,
+    "preset Finex tidak identik dengan instrumentConfig",
   );
 });
 
@@ -1854,9 +2163,12 @@ test("175. object registry tidak boleh dimutasi oleh pemanggil", () => {
   }
   assert(
     pushThrew || mutable.length === before,
-    "registry berhasil dimutasi via push"
+    "registry berhasil dimutasi via push",
   );
-  assert(BROKER_PROFILES.length === 2, `jumlah profil=${BROKER_PROFILES.length}`);
+  assert(
+    BROKER_PROFILES.length === 2,
+    `jumlah profil=${BROKER_PROFILES.length}`,
+  );
 
   const writable = finex as unknown as { label: string };
   let labelThrew = false;
@@ -1873,7 +2185,10 @@ test("176. helper simbol preservatif dan perilaku Finex lama utuh", () => {
   // brokerSymbol menyimpan nama asli; tidak memakai normalizeSymbol.
   const context = createBrokerContext("GBPUSD.pro");
   assert(context.brokerId === "finex", `brokerId=${context.brokerId}`);
-  assert(context.brokerSymbol === "GBPUSD.pro", `brokerSymbol=${context.brokerSymbol}`);
+  assert(
+    context.brokerSymbol === "GBPUSD.pro",
+    `brokerSymbol=${context.brokerSymbol}`,
+  );
   assert(context.instrumentFamily === undefined, "family harus opsional");
   const withFamily = createBrokerContext("US100", "index");
   assert(withFamily.instrumentFamily === "index", "family hilang");
@@ -1886,11 +2201,11 @@ test("176. helper simbol preservatif dan perilaku Finex lama utuh", () => {
   assert(normalizeSymbol("USTEC") === "US100", "alias US100 berubah");
   assert(
     getInstrumentProfile("GBPUSD").contractSize === 100000,
-    "preset Finex berubah"
+    "preset Finex berubah",
   );
   assert(
     getInstrumentProfile("US100").defaultBuffer === 10,
-    "preset US100 berubah"
+    "preset US100 berubah",
   );
 });
 
@@ -1914,9 +2229,9 @@ test("177. BrokerSelector memiliki option Finex", () => {
   assert(src.includes("profile.label"), "label opsi tidak dari profil");
   assert(
     BROKER_PROFILES.some(
-      (profile) => profile.id === "finex" && profile.label === "Finex"
+      (profile) => profile.id === "finex" && profile.label === "Finex",
     ),
-    "registry tidak menyediakan option Finex"
+    "registry tidak menyediakan option Finex",
   );
   assert(src.includes('data-testid="broker-selector"'), "testid hilang");
 });
@@ -1926,9 +2241,9 @@ test("178. BrokerSelector memiliki option OrbiTraderBerjangka", () => {
     BROKER_PROFILES.some(
       (profile) =>
         profile.id === "orbitraderberjangka" &&
-        profile.label === "OrbiTraderBerjangka"
+        profile.label === "OrbiTraderBerjangka",
     ),
-    "registry tidak menyediakan option OrbiTraderBerjangka"
+    "registry tidak menyediakan option OrbiTraderBerjangka",
   );
   const src = readSrc("src/components/analysis/BrokerSelector.tsx");
   assert(src.includes("isSupportedBrokerId"), "guard id broker hilang");
@@ -1941,7 +2256,7 @@ test("179. default broker adalah Finex", () => {
   const src = readSrc("src/App.tsx");
   assert(
     src.includes("useState<BrokerId>(DEFAULT_BROKER_ID)"),
-    "state broker tidak memakai DEFAULT_BROKER_ID"
+    "state broker tidak memakai DEFAULT_BROKER_ID",
   );
 });
 
@@ -1952,7 +2267,7 @@ test("180. App menggunakan DEFAULT_BROKER_ID dan state tunggal", () => {
   assert(src.includes("setActiveBrokerId"), "setter broker aktif hilang");
   assert(
     src.includes('import type { BrokerId } from "./types/broker"'),
-    "tipe BrokerId tidak dipakai App"
+    "tipe BrokerId tidak dipakai App",
   );
 });
 
@@ -1962,17 +2277,17 @@ test("181. label broker aktif berasal dari state", () => {
   assert(selector.includes("{activeLabel}"), "badge bukan dari state/props");
   assert(
     selector.includes("getBrokerProfile(value).label"),
-    "label badge bukan dari profil state"
+    "label badge bukan dari profil state",
   );
   const app = readSrc("src/App.tsx");
   assert(app.includes("value={activeBrokerId}"), "selector tidak dari state");
   assert(
     app.includes("getBrokerProfile(activeBrokerId).label"),
-    "label App bukan dari state"
+    "label App bukan dari state",
   );
   assert(
     app.includes("Sumber broker: {activeBrokerLabel}"),
-    "label konteks CSV bukan dari state"
+    "label konteks CSV bukan dari state",
   );
 });
 
@@ -1980,23 +2295,26 @@ test("182. handleBrokerChange tersedia dan terhubung", () => {
   const src = readSrc("src/App.tsx");
   assert(
     src.includes("const handleBrokerChange = useCallback"),
-    "handler tidak stabil (useCallback hilang)"
+    "handler tidak stabil (useCallback hilang)",
   );
   assert(
     src.includes("onChange={handleBrokerChange}"),
-    "selector tidak terhubung ke handler"
+    "selector tidak terhubung ke handler",
   );
   const body = readAppBrokerHandler();
   assert(body.includes("setActiveBrokerId"), "handler tidak mengubah state");
   assert(
     body.includes("if (nextBrokerId === activeBrokerId) return;"),
-    "guard broker sama hilang"
+    "guard broker sama hilang",
   );
 });
 
 test("183. pergantian broker membersihkan hasil analisis lama", () => {
   const body = readAppBrokerHandler();
-  assert(body.includes("clearAnalysisOutput()"), "hasil lama tidak dibersihkan");
+  assert(
+    body.includes("clearAnalysisOutput()"),
+    "hasil lama tidak dibersihkan",
+  );
   assert(body.includes('setSwingCsv("")'), "CSV lama tidak diputus");
   assert(body.includes('setConnectedCsvName("")'), "nama CSV lama tersisa");
   assert(body.includes("setCsvResetKey"), "reset koneksi CSV hilang");
@@ -2022,17 +2340,14 @@ test("185. pergantian broker tidak memodifikasi preset Finex", () => {
   assert(!body.includes("contractSize"), "handler menulis contractSize");
   assert(!body.includes("100000"), "handler menulis angka preset");
   const app = readSrc("src/App.tsx");
-  assert(
-    app.includes("pointValue: 100000"),
-    "nilai awal Finex berubah/hilang"
-  );
+  assert(app.includes("pointValue: 100000"), "nilai awal Finex berubah/hilang");
   assert(
     getInstrumentProfile("GBPUSD").contractSize === 100000,
-    "preset Finex berubah"
+    "preset Finex berubah",
   );
   assert(
     getInstrumentProfile("US100").defaultBuffer === 10,
-    "preset US100 berubah"
+    "preset US100 berubah",
   );
 });
 
@@ -2041,13 +2356,13 @@ test("186. OTB tidak menerima angka Finex sebagai preset", () => {
   assert(otb.instruments.length === 0, "preset OTB terisi");
   assert(
     !JSON.stringify(otb).includes("100000"),
-    "angka Finex bocor ke profil OTB"
+    "angka Finex bocor ke profil OTB",
   );
   const body = readAppBrokerHandler();
   assert(!body.includes("100000"), "angka Finex ditulis saat ganti broker");
   assert(
     body.includes("Preset instrumen belum diaktifkan"),
-    "status kosong OTB hilang dari notifikasi"
+    "status kosong OTB hilang dari notifikasi",
   );
 });
 
@@ -2055,25 +2370,25 @@ test("187. OTB menampilkan status perlu verifikasi", () => {
   const selector = readSrc("src/components/analysis/BrokerSelector.tsx");
   assert(
     selector.includes("harus diverifikasi dari terminal OrbiTraderBerjangka"),
-    "keterangan OTB hilang dari selector"
+    "keterangan OTB hilang dari selector",
   );
   const app = readSrc("src/App.tsx");
   assert(
     app.includes("Preset instrumen belum diaktifkan"),
-    "notifikasi OTB hilang dari App"
+    "notifikasi OTB hilang dari App",
   );
   assert(
     app.includes("Ambil ulang data market dari terminal OrbiTraderBerjangka"),
-    "warning ambil ulang data hilang"
+    "warning ambil ulang data hilang",
   );
   const form = readSrc("src/components/analysis/BrokerSettingsForm.tsx");
   assert(
     form.includes("Parameter OrbiTraderBerjangka belum diverifikasi"),
-    "warning OTB hilang dari form"
+    "warning OTB hilang dari form",
   );
   assert(
     form.includes("menu Specification pada MetaTrader OrbiTraderBerjangka"),
-    "rujukan Specification hilang"
+    "rujukan Specification hilang",
   );
 });
 
@@ -2083,17 +2398,17 @@ test("188. Finex tetap menjadi jalur default", () => {
   const body = readAppBrokerHandler();
   assert(
     body.includes("Gunakan screenshot, CSV, dan parameter dari terminal Finex"),
-    "notifikasi kembali ke Finex hilang"
+    "notifikasi kembali ke Finex hilang",
   );
   const app = readSrc("src/App.tsx");
   assert(
     app.includes("setActiveBrokerId(DEFAULT_BROKER_ID)"),
-    "reset tidak kembali ke Finex"
+    "reset tidak kembali ke Finex",
   );
   const selector = readSrc("src/components/analysis/BrokerSelector.tsx");
   assert(
     selector.includes("Gunakan data dari terminal Finex"),
-    "keterangan Finex hilang"
+    "keterangan Finex hilang",
   );
 });
 
@@ -2116,14 +2431,14 @@ test("190. CSV/OCR lama tetap terhubung seperti sebelumnya", () => {
   assert(app.includes("onCsvLoaded={handleCsvLoaded}"), "CSV loader lepas");
   assert(
     app.includes("onConnectionChange={handleConnectionChange}"),
-    "status koneksi CSV lepas"
+    "status koneksi CSV lepas",
   );
   assert(app.includes("onExtracted={handleExtracted}"), "OCR lepas");
   assert(app.includes("mergeValidOcrMarketData"), "merge aman OCR hilang");
   assert(app.includes("filterOcrPricesForSymbol"), "filter OCR hilang");
   assert(
     app.includes("Atur parameter broker dan risiko — "),
-    "judul dinamis form hilang"
+    "judul dinamis form hilang",
   );
   assert(app.includes("brokerId={activeBrokerId}"), "prop broker form hilang");
   const csv = readSrc("src/components/analysis/CsvFileConnector.tsx");
@@ -2166,7 +2481,7 @@ test("191. equity 0 tidak menghasilkan undefined%", () => {
   assert(
     message ===
       "Risiko minimum lot belum dapat dibandingkan karena Equity USD belum diisi.",
-    `pesan=${message}`
+    `pesan=${message}`,
   );
 });
 
@@ -2177,7 +2492,7 @@ test("192. equity NaN tidak menghasilkan NaN%", () => {
   assert(
     message ===
       "Risiko minimum lot belum dapat dibandingkan karena Equity USD belum diisi.",
-    `pesan=${message}`
+    `pesan=${message}`,
   );
 });
 
@@ -2187,7 +2502,7 @@ test("193. equity negatif tidak menghasilkan persentase", () => {
   assert(
     message ===
       "Risiko minimum lot belum dapat dibandingkan karena Equity USD belum diisi.",
-    `pesan=${message}`
+    `pesan=${message}`,
   );
 });
 
@@ -2200,17 +2515,17 @@ test("194. equity valid menghasilkan persentase yang benar", () => {
 });
 
 test("195. warning equity wajib tetap muncul", () => {
-  const summary = validateAnalysisInputs(
-    makeValidMarket("GBPUSD"),
-    { ...makeValidBroker(), equity: 0 }
-  );
+  const summary = validateAnalysisInputs(makeValidMarket("GBPUSD"), {
+    ...makeValidBroker(),
+    equity: 0,
+  });
   assert(
     summary.errors.some(
       (error) =>
         error.field === "equity" &&
-        error.message === "Equity harus lebih besar dari 0."
+        error.message === "Equity harus lebih besar dari 0.",
     ),
-    "validasi equity wajib berubah/hilang"
+    "validasi equity wajib berubah/hilang",
   );
   assert(!summary.valid, "equity 0 dianggap valid");
 });
@@ -2227,24 +2542,18 @@ test("196. tidak ada teks undefined% pada output validasi", () => {
 });
 
 test("197. rumus persen equity valid tidak berubah", () => {
-  const summary = validateAnalysisInputs(
-    makeValidMarket("GBPUSD"),
-    { ...makeValidBroker(), equity: 8.99 }
-  );
+  const summary = validateAnalysisInputs(makeValidMarket("GBPUSD"), {
+    ...makeValidBroker(),
+    equity: 8.99,
+  });
   const riskUsd = summary.minimumLotRiskUsd;
   const riskPct = summary.minimumLotRiskPercent;
   if (riskUsd === null || riskPct === null) {
     throw new Error("risiko minimum hilang saat equity valid");
   }
   const expected = (riskUsd / 8.99) * 100;
-  assert(
-    Math.abs(riskPct - expected) < 0.000001,
-    "rumus persen berubah"
-  );
-  assert(
-    Math.abs(riskPct - 13.21) < 0.01,
-    `nilai persen=${riskPct}`
-  );
+  assert(Math.abs(riskPct - expected) < 0.000001, "rumus persen berubah");
+  assert(Math.abs(riskPct - 13.21) < 0.01, `nilai persen=${riskPct}`);
 });
 
 /* ---------------- Propagasi S/R CSV ke market: TEST 198-209 ---------------- */
@@ -2252,13 +2561,12 @@ test("197. rumus persen equity valid tidak berubah", () => {
 function makeGbpCsvText(): string {
   const rows = ["time,open,high,low,close"];
   const closes = [
-    1.3250, 1.3260, 1.3240, 1.3270, 1.3230, 1.3280, 1.3220, 1.3290,
-    1.3210, 1.3300, 1.3245, 1.3265, 1.3235, 1.3275, 1.3225, 1.3285,
-    1.3215, 1.3295, 1.3255, 1.3262,
+    1.325, 1.326, 1.324, 1.327, 1.323, 1.328, 1.322, 1.329, 1.321, 1.33, 1.3245,
+    1.3265, 1.3235, 1.3275, 1.3225, 1.3285, 1.3215, 1.3295, 1.3255, 1.3262,
   ];
   closes.forEach((close, index) => {
     rows.push(
-      `2026-10-01 01:${String(index).padStart(2, "0")},${(close - 0.0002).toFixed(5)},${(close + 0.0004).toFixed(5)},${(close - 0.0004).toFixed(5)},${close.toFixed(5)}`
+      `2026-10-01 01:${String(index).padStart(2, "0")},${(close - 0.0002).toFixed(5)},${(close + 0.0004).toFixed(5)},${(close - 0.0004).toFixed(5)},${close.toFixed(5)}`,
     );
   });
   return rows.join("\n");
@@ -2282,7 +2590,7 @@ test("198. CSV valid menghitung Support dan Resistance", () => {
   assert(parsed.validRows >= 5, `validRows=${parsed.validRows}`);
   assert(
     checkInstrumentMismatch(parsed.candles, "GBPUSD", 1.32474) === null,
-    "CSV valid dianggap mismatch"
+    "CSV valid dianggap mismatch",
   );
   const resolved = resolveSwingLevels(parsed.candles, 1.32474, 2);
   const support = resolved.support;
@@ -2299,7 +2607,7 @@ test("199. Support diterapkan ke market state", () => {
   const result = applyCsvSwingLevels(
     previous,
     { support: 1.3211, resistance: 1.3299, csvSymbol: "GBPUSD" },
-    { activeSymbol: "GBPUSD" }
+    { activeSymbol: "GBPUSD" },
   );
   assert(result.applied, `ditolak: ${result.rejectionReason}`);
   assert(result.rejectionReason === null, "alasan penolakan harus null");
@@ -2313,12 +2621,12 @@ test("200. Resistance diterapkan ke market state", () => {
   const result = applyCsvSwingLevels(
     previous,
     { support: 1.3211, resistance: 1.3299, csvSymbol: "GBPUSD" },
-    { activeSymbol: "GBPUSD" }
+    { activeSymbol: "GBPUSD" },
   );
   assert(result.applied, `ditolak: ${result.rejectionReason}`);
   assert(
     result.market.resistance === 1.3299,
-    `resistance=${result.market.resistance}`
+    `resistance=${result.market.resistance}`,
   );
   assert(result.appliedResistance === 1.3299, "diagnostik resistance salah");
 });
@@ -2331,11 +2639,11 @@ test("201. form market utama menampilkan nilai S/R yang diterapkan", () => {
   assert(form.includes('{ key: "support"'), "field support hilang dari form");
   assert(
     form.includes('{ key: "resistance"'),
-    "field resistance hilang dari form"
+    "field resistance hilang dari form",
   );
   assert(
     form.includes("displayMarketNumber(market[field.key])"),
-    "form tidak membaca dari market state"
+    "form tidak membaca dari market state",
   );
 });
 
@@ -2343,7 +2651,7 @@ test("202. validator membaca nilai S/R yang sama", () => {
   const applied = applyCsvSwingLevels(
     makeEmptySrMarket(),
     { support: 1.3211, resistance: 1.3299, csvSymbol: "GBPUSD" },
-    { activeSymbol: "GBPUSD" }
+    { activeSymbol: "GBPUSD" },
   );
   assert(applied.applied, "apply gagal");
   const summary = validateAnalysisInputs(applied.market, makeValidBroker());
@@ -2352,14 +2660,14 @@ test("202. validator membaca nilai S/R yang sama", () => {
       (error) =>
         error.field === "support" ||
         error.field === "resistance" ||
-        error.field === "support-resistance"
+        error.field === "support-resistance",
     ),
-    "validator menolak S/R yang sudah diterapkan"
+    "validator menolak S/R yang sudah diterapkan",
   );
   const app = readSrc("src/App.tsx");
   assert(
     app.includes("validateAnalysisInputs(market, broker, activeBrokerId)"),
-    "validator tidak memakai market state yang sama + konteks broker (4B)"
+    "validator tidak memakai market state yang sama + konteks broker (4B)",
   );
   assert(app.includes("market={market}"), "form tidak memakai market state");
 });
@@ -2368,7 +2676,7 @@ test("203. S/R tetap ada setelah ekstraksi OCR", () => {
   const applied = applyCsvSwingLevels(
     makeEmptySrMarket(),
     { support: 1.3211, resistance: 1.3299, csvSymbol: "GBPUSD" },
-    { activeSymbol: "GBPUSD" }
+    { activeSymbol: "GBPUSD" },
   );
   assert(applied.applied, "apply gagal");
   const afterOcr = mergeValidOcrMarketData(applied.market, {
@@ -2397,25 +2705,25 @@ test("204. CSV simbol berbeda ditolak", () => {
   const cross = applyCsvSwingLevels(
     previous,
     { support: 30500, resistance: 30600, csvSymbol: "US100" },
-    { activeSymbol: "GBPUSD" }
+    { activeSymbol: "GBPUSD" },
   );
   assert(!cross.applied, "level simbol berbeda diterapkan");
   assert(cross.market === previous, "market berubah saat ditolak");
   assert(
     cross.rejectionReason !== null && cross.rejectionReason.includes("simbol"),
-    `alasan=${cross.rejectionReason}`
+    `alasan=${cross.rejectionReason}`,
   );
   assert(previous.support === 1.3211, "S/R valid tertimpa");
   const offScale = applyCsvSwingLevels(
     previous,
     { support: 30500, resistance: 30600, csvSymbol: "GBPUSD" },
-    { activeSymbol: "GBPUSD" }
+    { activeSymbol: "GBPUSD" },
   );
   assert(!offScale.applied, "level di luar skala diterapkan");
   assert(
     offScale.rejectionReason !== null &&
       offScale.rejectionReason.includes("skala"),
-    `alasan=${offScale.rejectionReason}`
+    `alasan=${offScale.rejectionReason}`,
   );
 });
 
@@ -2433,13 +2741,13 @@ test("205. CSV broker berbeda ditolak bila konteks tersedia", () => {
       csvSymbol: "GBPUSD",
       brokerId: "finex",
     },
-    { activeSymbol: "GBPUSD", activeBrokerId: "orbitraderberjangka" }
+    { activeSymbol: "GBPUSD", activeBrokerId: "orbitraderberjangka" },
   );
   assert(!diff.applied, "level broker berbeda diterapkan");
   assert(diff.market === previous, "market berubah saat ditolak");
   assert(
     diff.rejectionReason !== null && diff.rejectionReason.includes("broker"),
-    `alasan=${diff.rejectionReason}`
+    `alasan=${diff.rejectionReason}`,
   );
   const same = applyCsvSwingLevels(
     previous,
@@ -2449,13 +2757,13 @@ test("205. CSV broker berbeda ditolak bila konteks tersedia", () => {
       csvSymbol: "GBPUSD",
       brokerId: "finex",
     },
-    { activeSymbol: "GBPUSD", activeBrokerId: "finex" }
+    { activeSymbol: "GBPUSD", activeBrokerId: "finex" },
   );
   assert(same.applied, `broker sama ditolak: ${same.rejectionReason}`);
   const unknown = applyCsvSwingLevels(
     previous,
     { support: 1.3215, resistance: 1.3295, csvSymbol: "GBPUSD" },
-    { activeSymbol: "GBPUSD", activeBrokerId: "finex" }
+    { activeSymbol: "GBPUSD", activeBrokerId: "finex" },
   );
   assert(unknown.applied, "konteks tak lengkap ikut ditolak");
 });
@@ -2476,13 +2784,13 @@ test("206. nilai null/0/NaN/negatif tidak menghapus S/R valid", () => {
   const zeroApply = applyCsvSwingLevels(
     makeEmptySrMarket(),
     { support: 0, resistance: 1.3299, csvSymbol: "GBPUSD" },
-    { activeSymbol: "GBPUSD" }
+    { activeSymbol: "GBPUSD" },
   );
   assert(!zeroApply.applied, "level 0 diterapkan");
   assert(
     zeroApply.rejectionReason !== null &&
       zeroApply.rejectionReason.includes("valid"),
-    `alasan=${zeroApply.rejectionReason}`
+    `alasan=${zeroApply.rejectionReason}`,
   );
 });
 
@@ -2519,13 +2827,13 @@ test("208. diagnostik propagasi S/R lengkap dan terstruktur", () => {
   }
   assert(
     body.includes("setMarket((previous) =>"),
-    "apply tidak memakai state terbaru"
+    "apply tidak memakai state terbaru",
   );
   const form = readSrc("src/components/analysis/SwingLevelsForm.tsx");
   assert(form.includes("csvSymbol"), "konteks simbol tidak diteruskan");
   assert(
     form.includes("onDetected(support, resistance, resolved.source, {"),
-    "meta deteksi tidak dikirim"
+    "meta deteksi tidak dikirim",
   );
 });
 
@@ -2534,17 +2842,14 @@ test("209. decision engine dan aturan S/R validator tidak berubah", () => {
   assert(!engine.includes("BrokerId"), "engine tercemar tipe broker");
   assert(!engine.includes("applyCsvSwingLevels"), "engine memakai apply CSV");
   assert(!engine.includes("CsvSwing"), "engine tercemar tipe CSV");
-  const empty = validateAnalysisInputs(
-    makeEmptySrMarket(),
-    makeValidBroker()
-  );
+  const empty = validateAnalysisInputs(makeEmptySrMarket(), makeValidBroker());
   assert(
     empty.errors.some((error) => error.field === "support"),
-    "validator tidak lagi meminta support kosong"
+    "validator tidak lagi meminta support kosong",
   );
   assert(
     empty.errors.some((error) => error.field === "resistance"),
-    "validator tidak lagi meminta resistance kosong"
+    "validator tidak lagi meminta resistance kosong",
   );
   assert(!empty.valid, "market tanpa S/R dianggap valid");
 });
@@ -2570,7 +2875,7 @@ test("210. OTB preset GBPUSD_ORB ada dan beda dari Finex", () => {
   assert(otb.tickSize === 0.00001, `tickSize=${otb.tickSize}`);
   assert(
     otb.tickSize !== getInstrumentProfile("GBPUSD").pipSize,
-    "tickSize OTB sama dengan pipSize Finex"
+    "tickSize OTB sama dengan pipSize Finex",
   );
   assert(Object.isFrozen(otb), "preset OTB tidak dibekukan");
 });
@@ -2580,18 +2885,15 @@ test("211. OTB initialMargin terpisah dari tick value", () => {
   assert(otb.initialMargin === 100000, `initialMargin=${otb.initialMargin}`);
   assert(
     otb.maintenanceMargin === 100000,
-    `maintenanceMargin=${otb.maintenanceMargin}`
+    `maintenanceMargin=${otb.maintenanceMargin}`,
   );
   assert(otb.tickValue === 1, `tickValue tersimpan=${otb.tickValue}`);
   const tickValue = calculateOtbTickValue(otb);
   assert(tickValue === 1, `tickValue=${tickValue}`);
-  assert(
-    otb.tickValue === tickValue,
-    "nilai tersimpan beda dari kalkulator"
-  );
+  assert(otb.tickValue === tickValue, "nilai tersimpan beda dari kalkulator");
   assert(
     tickValue !== otb.initialMargin,
-    "tick value sama dengan initial margin"
+    "tick value sama dengan initial margin",
   );
 });
 
@@ -2610,7 +2912,7 @@ test("212. OTB minVolume 0.1 dengan batas volume utuh", () => {
   assert(otb.commission.pricePerLot === 33, "komisi bukan 33 USD/lot");
   assert(
     otb.commission.volumeMin === 0.01 && otb.commission.volumeMax === 1000,
-    "rentang volume komisi salah"
+    "rentang volume komisi salah",
   );
   assert(otb.hedgedMargin === 50000, `hedgedMargin=${otb.hedgedMargin}`);
 });
@@ -2618,30 +2920,30 @@ test("212. OTB minVolume 0.1 dengan batas volume utuh", () => {
 test("213. simbol OTB tak terverifikasi mengembalikan null", () => {
   assert(
     getOtbInstrumentProfile("EURUSD_ORB") === null,
-    "simbol tak terverifikasi mengembalikan preset"
+    "simbol tak terverifikasi mengembalikan preset",
   );
   assert(
     getOtbInstrumentProfile("GBPUSD") === null,
-    "nama simbol Finex bocor ke preset OTB"
+    "nama simbol Finex bocor ke preset OTB",
   );
   assert(getOtbInstrumentProfile("") === null, "simbol kosong lolos");
   assert(
     getOtbInstrumentProfile("gbpusd_orb") === null,
-    "lookup harus exact (case-sensitive)"
+    "lookup harus exact (case-sensitive)",
   );
   // 5D-EXT1: 3 flat + 10 percentage = 13 preset.
   assert(Object.keys(OTB_PRESETS).length === 13, "preset fiktif terdaftar");
   assert(
     getOtbInstrumentProfile("AUDCAD_ORB") !== null,
-    "preset AUDCAD_ORB hilang"
+    "preset AUDCAD_ORB hilang",
   );
   assert(
     getOtbInstrumentProfile("EURCHF_ORB") !== null,
-    "preset EURCHF_ORB hilang"
+    "preset EURCHF_ORB hilang",
   );
   assert(
     getBrokerProfile("orbitraderberjangka").instruments.length === 0,
-    "registry OTB teraktivasi prematur (wiring = 4B)"
+    "registry OTB teraktivasi prematur (wiring = 4B)",
   );
 });
 
@@ -2649,7 +2951,7 @@ test("214. kalkulator tick value terkunci + swap tersimpan", () => {
   const otb = requireOtbPreset("GBPUSD_ORB");
   assert(
     calculateOtbTickValue(otb) === otb.tickSize * otb.contractSize,
-    "rumus tick value berubah"
+    "rumus tick value berubah",
   );
   assert(calculateOtbTickValue(otb) === 1, "tick value bukan 1.00 USD");
   assert(otb.swapLong === -2.25, `swapLong=${otb.swapLong}`);
@@ -2659,15 +2961,15 @@ test("214. kalkulator tick value terkunci + swap tersimpan", () => {
 test("215. preset Finex byte-identik setelah modul OTB", () => {
   assert(
     getInstrumentProfile("GBPUSD").contractSize === 100000,
-    "contractSize Finex berubah"
+    "contractSize Finex berubah",
   );
   assert(
     getInstrumentProfile("GBPUSD").pipSize === 0.0001,
-    "pipSize Finex berubah"
+    "pipSize Finex berubah",
   );
   assert(
     getInstrumentProfile("US100").defaultBuffer === 10,
-    "preset US100 berubah"
+    "preset US100 berubah",
   );
   assert(SUPPORTED_SYMBOLS.length === 10, "daftar simbol Finex berubah");
 });
@@ -2680,13 +2982,13 @@ test("216. Finex preset dipilih bila broker default/finex", () => {
   const viaFinex = applyBrokerPreset(makeEmptyBroker(), "GBPUSD", "finex");
   assert(
     JSON.stringify(viaDefault) === JSON.stringify(viaFinex),
-    "jalur default beda dari jalur finex"
+    "jalur default beda dari jalur finex",
   );
   assert(
     viaDefault.pointValue === 100000 &&
       viaDefault.contractSize === 100000 &&
       viaDefault.buffer === 0.00005,
-    "preset Finex tidak diterapkan"
+    "preset Finex tidak diterapkan",
   );
   assert(viaDefault.minLot === 0.01, `minLot=${viaDefault.minLot}`);
   assert(viaDefault.equity === 0, "equity ikut ditebak");
@@ -2696,15 +2998,21 @@ test("217. OTB preset dipilih bila broker orbitraderberjangka", () => {
   const applied = applyBrokerPreset(
     makeEmptyBroker(),
     "GBPUSD_ORB",
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(applied.pointValue === 1, `pointValue=${applied.pointValue}`);
-  assert(applied.contractSize === 100000, `contractSize=${applied.contractSize}`);
+  assert(
+    applied.contractSize === 100000,
+    `contractSize=${applied.contractSize}`,
+  );
   assert(applied.minLot === 0.1, `minLot=${applied.minLot}`);
   assert(applied.lotStep === 0.1, `lotStep=${applied.lotStep}`);
   assert(applied.buffer === 0, "buffer OTB dikarang (tidak ada datanya)");
   assert(applied.equity === 0, "equity ikut ditebak");
-  assert(applied.commission === 33, `komisi OTB tidak terisi: ${applied.commission}`);
+  assert(
+    applied.commission === 33,
+    `komisi OTB tidak terisi: ${applied.commission}`,
+  );
   assert(applied.slippage === 0, "slippage ikut ditebak");
   assert(applied.riskPercent === 10, "default strategi tidak diisi");
 });
@@ -2713,12 +3021,12 @@ test("218. OTB tickValue dari kalkulator, bukan Finex", () => {
   const applied = applyBrokerPreset(
     makeEmptyBroker(),
     "GBPUSD_ORB",
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(applied.pointValue === 1, "tick value OTB bukan 1.00");
   assert(
     applied.pointValue !== getInstrumentProfile("GBPUSD").defaultPointValue,
-    "pointValue memakai angka Finex"
+    "pointValue memakai angka Finex",
   );
 });
 
@@ -2726,13 +3034,13 @@ test("219. OTB minLot 0.1 mengisi kekosongan tanpa menimpa pengguna", () => {
   const filled = applyBrokerPreset(
     makeEmptyBroker(),
     "GBPUSD_ORB",
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(filled.minLot === 0.1, `minLot=${filled.minLot}`);
   const kept = applyBrokerPreset(
     { ...makeEmptyBroker(), minLot: 0.5 },
     "GBPUSD_ORB",
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(kept.minLot === 0.5, "nilai minLot pengguna tertimpa preset");
 });
@@ -2741,21 +3049,21 @@ test("220. preset OTB EXACT match: GBPUSD bukan GBPUSD_ORB", () => {
   const previous = makeValidBroker();
   assert(
     applyBrokerPreset(previous, "GBPUSD", "orbitraderberjangka") === previous,
-    "simbol Finex lolos ke jalur OTB"
+    "simbol Finex lolos ke jalur OTB",
   );
   assert(
     applyBrokerPreset(previous, "gbpusd_orb", "orbitraderberjangka") ===
       previous,
-    "varian kapital lolos (harus exact)"
+    "varian kapital lolos (harus exact)",
   );
   assert(
     applyBrokerPreset(previous, "", "orbitraderberjangka") === previous,
-    "simbol kosong lolos"
+    "simbol kosong lolos",
   );
   const ok = applyBrokerPreset(
     makeEmptyBroker(),
     "GBPUSD_ORB",
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(ok.minLot === 0.1 && ok.pointValue === 1, "simbol exact ditolak");
 });
@@ -2765,12 +3073,12 @@ test("221. OTB tanpa preset tidak apply partial", () => {
   const result = applyBrokerPreset(
     previous,
     "EURUSD_ORB",
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(result === previous, "partial apply terjadi saat preset hilang");
   assert(
     result.pointValue === 0 && result.minLot === 0 && result.buffer === 0,
-    "nilai berubah saat penolakan"
+    "nilai berubah saat penolakan",
   );
 });
 
@@ -2783,11 +3091,14 @@ test("222. Finex simbol invalid tetap memakai fallback lama", () => {
 });
 
 test("223. validator OTB menolak minLot di bawah 0.1 via warning", () => {
-  const otbMarket: MarketData = { ...makeValidMarket("GBPUSD"), symbol: "GBPUSD_ORB" };
+  const otbMarket: MarketData = {
+    ...makeValidMarket("GBPUSD"),
+    symbol: "GBPUSD_ORB",
+  };
   const low = validateAnalysisInputs(
     otbMarket,
     { ...makeValidBroker(), minLot: 0.05 },
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   const warning = low.warnings.find((item) => item.field === "minLot");
   assert(warning !== undefined, "warning minLot OTB hilang");
@@ -2797,33 +3108,33 @@ test("223. validator OTB menolak minLot di bawah 0.1 via warning", () => {
   assert(warning.message.includes("0.1"), `pesan=${warning.message}`);
   assert(
     !low.errors.some((item) => item.field === "minLot"),
-    "guard OTB harus warning non-blokir, bukan error"
+    "guard OTB harus warning non-blokir, bukan error",
   );
-  const noBroker = validateAnalysisInputs(
-    otbMarket,
-    { ...makeValidBroker(), minLot: 0.05 }
-  );
+  const noBroker = validateAnalysisInputs(otbMarket, {
+    ...makeValidBroker(),
+    minLot: 0.05,
+  });
   assert(
     !noBroker.warnings.some((item) => item.field === "minLot"),
-    "guard OTB bocor tanpa konteks broker"
+    "guard OTB bocor tanpa konteks broker",
   );
   const enough = validateAnalysisInputs(
     otbMarket,
     { ...makeValidBroker(), minLot: 0.1 },
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(
     !enough.warnings.some((item) => item.field === "minLot"),
-    "minLot valid ikut diperingatkan"
+    "minLot valid ikut diperingatkan",
   );
   const finex = validateAnalysisInputs(
     makeValidMarket("GBPUSD"),
     { ...makeValidBroker(), minLot: 0.05 },
-    "finex"
+    "finex",
   );
   assert(
     !finex.warnings.some((item) => item.field === "minLot"),
-    "guard OTB bocor ke jalur Finex"
+    "guard OTB bocor ke jalur Finex",
   );
 });
 
@@ -2844,7 +3155,7 @@ test("224. Finex byte-identik sebelum/sesudah wiring OTB", () => {
   };
   assert(
     JSON.stringify(result) === JSON.stringify(expected),
-    `snapshot berubah: ${JSON.stringify(result)}`
+    `snapshot berubah: ${JSON.stringify(result)}`,
   );
 });
 
@@ -2856,24 +3167,21 @@ test("225. signature applyBrokerPreset aman + call site meneruskan broker", () =
   const app = readSrc("src/App.tsx");
   assert(
     app.includes("applyBrokerPreset(previous, symbol, activeBrokerId)"),
-    "effect simbol tidak meneruskan broker aktif"
+    "effect simbol tidak meneruskan broker aktif",
   );
   assert(
     app.includes("[market.symbol, activeBrokerId, clearAnalysisOutput]"),
-    "tombol preset tidak meneruskan broker aktif"
+    "tombol preset tidak meneruskan broker aktif",
   );
   assert(
     app.includes("validateAnalysisInputs(market, broker, activeBrokerId)"),
-    "validator tidak menerima konteks broker"
+    "validator tidak menerima konteks broker",
   );
   assert(
     app.includes("otbPresetMissingNotice"),
-    "status preset OTB tak terverifikasi hilang dari UI"
+    "status preset OTB tak terverifikasi hilang dari UI",
   );
-  assert(
-    app.includes("belum terverifikasi di"),
-    "pesan preset OTB hilang"
-  );
+  assert(app.includes("belum terverifikasi di"), "pesan preset OTB hilang");
 });
 
 /* ---------------- Dropdown & warning kondisional 4C: TEST 226-235 ---------------- */
@@ -2882,13 +3190,13 @@ test("226. dropdown Finex menampilkan US100 dan GBPUSD", () => {
   const finex = getAvailableSymbols("finex");
   assert(
     JSON.stringify(finex) === JSON.stringify([...SUPPORTED_SYMBOLS]),
-    "daftar Finex berubah"
+    "daftar Finex berubah",
   );
   assert(finex.includes("US100"), "US100 hilang dari dropdown Finex");
   assert(finex.includes("GBPUSD"), "GBPUSD hilang dari dropdown Finex");
   assert(
     JSON.stringify(getAvailableSymbols()) === JSON.stringify(finex),
-    "default tanpa broker bukan jalur Finex"
+    "default tanpa broker bukan jalur Finex",
   );
   const form = readSrc("src/components/extraction/ExtractedDataForm.tsx");
   assert(form.includes("SUPPORTED_SYMBOLS"), "form lepas dari daftar Finex");
@@ -2913,19 +3221,19 @@ test("228. simbol TBD tampil di dropdown tetapi tanpa preset", () => {
   assert(otb.includes("AUDCHF_ORB"), "AUDCHF_ORB tidak terdaftar di dropdown");
   assert(
     hasOtbPresetForSymbol("AUDCHF_ORB", "orbitraderberjangka"),
-    "AUDCHF_ORB harus terverifikasi (5D-EXT1)"
+    "AUDCHF_ORB harus terverifikasi (5D-EXT1)",
   );
   assert(
     !hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka"),
-    "TBD invented dianggap terverifikasi"
+    "TBD invented dianggap terverifikasi",
   );
   assert(
     !hasOtbPresetForSymbol("GBPUSD", "orbitraderberjangka"),
-    "simbol Finex dianggap preset OTB"
+    "simbol Finex dianggap preset OTB",
   );
   assert(
     getOtbInstrumentProfile("EURUSD_ORB") === null,
-    "preset fiktif untuk TBD"
+    "preset fiktif untuk TBD",
   );
 });
 
@@ -2934,18 +3242,18 @@ test("229. pindah Finex ke OTB mengubah daftar dropdown", () => {
   const otb = getAvailableSymbols("orbitraderberjangka");
   assert(
     JSON.stringify(finex) !== JSON.stringify(otb),
-    "daftar tidak berubah saat broker berganti"
+    "daftar tidak berubah saat broker berganti",
   );
   const form = readSrc("src/components/extraction/ExtractedDataForm.tsx");
   assert(
     form.includes("getAvailableSymbols(brokerId)"),
-    "form tidak menurunkan opsi dari broker aktif"
+    "form tidak menurunkan opsi dari broker aktif",
   );
   const app = readSrc("src/App.tsx");
   assert(
     app.includes("<ExtractedDataForm") &&
       app.includes("brokerId={activeBrokerId}"),
-    "App tidak meneruskan broker ke form simbol"
+    "App tidak meneruskan broker ke form simbol",
   );
 });
 
@@ -2960,13 +3268,13 @@ test("231. dropdown tidak mencampur simbol Finex dan OTB", () => {
   for (const symbol of getAvailableSymbols("orbitraderberjangka")) {
     assert(
       !isSupportedSymbol(symbol),
-      `simbol Finex ${symbol} tercampur di OTB`
+      `simbol Finex ${symbol} tercampur di OTB`,
     );
   }
   for (const symbol of getAvailableSymbols("finex")) {
     assert(
       getOtbInstrumentProfile(symbol) === null,
-      `preset OTB ${symbol} tercampur di Finex`
+      `preset OTB ${symbol} tercampur di Finex`,
     );
   }
 });
@@ -2978,27 +3286,27 @@ test("232. warning verifikasi tidak tampil untuk simbol Finex", () => {
   const form = readSrc("src/components/analysis/BrokerSettingsForm.tsx");
   assert(
     form.includes("!hasOtbPresetForSymbol(symbol, brokerId)"),
-    "warning form tidak kondisional preset"
+    "warning form tidak kondisional preset",
   );
 });
 
 test("233. warning hilang untuk GBPUSD_ORB dan validator menerima", () => {
   assert(
     hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
-    "GBPUSD_ORB dianggap belum terverifikasi"
+    "GBPUSD_ORB dianggap belum terverifikasi",
   );
   const summary = validateAnalysisInputs(
     { ...makeValidMarket("GBPUSD"), symbol: "GBPUSD_ORB" },
     makeValidBroker(),
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(
     !summary.errors.some((error) => error.field === "symbol"),
-    "simbol OTB terverifikasi ditolak validator"
+    "simbol OTB terverifikasi ditolak validator",
   );
   const closed = validateAnalysisInputs(
     { ...makeValidMarket("GBPUSD"), symbol: "GBPUSD_ORB" },
-    makeValidBroker()
+    makeValidBroker(),
   );
   // Tanpa konteks broker: GBPUSD_ORB dinilai sebagai keluarga GBPUSD via
   // normalizeSymbol (perilaku lama; skala identik) — bukan error simbol.
@@ -3006,21 +3314,21 @@ test("233. warning hilang untuk GBPUSD_ORB dan validator menerima", () => {
   // (223), dan dropdown (228/231) yang memakai exact match.
   assert(
     !closed.errors.some((error) => error.field === "symbol"),
-    "keluarga skala GBPUSD ikut ditolak"
+    "keluarga skala GBPUSD ikut ditolak",
   );
 });
 
 test("234. warning tampil untuk simbol OTB tanpa preset", () => {
   assert(
     hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka") === false,
-    "simbol invented lolos guard"
+    "simbol invented lolos guard",
   );
   // Preset tidak ter-apply (penolakan yang berlaku, tanpa partial):
   const previous = makeValidBroker();
   assert(
     applyBrokerPreset(previous, "EURUSD_ORB", "orbitraderberjangka") ===
       previous,
-    "preset unverified ter-apply"
+    "preset unverified ter-apply",
   );
   // Validator menilainya sebagai keluarga EURUSD (skala sama via
   // normalizeSymbol) — bukan error simbol; pembeda unverified adalah
@@ -3028,27 +3336,27 @@ test("234. warning tampil untuk simbol OTB tanpa preset", () => {
   const summary = validateAnalysisInputs(
     { ...makeValidMarket("GBPUSD"), symbol: "EURUSD_ORB" },
     makeValidBroker(),
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(
     !summary.errors.some((error) => error.field === "symbol"),
-    "keluarga skala EURUSD ikut ditolak"
+    "keluarga skala EURUSD ikut ditolak",
   );
   const app = readSrc("src/App.tsx");
   assert(
     app.includes("otbPresetMissingNotice") &&
       app.includes("belum terverifikasi di"),
-    "notice preset hilang dari App"
+    "notice preset hilang dari App",
   );
   // Simbol di luar keluarga mana pun tetap ditolak walau broker OTB:
   const xyz = validateAnalysisInputs(
     { ...makeValidMarket("GBPUSD"), symbol: "XYZ" },
     makeValidBroker(),
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(
     xyz.errors.some((error) => error.field === "symbol"),
-    "simbol asing lolos di mode OTB"
+    "simbol asing lolos di mode OTB",
   );
 });
 
@@ -3056,34 +3364,34 @@ test("235. memilih simbol dropdown mengubah simbol state secara exact", () => {
   assert(
     canonicalSymbolForBroker("GBPUSD_ORB", "orbitraderberjangka") ===
       "GBPUSD_ORB",
-    "suffiks _ORB terpangkas"
+    "suffiks _ORB terpangkas",
   );
   assert(
     canonicalSymbolForBroker("gbpusd_orb", "orbitraderberjangka") ===
       "GBPUSD_ORB",
-    "kapital OTB tidak dinormalisasi"
+    "kapital OTB tidak dinormalisasi",
   );
   assert(
     canonicalSymbolForBroker("GBPUSD.pro", "finex") === "GBPUSD",
-    "jalur Finex berubah"
+    "jalur Finex berubah",
   );
   assert(
     canonicalSymbolForBroker("GBPUSD.pro") === "GBPUSD",
-    "default tanpa broker berubah"
+    "default tanpa broker berubah",
   );
   assert(
     canonicalSymbolForBroker("", "orbitraderberjangka") === "",
-    "simbol kosong lolos"
+    "simbol kosong lolos",
   );
   const form = readSrc("src/components/extraction/ExtractedDataForm.tsx");
   assert(
     form.includes("updateSymbol(event.target.value)"),
-    "select tidak meneruskan pilihan"
+    "select tidak meneruskan pilihan",
   );
   const app = readSrc("src/App.tsx");
   assert(
     app.includes("onSymbolChange={handleSymbolChange}"),
-    "form simbol lepas dari handler"
+    "form simbol lepas dari handler",
   );
   const start = app.indexOf("const handleSymbolChange");
   const end = app.indexOf("const handleExtracted", start);
@@ -3091,7 +3399,7 @@ test("235. memilih simbol dropdown mengubah simbol state secara exact", () => {
   const body = app.slice(start, end);
   assert(
     body.includes("canonicalSymbolForBroker"),
-    "handler tidak memakai kanonikalisasi per broker"
+    "handler tidak memakai kanonikalisasi per broker",
   );
   assert(body.includes("createEmptyMarketForSymbol"), "reset hilang");
 });
@@ -3101,15 +3409,15 @@ test("235. memilih simbol dropdown mengubah simbol state secara exact", () => {
 test("236. OCR mengenali GBPUSD_ORB exact tanpa dinormalisasi", () => {
   assert(
     findOtbSymbolInText("GBPUSD_ORB 1.31970 1.31984") === "GBPUSD_ORB",
-    "deteksi exact gagal"
+    "deteksi exact gagal",
   );
   assert(
     findOtbSymbolInText("gbpusd_orb H1") === "GBPUSD_ORB",
-    "deteksi case-insensitive gagal"
+    "deteksi case-insensitive gagal",
   );
   assert(
     findOtbSymbolInText("GBPUSD 1.32474 1.32480") === null,
-    "nama Finex cocok sebagai OTB"
+    "nama Finex cocok sebagai OTB",
   );
   assert(findOtbSymbolInText("") === null, "teks kosong cocok");
   assert(exactOtbSymbol("GBPUSD_ORB") === "GBPUSD_ORB", "kanonis gagal");
@@ -3119,28 +3427,28 @@ test("236. OCR mengenali GBPUSD_ORB exact tanpa dinormalisasi", () => {
   });
   assert(
     rich.data.symbol === "GBPUSD_ORB",
-    `simbol aktif OTB dinormalisasi: ${rich.data.symbol}`
+    `simbol aktif OTB dinormalisasi: ${rich.data.symbol}`,
   );
 });
 
 test("237. OCR mengenali AUDCAD_ORB exact", () => {
   assert(
     findOtbSymbolInText("AUDCAD_ORB ... market watch") === "AUDCAD_ORB",
-    "deteksi AUDCAD_ORB gagal"
+    "deteksi AUDCAD_ORB gagal",
   );
   const rich = parseOcrTextRich("AUDCAD_ORB 0.91210 0.91216", {
     activeSymbol: "",
   });
   assert(
     rich.data.symbol === "AUDCAD_ORB",
-    `fallback OTB hilang: ${rich.data.symbol}`
+    `fallback OTB hilang: ${rich.data.symbol}`,
   );
 });
 
 test("238. OCR mengenali EURCHF_ORB dan merge menjaga simbol OTB", () => {
   assert(
     findOtbSymbolInText("EURCHF_ORB ... data window") === "EURCHF_ORB",
-    "deteksi EURCHF_ORB gagal"
+    "deteksi EURCHF_ORB gagal",
   );
   const previous: MarketData = {
     ...makeValidMarket("GBPUSD"),
@@ -3161,7 +3469,7 @@ test("238. OCR mengenali EURCHF_ORB dan merge menjaga simbol OTB", () => {
       bid: 1.3197,
       ask: 1.31984,
       symbol: "AUDCAD_ORB",
-    }
+    },
   );
   assert(fresh.symbol === "AUDCAD_ORB", `deteksi baru hilang: ${fresh.symbol}`);
   const keepsCurrent = mergeValidOcrMarketData(makeEmptySrMarket(), {
@@ -3171,7 +3479,7 @@ test("238. OCR mengenali EURCHF_ORB dan merge menjaga simbol OTB", () => {
   });
   assert(
     keepsCurrent.symbol === "GBPUSD",
-    "OCR menimpa pilihan simbol aktif (current-wins dilanggar)"
+    "OCR menimpa pilihan simbol aktif (current-wins dilanggar)",
   );
 });
 
@@ -3185,7 +3493,7 @@ test("239. dropdown OTB 13 simbol termasuk 3 berpreset", () => {
   for (const symbol of symbols) {
     assert(
       hasOtbPresetForSymbol(symbol, "orbitraderberjangka"),
-      `${symbol} belum berpreset`
+      `${symbol} belum berpreset`,
     );
   }
 });
@@ -3199,11 +3507,11 @@ test("240. banner saran tampil untuk GBPUSD_ORB saat broker Finex", () => {
   assert(notice.includes("GBPUSD_ORB"), `pesan=${notice}`);
   assert(
     getOtbDetectedNotice("orbitraderberjangka", "GBPUSD_ORB") === null,
-    "banner tampil saat broker sudah OTB"
+    "banner tampil saat broker sudah OTB",
   );
   assert(
     getOtbDetectedNotice("finex", "GBPUSD") === null,
-    "banner tampil untuk simbol Finex"
+    "banner tampil untuk simbol Finex",
   );
   assert(getOtbDetectedNotice("finex", "") === null, "banner tampil kosong");
 });
@@ -3228,35 +3536,35 @@ test("242. banner saran tampil untuk EURCHF_ORB", () => {
   assert(app.includes("otb-switch-banner"), "testid banner hilang");
   assert(
     app.includes('handleBrokerChange("orbitraderberjangka")'),
-    "tombol banner melewati cleanup handler"
+    "tombol banner melewati cleanup handler",
   );
 });
 
 test("243. hasOtbPresetForSymbol true hanya 3 terverifikasi", () => {
   assert(
     hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
-    "GBPUSD_ORB harus terverifikasi"
+    "GBPUSD_ORB harus terverifikasi",
   );
   assert(
     hasOtbPresetForSymbol("AUDCAD_ORB", "orbitraderberjangka") === true,
-    "AUDCAD_ORB harus terverifikasi"
+    "AUDCAD_ORB harus terverifikasi",
   );
   assert(
     hasOtbPresetForSymbol("EURCHF_ORB", "orbitraderberjangka") === true,
-    "EURCHF_ORB harus terverifikasi"
+    "EURCHF_ORB harus terverifikasi",
   );
   // 5D-EXT1: 10 simbol pending kini terverifikasi; TBD diuji via invented.
   assert(
     hasOtbPresetForSymbol("AUDCHF_ORB", "orbitraderberjangka") === true,
-    "AUDCHF_ORB harus terverifikasi (5D-EXT1)"
+    "AUDCHF_ORB harus terverifikasi (5D-EXT1)",
   );
   assert(
     hasOtbPresetForSymbol("AUDJPY_ORB", "orbitraderberjangka") === true,
-    "AUDJPY_ORB harus terverifikasi (5D-EXT1)"
+    "AUDJPY_ORB harus terverifikasi (5D-EXT1)",
   );
   assert(
     hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka") === false,
-    "EURUSD_ORB invented harus false (TBD)"
+    "EURUSD_ORB invented harus false (TBD)",
   );
 });
 
@@ -3295,7 +3603,7 @@ test("245. komisi GBPUSD_ORB auto-fill 33", () => {
   const applied = applyBrokerPreset(
     makeEmptyBroker(),
     "GBPUSD_ORB",
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(applied.commission === 33, `komisi=${applied.commission}`);
 });
@@ -3304,7 +3612,7 @@ test("246. komisi AUDCAD_ORB auto-fill 33", () => {
   const applied = applyBrokerPreset(
     makeEmptyBroker(),
     "AUDCAD_ORB",
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(applied.commission === 33, `komisi=${applied.commission}`);
 });
@@ -3313,7 +3621,7 @@ test("247. komisi EURCHF_ORB auto-fill 33", () => {
   const applied = applyBrokerPreset(
     makeEmptyBroker(),
     "EURCHF_ORB",
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(applied.commission === 33, `komisi=${applied.commission}`);
 });
@@ -3324,7 +3632,7 @@ test("248. komisi simbol OTB TBD tetap kosong", () => {
   const result = applyBrokerPreset(
     previous,
     "EURUSD_ORB",
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(result === previous, "preset TBD ikut mengisi");
   assert(result.commission === 0, "komisi berubah tanpa preset");
@@ -3341,13 +3649,13 @@ test("250. user bisa override komisi OTB + guard info menyimpang", () => {
   const kept = applyBrokerPreset(
     otbBrokerWithCommission(50),
     "GBPUSD_ORB",
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(kept.commission === 50, "override komisi pengguna tertimpa");
   const warned = validateAnalysisInputs(
     { ...makeValidMarket("GBPUSD"), symbol: "GBPUSD_ORB" },
     otbBrokerWithCommission(50),
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   const info = warned.warnings.find((item) => item.field === "commission");
   assert(info !== undefined, "info penyimpangan komisi hilang");
@@ -3357,16 +3665,16 @@ test("250. user bisa override komisi OTB + guard info menyimpang", () => {
   assert(info.message.includes("33"), `pesan=${info.message}`);
   assert(
     !warned.errors.some((item) => item.field === "commission"),
-    "info komisi berubah menjadi error pemblokir"
+    "info komisi berubah menjadi error pemblokir",
   );
   const exact = validateAnalysisInputs(
     { ...makeValidMarket("GBPUSD"), symbol: "GBPUSD_ORB" },
     otbBrokerWithCommission(33),
-    "orbitraderberjangka"
+    "orbitraderberjangka",
   );
   assert(
     !exact.warnings.some((item) => item.field === "commission"),
-    "komisi sesuai spec ikut diperingatkan"
+    "komisi sesuai spec ikut diperingatkan",
   );
 });
 
@@ -3374,7 +3682,7 @@ test("250. user bisa override komisi OTB + guard info menyimpang", () => {
 /* Modul murni; engine/validator/UI tidak tersentuh. */
 
 function requireSwapCost(
-  args: Parameters<typeof calculateSwapCost>[0]
+  args: Parameters<typeof calculateSwapCost>[0],
 ): Exclude<ReturnType<typeof calculateSwapCost>, null> {
   const result = calculateSwapCost(args);
   if (result === null) {
@@ -3418,10 +3726,7 @@ test("253. holdingDays=1 long memuat swap penuh + peta BELI", () => {
   assert(cost.swapPerDayPerLot === -2.25, "rate long salah");
   assert(cost.direction === "long", "arah tidak bergema");
   assert(cost.holdingDays === 1 && cost.lot === 0.1, "input tidak bergema");
-  assert(
-    Math.abs(cost.swapCost - -0.225) < 1e-9,
-    `swapCost=${cost.swapCost}`
-  );
+  assert(Math.abs(cost.swapCost - -0.225) < 1e-9, `swapCost=${cost.swapCost}`);
   const beli = requireSwapCost({
     symbol: "GBPUSD_ORB",
     brokerId: "orbitraderberjangka",
@@ -3431,7 +3736,7 @@ test("253. holdingDays=1 long memuat swap penuh + peta BELI", () => {
   });
   assert(
     Math.abs(beli.swapCost - cost.swapCost) < 1e-12,
-    "BELI tidak memetakan ke long"
+    "BELI tidak memetakan ke long",
   );
 });
 
@@ -3465,10 +3770,7 @@ test("255. arah short memakai swapShort + default 1 hari", () => {
   });
   assert(cost.direction === "short", "JUAL tidak memetakan ke short");
   assert(cost.swapPerDayPerLot === -2.25, "rate short salah");
-  assert(
-    Math.abs(cost.swapCost - -4.5) < 1e-9,
-    `swapCost=${cost.swapCost}`
-  );
+  assert(Math.abs(cost.swapCost - -4.5) < 1e-9, `swapCost=${cost.swapCost}`);
   const omitted = requireSwapCost({
     symbol: "EURCHF_ORB",
     brokerId: "orbitraderberjangka",
@@ -3478,7 +3780,7 @@ test("255. arah short memakai swapShort + default 1 hari", () => {
   assert(omitted.holdingDays === 1, "default holdingDays bukan 1");
   assert(
     Math.abs(omitted.swapCost - -0.125) < 1e-9,
-    `swapCost=${omitted.swapCost}`
+    `swapCost=${omitted.swapCost}`,
   );
 });
 
@@ -3491,7 +3793,7 @@ test("256. non-OTB/TBD/invalid mengembalikan null", () => {
       lot: 0.1,
       holdingDays: 1,
     }) === null,
-    "Finex berbiaya swap"
+    "Finex berbiaya swap",
   );
   assert(
     calculateSwapCost({
@@ -3500,7 +3802,7 @@ test("256. non-OTB/TBD/invalid mengembalikan null", () => {
       lot: 0.1,
       holdingDays: 1,
     }) === null,
-    "tanpa broker ikut terhitung"
+    "tanpa broker ikut terhitung",
   );
   assert(
     calculateSwapCost({
@@ -3510,7 +3812,7 @@ test("256. non-OTB/TBD/invalid mengembalikan null", () => {
       lot: 0.1,
       holdingDays: 1,
     }) === null,
-    "simbol TBD ikut terhitung"
+    "simbol TBD ikut terhitung",
   );
   assert(
     calculateSwapCost({
@@ -3520,7 +3822,7 @@ test("256. non-OTB/TBD/invalid mengembalikan null", () => {
       lot: 0.1,
       holdingDays: 1,
     }) === null,
-    "TUNGGU berbiaya"
+    "TUNGGU berbiaya",
   );
   assert(
     calculateSwapCost({
@@ -3530,7 +3832,7 @@ test("256. non-OTB/TBD/invalid mengembalikan null", () => {
       lot: 0,
       holdingDays: 1,
     }) === null,
-    "lot 0 terhitung"
+    "lot 0 terhitung",
   );
   assert(
     calculateSwapCost({
@@ -3540,7 +3842,7 @@ test("256. non-OTB/TBD/invalid mengembalikan null", () => {
       lot: NaN,
       holdingDays: 1,
     }) === null,
-    "lot NaN terhitung"
+    "lot NaN terhitung",
   );
 });
 
@@ -3548,7 +3850,7 @@ test("256. non-OTB/TBD/invalid mengembalikan null", () => {
 
 function makeAnalysisResult(
   decision: "BELI" | "JUAL" | "TUNGGU",
-  suggestedLot: number | null
+  suggestedLot: number | null,
 ) {
   return {
     decision,
@@ -3576,12 +3878,9 @@ function makeAnalysisResult(
 
 function requireAttachedSwap(
   args: Parameters<typeof attachSwapToResult>[1],
-  decision: "BELI" | "JUAL" | "TUNGGU" = "BELI"
+  decision: "BELI" | "JUAL" | "TUNGGU" = "BELI",
 ) {
-  const attached = attachSwapToResult(
-    makeAnalysisResult(decision, 0.1),
-    args
-  );
+  const attached = attachSwapToResult(makeAnalysisResult(decision, 0.1), args);
   if (attached === null || attached.swapDetail === null) {
     throw new Error(`attach swap null untuk ${JSON.stringify(args)}`);
   }
@@ -3612,7 +3911,7 @@ test("258. attach GBPUSD_ORB BELI 1 hari → -2.25 USD", () => {
   assert(detail.direction === "long", "BELI tidak memetakan ke long");
   assert(
     Math.abs(detail.swapCost - -2.25) < 1e-9,
-    `swapCost=${detail.swapCost}`
+    `swapCost=${detail.swapCost}`,
   );
   assert(detail.profitCurrency === "USD", "label currency salah");
 });
@@ -3626,12 +3925,12 @@ test("259. attach AUDCAD_ORB JUAL multi-hari → CAD jujur", () => {
       lot: 1,
       holdingDays: 9,
     },
-    "JUAL"
+    "JUAL",
   );
   assert(detail.direction === "short", "JUAL tidak memetakan ke short");
   assert(
     Math.abs(detail.swapCost - -20.25) < 1e-9,
-    `swapCost=${detail.swapCost}`
+    `swapCost=${detail.swapCost}`,
   );
   assert(detail.profitCurrency === "CAD", "unit CAD diklaim USD");
 });
@@ -3645,7 +3944,7 @@ test("260. memo swap berlabel profit-currency", () => {
   assert(
     app.includes("blockedReasons={blockedReasons}") &&
       app.includes("brokerId={activeBrokerId}"),
-    "props hasil tidak lengkap"
+    "props hasil tidak lengkap",
   );
 });
 
@@ -3655,7 +3954,7 @@ test("261. spinner holdingDays 0-10 tersedia", () => {
   assert(src.includes("Holding (hari)"), "label spinner hilang");
   assert(
     src.includes('data-testid="swap-holding-input"'),
-    "testid spinner hilang"
+    "testid spinner hilang",
   );
   assert(src.includes("min={0}") && src.includes("max={10}"), "batas hilang");
   assert(src.includes("Math.min(10,"), "clamp atas hilang");
@@ -3674,33 +3973,33 @@ test("262. Finex blind + null-safety attach", () => {
       ...base,
       brokerId: "finex",
     }) === null,
-    "Finex ikut ter-attach swap"
+    "Finex ikut ter-attach swap",
   );
   assert(
     attachSwapToResult(makeAnalysisResult("BELI", 0.1), {
       ...base,
       symbol: "NZDUSD_ORB",
     }) === null,
-    "simbol TBD ikut ter-attach"
+    "simbol TBD ikut ter-attach",
   );
   assert(
     attachSwapToResult(makeAnalysisResult("BELI", null), {
       ...base,
       lot: null,
     }) === null,
-    "lot null ter-attach"
+    "lot null ter-attach",
   );
   assert(
     attachSwapToResult(makeAnalysisResult("TUNGGU", 0.1), {
       ...base,
       direction: "TUNGGU",
     }) === null,
-    "TUNGGU ter-attach swap"
+    "TUNGGU ter-attach swap",
   );
   const src = readSrc("src/components/result/AnalysisResult.tsx");
   assert(
     src.includes('brokerId === "orbitraderberjangka"'),
-    "blok swap tidak digate broker OTB"
+    "blok swap tidak digate broker OTB",
   );
 });
 
@@ -3716,18 +4015,18 @@ test("263. flat GBPUSD_ORB BELI 1 lot 1 hari → -2.25 USD", () => {
     holdingDays: 1,
   });
   assert(cost.swapType === "flat", `swapType=${cost.swapType}`);
-  assert(
-    Math.abs(cost.swapCost - -2.25) < 1e-9,
-    `swapCost=${cost.swapCost}`
-  );
+  assert(Math.abs(cost.swapCost - -2.25) < 1e-9, `swapCost=${cost.swapCost}`);
   assert(
     Math.abs(cost.swapCostInContractBaseCurrency - -2.25) < 1e-9,
-    "alias kontrak-base salah"
+    "alias kontrak-base salah",
   );
   assert(cost.contractBaseCurrency === "USD", "flat base bukan USD");
   assert(cost.profitCurrency === "USD", "profit currency salah");
   assert(cost.swapPerDayUSD === -2.25, "swapPerDayUSD salah");
-  assert(cost.direction === "long" && cost.directionInput === "BELI", "arah salah");
+  assert(
+    cost.direction === "long" && cost.directionInput === "BELI",
+    "arah salah",
+  );
 });
 
 test("264. flat AUDCAD_ORB JUAL 2 lot 2 hari → -9.0 (koreksi spec -1.5)", () => {
@@ -3742,7 +4041,7 @@ test("264. flat AUDCAD_ORB JUAL 2 lot 2 hari → -9.0 (koreksi spec -1.5)", () =
   assert(cost.swapPerDayUSD === -2.25, "rate short salah");
   assert(
     Math.abs(cost.swapCost - -9.0) < 1e-9,
-    `swapCost=${cost.swapCost} (spec -1.5 salah hitung: -2.25×2×2=-9.0)`
+    `swapCost=${cost.swapCost} (spec -1.5 salah hitung: -2.25×2×2=-9.0)`,
   );
   assert(cost.contractBaseCurrency === "USD", "flat base bukan USD");
   assert(cost.profitCurrency === "CAD", "profit CAD salah");
@@ -3773,7 +4072,7 @@ test("266. percentage AUDCHF_ORB BELI 0.5 lot price=0.5756 → -431.7 AUD", () =
   assert(cost.swapType === "percentage", `swapType=${cost.swapType}`);
   assert(
     Math.abs(cost.swapCost - -431.7) < 1e-6,
-    `swapCost=${cost.swapCost} (spec -863.4 lupa ×lot 0.5)`
+    `swapCost=${cost.swapCost} (spec -863.4 lupa ×lot 0.5)`,
   );
   assert(cost.contractBaseCurrency === "AUD", "base bukan AUD");
   assert(cost.profitCurrency === "CHF", "profit bukan CHF");
@@ -3790,10 +4089,7 @@ test("267. percentage AUDCHF_ORB JUAL 0.5 lot → sama -431.7 AUD", () => {
     holdingDays: 1,
     currentPrice: 0.5756,
   });
-  assert(
-    Math.abs(cost.swapCost - -431.7) < 1e-6,
-    `swapCost=${cost.swapCost}`
-  );
+  assert(Math.abs(cost.swapCost - -431.7) < 1e-6, `swapCost=${cost.swapCost}`);
   assert(cost.direction === "short", "JUAL tidak ke short");
   assert(cost.swapPercentage === -1.5, "long/short sama -1.5");
 });
@@ -3810,7 +4106,7 @@ test("268. percentage AUDJPY_ORB JUAL 1 lot price=0.009325 3 hari → -48.95625"
   assert(cost.swapPercentage === -1.75, "rate short salah");
   assert(
     Math.abs(cost.swapCost - -48.95625) < 1e-6,
-    `swapCost=${cost.swapCost} (≈-49 spec)`
+    `swapCost=${cost.swapCost} (≈-49 spec)`,
   );
   assert(cost.contractBaseCurrency === "AUD", "base bukan AUD");
   assert(cost.profitCurrency === "JPY", "profit bukan JPY");
@@ -3825,10 +4121,7 @@ test("269. percentage AUDNZD_ORB BELI 2 lot price=0.4950 2 hari → -2475", () =
     holdingDays: 2,
     currentPrice: 0.495,
   });
-  assert(
-    Math.abs(cost.swapCost - -2475) < 1e-6,
-    `swapCost=${cost.swapCost}`
-  );
+  assert(Math.abs(cost.swapCost - -2475) < 1e-6, `swapCost=${cost.swapCost}`);
   assert(cost.profitCurrency === "NZD", "profit bukan NZD");
 });
 
@@ -3867,7 +4160,7 @@ test("272. broker Finex → null", () => {
       lot: 1,
       holdingDays: 1,
     }) === null,
-    "Finex berbiaya swap"
+    "Finex berbiaya swap",
   );
 });
 
@@ -3881,7 +4174,7 @@ test("273. simbol TBD → null", () => {
       holdingDays: 1,
       currentPrice: 0.6,
     }) === null,
-    "simbol TBD ikut terhitung"
+    "simbol TBD ikut terhitung",
   );
 });
 
@@ -3894,7 +4187,7 @@ test("274. direction TUNGGU → null", () => {
       lot: 1,
       holdingDays: 1,
     }) === null,
-    "TUNGGU berbiaya"
+    "TUNGGU berbiaya",
   );
 });
 
@@ -3907,7 +4200,7 @@ test("275. lot=0 → null", () => {
       lot: 0,
       holdingDays: 1,
     }) === null,
-    "lot 0 terhitung"
+    "lot 0 terhitung",
   );
 });
 
@@ -3920,7 +4213,7 @@ test("276. percentage tanpa currentPrice → null (graceful)", () => {
       lot: 0.5,
       holdingDays: 1,
     }) === null,
-    "tanpa price ikut terhitung"
+    "tanpa price ikut terhitung",
   );
   assert(
     calculateSwapCost({
@@ -3931,7 +4224,7 @@ test("276. percentage tanpa currentPrice → null (graceful)", () => {
       holdingDays: 1,
       currentPrice: NaN,
     }) === null,
-    "price NaN ikut terhitung"
+    "price NaN ikut terhitung",
   );
   assert(
     calculateSwapCost({
@@ -3942,7 +4235,7 @@ test("276. percentage tanpa currentPrice → null (graceful)", () => {
       holdingDays: 1,
       currentPrice: 0,
     }) === null,
-    "price 0 ikut terhitung"
+    "price 0 ikut terhitung",
   );
 });
 
@@ -3984,7 +4277,10 @@ test("278. return format validation (semua field baru hadir)", () => {
     currentPrice: 0.5756,
   });
   assert(typeof cost.directionInput === "string", "directionInput hilang");
-  assert(typeof cost.swapCostInContractBaseCurrency === "number", "field baru hilang");
+  assert(
+    typeof cost.swapCostInContractBaseCurrency === "number",
+    "field baru hilang",
+  );
   assert(typeof cost.contractBaseCurrency === "string", "base hilang");
   assert(typeof cost.profitCurrency === "string", "profit hilang");
   assert(typeof cost.swapType === "string", "swapType hilang");
@@ -4005,11 +4301,11 @@ test("278. return format validation (semua field baru hadir)", () => {
   }
   assert(
     Math.abs(attached.swapDetail.swapCost - -431.7) < 1e-6,
-    "attach tidak meneruskan field baru"
+    "attach tidak meneruskan field baru",
   );
   assert(
     attached.swapDetail.contractBaseCurrency === "AUD",
-    "attach base salah"
+    "attach base salah",
   );
 });
 
@@ -4120,22 +4416,31 @@ test("286. USDCAD_ORB all fields present", () => {
 test("287. fetchECBRates() returns rates object (mock/live)", () => {
   // Tanpa network call (deterministik): bentuk fallback + wiring fetch.
   assert(typeof fetchECBRates === "function", "fetchECBRates hilang");
-  for (const key of ["EUR", "USD", "AUD", "CAD", "CHF", "GBP", "JPY", "NZD"] as const) {
+  for (const key of [
+    "EUR",
+    "USD",
+    "AUD",
+    "CAD",
+    "CHF",
+    "GBP",
+    "JPY",
+    "NZD",
+  ] as const) {
     assert(
-      typeof FALLBACK_RATES[key] === "number" && Number.isFinite(FALLBACK_RATES[key]),
-      `fallback ${key} invalid`
+      typeof FALLBACK_RATES[key] === "number" &&
+        Number.isFinite(FALLBACK_RATES[key]),
+      `fallback ${key} invalid`,
     );
   }
   assert(FALLBACK_RATES.fetchedAt === "2026-10-02", "fallback date salah");
   const src = readSrc("src/services/fxRateService.ts");
   assert(src.includes("eurofxref-daily.xml"), "ECB URL hilang");
   assert(src.includes("FALLBACK_RATES"), "fallback wiring hilang");
-  const maybePromise = (
-    globalThis as { fetch?: unknown }
-  ).fetch;
+  const maybePromise = (globalThis as { fetch?: unknown }).fetch;
   assert(
-    typeof fetchECBRates === "function" && (maybePromise === undefined || typeof maybePromise === "function"),
-    "fetch boundary tidak aman"
+    typeof fetchECBRates === "function" &&
+      (maybePromise === undefined || typeof maybePromise === "function"),
+    "fetch boundary tidak aman",
   );
 });
 
@@ -4167,8 +4472,14 @@ test("290. convertToUSD(-431.7 AUD) ≈ -261.44 USD (AUDCHF swap)", () => {
 test("291. convertToUSD(-49 JPY) ≈ -0.304 USD (AUDJPY swap)", () => {
   const usd = convertToUSD(-49, "JPY", FALLBACK_RATES);
   assert(Math.abs(usd - -0.3039) < 0.001, `usd=${usd}`);
-  assert(convertToUSD(10, "USD", FALLBACK_RATES) === 10, "USD passthrough rusak");
-  assert(convertToUSD(10, "XXX", FALLBACK_RATES) === 10, "unknown currency tidak fallback");
+  assert(
+    convertToUSD(10, "USD", FALLBACK_RATES) === 10,
+    "USD passthrough rusak",
+  );
+  assert(
+    convertToUSD(10, "XXX", FALLBACK_RATES) === 10,
+    "unknown currency tidak fallback",
+  );
 });
 
 test("292. attachSwapToResult dengan fxRates → swapCostInUSD populated", () => {
@@ -4184,14 +4495,17 @@ test("292. attachSwapToResult dengan fxRates → swapCostInUSD populated", () =>
   if (attached === null || attached.swapDetail === null) {
     throw new Error("attach dengan fxRates null");
   }
-  assert(attached.swapDetail.swapCostInUSD !== null, "swapCostInUSD tidak terisi");
+  assert(
+    attached.swapDetail.swapCostInUSD !== null,
+    "swapCostInUSD tidak terisi",
+  );
   assert(
     Math.abs((attached.swapDetail.swapCostInUSD ?? 0) - -261.4423) < 0.01,
-    `usd=${attached.swapDetail.swapCostInUSD}`
+    `usd=${attached.swapDetail.swapCostInUSD}`,
   );
   assert(
     Math.abs((attached.swapDetail.fxRate ?? 0) - 1.6512) < 1e-9,
-    `fxRate=${attached.swapDetail.fxRate}`
+    `fxRate=${attached.swapDetail.fxRate}`,
   );
 });
 
@@ -4209,8 +4523,9 @@ test("293. attachSwapToResult tanpa fxRates → swapCostInUSD null (fallback)", 
   }
   assert(attached.swapDetail.swapCostInUSD === null, "harus null tanpa rates");
   assert(
-    Math.abs(attached.swapDetail.swapCostInContractBaseCurrency - -431.7) < 1e-6,
-    "satuan asli rusak"
+    Math.abs(attached.swapDetail.swapCostInContractBaseCurrency - -431.7) <
+      1e-6,
+    "satuan asli rusak",
   );
 });
 
@@ -4220,7 +4535,10 @@ test("294. Rate cache per app session (tidak re-fetch)", () => {
   assert(src.includes("fxRates"), "state fxRates hilang");
   assert(src.includes("useEffect"), "fetch tidak di effect");
   assert(src.includes("[]"), "effect harus mount-once (cache session)");
-  assert(src.includes("fxRates={fxRates}"), "fxRates tidak diteruskan ke hasil");
+  assert(
+    src.includes("fxRates={fxRates}"),
+    "fxRates tidak diteruskan ke hasil",
+  );
   const comp = readSrc("src/components/result/AnalysisResult.tsx");
   assert(comp.includes("fxRates"), "AnalysisResult tidak menerima fxRates");
 });
@@ -4321,7 +4639,10 @@ test("303. getTripleSwapLabel tanpa Rabu -> normal", () => {
 
 test("304. swapCost terintegrasi triple-swap (Rabu x3)", () => {
   const src = readSrc("src/calculations/swapCost.ts");
-  assert(src.includes("calculateSwapWithTriple"), "swapCost tidak panggil triple");
+  assert(
+    src.includes("calculateSwapWithTriple"),
+    "swapCost tidak panggil triple",
+  );
   assert(src.includes("startDate"), "param startDate hilang di swapCost");
   // GBPUSD_ORB flat long -2.25/lot/hari: Sel(1x)+Rab(3x) = -9.0 untuk 1 lot.
   const triple = calculateSwapCost({
@@ -4335,7 +4656,7 @@ test("304. swapCost terintegrasi triple-swap (Rabu x3)", () => {
   if (triple === null) throw new Error("swap triple null");
   assert(
     Math.abs(triple.swapCost - -9) < 1e-9,
-    `swap triple=${triple.swapCost}, harus -9`
+    `swap triple=${triple.swapCost}, harus -9`,
   );
   // Legacy tanpa startDate tetap 2x (-4.5) agar test 1-296 deterministik.
   const legacy = calculateSwapCost({
@@ -4348,7 +4669,7 @@ test("304. swapCost terintegrasi triple-swap (Rabu x3)", () => {
   if (legacy === null) throw new Error("swap legacy null");
   assert(
     Math.abs(legacy.swapCost - -4.5) < 1e-9,
-    `swap legacy=${legacy.swapCost}, harus -4.5`
+    `swap legacy=${legacy.swapCost}, harus -4.5`,
   );
   const comp = readSrc("src/components/result/AnalysisResult.tsx");
   assert(comp.includes("getTripleSwapLabel"), "label triple hilang di UI");
@@ -4380,7 +4701,7 @@ function removeTempDir(dir: string): void {
 
 test("305. MT5LogReader init aman: path hilang -> null, file valid -> snapshot", () => {
   const missing = new MT5LogReader(
-    nodePath.join("tidak-ada-mdbka", "missing.log")
+    nodePath.join("tidak-ada-mdbka", "missing.log"),
   );
   assert(missing.getLatest() === null, "path hilang harus null");
   assert(missing.refresh() === null, "refresh path hilang harus null");
@@ -4390,33 +4711,37 @@ test("305. MT5LogReader init aman: path hilang -> null, file valid -> snapshot",
     const file = nodePath.join(dir, "20261002.log");
     (nodeFs as { writeFileSync(f: string, d: string): void }).writeFileSync(
       file,
-      "2026.10.02 10:00:00 Trade opened #1\nBalance: 1000.50\nEquity: 1050.75\n"
+      "2026.10.02 10:00:00 Trade opened #1\nBalance: 1000.50\nEquity: 1050.75\n",
     );
     const reader = new MT5LogReader(file);
     const snap = reader.refresh();
     if (snap === null) throw new Error("snapshot null untuk file valid");
     assert(Math.abs(snap.balance - 1000.5) < 1e-9, `balance=${snap.balance}`);
     assert(Math.abs(snap.equity - 1050.75) < 1e-9, `equity=${snap.equity}`);
-    assert(snap.timestamp.length > 0 && snap.lastModified.length > 0, "waktu kosong");
+    assert(
+      snap.timestamp.length > 0 && snap.lastModified.length > 0,
+      "waktu kosong",
+    );
   } finally {
     removeTempDir(dir);
   }
 });
 
 test("306. parseEquityFromText: Balance/Equity akurat + last-wins + profit derivasi", () => {
-  const parsed = parseEquityFromText(
-    "Balance: 1000.50\nEquity: 1050.75\n"
-  );
+  const parsed = parseEquityFromText("Balance: 1000.50\nEquity: 1050.75\n");
   if (parsed === null) throw new Error("parse null untuk input valid");
   assert(Math.abs(parsed.balance - 1000.5) < 1e-9, `balance=${parsed.balance}`);
   assert(Math.abs(parsed.equity - 1050.75) < 1e-9, `equity=${parsed.equity}`);
   assert(Math.abs(parsed.profit - 50.25) < 1e-9, `profit=${parsed.profit}`);
   // Last wins: baris terakhir menang.
   const repeated = parseEquityFromText(
-    "Balance: 100.00\nBalance: 1200.00\nEquity: 1300.00\n"
+    "Balance: 100.00\nBalance: 1200.00\nEquity: 1300.00\n",
   );
   if (repeated === null) throw new Error("parse repeated null");
-  assert(Math.abs(repeated.balance - 1200) < 1e-9, `last-wins=${repeated.balance}`);
+  assert(
+    Math.abs(repeated.balance - 1200) < 1e-9,
+    `last-wins=${repeated.balance}`,
+  );
   // Tanpa angka relevan -> null (bukan 0 fiktif).
   assert(parseEquityFromText("hello world\n") === null, "teks acak harus null");
 });
@@ -4427,7 +4752,7 @@ test("307. refresh() deteksi perubahan file -> onUpdate push snapshot baru", () 
     const file = nodePath.join(dir, "live.log");
     (nodeFs as { writeFileSync(f: string, d: string): void }).writeFileSync(
       file,
-      "Balance: 1000.00\nEquity: 1010.00\n"
+      "Balance: 1000.00\nEquity: 1010.00\n",
     );
     const reader = new MT5LogReader(file);
     reader.refresh();
@@ -4441,7 +4766,7 @@ test("307. refresh() deteksi perubahan file -> onUpdate push snapshot baru", () 
     // Tulis equity baru -> satu push dengan angka baru.
     (nodeFs as { writeFileSync(f: string, d: string): void }).writeFileSync(
       file,
-      "Balance: 1000.00\nEquity: 1200.00\n"
+      "Balance: 1000.00\nEquity: 1200.00\n",
     );
     reader.refresh();
     assert(received.length === 1, `push=${received.length}, harus 1`);
@@ -4450,7 +4775,7 @@ test("307. refresh() deteksi perubahan file -> onUpdate push snapshot baru", () 
     // Setelah unsubscribe tidak ada push lagi.
     (nodeFs as { writeFileSync(f: string, d: string): void }).writeFileSync(
       file,
-      "Balance: 1000.00\nEquity: 1300.00\n"
+      "Balance: 1000.00\nEquity: 1300.00\n",
     );
     reader.refresh();
     assert(received.length === 1, "unsubscribe gagal");
@@ -4483,12 +4808,35 @@ test("309. CORS localhost:5173 + frontend SSE wiring + LiveEquity terpasang", ()
   assert(hook.includes("/api/equity/latest"), "fallback polling latest hilang");
   assert(hook.includes("setInterval"), "fallback interval hilang");
   const panel = readSrc("src/components/result/LiveEquity.tsx");
-  assert(panel.includes('data-testid="live-equity"'), "testid live-equity hilang");
+  assert(
+    panel.includes('data-testid="live-equity"'),
+    "testid live-equity hilang",
+  );
   assert(panel.includes("useEquityStream"), "hook tak dipakai panel");
   const resultSrc = readSrc("src/components/result/AnalysisResult.tsx");
   assert(resultSrc.includes("LiveEquity"), "LiveEquity tak terpasang di hasil");
-  assert(resultSrc.includes("/lot (profit"), "label swap legacy hilang (regresi)");
+  assert(
+    resultSrc.includes("/lot (profit"),
+    "label swap legacy hilang (regresi)",
+  );
 });
 
-console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);
-if (failed > 0) process.exit(1);
+// Test 310-317: QuotesLogReader
+(async () => {
+  try {
+    const allPassed = await runQuotesLogReaderTests();
+    if (allPassed) {
+      passed += 8;
+    } else {
+      failed += 8;
+    }
+  } catch (e) {
+    console.error("✗ QuotesLogReader test suite error:", e);
+    failed += 8;
+  }
+
+  console.log(
+    `\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`,
+  );
+  process.exit(failed > 0 ? 1 : 0);
+})();
