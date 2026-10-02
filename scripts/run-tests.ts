@@ -64,6 +64,8 @@ import {
   getOtbDetectedNotice,
   hasOtbPresetForSymbol,
 } from "../src/lib/brokerSymbols";
+import { calculateSwapCost } from "../src/calculations/swapCost";
+import { attachSwapToResult } from "../src/calculations/attachSwapToResult";
 
 let passed = 0;
 let failed = 0;
@@ -3329,6 +3331,340 @@ test("250. user bisa override komisi OTB + guard info menyimpang", () => {
   assert(
     !exact.warnings.some((item) => item.field === "commission"),
     "komisi sesuai spec ikut diperingatkan"
+  );
+});
+
+/* ---------------- Biaya swap overnight 5C: TEST 251-256 ---------------- */
+/* Modul murni; engine/validator/UI tidak tersentuh. */
+
+function requireSwapCost(
+  args: Parameters<typeof calculateSwapCost>[0]
+): Exclude<ReturnType<typeof calculateSwapCost>, null> {
+  const result = calculateSwapCost(args);
+  if (result === null) {
+    throw new Error(`swap cost null untuk ${JSON.stringify(args)}`);
+  }
+  return result;
+}
+
+test("251. swapLong 3 simbol tersimpan sesuai spec", () => {
+  const gbp = getOtbInstrumentProfile("GBPUSD_ORB");
+  const aud = getOtbInstrumentProfile("AUDCAD_ORB");
+  const eur = getOtbInstrumentProfile("EURCHF_ORB");
+  if (gbp === null || aud === null || eur === null) {
+    throw new Error("preset swap hilang");
+  }
+  assert(gbp.swapLong === -2.25, `GBPUSD long=${gbp.swapLong}`);
+  assert(aud.swapLong === -0.75, `AUDCAD long=${aud.swapLong}`);
+  assert(eur.swapLong === -1.75, `EURCHF long=${eur.swapLong}`);
+});
+
+test("252. swapShort 3 simbol tersimpan sesuai spec", () => {
+  const gbp = getOtbInstrumentProfile("GBPUSD_ORB");
+  const aud = getOtbInstrumentProfile("AUDCAD_ORB");
+  const eur = getOtbInstrumentProfile("EURCHF_ORB");
+  if (gbp === null || aud === null || eur === null) {
+    throw new Error("preset swap hilang");
+  }
+  assert(gbp.swapShort === -0.75, `GBPUSD short=${gbp.swapShort}`);
+  assert(aud.swapShort === -2.25, `AUDCAD short=${aud.swapShort}`);
+  assert(eur.swapShort === -1.25, `EURCHF short=${eur.swapShort}`);
+});
+
+test("253. holdingDays=1 long memuat swap penuh + peta BELI", () => {
+  const cost = requireSwapCost({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "long",
+    lot: 0.1,
+    holdingDays: 1,
+  });
+  assert(cost.swapPerDayPerLot === -2.25, "rate long salah");
+  assert(cost.direction === "long", "arah tidak bergema");
+  assert(cost.holdingDays === 1 && cost.lot === 0.1, "input tidak bergema");
+  assert(
+    Math.abs(cost.swapCost - -0.225) < 1e-9,
+    `swapCost=${cost.swapCost}`
+  );
+  const beli = requireSwapCost({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 0.1,
+    holdingDays: 1,
+  });
+  assert(
+    Math.abs(beli.swapCost - cost.swapCost) < 1e-12,
+    "BELI tidak memetakan ke long"
+  );
+});
+
+test("254. holdingDays=0 atau negatif = nol biaya", () => {
+  const zero = requireSwapCost({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "long",
+    lot: 0.5,
+    holdingDays: 0,
+  });
+  assert(zero.swapCost === 0, `swapCost=${zero.swapCost}`);
+  assert(zero.holdingDays === 0, "holdingDays tidak ternormalisasi");
+  const negative = requireSwapCost({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "short",
+    lot: 0.5,
+    holdingDays: -3,
+  });
+  assert(negative.swapCost === 0, "holding negatif berbiaya");
+});
+
+test("255. arah short memakai swapShort + default 1 hari", () => {
+  const cost = requireSwapCost({
+    symbol: "AUDCAD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "JUAL",
+    lot: 1,
+    holdingDays: 2,
+  });
+  assert(cost.direction === "short", "JUAL tidak memetakan ke short");
+  assert(cost.swapPerDayPerLot === -2.25, "rate short salah");
+  assert(
+    Math.abs(cost.swapCost - -4.5) < 1e-9,
+    `swapCost=${cost.swapCost}`
+  );
+  const omitted = requireSwapCost({
+    symbol: "EURCHF_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "short",
+    lot: 0.1,
+  });
+  assert(omitted.holdingDays === 1, "default holdingDays bukan 1");
+  assert(
+    Math.abs(omitted.swapCost - -0.125) < 1e-9,
+    `swapCost=${omitted.swapCost}`
+  );
+});
+
+test("256. non-OTB/TBD/invalid mengembalikan null", () => {
+  assert(
+    calculateSwapCost({
+      symbol: "GBPUSD",
+      brokerId: "finex",
+      direction: "long",
+      lot: 0.1,
+      holdingDays: 1,
+    }) === null,
+    "Finex berbiaya swap"
+  );
+  assert(
+    calculateSwapCost({
+      symbol: "GBPUSD",
+      direction: "long",
+      lot: 0.1,
+      holdingDays: 1,
+    }) === null,
+    "tanpa broker ikut terhitung"
+  );
+  assert(
+    calculateSwapCost({
+      symbol: "AUDCHF_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "long",
+      lot: 0.1,
+      holdingDays: 1,
+    }) === null,
+    "simbol TBD ikut terhitung"
+  );
+  assert(
+    calculateSwapCost({
+      symbol: "GBPUSD_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "TUNGGU",
+      lot: 0.1,
+      holdingDays: 1,
+    }) === null,
+    "TUNGGU berbiaya"
+  );
+  assert(
+    calculateSwapCost({
+      symbol: "GBPUSD_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "long",
+      lot: 0,
+      holdingDays: 1,
+    }) === null,
+    "lot 0 terhitung"
+  );
+  assert(
+    calculateSwapCost({
+      symbol: "GBPUSD_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "long",
+      lot: NaN,
+      holdingDays: 1,
+    }) === null,
+    "lot NaN terhitung"
+  );
+});
+
+/* ---------------- Attach swap post-decision 5C-Step-2: TEST 257-262 ---------------- */
+
+function makeAnalysisResult(
+  decision: "BELI" | "JUAL" | "TUNGGU",
+  suggestedLot: number | null
+) {
+  return {
+    decision,
+    score: 4,
+    trendScore: 1,
+    cciScore: 1,
+    macdScore: 1,
+    rsiScore: 1,
+    entry: 1.3197,
+    stopLoss: 1.3187,
+    takeProfit: 1.3212,
+    riskDistance: 0.001,
+    targetDistance: 0.0015,
+    maxRiskUsd: 0.9,
+    riskAtMinLot: 1.19,
+    theoreticalLot: 0.05,
+    suggestedLot,
+    riskPercentAtMinLot: 13.2,
+    riskStatus: "MEMENUHI batas risiko",
+    explanation: "fixture",
+    factors: [],
+    warnings: [],
+  };
+}
+
+function requireAttachedSwap(
+  args: Parameters<typeof attachSwapToResult>[1],
+  decision: "BELI" | "JUAL" | "TUNGGU" = "BELI"
+) {
+  const attached = attachSwapToResult(
+    makeAnalysisResult(decision, 0.1),
+    args
+  );
+  if (attached === null || attached.swapDetail === null) {
+    throw new Error(`attach swap null untuk ${JSON.stringify(args)}`);
+  }
+  return attached.swapDetail;
+}
+
+test("257. attach holdingDays=0 → swapCost 0 intraday", () => {
+  const detail = requireAttachedSwap({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 0.1,
+    holdingDays: 0,
+  });
+  assert(detail.swapCost === 0, `swapCost=${detail.swapCost}`);
+  assert(detail.holdingDays === 0, "holdingDays tidak bergema");
+  assert(detail.profitCurrency === "USD", `currency=${detail.profitCurrency}`);
+});
+
+test("258. attach GBPUSD_ORB BELI 1 hari → -2.25 USD", () => {
+  const detail = requireAttachedSwap({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 1,
+  });
+  assert(detail.direction === "long", "BELI tidak memetakan ke long");
+  assert(
+    Math.abs(detail.swapCost - -2.25) < 1e-9,
+    `swapCost=${detail.swapCost}`
+  );
+  assert(detail.profitCurrency === "USD", "label currency salah");
+});
+
+test("259. attach AUDCAD_ORB JUAL multi-hari → CAD jujur", () => {
+  const detail = requireAttachedSwap(
+    {
+      symbol: "AUDCAD_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "JUAL",
+      lot: 1,
+      holdingDays: 9,
+    },
+    "JUAL"
+  );
+  assert(detail.direction === "short", "JUAL tidak memetakan ke short");
+  assert(
+    Math.abs(detail.swapCost - -20.25) < 1e-9,
+    `swapCost=${detail.swapCost}`
+  );
+  assert(detail.profitCurrency === "CAD", "unit CAD diklaim USD");
+});
+
+test("260. memo swap berlabel profit-currency", () => {
+  const src = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(src.includes('data-testid="swap-memo"'), "testid memo hilang");
+  assert(src.includes("/lot (profit"), "label profit currency hilang");
+  assert(src.includes("attachSwapToResult"), "memo tidak dari hasil attach");
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("blockedReasons={blockedReasons}") &&
+      app.includes("brokerId={activeBrokerId}"),
+    "props hasil tidak lengkap"
+  );
+});
+
+test("261. spinner holdingDays 0-10 tersedia", () => {
+  const src = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(src.includes("useState(0)"), "state holding default hilang");
+  assert(src.includes("Holding (hari)"), "label spinner hilang");
+  assert(
+    src.includes('data-testid="swap-holding-input"'),
+    "testid spinner hilang"
+  );
+  assert(src.includes("min={0}") && src.includes("max={10}"), "batas hilang");
+  assert(src.includes("Math.min(10,"), "clamp atas hilang");
+});
+
+test("262. Finex blind + null-safety attach", () => {
+  const base = {
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka" as const,
+    direction: "BELI" as const,
+    lot: 0.1,
+    holdingDays: 1,
+  };
+  assert(
+    attachSwapToResult(makeAnalysisResult("BELI", 0.1), {
+      ...base,
+      brokerId: "finex",
+    }) === null,
+    "Finex ikut ter-attach swap"
+  );
+  assert(
+    attachSwapToResult(makeAnalysisResult("BELI", 0.1), {
+      ...base,
+      symbol: "AUDCHF_ORB",
+    }) === null,
+    "simbol TBD ikut ter-attach"
+  );
+  assert(
+    attachSwapToResult(makeAnalysisResult("BELI", null), {
+      ...base,
+      lot: null,
+    }) === null,
+    "lot null ter-attach"
+  );
+  assert(
+    attachSwapToResult(makeAnalysisResult("TUNGGU", 0.1), {
+      ...base,
+      direction: "TUNGGU",
+    }) === null,
+    "TUNGGU ter-attach swap"
+  );
+  const src = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(
+    src.includes('brokerId === "orbitraderberjangka"'),
+    "blok swap tidak digate broker OTB"
   );
 });
 
