@@ -10,6 +10,7 @@ import type { AnalysisResult as ResultType, MarketData } from "../../types/analy
 import type { BrokerId } from "../../types/broker";
 import type { ValidationViewState } from "../../lib/validationView";
 import { attachSwapToResult } from "../../calculations/attachSwapToResult";
+import { getTripleSwapLabel } from "../../services/dateService";
 import type { ExchangeRates } from "../../services/fxRateService";
 
 interface Props {
@@ -52,6 +53,10 @@ export default function AnalysisResult({ result, market, viewState, blockedReaso
 
   const currentPrice = market.bid > 0 ? market.bid : market.close;
 
+  // Tahap 5E-STEP1: tanggal mulai holding = hari ini (auto-detect Rabu x3).
+  // Di-memo agar stabil selama session render (tidak re-create tiap render).
+  const holdingStartDate = useMemo(() => new Date(), []);
+
   const attached = useMemo(
     () =>
       result === null
@@ -64,8 +69,9 @@ export default function AnalysisResult({ result, market, viewState, blockedReaso
             holdingDays,
             currentPrice,
             fxRates: fxRates ?? null,
+            startDate: holdingStartDate,
           }),
-    [result, market.symbol, brokerId, holdingDays, currentPrice, fxRates],
+    [result, market.symbol, brokerId, holdingDays, currentPrice, fxRates, holdingStartDate],
   );
 
   const showSwapBlock =
@@ -338,6 +344,10 @@ export default function AnalysisResult({ result, market, viewState, blockedReaso
 
             <span className="block text-xs text-slate-500">
               0 = intraday (tanpa swap). Maksimal 10 hari.
+            </span>
+
+            <span className="block text-xs text-gray-400">
+              {getTripleSwapLabel(holdingDays, holdingStartDate)}
             </span>
           </label>
 

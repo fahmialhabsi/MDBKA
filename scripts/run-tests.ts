@@ -72,6 +72,11 @@ import {
   fetchECBRates,
   parseECBXml,
 } from "../src/services/fxRateService";
+import {
+  calculateSwapWithTriple,
+  getTripleSwapLabel,
+  isWednesday,
+} from "../src/services/dateService";
 
 let passed = 0;
 let failed = 0;
@@ -4253,6 +4258,96 @@ test("296. Display memo USD (dari AUD @1.6512)", () => {
   assert(src.includes('data-testid="swap-memo"'), "testid memo hilang");
   assert(src.includes("swapCostInUSD"), "memo tidak render USD");
   assert(src.includes("/lot (profit"), "label legacy hilang (regresi)");
+});
+
+/* Tahap 5E-STEP1: Triple-Swap Wednesday (8 test: 297-304).
+ * Catatan tanggal: spec menulis 2026-10-02=Rabu / 2026-10-01=Sel,
+ * namun kalender nyata 2026-10-02=Jumat & 2026-10-01=Kamis.
+ * Test memakai Rabu nyata 2026-09-30 + Selasa 2026-09-29 agar
+ * isWednesday deterministik dan tidak bergantung hari eksekusi. */
+test("297. isWednesday(Rabu 2026-09-30) = true", () => {
+  assert(isWednesday(new Date(2026, 8, 30)) === true, "2026-09-30 harus Rabu");
+  assert(new Date(2026, 8, 30).getDay() === 3, "guard kalender rusak");
+});
+
+test("298. isWednesday(Selasa 2026-09-29) = false", () => {
+  assert(isWednesday(new Date(2026, 8, 29)) === false, "2026-09-29 bukan Rabu");
+});
+
+test("299. calculateSwapWithTriple 2 hari tanpa Rabu = 2x normal", () => {
+  // Sen 2026-09-28 + Sel 2026-09-29: 1x + 1x = 2x.
+  const total = calculateSwapWithTriple({
+    holdingDays: 2,
+    swapPerDay: 10,
+    startDate: new Date(2026, 8, 28),
+  });
+  assert(total === 20, `total=${total}, harus 20`);
+});
+
+test("300. calculateSwapWithTriple 2 hari dengan Rabu = 1+3 = 4x", () => {
+  // Sel 2026-09-29 (1x) + Rab 2026-09-30 (3x) = 4x.
+  const total = calculateSwapWithTriple({
+    holdingDays: 2,
+    swapPerDay: 10,
+    startDate: new Date(2026, 8, 29),
+  });
+  assert(total === 40, `total=${total}, harus 40`);
+});
+
+test("301. calculateSwapWithTriple 3 hari Sel-Rab-Kam = 1+3+1 = 5x", () => {
+  const total = calculateSwapWithTriple({
+    holdingDays: 3,
+    swapPerDay: 10,
+    startDate: new Date(2026, 8, 29),
+  });
+  assert(total === 50, `total=${total}, harus 50`);
+});
+
+test("302. getTripleSwapLabel ada Rabu -> termasuk Rabu x3", () => {
+  const label = getTripleSwapLabel(2, new Date(2026, 8, 29));
+  assert(label.includes("2 hari"), `label=${label}`);
+  assert(label.includes("Rabu"), `label=${label} harus sebut Rabu`);
+});
+
+test("303. getTripleSwapLabel tanpa Rabu -> normal", () => {
+  const label = getTripleSwapLabel(2, new Date(2026, 8, 28));
+  assert(label.includes("2 hari"), `label=${label}`);
+  assert(label.includes("normal"), `label=${label} harus sebut normal`);
+});
+
+test("304. swapCost terintegrasi triple-swap (Rabu x3)", () => {
+  const src = readSrc("src/calculations/swapCost.ts");
+  assert(src.includes("calculateSwapWithTriple"), "swapCost tidak panggil triple");
+  assert(src.includes("startDate"), "param startDate hilang di swapCost");
+  // GBPUSD_ORB flat long -2.25/lot/hari: Sel(1x)+Rab(3x) = -9.0 untuk 1 lot.
+  const triple = calculateSwapCost({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 2,
+    startDate: new Date(2026, 8, 29),
+  });
+  if (triple === null) throw new Error("swap triple null");
+  assert(
+    Math.abs(triple.swapCost - -9) < 1e-9,
+    `swap triple=${triple.swapCost}, harus -9`
+  );
+  // Legacy tanpa startDate tetap 2x (-4.5) agar test 1-296 deterministik.
+  const legacy = calculateSwapCost({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 2,
+  });
+  if (legacy === null) throw new Error("swap legacy null");
+  assert(
+    Math.abs(legacy.swapCost - -4.5) < 1e-9,
+    `swap legacy=${legacy.swapCost}, harus -4.5`
+  );
+  const comp = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(comp.includes("getTripleSwapLabel"), "label triple hilang di UI");
 });
 
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);

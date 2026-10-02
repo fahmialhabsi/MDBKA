@@ -1,5 +1,6 @@
 import { ORBITRADER_BROKER_ID } from "../lib/brokerRegistry";
 import { getOtbInstrumentProfile } from "../lib/otbInstrumentConfig";
+import { calculateSwapWithTriple } from "../services/dateService";
 import type { BrokerId } from "../types/broker";
 import type { Decision } from "../types/analysis";
 
@@ -52,6 +53,15 @@ export function calculateSwapCost(args: {
   readonly lot: number;
   readonly holdingDays?: number;
   readonly currentPrice?: number;
+  /**
+   * Tahap 5E-STEP1: tanggal mulai holding (untuk triple-swap Rabu).
+   * - Bila diisi → total swap memakai calculateSwapWithTriple
+   *   (Rabu x3, hari lain x1) sehingga Sel-Rab = 1x + 3x = 4x.
+   * - Bila dikosongkan → jalur legacy (swap x holdingDays) agar
+   *   test 1-296 tetap deterministik (tidak flaky tiap hari Rabu).
+   *   UI selalu mengisi startDate = hari ini (auto-detect).
+   */
+  readonly startDate?: Date;
 }): SwapCostResult | null {
   if (args.brokerId !== ORBITRADER_BROKER_ID) return null;
 
@@ -107,7 +117,16 @@ export function calculateSwapCost(args: {
   }
 
   if (swapType === "flat") {
-    const swapCost = swapValue * args.lot * holdingDays;
+    // Tahap 5E-STEP1: triple-swap bila startDate eksplisit, legacy bila tidak.
+    const totalPerLot =
+      args.startDate !== undefined
+        ? calculateSwapWithTriple({
+            holdingDays,
+            swapPerDay: swapValue,
+            startDate: args.startDate,
+          })
+        : swapValue * holdingDays;
+    const swapCost = totalPerLot * args.lot;
 
     return {
       symbol: preset.symbol,
@@ -136,7 +155,17 @@ export function calculateSwapCost(args: {
       return null;
 
     const notional = preset.contractSize * price;
-    const swapCost = notional * (swapValue / 100) * args.lot * holdingDays;
+    // Tahap 5E-STEP1: % per hari → triple-swap bila startDate eksplisit.
+    const perLotPerDay = notional * (swapValue / 100);
+    const totalPerLot =
+      args.startDate !== undefined
+        ? calculateSwapWithTriple({
+            holdingDays,
+            swapPerDay: perLotPerDay,
+            startDate: args.startDate,
+          })
+        : perLotPerDay * holdingDays;
+    const swapCost = totalPerLot * args.lot;
 
     return {
       symbol: preset.symbol,

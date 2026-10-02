@@ -73,6 +73,8 @@ export function attachSwapToResult(
     readonly holdingDays?: number;
     readonly currentPrice?: number;
     readonly fxRates?: ExchangeRates | null;
+    /** Tahap 5E-STEP1: diteruskan ke calculateSwapCost (Rabu x3). */
+    readonly startDate?: Date;
   }
 ): AnalysisResultWithSwap | null {
   if (args.lot === null) return null;
@@ -85,6 +87,9 @@ export function attachSwapToResult(
     holdingDays: args.holdingDays ?? 0,
     ...(args.currentPrice !== undefined
       ? { currentPrice: args.currentPrice }
+      : {}),
+    ...(args.startDate !== undefined
+      ? { startDate: args.startDate }
       : {}),
   });
 

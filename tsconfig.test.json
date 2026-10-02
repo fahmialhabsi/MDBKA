@@ -31,6 +31,7 @@
     "src/lib/brokerRegistry.ts",
     "src/lib/brokerSymbols.ts",
     "src/lib/otbInstrumentConfig.ts",
-    "src/services/fxRateService.ts"
+    "src/services/fxRateService.ts",
+    "src/services/dateService.ts"
   ]
 }
