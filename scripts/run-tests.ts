@@ -3998,5 +3998,107 @@ test("278. return format validation (semua field baru hadir)", () => {
   );
 });
 
+/* ---------------- Expand OTB_PRESETS 5D-STEP1: TEST 279-286 ---------------- */
+
+test("279. OTB_PRESETS size = 13 (3 verified + 10 pending)", () => {
+  const keys = Object.keys(OTB_PRESETS);
+  assert(keys.length === 13, `expected 13 presets, got ${keys.length}`);
+  for (const s of ["GBPUSD_ORB", "AUDCAD_ORB", "EURCHF_ORB"]) {
+    assert(keys.includes(s), `${s} hilang`);
+  }
+  for (const s of [
+    "AUDCHF_ORB",
+    "AUDJPY_ORB",
+    "AUDNZD_ORB",
+    "AUDUSD_ORB",
+    "CADJPY_ORB",
+    "CHFJPY_ORB",
+    "EURAUD_ORB",
+    "EURCAD_ORB",
+    "GBPAUD_ORB",
+    "USDCAD_ORB",
+  ]) {
+    assert(keys.includes(s), `${s} hilang`);
+  }
+  const symbols = getAvailableSymbols("orbitraderberjangka");
+  assert(symbols.length === 13, `dropdown=${symbols.length}`);
+});
+
+test("280. AUDCHF_ORB preset exists + digits=5", () => {
+  const p = getOtbInstrumentProfile("AUDCHF_ORB");
+  if (p === null) throw new Error("preset AUDCHF_ORB hilang");
+  assert(p.digits === 5, `digits=${p.digits}`);
+  assert(p.contractSize === 100000, "contractSize salah");
+  assert(p.contractCurrency === "AUD", "contractCurrency bukan AUD");
+  assert(p.currencyProfit === "CHF", "profit bukan CHF");
+  assert(p.swapType === "percentage", "swapType bukan percentage");
+  assert(p.swapLong === -1.5 && p.swapShort === -1.5, "swap salah");
+  assert(p.commission?.pricePerLot === 33, "komisi bukan 33");
+});
+
+test("281. AUDJPY_ORB preset swapLong=-1.25%", () => {
+  const p = getOtbInstrumentProfile("AUDJPY_ORB");
+  if (p === null) throw new Error("preset AUDJPY_ORB hilang");
+  assert(p.digits === 3, `digits=${p.digits}`);
+  assert(p.swapLong === -1.25, `swapLong=${p.swapLong}`);
+  assert(p.swapShort === -1.75, `swapShort=${p.swapShort}`);
+  assert(p.swapType === "percentage", "swapType bukan percentage");
+  assert(p.contractCurrency === "AUD", "contract bukan AUD");
+  assert(p.currencyProfit === "JPY", "profit bukan JPY");
+});
+
+test("282. CADJPY_ORB contractCurrency=CAD", () => {
+  const p = getOtbInstrumentProfile("CADJPY_ORB");
+  if (p === null) throw new Error("preset CADJPY_ORB hilang");
+  assert(p.contractCurrency === "CAD", `contract=${p.contractCurrency}`);
+  assert(p.currencyProfit === "JPY", "profit bukan JPY");
+  assert(p.swapLong === -1.25 && p.swapShort === -1.75, "swap salah");
+  assert(p.swapType === "percentage", "swapType bukan percentage");
+  assert(p.contractSize === 100000, "contractSize salah");
+});
+
+test("283. CHFJPY_ORB swapShort=-1.25%", () => {
+  const p = getOtbInstrumentProfile("CHFJPY_ORB");
+  if (p === null) throw new Error("preset CHFJPY_ORB hilang");
+  assert(p.swapShort === -1.25, `swapShort=${p.swapShort}`);
+  assert(p.swapLong === -1.75, `swapLong=${p.swapLong}`);
+  assert(p.contractCurrency === "CHF", "contract bukan CHF");
+  assert(p.currencyProfit === "JPY", "profit bukan JPY");
+  assert(p.swapType === "percentage", "swapType bukan percentage");
+});
+
+test("284. EURAUD_ORB profitCurrency=AUD", () => {
+  const p = getOtbInstrumentProfile("EURAUD_ORB");
+  if (p === null) throw new Error("preset EURAUD_ORB hilang");
+  assert(p.currencyProfit === "AUD", `profit=${p.currencyProfit}`);
+  assert(p.contractCurrency === "EUR", "contract bukan EUR");
+  assert(p.swapLong === -1.5 && p.swapShort === -1.5, "swap salah");
+  assert(p.swapType === "percentage", "swapType bukan percentage");
+});
+
+test("285. GBPAUD_ORB swapLong=-0.75%", () => {
+  const p = getOtbInstrumentProfile("GBPAUD_ORB");
+  if (p === null) throw new Error("preset GBPAUD_ORB hilang");
+  assert(p.swapLong === -0.75, `swapLong=${p.swapLong}`);
+  assert(p.swapShort === -2.25, `swapShort=${p.swapShort}`);
+  assert(p.contractCurrency === "GBP", "contract bukan GBP");
+  assert(p.currencyProfit === "AUD", "profit bukan AUD");
+  assert(p.swapType === "percentage", "swapType bukan percentage");
+});
+
+test("286. USDCAD_ORB all fields present", () => {
+  const p = getOtbInstrumentProfile("USDCAD_ORB");
+  if (p === null) throw new Error("preset USDCAD_ORB hilang");
+  assert(p.contractSize === 100000, "contractSize salah");
+  assert(p.contractCurrency === "USD", "contract bukan USD");
+  assert(p.currencyProfit === "CAD", "profit bukan CAD");
+  assert(p.swapLong === -1.5 && p.swapShort === -1.5, "swap salah");
+  assert(p.swapType === "percentage", "swapType bukan percentage");
+  assert(p.commission?.pricePerLot === 33, "komisi bukan 33");
+  assert(p.digits === 5, "digits bukan 5");
+  assert(p.minVolume === 0.1 && p.maxVolume === 10, "volume salah");
+  assert(p.initialMargin === 100000, "margin salah");
+});
+
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);
 if (failed > 0) process.exit(1);
