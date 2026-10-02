@@ -24,10 +24,13 @@
     "src/lib/marketWatchParser.ts",
     "src/components/extraction/ocrParser.ts",
     "src/calculations/inputValidator.ts",
+    "src/calculations/swapCost.ts",
+    "src/calculations/attachSwapToResult.ts",
     "src/types/analysis.ts",
     "src/types/broker.ts",
     "src/lib/brokerRegistry.ts",
     "src/lib/brokerSymbols.ts",
-    "src/lib/otbInstrumentConfig.ts"
+    "src/lib/otbInstrumentConfig.ts",
+    "src/services/fxRateService.ts"
   ]
 }

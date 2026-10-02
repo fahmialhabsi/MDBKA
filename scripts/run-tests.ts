@@ -66,6 +66,12 @@ import {
 } from "../src/lib/brokerSymbols";
 import { calculateSwapCost } from "../src/calculations/swapCost";
 import { attachSwapToResult } from "../src/calculations/attachSwapToResult";
+import {
+  FALLBACK_RATES,
+  convertToUSD,
+  fetchECBRates,
+  parseECBXml,
+} from "../src/services/fxRateService";
 
 let passed = 0;
 let failed = 0;
@@ -4098,6 +4104,155 @@ test("286. USDCAD_ORB all fields present", () => {
   assert(p.digits === 5, "digits bukan 5");
   assert(p.minVolume === 0.1 && p.maxVolume === 10, "volume salah");
   assert(p.initialMargin === 100000, "margin salah");
+});
+
+/* ---------------- ECB Daily Rate + FX Conversion 5D-STEP2: TEST 287-296 ---------------- */
+
+test("287. fetchECBRates() returns rates object (mock/live)", () => {
+  // Tanpa network call (deterministik): bentuk fallback + wiring fetch.
+  assert(typeof fetchECBRates === "function", "fetchECBRates hilang");
+  for (const key of ["EUR", "USD", "AUD", "CAD", "CHF", "GBP", "JPY", "NZD"] as const) {
+    assert(
+      typeof FALLBACK_RATES[key] === "number" && Number.isFinite(FALLBACK_RATES[key]),
+      `fallback ${key} invalid`
+    );
+  }
+  assert(FALLBACK_RATES.fetchedAt === "2026-10-02", "fallback date salah");
+  const src = readSrc("src/services/fxRateService.ts");
+  assert(src.includes("eurofxref-daily.xml"), "ECB URL hilang");
+  assert(src.includes("FALLBACK_RATES"), "fallback wiring hilang");
+  const maybePromise = (
+    globalThis as { fetch?: unknown }
+  ).fetch;
+  assert(
+    typeof fetchECBRates === "function" && (maybePromise === undefined || typeof maybePromise === "function"),
+    "fetch boundary tidak aman"
+  );
+});
+
+test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
+  const xml =
+    `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
+    `<Cube currency="USD" rate="1.0831"/>` +
+    `<Cube currency="JPY" rate="161.25"/>` +
+    `<Cube currency="AUD" rate="1.6512"/>` +
+    `</Cube></Cube></gesmes:Envelope>`;
+  const rates = parseECBXml(xml);
+  assert(Math.abs(rates.USD - 1.0831) < 1e-9, `USD=${rates.USD}`);
+  assert(Math.abs(rates.JPY - 161.25) < 1e-9, `JPY=${rates.JPY}`);
+  assert(Math.abs(rates.AUD - 1.6512) < 1e-9, `AUD=${rates.AUD}`);
+  assert(rates.EUR === 1.0, "EUR base berubah");
+});
+
+test("289. convertToUSD(100 AUD) ≈ 60.56 USD", () => {
+  const usd = convertToUSD(100, "AUD", FALLBACK_RATES);
+  assert(Math.abs(usd - 100 / 1.6512) < 1e-9, `usd=${usd}`);
+  assert(Math.abs(usd - 60.5622) < 0.01, `usd=${usd} (≈60.56 spec)`);
+});
+
+test("290. convertToUSD(-431.7 AUD) ≈ -261.44 USD (AUDCHF swap)", () => {
+  const usd = convertToUSD(-431.7, "AUD", FALLBACK_RATES);
+  assert(Math.abs(usd - -261.4423) < 0.01, `usd=${usd}`);
+});
+
+test("291. convertToUSD(-49 JPY) ≈ -0.304 USD (AUDJPY swap)", () => {
+  const usd = convertToUSD(-49, "JPY", FALLBACK_RATES);
+  assert(Math.abs(usd - -0.3039) < 0.001, `usd=${usd}`);
+  assert(convertToUSD(10, "USD", FALLBACK_RATES) === 10, "USD passthrough rusak");
+  assert(convertToUSD(10, "XXX", FALLBACK_RATES) === 10, "unknown currency tidak fallback");
+});
+
+test("292. attachSwapToResult dengan fxRates → swapCostInUSD populated", () => {
+  const attached = attachSwapToResult(makeAnalysisResult("BELI", 0.5), {
+    symbol: "AUDCHF_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 0.5,
+    holdingDays: 1,
+    currentPrice: 0.5756,
+    fxRates: FALLBACK_RATES,
+  });
+  if (attached === null || attached.swapDetail === null) {
+    throw new Error("attach dengan fxRates null");
+  }
+  assert(attached.swapDetail.swapCostInUSD !== null, "swapCostInUSD tidak terisi");
+  assert(
+    Math.abs((attached.swapDetail.swapCostInUSD ?? 0) - -261.4423) < 0.01,
+    `usd=${attached.swapDetail.swapCostInUSD}`
+  );
+  assert(
+    Math.abs((attached.swapDetail.fxRate ?? 0) - 1.6512) < 1e-9,
+    `fxRate=${attached.swapDetail.fxRate}`
+  );
+});
+
+test("293. attachSwapToResult tanpa fxRates → swapCostInUSD null (fallback)", () => {
+  const attached = attachSwapToResult(makeAnalysisResult("BELI", 0.5), {
+    symbol: "AUDCHF_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 0.5,
+    holdingDays: 1,
+    currentPrice: 0.5756,
+  });
+  if (attached === null || attached.swapDetail === null) {
+    throw new Error("attach tanpa fxRates null");
+  }
+  assert(attached.swapDetail.swapCostInUSD === null, "harus null tanpa rates");
+  assert(
+    Math.abs(attached.swapDetail.swapCostInContractBaseCurrency - -431.7) < 1e-6,
+    "satuan asli rusak"
+  );
+});
+
+test("294. Rate cache per app session (tidak re-fetch)", () => {
+  const src = readSrc("src/App.tsx");
+  assert(src.includes("fetchECBRates"), "App tidak fetch ECB");
+  assert(src.includes("fxRates"), "state fxRates hilang");
+  assert(src.includes("useEffect"), "fetch tidak di effect");
+  assert(src.includes("[]"), "effect harus mount-once (cache session)");
+  assert(src.includes("fxRates={fxRates}"), "fxRates tidak diteruskan ke hasil");
+  const comp = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(comp.includes("fxRates"), "AnalysisResult tidak menerima fxRates");
+});
+
+test("295. Fallback rate used jika ECB fetch gagal", () => {
+  const src = readSrc("src/services/fxRateService.ts");
+  assert(src.includes("try"), "tanpa try/catch");
+  assert(src.includes("catch"), "tanpa catch fallback");
+  assert(src.includes("console.warn"), "tanpa warn fallback");
+  assert(src.includes("return FALLBACK_RATES"), "tidak return fallback");
+  // Degradasi graceful: XML kosong → default 1 (tanpa throw).
+  const empty = parseECBXml("<gesmes:Envelope/>");
+  assert(empty.USD === 1 && empty.EUR === 1.0, "parse kosong tidak default");
+});
+
+test("296. Display memo USD (dari AUD @1.6512)", () => {
+  const attached = attachSwapToResult(makeAnalysisResult("BELI", 0.5), {
+    symbol: "AUDCHF_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 0.5,
+    holdingDays: 1,
+    currentPrice: 0.5756,
+    fxRates: FALLBACK_RATES,
+  });
+  if (attached === null || attached.swapDetail === null) {
+    throw new Error("attach null");
+  }
+  const d = attached.swapDetail;
+  const memo =
+    `Swap ${d.holdingDays} hari: ${(d.swapCostInUSD ?? 0).toFixed(2)} USD ` +
+    `(dari ${d.swapCostInContractBaseCurrency.toFixed(1)} ` +
+    `${d.contractBaseCurrency} @${(d.fxRate ?? 0).toFixed(4)})`;
+  // Koreksi pembulatan spec: -431.7/1.6512 = -261.4462 → toFixed(2) = -261.45.
+  assert(memo.includes("-261.45 USD"), `memo=${memo}`);
+  assert(memo.includes("-431.7 AUD"), `memo=${memo}`);
+  assert(memo.includes("@1.6512"), `memo=${memo}`);
+  const src = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(src.includes('data-testid="swap-memo"'), "testid memo hilang");
+  assert(src.includes("swapCostInUSD"), "memo tidak render USD");
+  assert(src.includes("/lot (profit"), "label legacy hilang (regresi)");
 });
 
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);

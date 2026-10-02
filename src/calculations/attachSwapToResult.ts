@@ -8,6 +8,10 @@ import type {
   Decision,
 } from "../types/analysis";
 import type { BrokerId } from "../types/broker";
+import {
+  convertToUSD,
+  type ExchangeRates,
+} from "../services/fxRateService";
 
 /**
  * Tahap 5C Step 2 — lampiran swap post-decision (MODUL MURNI).
@@ -39,6 +43,11 @@ export interface AttachedSwapDetail {
   readonly swapPercentage?: number;
   readonly contractSize: number;
   readonly currentPrice?: number;
+  /** Tahap 5D-STEP2: konversi display ke USD (info-only). null bila
+   * fxRates tidak disediakan (fallback: tampilkan satuan asli). */
+  readonly swapCostInUSD: number | null;
+  /** Rate ECB yang dipakai untuk konversi (per contractBaseCurrency). */
+  readonly fxRate?: number | null;
 }
 
 export type AnalysisResultWithSwap = AnalysisResult & {
@@ -51,6 +60,8 @@ export type AnalysisResultWithSwap = AnalysisResult & {
  * Mengembalikan null bila: lot null/invalid, arah TUNGGU/invalid,
  * broker non-OTB, swap belum terverifikasi, atau (mode percentage
  * dengan holdingDays > 0) currentPrice hilang/invalid.
+ * Bila fxRates disediakan, swapCostInUSD + fxRate ikut terisi
+ * (display risk); tanpa fxRates keduanya null (fallback satuan asli).
  */
 export function attachSwapToResult(
   result: AnalysisResult,
@@ -61,6 +72,7 @@ export function attachSwapToResult(
     readonly lot: number | null;
     readonly holdingDays?: number;
     readonly currentPrice?: number;
+    readonly fxRates?: ExchangeRates | null;
   }
 ): AnalysisResultWithSwap | null {
   if (args.lot === null) return null;
@@ -82,6 +94,28 @@ export function attachSwapToResult(
 
   if (preset === null) return null;
 
+  const fxRates = args.fxRates ?? null;
+  const swapCostInUSD =
+    fxRates === null
+      ? null
+      : convertToUSD(
+          cost.swapCostInContractBaseCurrency,
+          cost.contractBaseCurrency,
+          fxRates
+        );
+  const rawFxRate =
+    fxRates === null
+      ? null
+      : ((fxRates as Record<string, unknown>)[
+          cost.contractBaseCurrency
+        ] ?? null);
+  const fxRate =
+    typeof rawFxRate === "number" &&
+    Number.isFinite(rawFxRate) &&
+    rawFxRate > 0
+      ? rawFxRate
+      : null;
+
   return {
     ...result,
     swapDetail: {
@@ -98,6 +132,8 @@ export function attachSwapToResult(
       swapType: cost.swapType,
       contractSize: cost.contractSize,
       profitCurrency: preset.currencyProfit,
+      swapCostInUSD,
+      fxRate,
       ...(cost.swapPerDayUSD !== undefined
         ? { swapPerDayUSD: cost.swapPerDayUSD }
         : {}),

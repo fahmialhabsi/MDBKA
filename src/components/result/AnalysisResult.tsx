@@ -10,6 +10,7 @@ import type { AnalysisResult as ResultType, MarketData } from "../../types/analy
 import type { BrokerId } from "../../types/broker";
 import type { ValidationViewState } from "../../lib/validationView";
 import { attachSwapToResult } from "../../calculations/attachSwapToResult";
+import type { ExchangeRates } from "../../services/fxRateService";
 
 interface Props {
   result: ResultType | null;
@@ -18,6 +19,8 @@ interface Props {
   blockedReasons?: string[] | null;
   /** Konteks broker (display only): mengaktifkan blok swap OTB. */
   brokerId?: BrokerId;
+  /** Tahap 5D-STEP2: ECB rate cache dari App (display USD info-only). */
+  fxRates?: ExchangeRates | null;
 }
 
 function money(value: number | null) {
@@ -40,10 +43,14 @@ const REQUIRED_SUMMARY = [
   "Support dan Resistance"
 ];
 
-export default function AnalysisResult({ result, market, viewState, blockedReasons, brokerId }: Props) {
+export default function AnalysisResult({ result, market, viewState, blockedReasons, brokerId, fxRates }: Props) {
   // Tahap 5C Step 2: holding + memo swap (info-only, post-decision).
-  // Hooks di atas semua early return. Tanpa hasil/lot → null.
+  // Tahap 5D-STEP2: teruskan currentPrice (untuk % calc) + fxRates
+  // (untuk display USD). Hooks di atas semua early return.
+  // Tanpa hasil/lot → null.
   const [holdingDays, setHoldingDays] = useState(0);
+
+  const currentPrice = market.bid > 0 ? market.bid : market.close;
 
   const attached = useMemo(
     () =>
@@ -55,8 +62,10 @@ export default function AnalysisResult({ result, market, viewState, blockedReaso
             direction: result.decision,
             lot: result.suggestedLot ?? result.theoreticalLot,
             holdingDays,
+            currentPrice,
+            fxRates: fxRates ?? null,
           }),
-    [result, market.symbol, brokerId, holdingDays],
+    [result, market.symbol, brokerId, holdingDays, currentPrice, fxRates],
   );
 
   const showSwapBlock =
@@ -343,6 +352,19 @@ export default function AnalysisResult({ result, market, viewState, blockedReaso
                 {attached.swapDetail.swapCost.toFixed(2)}{" "}
                 {attached.swapDetail.profitCurrency}/lot (profit{" "}
                 {attached.swapDetail.profitCurrency})
+                {attached.swapDetail.swapCostInUSD !== null && (
+                  <>
+                    {" "}≈ {attached.swapDetail.swapCostInUSD.toFixed(2)}{" "}
+                    USD (dari{" "}
+                    {attached.swapDetail.swapCostInContractBaseCurrency.toFixed(2)}{" "}
+                    {attached.swapDetail.contractBaseCurrency} @{" "}
+                    {attached.swapDetail.fxRate !== null &&
+                    attached.swapDetail.fxRate !== undefined
+                      ? attached.swapDetail.fxRate.toFixed(4)
+                      : "-"}
+                    )
+                  </>
+                )}
               </p>
             )}
         </div>

@@ -55,6 +55,10 @@ import {
   buildBlockedReasons,
   getValidationViewState,
 } from "./lib/validationView";
+import {
+  fetchECBRates,
+  type ExchangeRates,
+} from "./services/fxRateService";
 
 const initialMarket: MarketData = {
   symbol: "GBPUSD",
@@ -142,6 +146,15 @@ export default function App() {
   const [result, setResult] = useState<ReturnType<typeof analyzeMarket> | null>(
     null,
   );
+  // Tahap 5D-STEP2: ECB daily rate 1x saat app init, cache selama session.
+  const [fxRates, setFxRates] = useState<ExchangeRates | null>(null);
+
+  useEffect(() => {
+    fetchECBRates().then((rates) => {
+      setFxRates(rates);
+      console.log("FX rates loaded:", rates.fetchedAt);
+    });
+  }, []);
 
   const lastSymbol = useRef(initialMarket.symbol);
   const lastBroker = useRef<BrokerId>(DEFAULT_BROKER_ID);
@@ -762,6 +775,7 @@ export default function App() {
                 viewState={viewState}
                 blockedReasons={blockedReasons}
                 brokerId={activeBrokerId}
+                fxRates={fxRates}
               />
             </Panel>
           </aside>
