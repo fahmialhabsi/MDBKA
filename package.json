@@ -1,7 +1,7 @@
 {
   "name": "mdbka",
   "version": "1.0.0",
-  "description": "Aplikasi analisa trading berbasis screenshot.",
+  "description": "Trading Education & Risk Calculator untuk MetaTrader 5 (OTB + Finex).",
   "main": "index.js",
   "directories": {
     "doc": "docs",
