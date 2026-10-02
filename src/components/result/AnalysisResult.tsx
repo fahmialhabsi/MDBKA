@@ -1,4 +1,5 @@
-﻿import {
+﻿import { useMemo, useState } from "react";
+import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
@@ -6,13 +7,17 @@
   TrendingUp
 } from "lucide-react";
 import type { AnalysisResult as ResultType, MarketData } from "../../types/analysis";
+import type { BrokerId } from "../../types/broker";
 import type { ValidationViewState } from "../../lib/validationView";
+import { attachSwapToResult } from "../../calculations/attachSwapToResult";
 
 interface Props {
   result: ResultType | null;
   market: MarketData;
   viewState: ValidationViewState;
   blockedReasons?: string[] | null;
+  /** Konteks broker (display only): mengaktifkan blok swap OTB. */
+  brokerId?: BrokerId;
 }
 
 function money(value: number | null) {
@@ -35,7 +40,28 @@ const REQUIRED_SUMMARY = [
   "Support dan Resistance"
 ];
 
-export default function AnalysisResult({ result, market, viewState, blockedReasons }: Props) {
+export default function AnalysisResult({ result, market, viewState, blockedReasons, brokerId }: Props) {
+  // Tahap 5C Step 2: holding + memo swap (info-only, post-decision).
+  // Hooks di atas semua early return. Tanpa hasil/lot → null.
+  const [holdingDays, setHoldingDays] = useState(0);
+
+  const attached = useMemo(
+    () =>
+      result === null
+        ? null
+        : attachSwapToResult(result, {
+            symbol: market.symbol,
+            brokerId,
+            direction: result.decision,
+            lot: result.suggestedLot ?? result.theoreticalLot,
+            holdingDays,
+          }),
+    [result, market.symbol, brokerId, holdingDays],
+  );
+
+  const showSwapBlock =
+    brokerId === "orbitraderberjangka" && result !== null;
+
   // Umpan balik klik Analisa yang eksplisit: selalu diutamakan bila ada.
   if (blockedReasons && blockedReasons.length > 0) {
     return (
@@ -275,6 +301,52 @@ export default function AnalysisResult({ result, market, viewState, blockedReaso
         <Metric label="Lot teoritis" value={number(result.theoreticalLot, 4)} />
         <Metric label="Lot disarankan" value={number(result.suggestedLot, 4)} />
       </div>
+
+      {showSwapBlock && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <label className="space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Holding (hari)
+            </span>
+
+            <input
+              data-testid="swap-holding-input"
+              type="number"
+              min={0}
+              max={10}
+              step={1}
+              value={holdingDays}
+              onChange={(event) => {
+                const parsed = Number(event.target.value);
+                setHoldingDays(
+                  Number.isFinite(parsed)
+                    ? Math.min(10, Math.max(0, Math.floor(parsed)))
+                    : 0,
+                );
+              }}
+              className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-white outline-none focus:border-emerald-400"
+            />
+
+            <span className="block text-xs text-slate-500">
+              0 = intraday (tanpa swap). Maksimal 10 hari.
+            </span>
+          </label>
+
+          {attached !== null &&
+            attached.swapDetail !== null &&
+            holdingDays > 0 && (
+              <p
+                data-testid="swap-memo"
+                className="mt-3 text-sm text-slate-400"
+              >
+                Swap {attached.swapDetail.holdingDays} hari:{" "}
+                {attached.swapDetail.swapCost.toFixed(2)}{" "}
+                {attached.swapDetail.profitCurrency}/lot (profit{" "}
+                {attached.swapDetail.profitCurrency})
+              </p>
+            )}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
         <div className="flex items-start gap-3">
