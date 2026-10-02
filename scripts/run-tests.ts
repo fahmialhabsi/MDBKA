@@ -4840,3 +4840,19 @@ test("309. CORS localhost:5173 + frontend SSE wiring + LiveEquity terpasang", ()
   );
   process.exit(failed > 0 ? 1 : 0);
 })();
+
+// Test 318-323: useQuotesStream + LiveQuotes
+(async () => {
+  try {
+    const { runQuotesStreamTests } = await import('../src/hooks/useQuotesStream.test');
+    const allPassed = await runQuotesStreamTests();
+    if (allPassed) {
+      passed += 6;
+    } else {
+      failed += 6;
+    }
+  } catch (e) {
+    console.error("✗ Quotes stream test suite error:", e);
+    failed += 6;
+  }
+})();
