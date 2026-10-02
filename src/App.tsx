@@ -33,7 +33,10 @@ import {
   DEFAULT_BROKER_ID,
   getBrokerProfile,
 } from "./lib/brokerRegistry";
-import { getOtbInstrumentProfile } from "./lib/otbInstrumentConfig";
+import {
+  canonicalSymbolForBroker,
+  hasOtbPresetForSymbol,
+} from "./lib/brokerSymbols";
 
 import type { BrokerSettings, MarketData } from "./types/analysis";
 import type { BrokerId } from "./types/broker";
@@ -181,13 +184,10 @@ export default function App() {
   // Label broker aktif selalu berasal dari state (bukan hard-code).
   const activeBrokerLabel = getBrokerProfile(activeBrokerId).label;
 
-  // Tahap 4B: status preset OTB diturunkan saat render (bukan setState
-  // dalam effect). Simbol dicocokkan EXACT (tanpa normalizeSymbol agar
-  // suffiks _ORB tidak terpangkas).
+  // Tahap 4C: status preset OTB via satu helper (suffiks _ORB terjaga).
   const otbPresetMissingNotice =
-    activeBrokerId === "orbitraderberjangka" &&
     market.symbol.trim() !== "" &&
-    getOtbInstrumentProfile(market.symbol.trim()) === null
+    !hasOtbPresetForSymbol(market.symbol.trim(), activeBrokerId)
       ? `Simbol ${market.symbol.trim()} belum terverifikasi di ` +
         `OrbiTraderBerjangka. Preset instrumen belum diaktifkan. ` +
         `Verifikasi simbol dan parameter broker dari Specification ` +
@@ -198,10 +198,11 @@ export default function App() {
   // CSV instrumen lama tidak boleh dipakai untuk simbol baru.
   // Pengosongan field harga dimiliki handleSymbolChange; effect ini hanya
   // menyesuaikan turunan (broker/CSV/hasil) agar tidak ada dua sumber reset.
-  // Tahap 4B: preset diterapkan berdasar broker aktif; simbol OTB tanpa
+  // Tahap 4B/4C: preset diterapkan berdasar broker aktif; simbol OTB tanpa
   // preset terverifikasi tidak mengubah setting (apply = no-op) + notifikasi.
+  // Tahap 4C: simbol dikanonikalisasi per broker (OTB exact, _ORB terjaga).
   useEffect(() => {
-    const symbol = normalizeSymbol(market.symbol);
+    const symbol = canonicalSymbolForBroker(market.symbol, activeBrokerId);
 
     if (!symbol) return;
 
@@ -227,13 +228,22 @@ export default function App() {
 
   // Satu-satunya jalur reset saat pengguna mengganti simbol: kosongkan
   // semua harga/indikator (tanpa angka fiktif) lalu tampilkan instruksi.
+  // Tahap 4C: kanonikalisasi per broker agar simbol OTB exact tersimpan.
   const handleSymbolChange = useCallback(
     (nextSymbol: string) => {
-      const normalized = normalizeSymbol(nextSymbol);
+      const normalized = canonicalSymbolForBroker(
+        nextSymbol,
+        activeBrokerId,
+      );
 
       if (!normalized) return;
 
-      if (normalizeSymbol(market.symbol) === normalized) return;
+      if (
+        canonicalSymbolForBroker(market.symbol, activeBrokerId) ===
+        normalized
+      ) {
+        return;
+      }
 
       setMarket((previous) =>
         createEmptyMarketForSymbol(normalized, previous),
@@ -242,7 +252,7 @@ export default function App() {
         `Simbol berubah menjadi ${normalized}. Masukkan atau impor data ${normalized} dari chart MT5.`,
       );
     },
-    [market.symbol],
+    [market.symbol, activeBrokerId],
   );
 
   const handleExtracted = useCallback(
@@ -375,7 +385,7 @@ export default function App() {
     setBroker((previous) =>
       applyBrokerPreset(
         previous,
-        normalizeSymbol(market.symbol),
+        canonicalSymbolForBroker(market.symbol, activeBrokerId),
         activeBrokerId,
       ),
     );
@@ -606,6 +616,7 @@ export default function App() {
             >
               <ExtractedDataForm
                 market={market}
+                brokerId={activeBrokerId}
                 onChange={(nextMarket) => {
                   setMarket(nextMarket);
                   setSymbolNotice("");

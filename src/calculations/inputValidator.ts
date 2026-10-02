@@ -57,13 +57,21 @@ export function validateAnalysisInputs(
   if (!market.symbol.trim()) {
     errors.push(item("symbol", "Pilih simbol sebelum melakukan analisa.", "error"));
   } else if (profile.category === "unknown") {
-    errors.push(
-      item(
-        "symbol",
-        "Simbol belum dikenali. Pilih simbol dari daftar.",
-        "error"
-      )
-    );
+    // Tahap 4C: simbol OTB terverifikasi diterima bila broker aktif OTB
+    // (exact match, tanpa normalisasi). Jalur lain tidak berubah.
+    const otbAccepted =
+      brokerId === ORBITRADER_BROKER_ID &&
+      getOtbInstrumentProfile(market.symbol) !== null;
+
+    if (!otbAccepted) {
+      errors.push(
+        item(
+          "symbol",
+          "Simbol belum dikenali. Pilih simbol dari daftar.",
+          "error"
+        )
+      );
+    }
   }
 
   if (!market.timeframe.trim()) {
