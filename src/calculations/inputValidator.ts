@@ -2,6 +2,9 @@
   BrokerSettings,
   MarketData
 } from "../types/analysis";
+import type { BrokerId } from "../types/broker";
+import { ORBITRADER_BROKER_ID } from "../lib/brokerRegistry";
+import { getOtbInstrumentProfile } from "../lib/otbInstrumentConfig";
 import { getInstrumentProfile } from "../lib/instrumentConfig";
 import { traceOcrStage } from "../lib/debugTrace";
 
@@ -34,7 +37,8 @@ function item(
 
 export function validateAnalysisInputs(
   market: MarketData,
-  broker: BrokerSettings
+  broker: BrokerSettings,
+  brokerId?: BrokerId
 ): ValidationSummary {
   const errors: ValidationItem[] = [];
   const warnings: ValidationItem[] = [];
@@ -287,6 +291,29 @@ export function validateAnalysisInputs(
         "error"
       )
     );
+  }
+
+  // Tahap 4B: minimum lot khusus OTB sebagai warning non-blokir (tidak
+  // force naik). Hanya bila broker aktif OTB, minLot valid > 0, dan ada
+  // preset OTB terverifikasi untuk simbol exact. Tanpa preset: tidak ada
+  // guard (tidak boleh mengarang batas).
+  if (
+    brokerId === ORBITRADER_BROKER_ID &&
+    Number.isFinite(broker.minLot) &&
+    broker.minLot > 0
+  ) {
+    const otbMinimum = getOtbInstrumentProfile(market.symbol)?.minVolume;
+
+    if (otbMinimum !== undefined && broker.minLot < otbMinimum) {
+      warnings.push(
+        item(
+          "minLot",
+          `Minimum lot ${broker.minLot} di bawah minimum ` +
+            `OrbiTraderBerjangka (${otbMinimum} lot). Sesuaikan sebelum order.`,
+          "warning"
+        )
+      );
+    }
   }
 
   if (!Number.isFinite(broker.lotStep) || broker.lotStep <= 0) {

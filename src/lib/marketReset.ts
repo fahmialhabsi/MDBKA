@@ -5,6 +5,14 @@ import {
   getInstrumentProfile,
   normalizeSymbol,
 } from "./instrumentConfig";
+import {
+  DEFAULT_BROKER_ID,
+  ORBITRADER_BROKER_ID,
+} from "./brokerRegistry";
+import {
+  calculateOtbTickValue,
+  getOtbInstrumentProfile,
+} from "./otbInstrumentConfig";
 import { traceOcrStage } from "./debugTrace";
 
 /** Field numerik MarketData yang dikosongkan (0) saat simbol berubah. */
@@ -377,14 +385,49 @@ function needsFill(value: number): boolean {
 
 /**
  * Menerapkan preset broker untuk simbol baru TANPA menebak data akun:
- * - pointValue/contractSize/buffer selalu mengikuti preset instrumen,
- * - default strategi (risiko/lot/ATR/RR) hanya diisi bila kosong/invalid,
- * - equity/komisi/slippage TIDAK disentuh (wajib input/konfirmasi manual).
+ * - Finex (default): pointValue/contractSize/buffer mengikuti preset
+ *   instrumentConfig; perilaku lama byte-identik.
+ * - OrbiTraderBerjangka: lookup EXACT (tanpa normalizeSymbol agar
+ *   "GBPUSD_ORB" tidak terpangkas menjadi "GBPUSD"); pointValue dari
+ *   kalkulator tick OTB, contractSize/minLot/lotStep dari preset
+ *   terverifikasi; buffer dipertahankan (tidak ada data buffer OTB).
+ * - Simbol OTB tak terverifikasi: kembalikan `previous` (referensi sama,
+ *   tanpa partial apply, tanpa fallback Finex).
+ * - Default strategi hanya diisi bila kosong/invalid; equity/komisi/
+ *   slippage TIDAK disentuh (wajib input/konfirmasi manual).
  */
 export function applyBrokerPreset(
   previous: BrokerSettings,
-  symbol: string
+  symbol: string,
+  brokerId: BrokerId = DEFAULT_BROKER_ID
 ): BrokerSettings {
+  if (brokerId === ORBITRADER_BROKER_ID) {
+    const otb = getOtbInstrumentProfile(symbol);
+
+    if (otb === null) {
+      return previous;
+    }
+
+    return {
+      ...previous,
+      pointValue: calculateOtbTickValue(otb),
+      contractSize: otb.contractSize,
+      riskPercent: needsFill(previous.riskPercent)
+        ? STRATEGY_DEFAULTS.riskPercent
+        : previous.riskPercent,
+      minLot: needsFill(previous.minLot) ? otb.minVolume : previous.minLot,
+      lotStep: needsFill(previous.lotStep)
+        ? otb.volumeStep
+        : previous.lotStep,
+      atrMultiplier: needsFill(previous.atrMultiplier)
+        ? STRATEGY_DEFAULTS.atrMultiplier
+        : previous.atrMultiplier,
+      targetRR: needsFill(previous.targetRR)
+        ? STRATEGY_DEFAULTS.targetRR
+        : previous.targetRR,
+    };
+  }
+
   const preset = getInstrumentPreset(symbol);
 
   return {

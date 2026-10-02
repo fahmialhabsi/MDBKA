@@ -2333,8 +2333,8 @@ test("202. validator membaca nilai S/R yang sama", () => {
   );
   const app = readSrc("src/App.tsx");
   assert(
-    app.includes("validateAnalysisInputs(market, broker)"),
-    "validator tidak memakai market state yang sama"
+    app.includes("validateAnalysisInputs(market, broker, activeBrokerId)"),
+    "validator tidak memakai market state yang sama + konteks broker (4B)"
   );
   assert(app.includes("market={market}"), "form tidak memakai market state");
 });
@@ -2632,6 +2632,210 @@ test("215. preset Finex byte-identik setelah modul OTB", () => {
     "preset US100 berubah"
   );
   assert(SUPPORTED_SYMBOLS.length === 10, "daftar simbol Finex berubah");
+});
+
+/* ---------------- Wiring preset OTB 4B: TEST 216-225 ---------------- */
+/* Signature applyBrokerPreset dipertahankan; Finex byte-identik. */
+
+test("216. Finex preset dipilih bila broker default/finex", () => {
+  const viaDefault = applyBrokerPreset(makeEmptyBroker(), "GBPUSD");
+  const viaFinex = applyBrokerPreset(makeEmptyBroker(), "GBPUSD", "finex");
+  assert(
+    JSON.stringify(viaDefault) === JSON.stringify(viaFinex),
+    "jalur default beda dari jalur finex"
+  );
+  assert(
+    viaDefault.pointValue === 100000 &&
+      viaDefault.contractSize === 100000 &&
+      viaDefault.buffer === 0.00005,
+    "preset Finex tidak diterapkan"
+  );
+  assert(viaDefault.minLot === 0.01, `minLot=${viaDefault.minLot}`);
+  assert(viaDefault.equity === 0, "equity ikut ditebak");
+});
+
+test("217. OTB preset dipilih bila broker orbitraderberjangka", () => {
+  const applied = applyBrokerPreset(
+    makeEmptyBroker(),
+    "GBPUSD_ORB",
+    "orbitraderberjangka"
+  );
+  assert(applied.pointValue === 1, `pointValue=${applied.pointValue}`);
+  assert(applied.contractSize === 100000, `contractSize=${applied.contractSize}`);
+  assert(applied.minLot === 0.1, `minLot=${applied.minLot}`);
+  assert(applied.lotStep === 0.1, `lotStep=${applied.lotStep}`);
+  assert(applied.buffer === 0, "buffer OTB dikarang (tidak ada datanya)");
+  assert(applied.equity === 0, "equity ikut ditebak");
+  assert(applied.commission === 0, "komisi ikut ditebak");
+  assert(applied.slippage === 0, "slippage ikut ditebak");
+  assert(applied.riskPercent === 10, "default strategi tidak diisi");
+});
+
+test("218. OTB tickValue dari kalkulator, bukan Finex", () => {
+  const applied = applyBrokerPreset(
+    makeEmptyBroker(),
+    "GBPUSD_ORB",
+    "orbitraderberjangka"
+  );
+  assert(applied.pointValue === 1, "tick value OTB bukan 1.00");
+  assert(
+    applied.pointValue !== getInstrumentProfile("GBPUSD").defaultPointValue,
+    "pointValue memakai angka Finex"
+  );
+});
+
+test("219. OTB minLot 0.1 mengisi kekosongan tanpa menimpa pengguna", () => {
+  const filled = applyBrokerPreset(
+    makeEmptyBroker(),
+    "GBPUSD_ORB",
+    "orbitraderberjangka"
+  );
+  assert(filled.minLot === 0.1, `minLot=${filled.minLot}`);
+  const kept = applyBrokerPreset(
+    { ...makeEmptyBroker(), minLot: 0.5 },
+    "GBPUSD_ORB",
+    "orbitraderberjangka"
+  );
+  assert(kept.minLot === 0.5, "nilai minLot pengguna tertimpa preset");
+});
+
+test("220. preset OTB EXACT match: GBPUSD bukan GBPUSD_ORB", () => {
+  const previous = makeValidBroker();
+  assert(
+    applyBrokerPreset(previous, "GBPUSD", "orbitraderberjangka") === previous,
+    "simbol Finex lolos ke jalur OTB"
+  );
+  assert(
+    applyBrokerPreset(previous, "gbpusd_orb", "orbitraderberjangka") ===
+      previous,
+    "varian kapital lolos (harus exact)"
+  );
+  assert(
+    applyBrokerPreset(previous, "", "orbitraderberjangka") === previous,
+    "simbol kosong lolos"
+  );
+  const ok = applyBrokerPreset(
+    makeEmptyBroker(),
+    "GBPUSD_ORB",
+    "orbitraderberjangka"
+  );
+  assert(ok.minLot === 0.1 && ok.pointValue === 1, "simbol exact ditolak");
+});
+
+test("221. OTB tanpa preset tidak apply partial", () => {
+  const previous = makeEmptyBroker();
+  const result = applyBrokerPreset(
+    previous,
+    "EURUSD_ORB",
+    "orbitraderberjangka"
+  );
+  assert(result === previous, "partial apply terjadi saat preset hilang");
+  assert(
+    result.pointValue === 0 && result.minLot === 0 && result.buffer === 0,
+    "nilai berubah saat penolakan"
+  );
+});
+
+test("222. Finex simbol invalid tetap memakai fallback lama", () => {
+  const result = applyBrokerPreset(makeEmptyBroker(), "XYZ");
+  assert(result.pointValue === 1, `pointValue=${result.pointValue}`);
+  assert(result.contractSize === 1, `contractSize=${result.contractSize}`);
+  assert(result.buffer === 0, `buffer=${result.buffer}`);
+  assert(result.minLot === 0.01, "default strategi berubah");
+});
+
+test("223. validator OTB menolak minLot di bawah 0.1 via warning", () => {
+  const otbMarket: MarketData = { ...makeValidMarket("GBPUSD"), symbol: "GBPUSD_ORB" };
+  const low = validateAnalysisInputs(
+    otbMarket,
+    { ...makeValidBroker(), minLot: 0.05 },
+    "orbitraderberjangka"
+  );
+  const warning = low.warnings.find((item) => item.field === "minLot");
+  assert(warning !== undefined, "warning minLot OTB hilang");
+  if (warning === undefined) {
+    throw new Error("warning minLot OTB hilang");
+  }
+  assert(warning.message.includes("0.1"), `pesan=${warning.message}`);
+  assert(
+    !low.errors.some((item) => item.field === "minLot"),
+    "guard OTB harus warning non-blokir, bukan error"
+  );
+  const noBroker = validateAnalysisInputs(
+    otbMarket,
+    { ...makeValidBroker(), minLot: 0.05 }
+  );
+  assert(
+    !noBroker.warnings.some((item) => item.field === "minLot"),
+    "guard OTB bocor tanpa konteks broker"
+  );
+  const enough = validateAnalysisInputs(
+    otbMarket,
+    { ...makeValidBroker(), minLot: 0.1 },
+    "orbitraderberjangka"
+  );
+  assert(
+    !enough.warnings.some((item) => item.field === "minLot"),
+    "minLot valid ikut diperingatkan"
+  );
+  const finex = validateAnalysisInputs(
+    makeValidMarket("GBPUSD"),
+    { ...makeValidBroker(), minLot: 0.05 },
+    "finex"
+  );
+  assert(
+    !finex.warnings.some((item) => item.field === "minLot"),
+    "guard OTB bocor ke jalur Finex"
+  );
+});
+
+test("224. Finex byte-identik sebelum/sesudah wiring OTB", () => {
+  const result = applyBrokerPreset(makeValidBroker(), "GBPUSD");
+  const expected: BrokerSettings = {
+    equity: 8.99,
+    riskPercent: 10,
+    minLot: 0.01,
+    lotStep: 0.01,
+    pointValue: 100000,
+    contractSize: 100000,
+    commission: 0,
+    slippage: 0,
+    buffer: 0.00005,
+    atrMultiplier: 1.2,
+    targetRR: 1.5,
+  };
+  assert(
+    JSON.stringify(result) === JSON.stringify(expected),
+    `snapshot berubah: ${JSON.stringify(result)}`
+  );
+});
+
+test("225. signature applyBrokerPreset aman + call site meneruskan broker", () => {
+  const previous = makeValidBroker();
+  const out = applyBrokerPreset(previous, "EURUSD");
+  assert(out !== previous, "harus objek baru untuk simbol dikenal");
+  assert(typeof out.pointValue === "number", "return bukan BrokerSettings");
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("applyBrokerPreset(previous, symbol, activeBrokerId)"),
+    "effect simbol tidak meneruskan broker aktif"
+  );
+  assert(
+    app.includes("[market.symbol, activeBrokerId, clearAnalysisOutput]"),
+    "tombol preset tidak meneruskan broker aktif"
+  );
+  assert(
+    app.includes("validateAnalysisInputs(market, broker, activeBrokerId)"),
+    "validator tidak menerima konteks broker"
+  );
+  assert(
+    app.includes("otbPresetMissingNotice"),
+    "status preset OTB tak terverifikasi hilang dari UI"
+  );
+  assert(
+    app.includes("belum terverifikasi di"),
+    "pesan preset OTB hilang"
+  );
 });
 
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);
