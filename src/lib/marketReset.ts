@@ -9,6 +9,7 @@ import {
   DEFAULT_BROKER_ID,
   ORBITRADER_BROKER_ID,
 } from "./brokerRegistry";
+import { exactOtbSymbol } from "./brokerSymbols";
 import {
   calculateOtbTickValue,
   getOtbInstrumentProfile,
@@ -191,10 +192,21 @@ export function mergeValidOcrMarketData(
 
   if (kept.timeframe !== undefined) merged.timeframe = kept.timeframe;
 
+  // Tahap 5A Step 1: simbol OTB exact tidak boleh dinormalisasi menjadi
+  // nama Finex. Simbol OTB aktif dipertahankan (filosofi current-wins);
+  // deteksi OTB baru hanya mengisi bila belum ada simbol.
+  const previousOtb = exactOtbSymbol(previous.symbol);
+  const incomingOtb =
+    ocrData.symbol === undefined ? null : exactOtbSymbol(ocrData.symbol);
+
   merged.symbol =
-    ocrData.symbol === undefined
-      ? previous.symbol
-      : finalSym || previous.symbol;
+    previousOtb !== null
+      ? previousOtb
+      : incomingOtb !== null && previous.symbol.trim() === ""
+        ? incomingOtb
+        : ocrData.symbol === undefined
+          ? previous.symbol
+          : finalSym || previous.symbol;
 
   traceOcrStage("merge", {
     activeSymbol: finalSym,

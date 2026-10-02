@@ -1,5 +1,9 @@
 ﻿import type { MarketData } from "../../types/analysis";
 import { SUPPORTED_SYMBOLS, getInstrumentProfile, normalizeSymbol } from "../../lib/instrumentConfig";
+import {
+  exactOtbSymbol,
+  findOtbSymbolInText,
+} from "../../lib/brokerSymbols";
 import { parseInstrumentPrice } from "../../lib/priceParser";
 import {
   normalizeOcrPriceToken,
@@ -113,6 +117,13 @@ function normalizeText(text: string): string {
 }
 
 function findSymbol(text: string): string | null {
+  // Tahap 5A: nama OTB exact didahulukan agar suffix _ORB tidak hilang.
+  // (Pola \b Finex tidak cocok di dalam kata bergaris bawah, jadi tidak
+  // ada konflik urutan dengan daftar Finex.)
+  const otbExact = findOtbSymbolInText(text);
+
+  if (otbExact !== null) return otbExact;
+
   const names = OCR_SYMBOLS.join("|");
   const chartMatch = text.match(
     new RegExp(
@@ -544,8 +555,10 @@ export function parseOcrTextRich(
   const data = parseOcrTextBase(dwText, parseSymbol);
 
   // data.symbol selalu diisi agar konsumen tahu simbol hasil parsing.
+  // Tahap 5A: simbol OTB aktif dipertahankan exact (jangan dinormalisasi
+  // menjadi nama Finex); sisanya perilaku lama byte-identik.
   if (activeSymbol) {
-    data.symbol = activeSymbol;
+    data.symbol = exactOtbSymbol(options.activeSymbol) ?? activeSymbol;
   } else if (fallbackSymbol) {
     data.symbol = fallbackSymbol;
   } else {

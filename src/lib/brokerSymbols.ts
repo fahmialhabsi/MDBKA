@@ -3,18 +3,33 @@ import {
   normalizeSymbol,
 } from "./instrumentConfig";
 import { ORBITRADER_BROKER_ID } from "./brokerRegistry";
-import {
-  OTB_PRESETS,
-  getOtbInstrumentProfile,
-} from "./otbInstrumentConfig";
+import { getOtbInstrumentProfile } from "./otbInstrumentConfig";
 import type { BrokerId } from "../types/broker";
 
 /**
- * Tahap 4C — daftar simbol & kanonikalisasi per broker (UI/wiring only).
+ * Tahap 4C/5A — daftar simbol & kanonikalisasi per broker (UI/wiring only).
  * - Finex (default): SUPPORTED_SYMBOLS, perilaku lama byte-identik.
- * - OTB: hanya simbol berpreset lengkap (digits + contractSize > 0).
- *   Simbol OTB dicocokkan EXACT; suffiks seperti _ORB signifikan.
+ * - OTB: OTB_ALL_SYMBOLS untuk dropdown; hanya simbol berpreset lengkap
+ *   yang dianggap terverifikasi. Simbol OTB dicocokkan EXACT; suffiks
+ *   seperti _ORB signifikan.
  */
+
+/** Daftar simbol OTB dari broker (termasuk yang presetnya masih TBD). */
+export const OTB_ALL_SYMBOLS = [
+  "AUDCAD_ORB",
+  "AUDCHF_ORB",
+  "AUDJPY_ORB",
+  "AUDNZD_ORB",
+  "AUDUSD_ORB",
+  "CADJPY_ORB",
+  "CHFJPY_ORB",
+  "EURAUD_ORB",
+  "EURCAD_ORB",
+  "EURCHF_ORB",
+  "GBPAUD_ORB",
+  "GBPUSD_ORB",
+  "USDCAD_ORB",
+] as const;
 
 /** True bila preset OTB cukup lengkap untuk ditampilkan/dipakai. */
 function isCompleteOtbPreset(symbol: string): boolean {
@@ -26,11 +41,12 @@ function isCompleteOtbPreset(symbol: string): boolean {
 
 /**
  * Daftar simbol untuk dropdown mengikuti broker aktif.
- * Tanpa broker (undefined) = jalur Finex lama.
+ * Finex/default: SUPPORTED_SYMBOLS. OTB: seluruh daftar broker
+ * (termasuk preset-TBD; kelengkapan dicek via hasOtbPresetForSymbol).
  */
 export function getAvailableSymbols(brokerId?: BrokerId): string[] {
   if (brokerId === ORBITRADER_BROKER_ID) {
-    return Object.keys(OTB_PRESETS).filter(isCompleteOtbPreset);
+    return [...OTB_ALL_SYMBOLS];
   }
 
   return [...SUPPORTED_SYMBOLS];
@@ -64,4 +80,56 @@ export function canonicalSymbolForBroker(
   }
 
   return normalizeSymbol(symbol);
+}
+
+/**
+ * Nama simbol OTB kanonis bila terdaftar di daftar broker
+ * (case-insensitive, whitespace-tolerant), atau null.
+ * Dipakai agar suffix _ORB tidak dinormalisasi menjadi nama Finex
+ * pada jalur identitas simbol (BUKAN untuk skala/harga).
+ */
+export function exactOtbSymbol(symbol: string): string | null {
+  const canonical = symbol.trim().toUpperCase();
+
+  if (canonical === "") return null;
+
+  return (OTB_ALL_SYMBOLS as readonly string[]).includes(canonical)
+    ? canonical
+    : null;
+}
+
+/**
+ * Deteksi simbol OTB dari teks bebas (mis. OCR): nama terdaftar pertama
+ * yang muncul utuh (batas kata; "_" dihitung karakter kata sehingga
+ * "GBPUSD" biasa tidak cocok di dalam "GBPUSD_ORB").
+ */
+export function findOtbSymbolInText(text: string): string | null {
+  for (const symbol of OTB_ALL_SYMBOLS) {
+    if (new RegExp(`\\b${symbol}\\b`, "i").test(text)) {
+      return symbol;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Saran pindah broker (sufficient: broker non-OTB + simbol berpreset
+ * lengkap). Murni display; TIDAK memindahkan state (pemanggil memakai
+ * handleBrokerChange agar cleanup tetap jalan).
+ */
+export function getOtbDetectedNotice(
+  brokerId: BrokerId | undefined,
+  symbol: string
+): string | null {
+  const trimmed = symbol.trim();
+
+  if (trimmed === "") return null;
+  if (brokerId === ORBITRADER_BROKER_ID) return null;
+  if (!hasOtbPresetForSymbol(trimmed, ORBITRADER_BROKER_ID)) return null;
+
+  return (
+    `Terdeteksi simbol OTB (${trimmed}). ` +
+    `Klik untuk pindah broker.`
+  );
 }

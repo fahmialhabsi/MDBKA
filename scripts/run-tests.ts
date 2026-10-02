@@ -58,7 +58,10 @@ import {
 } from "../src/lib/otbInstrumentConfig";
 import {
   canonicalSymbolForBroker,
+  exactOtbSymbol,
+  findOtbSymbolInText,
   getAvailableSymbols,
+  getOtbDetectedNotice,
   hasOtbPresetForSymbol,
 } from "../src/lib/brokerSymbols";
 
@@ -2562,9 +2565,13 @@ test("211. OTB initialMargin terpisah dari tick value", () => {
     otb.maintenanceMargin === 100000,
     `maintenanceMargin=${otb.maintenanceMargin}`
   );
-  assert(otb.tickValue === null, "tickValue harus TBD (null)");
+  assert(otb.tickValue === 1, `tickValue tersimpan=${otb.tickValue}`);
   const tickValue = calculateOtbTickValue(otb);
   assert(tickValue === 1, `tickValue=${tickValue}`);
+  assert(
+    otb.tickValue === tickValue,
+    "nilai tersimpan beda dari kalkulator"
+  );
   assert(
     tickValue !== otb.initialMargin,
     "tick value sama dengan initial margin"
@@ -2605,7 +2612,15 @@ test("213. simbol OTB tak terverifikasi mengembalikan null", () => {
     getOtbInstrumentProfile("gbpusd_orb") === null,
     "lookup harus exact (case-sensitive)"
   );
-  assert(Object.keys(OTB_PRESETS).length === 1, "preset fiktif terdaftar");
+  assert(Object.keys(OTB_PRESETS).length === 3, "preset fiktif terdaftar");
+  assert(
+    getOtbInstrumentProfile("AUDCAD_ORB") !== null,
+    "preset AUDCAD_ORB hilang"
+  );
+  assert(
+    getOtbInstrumentProfile("EURCHF_ORB") !== null,
+    "preset EURCHF_ORB hilang"
+  );
   assert(
     getBrokerProfile("orbitraderberjangka").instruments.length === 0,
     "registry OTB teraktivasi prematur (wiring = 4B)"
@@ -2862,24 +2877,31 @@ test("226. dropdown Finex menampilkan US100 dan GBPUSD", () => {
   assert(form.includes("symbolOptions.map"), "render opsi hilang");
 });
 
-test("227. dropdown OTB menampilkan GBPUSD_ORB berpreset lengkap", () => {
+test("227. dropdown OTB menampilkan 13 simbol broker", () => {
   const otb = getAvailableSymbols("orbitraderberjangka");
-  assert(otb.length === 1, `daftar OTB=${JSON.stringify(otb)}`);
-  assert(otb[0] === "GBPUSD_ORB", "GBPUSD_ORB hilang dari dropdown OTB");
+  assert(otb.length === 13, `daftar OTB=${JSON.stringify(otb)}`);
+  assert(otb[0] === "AUDCAD_ORB", "urutan dropdown berubah");
+  assert(otb.includes("GBPUSD_ORB"), "GBPUSD_ORB hilang");
+  assert(otb.includes("AUDCAD_ORB"), "AUDCAD_ORB hilang");
+  assert(otb.includes("EURCHF_ORB"), "EURCHF_ORB hilang");
+  assert(otb.includes("AUDCHF_ORB"), "simbol TBD hilang dari daftar");
+  assert(otb.includes("USDCAD_ORB"), "USDCAD_ORB hilang dari daftar");
 });
 
-test("228. dropdown OTB tidak menampilkan simbol tanpa preset", () => {
+test("228. simbol TBD tampil di dropdown tetapi tanpa preset", () => {
   const otb = getAvailableSymbols("orbitraderberjangka");
-  assert(!otb.includes("EURUSD_ORB"), "simbol invented tampil di OTB");
-  assert(!otb.includes("GBPUSD"), "simbol Finex tampil di OTB");
-  assert(!otb.includes("US100"), "US100 tampil di OTB");
+  assert(otb.includes("AUDCHF_ORB"), "TBD tidak terdaftar di dropdown");
   assert(
-    !hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka"),
-    "simbol invented dianggap terverifikasi"
+    !hasOtbPresetForSymbol("AUDCHF_ORB", "orbitraderberjangka"),
+    "TBD dianggap terverifikasi"
   );
   assert(
     !hasOtbPresetForSymbol("GBPUSD", "orbitraderberjangka"),
     "simbol Finex dianggap preset OTB"
+  );
+  assert(
+    getOtbInstrumentProfile("AUDCHF_ORB") === null,
+    "preset fiktif untuk TBD"
   );
 });
 
@@ -3048,6 +3070,182 @@ test("235. memilih simbol dropdown mengubah simbol state secara exact", () => {
     "handler tidak memakai kanonikalisasi per broker"
   );
   assert(body.includes("createEmptyMarketForSymbol"), "reset hilang");
+});
+
+/* ---------------- Preservasi _ORB 5A Step 1: TEST 236-244 ---------------- */
+
+test("236. OCR mengenali GBPUSD_ORB exact tanpa dinormalisasi", () => {
+  assert(
+    findOtbSymbolInText("GBPUSD_ORB 1.31970 1.31984") === "GBPUSD_ORB",
+    "deteksi exact gagal"
+  );
+  assert(
+    findOtbSymbolInText("gbpusd_orb H1") === "GBPUSD_ORB",
+    "deteksi case-insensitive gagal"
+  );
+  assert(
+    findOtbSymbolInText("GBPUSD 1.32474 1.32480") === null,
+    "nama Finex cocok sebagai OTB"
+  );
+  assert(findOtbSymbolInText("") === null, "teks kosong cocok");
+  assert(exactOtbSymbol("GBPUSD_ORB") === "GBPUSD_ORB", "kanonis gagal");
+  assert(exactOtbSymbol("GBPUSD") === null, "nama Finex lolos exact");
+  const rich = parseOcrTextRich("GBPUSD 1.32474 1.32480", {
+    activeSymbol: "GBPUSD_ORB",
+  });
+  assert(
+    rich.data.symbol === "GBPUSD_ORB",
+    `simbol aktif OTB dinormalisasi: ${rich.data.symbol}`
+  );
+});
+
+test("237. OCR mengenali AUDCAD_ORB exact", () => {
+  assert(
+    findOtbSymbolInText("AUDCAD_ORB ... market watch") === "AUDCAD_ORB",
+    "deteksi AUDCAD_ORB gagal"
+  );
+  const rich = parseOcrTextRich("AUDCAD_ORB 0.91210 0.91216", {
+    activeSymbol: "",
+  });
+  assert(
+    rich.data.symbol === "AUDCAD_ORB",
+    `fallback OTB hilang: ${rich.data.symbol}`
+  );
+});
+
+test("238. OCR mengenali EURCHF_ORB dan merge menjaga simbol OTB", () => {
+  assert(
+    findOtbSymbolInText("EURCHF_ORB ... data window") === "EURCHF_ORB",
+    "deteksi EURCHF_ORB gagal"
+  );
+  const previous: MarketData = {
+    ...makeValidMarket("GBPUSD"),
+    symbol: "GBPUSD_ORB",
+    support: 1.3211,
+    resistance: 1.3299,
+  };
+  const kept = mergeValidOcrMarketData(previous, {
+    bid: 1.3197,
+    ask: 1.31984,
+    close: 1.31977,
+  });
+  assert(kept.symbol === "GBPUSD_ORB", `simbol OTB tertimpa: ${kept.symbol}`);
+  assert(kept.support === 1.3211, "S/R ikut tertimpa");
+  const fresh = mergeValidOcrMarketData(
+    { ...makeEmptySrMarket(), symbol: "" },
+    {
+      bid: 1.3197,
+      ask: 1.31984,
+      symbol: "AUDCAD_ORB",
+    }
+  );
+  assert(fresh.symbol === "AUDCAD_ORB", `deteksi baru hilang: ${fresh.symbol}`);
+  const keepsCurrent = mergeValidOcrMarketData(makeEmptySrMarket(), {
+    bid: 1.3197,
+    ask: 1.31984,
+    symbol: "AUDCAD_ORB",
+  });
+  assert(
+    keepsCurrent.symbol === "GBPUSD",
+    "OCR menimpa pilihan simbol aktif (current-wins dilanggar)"
+  );
+});
+
+test("239. dropdown OTB 13 simbol termasuk 3 berpreset", () => {
+  const symbols = getAvailableSymbols("orbitraderberjangka");
+  assert(symbols.length === 13, `expected 13, got ${symbols.length}`);
+  assert(symbols.includes("GBPUSD_ORB"), "GBPUSD_ORB missing");
+  assert(symbols.includes("AUDCAD_ORB"), "AUDCAD_ORB missing");
+  assert(symbols.includes("EURCHF_ORB"), "EURCHF_ORB missing");
+});
+
+test("240. banner saran tampil untuk GBPUSD_ORB saat broker Finex", () => {
+  const notice = getOtbDetectedNotice("finex", "GBPUSD_ORB");
+  assert(notice !== null, "banner tidak tampil");
+  if (notice === null) {
+    throw new Error("banner tidak tampil");
+  }
+  assert(notice.includes("GBPUSD_ORB"), `pesan=${notice}`);
+  assert(
+    getOtbDetectedNotice("orbitraderberjangka", "GBPUSD_ORB") === null,
+    "banner tampil saat broker sudah OTB"
+  );
+  assert(
+    getOtbDetectedNotice("finex", "GBPUSD") === null,
+    "banner tampil untuk simbol Finex"
+  );
+  assert(getOtbDetectedNotice("finex", "") === null, "banner tampil kosong");
+});
+
+test("241. banner saran tampil untuk AUDCAD_ORB", () => {
+  const notice = getOtbDetectedNotice("finex", "AUDCAD_ORB");
+  assert(notice !== null, "banner AUDCAD_ORB hilang");
+  if (notice === null) {
+    throw new Error("banner AUDCAD_ORB hilang");
+  }
+  assert(notice.includes("AUDCAD_ORB"), `pesan=${notice}`);
+});
+
+test("242. banner saran tampil untuk EURCHF_ORB", () => {
+  const notice = getOtbDetectedNotice("finex", "EURCHF_ORB");
+  assert(notice !== null, "banner EURCHF_ORB hilang");
+  if (notice === null) {
+    throw new Error("banner EURCHF_ORB hilang");
+  }
+  assert(notice.includes("EURCHF_ORB"), `pesan=${notice}`);
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("otb-switch-banner"), "testid banner hilang");
+  assert(
+    app.includes('handleBrokerChange("orbitraderberjangka")'),
+    "tombol banner melewati cleanup handler"
+  );
+});
+
+test("243. hasOtbPresetForSymbol true hanya 3 terverifikasi", () => {
+  assert(
+    hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
+    "GBPUSD_ORB harus terverifikasi"
+  );
+  assert(
+    hasOtbPresetForSymbol("AUDCAD_ORB", "orbitraderberjangka") === true,
+    "AUDCAD_ORB harus terverifikasi"
+  );
+  assert(
+    hasOtbPresetForSymbol("EURCHF_ORB", "orbitraderberjangka") === true,
+    "EURCHF_ORB harus terverifikasi"
+  );
+  assert(
+    hasOtbPresetForSymbol("AUDCHF_ORB", "orbitraderberjangka") === false,
+    "AUDCHF_ORB should be false (TBD)"
+  );
+  assert(
+    hasOtbPresetForSymbol("AUDJPY_ORB", "orbitraderberjangka") === false,
+    "AUDJPY_ORB should be false (TBD)"
+  );
+});
+
+test("244. OTB_PRESETS berisi 3 preset terverifikasi", () => {
+  const keys = Object.keys(OTB_PRESETS);
+  assert(keys.length === 3, `expected 3 presets, got ${keys.length}`);
+  assert(keys.includes("GBPUSD_ORB"), "GBPUSD_ORB hilang dari preset");
+  assert(keys.includes("AUDCAD_ORB"), "AUDCAD_ORB hilang dari preset");
+  assert(keys.includes("EURCHF_ORB"), "EURCHF_ORB hilang dari preset");
+  const audcad = getOtbInstrumentProfile("AUDCAD_ORB");
+  if (audcad === null) {
+    throw new Error("preset AUDCAD_ORB hilang");
+  }
+  assert(calculateOtbTickValue(audcad) === 1, "tick value AUDCAD bukan 1");
+  assert(audcad.currencyProfit === "CAD", "profit currency bukan CAD");
+  assert(audcad.contractCurrency === "AUD", "contract currency bukan AUD");
+  assert(audcad.swapLong === -0.75 && audcad.swapShort === -2.25, "swap salah");
+  const eurchf = getOtbInstrumentProfile("EURCHF_ORB");
+  if (eurchf === null) {
+    throw new Error("preset EURCHF_ORB hilang");
+  }
+  assert(calculateOtbTickValue(eurchf) === 1, "tick value EURCHF bukan 1");
+  assert(eurchf.currencyProfit === "CHF", "profit currency bukan CHF");
+  assert(eurchf.contractCurrency === "EUR", "contract currency bukan EUR");
+  assert(eurchf.swapLong === -1.75 && eurchf.swapShort === -1.25, "swap salah");
 });
 
 console.log(`\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`);

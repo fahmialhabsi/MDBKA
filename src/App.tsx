@@ -35,6 +35,7 @@ import {
 } from "./lib/brokerRegistry";
 import {
   canonicalSymbolForBroker,
+  getOtbDetectedNotice,
   hasOtbPresetForSymbol,
 } from "./lib/brokerSymbols";
 
@@ -184,7 +185,14 @@ export default function App() {
   // Label broker aktif selalu berasal dari state (bukan hard-code).
   const activeBrokerLabel = getBrokerProfile(activeBrokerId).label;
 
-  // Tahap 4C: status preset OTB via satu helper (suffiks _ORB terjaga).
+  // Tahap 5A Step 1: saran pindah broker (display only). Tombol memakai
+  // handleBrokerChange agar cleanup (CSV/hasil/notice) tetap jalan.
+  const otbDetectedNotice = getOtbDetectedNotice(
+    activeBrokerId,
+    market.symbol,
+  );
+
+  // Status preset OTB via satu helper (suffiks _ORB terjaga).
   const otbPresetMissingNotice =
     market.symbol.trim() !== "" &&
     !hasOtbPresetForSymbol(market.symbol.trim(), activeBrokerId)
@@ -540,6 +548,25 @@ export default function App() {
             <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/50 p-3 text-sm text-slate-300">
               {brokerNotice}
             </p>
+          )}
+
+          {otbDetectedNotice && (
+            <div
+              data-testid="otb-switch-banner"
+              className="mt-4 rounded-xl border border-sky-400/30 bg-sky-400/10 p-3 text-sm text-sky-100"
+            >
+              <p>{otbDetectedNotice}</p>
+
+              <button
+                type="button"
+                onClick={() =>
+                  handleBrokerChange("orbitraderberjangka")
+                }
+                className="mt-3 rounded-xl bg-emerald-400 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-emerald-300"
+              >
+                Pindah ke OTB
+              </button>
+            </div>
           )}
 
           {otbPresetMissingNotice && (
