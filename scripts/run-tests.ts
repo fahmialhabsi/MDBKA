@@ -3242,9 +3242,9 @@ test("227. dropdown OTB menampilkan 13 simbol broker", () => {
 });
 
 test("228. simbol pending tampil di dropdown tetapi tanpa preset aktif", () => {
-  // Kebijakan verifikasi (Tahap 6E-7): 8 verified; 5 simbol lain
-  // (termasuk EURCAD_ORB) pending — tampil di dropdown + warning,
-  // tanpa auto-fill preset. Simbol invented di luar dropdown null.
+  // Kebijakan verifikasi (Tahap 6E-8): 9 verified; 4 simbol lain
+  // (AUDCAD, EURCHF, GBPAUD, USDCAD) pending — tampil di dropdown +
+  // warning, tanpa auto-fill preset. Simbol invented di luar dropdown null.
   const otb = getAvailableSymbols("orbitraderberjangka");
   assert(otb.includes("AUDCHF_ORB"), "AUDCHF_ORB tidak terdaftar di dropdown");
   assert(
@@ -3276,8 +3276,12 @@ test("228. simbol pending tampil di dropdown tetapi tanpa preset aktif", () => {
     "EURAUD_ORB verified 6E-7 harus tanpa warning",
   );
   assert(
-    hasOtbPresetForSymbol("EURCAD_ORB", "orbitraderberjangka") === false,
-    "EURCAD_ORB pending dianggap terverifikasi",
+    hasOtbPresetForSymbol("EURCAD_ORB", "orbitraderberjangka") === true,
+    "EURCAD_ORB verified 6E-8 harus tanpa warning",
+  );
+  assert(
+    hasOtbPresetForSymbol("GBPAUD_ORB", "orbitraderberjangka") === false,
+    "GBPAUD_ORB pending dianggap terverifikasi",
   );
   assert(
     !hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka"),
@@ -3539,13 +3543,13 @@ test("238. OCR mengenali EURCHF_ORB dan merge menjaga simbol OTB", () => {
   );
 });
 
-test("239. dropdown OTB 13 simbol, hanya 8 terverifikasi", () => {
+test("239. dropdown OTB 13 simbol, hanya 9 terverifikasi", () => {
   const symbols = getAvailableSymbols("orbitraderberjangka");
   assert(symbols.length === 13, `expected 13, got ${symbols.length}`);
   assert(symbols.includes("GBPUSD_ORB"), "GBPUSD_ORB missing");
   assert(symbols.includes("AUDCAD_ORB"), "AUDCAD_ORB missing");
   assert(symbols.includes("EURCHF_ORB"), "EURCHF_ORB missing");
-  // Kebijakan verifikasi (6E-7): 8 verified; 5 lainnya pending
+  // Kebijakan verifikasi (6E-8): 9 verified; 4 lainnya pending
   // (tampil + warning, tanpa preset otomatis).
   assert(
     hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
@@ -3579,6 +3583,10 @@ test("239. dropdown OTB 13 simbol, hanya 8 terverifikasi", () => {
     hasOtbPresetForSymbol("EURAUD_ORB", "orbitraderberjangka") === true,
     "EURAUD_ORB harus terverifikasi (6E-7)",
   );
+  assert(
+    hasOtbPresetForSymbol("EURCAD_ORB", "orbitraderberjangka") === true,
+    "EURCAD_ORB harus terverifikasi (6E-8)",
+  );
   for (const symbol of symbols) {
     if (
       symbol === "GBPUSD_ORB" ||
@@ -3588,7 +3596,8 @@ test("239. dropdown OTB 13 simbol, hanya 8 terverifikasi", () => {
       symbol === "AUDUSD_ORB" ||
       symbol === "CADJPY_ORB" ||
       symbol === "CHFJPY_ORB" ||
-      symbol === "EURAUD_ORB"
+      symbol === "EURAUD_ORB" ||
+      symbol === "EURCAD_ORB"
     )
       continue;
     assert(
@@ -3652,7 +3661,7 @@ test("242. banner pindah tidak tampil untuk EURCHF_ORB pending", () => {
   );
 });
 
-test("243. hasOtbPresetForSymbol true untuk 8 simbol verified", () => {
+test("243. hasOtbPresetForSymbol true untuk 9 simbol verified", () => {
   assert(
     hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
     "GBPUSD_ORB harus terverifikasi",
@@ -3686,6 +3695,10 @@ test("243. hasOtbPresetForSymbol true untuk 8 simbol verified", () => {
     "EURAUD_ORB harus terverifikasi (6E-7)",
   );
   assert(
+    hasOtbPresetForSymbol("EURCAD_ORB", "orbitraderberjangka") === true,
+    "EURCAD_ORB harus terverifikasi (6E-8)",
+  );
+  assert(
     hasOtbPresetForSymbol("AUDCAD_ORB", "orbitraderberjangka") === false,
     "AUDCAD_ORB pending dianggap terverifikasi",
   );
@@ -3693,9 +3706,8 @@ test("243. hasOtbPresetForSymbol true untuk 8 simbol verified", () => {
     hasOtbPresetForSymbol("EURCHF_ORB", "orbitraderberjangka") === false,
     "EURCHF_ORB pending dianggap terverifikasi",
   );
-  // Kebijakan verifikasi (6E-7): 5 simbol pending false; invented tetap false.
+  // Kebijakan verifikasi (6E-8): 4 simbol pending false; invented tetap false.
   for (const symbol of [
-    "EURCAD_ORB",
     "GBPAUD_ORB",
     "USDCAD_ORB",
   ]) {
@@ -3710,12 +3722,12 @@ test("243. hasOtbPresetForSymbol true untuk 8 simbol verified", () => {
   );
 });
 
-test("244. OTB_PRESETS berisi 13 objek (8 verified + 5 fixture pending)", () => {
+test("244. OTB_PRESETS berisi 13 objek (9 verified + 4 fixture pending)", () => {
   const keys = Object.keys(OTB_PRESETS);
   // Objek preset ada untuk 13 simbol sebagai data-layer/fixture;
   // status terverifikasi ditentukan VERIFIED_OTB_SYMBOLS
-  // (GBPUSD + AUDCHF 6E-1 + AUDJPY 6E-2 + AUDNZD 6E-3 + AUDUSD 6E-4
-  //  + CADJPY 6E-5 + CHFJPY 6E-6 + EURAUD 6E-7).
+  // (GBPUSD + 6E-1..6E-8: AUDCHF, AUDJPY, AUDNZD, AUDUSD, CADJPY, CHFJPY,
+  //  EURAUD, EURCAD).
   assert(keys.length === 13, `expected 13 presets, got ${keys.length}`);
   assert(keys.includes("GBPUSD_ORB"), "GBPUSD_ORB hilang dari preset");
   assert(keys.includes("AUDCAD_ORB"), "AUDCAD_ORB hilang dari preset");
@@ -4485,7 +4497,7 @@ test("278. return format validation (semua field baru hadir)", () => {
 
 /* ---------------- Expand OTB_PRESETS 5D-STEP1: TEST 279-286 ---------------- */
 
-test("279. OTB_PRESETS size = 13 (8 verified + 5 fixture pending)", () => {
+test("279. OTB_PRESETS size = 13 (9 verified + 4 fixture pending)", () => {
   const keys = Object.keys(OTB_PRESETS);
   assert(keys.length === 13, `expected 13 presets, got ${keys.length}`);
   for (const s of ["GBPUSD_ORB", "AUDCAD_ORB", "EURCHF_ORB"]) {
@@ -4996,11 +5008,11 @@ test("309. CORS localhost:5173 + frontend SSE wiring + LiveEquity terpasang", ()
 });
 
 /* Kebijakan verifikasi OTB: TEST 330-332.
- * GBPUSD + 6E-1..6E-7 (AUDCHF, AUDJPY, AUDNZD, AUDUSD, CADJPY, CHFJPY,
- * EURAUD) verified; 5 simbol lain pending. Finex byte-identik;
+ * GBPUSD + 6E-1..6E-8 (AUDCHF, AUDJPY, AUDNZD, AUDUSD, CADJPY, CHFJPY,
+ * EURAUD, EURCAD) verified; 4 simbol lain pending. Finex byte-identik;
  * SSE 318-329 tidak tersentuh. */
 
-test("330. 8 simbol verified end-to-end (preset+warning+validator)", () => {
+test("330. 9 simbol verified end-to-end (preset+warning+validator)", () => {
   assert(isOtbSymbolVerified("GBPUSD_ORB") === true, "GBPUSD_ORB harus verified");
   assert(isOtbSymbolVerified("AUDCHF_ORB") === true, "AUDCHF_ORB harus verified (6E-1)");
   assert(isOtbSymbolVerified("AUDJPY_ORB") === true, "AUDJPY_ORB harus verified (6E-2)");
@@ -5009,8 +5021,9 @@ test("330. 8 simbol verified end-to-end (preset+warning+validator)", () => {
   assert(isOtbSymbolVerified("CADJPY_ORB") === true, "CADJPY_ORB harus verified (6E-5)");
   assert(isOtbSymbolVerified("CHFJPY_ORB") === true, "CHFJPY_ORB harus verified (6E-6)");
   assert(isOtbSymbolVerified("EURAUD_ORB") === true, "EURAUD_ORB harus verified (6E-7)");
+  assert(isOtbSymbolVerified("EURCAD_ORB") === true, "EURCAD_ORB harus verified (6E-8)");
   assert(
-    VERIFIED_OTB_SYMBOLS.length === 8 &&
+    VERIFIED_OTB_SYMBOLS.length === 9 &&
       VERIFIED_OTB_SYMBOLS.includes("GBPUSD_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("AUDCHF_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("AUDJPY_ORB") &&
@@ -5018,8 +5031,9 @@ test("330. 8 simbol verified end-to-end (preset+warning+validator)", () => {
       VERIFIED_OTB_SYMBOLS.includes("AUDUSD_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("CADJPY_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("CHFJPY_ORB") &&
-      VERIFIED_OTB_SYMBOLS.includes("EURAUD_ORB"),
-    "daftar verified berubah di luar 6E-7",
+      VERIFIED_OTB_SYMBOLS.includes("EURAUD_ORB") &&
+      VERIFIED_OTB_SYMBOLS.includes("EURCAD_ORB"),
+    "daftar verified berubah di luar 6E-8",
   );
   assert(
     hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
@@ -5038,10 +5052,10 @@ test("330. 8 simbol verified end-to-end (preset+warning+validator)", () => {
   );
 });
 
-test("331. 5 simbol pending (preset commission=0, gate lama utuh)", () => {
+test("331. 4 simbol pending (preset commission=0, gate lama utuh)", () => {
   // Tahap 6D: 12 simbol OTB (selain GBPUSD_ORB) ter-apply via spec32;
-  // Tahap 6E-1..6E-7: 7 simbol naik ke verified (gate lama).
-  // 5 simbol tersisa tetap pending: VERIFIED_OTB_SYMBOLS = 8,
+  // Tahap 6E-1..6E-8: 8 simbol naik ke verified (gate lama).
+  // 4 simbol tersisa tetap pending: VERIFIED_OTB_SYMBOLS = 9,
   // hasOtbPresetForSymbol false, banner pindah null,
   // validator tanpa warning fixture.
   const pending = (OTB_ALL_SYMBOLS as readonly string[]).filter(
@@ -5053,9 +5067,10 @@ test("331. 5 simbol pending (preset commission=0, gate lama utuh)", () => {
       symbol !== "AUDUSD_ORB" &&
       symbol !== "CADJPY_ORB" &&
       symbol !== "CHFJPY_ORB" &&
-      symbol !== "EURAUD_ORB",
+      symbol !== "EURAUD_ORB" &&
+      symbol !== "EURCAD_ORB",
   );
-  assert(pending.length === 5, `pending=${pending.length}, harus 5`);
+  assert(pending.length === 4, `pending=${pending.length}, harus 4`);
   for (const symbol of pending) {
     assert(!isOtbSymbolVerified(symbol), `${symbol} dianggap verified`);
     assert(
@@ -5180,9 +5195,9 @@ test("336. isEquitySnapshot menerima valid, menolak malformed", () => {
   );
 });
 
-test("337. VERIFIED_OTB_SYMBOLS = 8 simbol (6E-7)", () => {
+test("337. VERIFIED_OTB_SYMBOLS = 9 simbol (6E-8)", () => {
   assert(
-    VERIFIED_OTB_SYMBOLS.length === 8 &&
+    VERIFIED_OTB_SYMBOLS.length === 9 &&
       VERIFIED_OTB_SYMBOLS[0] === "GBPUSD_ORB" &&
       VERIFIED_OTB_SYMBOLS[1] === "AUDCHF_ORB" &&
       VERIFIED_OTB_SYMBOLS[2] === "AUDJPY_ORB" &&
@@ -5190,8 +5205,9 @@ test("337. VERIFIED_OTB_SYMBOLS = 8 simbol (6E-7)", () => {
       VERIFIED_OTB_SYMBOLS[4] === "AUDUSD_ORB" &&
       VERIFIED_OTB_SYMBOLS[5] === "CADJPY_ORB" &&
       VERIFIED_OTB_SYMBOLS[6] === "CHFJPY_ORB" &&
-      VERIFIED_OTB_SYMBOLS[7] === "EURAUD_ORB",
-    "daftar verified berubah di luar 6E-7 (5 pending tidak boleh aktif)",
+      VERIFIED_OTB_SYMBOLS[7] === "EURAUD_ORB" &&
+      VERIFIED_OTB_SYMBOLS[8] === "EURCAD_ORB",
+    "daftar verified berubah di luar 6E-8 (4 pending tidak boleh aktif)",
   );
 });
 
@@ -5234,7 +5250,7 @@ test("353. swap function-level tetap passthrough untuk simbol pending (gate di U
   assert(cost !== null, "kontrak function-level berubah (harus non-null)");
 });
 
-test("354. 8 simbol verified; 5 simbol lain pending", () => {
+test("354. 9 simbol verified; 4 simbol lain pending", () => {
   assert(isOtbSymbolVerified("GBPUSD_ORB"), "GBPUSD_ORB harus verified");
   assert(isOtbSymbolVerified("AUDCHF_ORB"), "AUDCHF_ORB harus verified (6E-1)");
   assert(isOtbSymbolVerified("AUDJPY_ORB"), "AUDJPY_ORB harus verified (6E-2)");
@@ -5243,6 +5259,7 @@ test("354. 8 simbol verified; 5 simbol lain pending", () => {
   assert(isOtbSymbolVerified("CADJPY_ORB"), "CADJPY_ORB harus verified (6E-5)");
   assert(isOtbSymbolVerified("CHFJPY_ORB"), "CHFJPY_ORB harus verified (6E-6)");
   assert(isOtbSymbolVerified("EURAUD_ORB"), "EURAUD_ORB harus verified (6E-7)");
+  assert(isOtbSymbolVerified("EURCAD_ORB"), "EURCAD_ORB harus verified (6E-8)");
   for (const s of [
     "AUDCAD_ORB",
     "EURCHF_ORB",
@@ -5612,7 +5629,7 @@ test("379. legacy registry/dropdown 13-OTB + 10-Finex utuh", () => {
   assert(getAvailableSymbols("orbitraderberjangka").length === 13, "OTB berubah");
   assert(getAvailableSymbols("finex").length === 10, "Finex berubah");
   assert(Object.keys(OTB_PRESETS).length === 13, "preset berubah");
-  assert(VERIFIED_OTB_SYMBOLS.length === 8, "verified berubah di luar 6E-7");
+  assert(VERIFIED_OTB_SYMBOLS.length === 9, "verified berubah di luar 6E-8");
 });
 
 test("380. AUDNZD 0.00 long dihitung jujur (tanpa fabrikasi)", () => {
