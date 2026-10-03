@@ -101,6 +101,21 @@ import {
 } from "../server/services/mt5LogReader";
 import { isEquitySnapshot } from "../server/types/equity";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
+import {
+  FINEX_SPECS_32,
+  INSTRUMENT_SPECS_32,
+  OTB_SPECS_32,
+  getInstrumentSpec32,
+  getJPYPairSymbols32,
+  isSpec32Verified,
+} from "../src/lib/instrumentSpecs32";
+import {
+  calculateSwap,
+  detectWednesdayTripleSwap,
+  getDayMultiplier,
+  getJPYRate,
+  isTripleDay,
+} from "../src/lib/jpySwapCalculator";
 
 let passed = 0;
 let failed = 0;
@@ -5129,6 +5144,417 @@ test("357. attach verified GBPUSD_ORB tetap non-null (jalur rilis utuh)", () => 
   assert(
     attached !== null && attached.swapDetail !== null,
     "jalur verified rusak",
+  );
+});
+
+/* ---------------- Tahap 6B additive (paralel, tanpa sentuh 1-354): TEST 358-385 ---------------- */
+/* Modul baru instrumentSpecs32 + jpySwapCalculator. Legacy otbInstrumentConfig /
+ * swapCost / dropdown 13-simbol TIDAK diubah; suite ini hanya membaca modul baru. */
+
+function requireSpec32(symbol: string) {
+  const spec = getInstrumentSpec32(symbol);
+  if (spec === null) throw new Error(`spec32 hilang untuk ${symbol}`);
+  return spec;
+}
+
+test("358. specs32 berisi 32 simbol (16 OTB + 16 Finex)", () => {
+  assert(Object.keys(INSTRUMENT_SPECS_32).length === 32, "harus 32 specs");
+  assert(OTB_SPECS_32.length === 16, "OTB harus 16");
+  assert(FINEX_SPECS_32.length === 16, "Finex harus 16");
+  for (const s of OTB_SPECS_32) assert(s.endsWith("_ORB"), `${s} bukan OTB`);
+  for (const s of FINEX_SPECS_32)
+    assert(!s.endsWith("_ORB"), `${s} bocor _ORB ke Finex`);
+});
+
+test("359. semua specs32 VERIFIED + commission 0.00", () => {
+  for (const [symbol, spec] of Object.entries(INSTRUMENT_SPECS_32)) {
+    assert(spec.symbol === symbol, `key/symbol beda: ${symbol}`);
+    assert(spec.status === "VERIFIED", `${symbol} bukan VERIFIED`);
+    assert(isSpec32Verified(symbol), `${symbol} helper verified gagal`);
+    assert(spec.commission === 0, `${symbol} commission=${spec.commission}`);
+  }
+  assert(getInstrumentSpec32("XYZ") === null, "unknown harus null");
+  assert(getInstrumentSpec32("gbpusd_orb") === null, "harus exact case-sensitive");
+});
+
+test("360. OTB 16 simbol lengkap sesuai CSV 6B", () => {
+  for (const s of [
+    "AUDCAD_ORB",
+    "AUDCHF_ORB",
+    "AUDJPY_ORB",
+    "AUDNZD_ORB",
+    "AUDUSD_ORB",
+    "CADJPY_ORB",
+    "CHFJPY_ORB",
+    "EURAUD_ORB",
+    "EURCAD_ORB",
+    "EURCHF_ORB",
+    "GBPAUD_ORB",
+    "GBPUSD_ORB",
+    "NZDJPY_ORB",
+    "USDCAD_ORB",
+    "USDCHF_ORB",
+    "USDJPY_ORB",
+  ]) {
+    const spec = requireSpec32(s);
+    assert(spec.broker === "orbitraderberjangka", `${s} broker salah`);
+  }
+});
+
+test("361. Finex 16 simbol lengkap termasuk US100", () => {
+  for (const s of [
+    "AUDCAD",
+    "AUDCHF",
+    "AUDJPY",
+    "AUDNZD",
+    "AUDUSD",
+    "CADJPY",
+    "CHFJPY",
+    "EURAUD",
+    "EURCAD",
+    "EURCHF",
+    "EURUSD",
+    "GBPUSD",
+    "NZDJPY",
+    "USDCHF",
+    "USDJPY",
+    "US100",
+  ]) {
+    const spec = requireSpec32(s);
+    assert(spec.broker === "finex", `${s} broker salah`);
+  }
+});
+
+test("362. swap Long/Short OTB sesuai CSV 6B", () => {
+  assert(requireSpec32("AUDCAD_ORB").swapLong === -0.75, "AUDCAD long salah");
+  assert(requireSpec32("AUDCAD_ORB").swapShort === -2.25, "AUDCAD short salah");
+  assert(requireSpec32("GBPUSD_ORB").swapLong === -2.25, "GU long salah");
+  assert(requireSpec32("GBPUSD_ORB").swapShort === -0.75, "GU short salah");
+  assert(requireSpec32("USDJPY_ORB").swapLong === -1.0, "UJ long salah");
+  assert(requireSpec32("USDJPY_ORB").swapShort === -2.0, "UJ short salah");
+});
+
+test("363. swap Long/Short Finex sesuai CSV 6B (termasuk positif)", () => {
+  assert(requireSpec32("AUDJPY").swapLong === 0.75, "AUDJPY long salah");
+  assert(requireSpec32("AUDJPY").swapShort === -3.95, "AUDJPY short salah");
+  assert(requireSpec32("CADJPY").swapLong === -6.32, "CADJPY long salah");
+  assert(requireSpec32("CADJPY").swapShort === 0.96, "CADJPY short salah");
+  assert(requireSpec32("US100").swapLong === -25.29, "US100 long salah");
+  assert(requireSpec32("US100").swapShort === -117.17, "US100 short salah");
+});
+
+test("364. JPY pairs flagged + tick 0.63 (5 per broker, tanpa fabrikasi)", () => {
+  const jpy = getJPYPairSymbols32();
+  assert(jpy.length === 10, `JPY=${jpy.length}, harus 10 (5+5)`);
+  for (const s of [
+    "AUDJPY_ORB",
+    "CADJPY_ORB",
+    "CHFJPY_ORB",
+    "NZDJPY_ORB",
+    "USDJPY_ORB",
+    "AUDJPY",
+    "CADJPY",
+    "CHFJPY",
+    "NZDJPY",
+    "USDJPY",
+  ]) {
+    const spec = requireSpec32(s);
+    assert(spec.isJPYPair === true, `${s} bukan JPY`);
+    assert(spec.tickValue === 0.63, `${s} tick=${spec.tickValue}`);
+    assert(spec.swapWedMultiplier === 3, `${s} multiplier hilang`);
+  }
+  assert(requireSpec32("AUDCAD_ORB").isJPYPair === false, "AUDCAD ikut JPY");
+  assert(requireSpec32("EURUSD").isJPYPair === false, "EURUSD ikut JPY");
+});
+
+test("365. tick/pip per digits + triple day (US100 Jumat)", () => {
+  assert(requireSpec32("AUDJPY_ORB").pip === 0.001, "JPY pip salah");
+  assert(requireSpec32("GBPUSD_ORB").pip === 0.00001, "5-digit pip salah");
+  assert(requireSpec32("US100").pip === 0.01, "US100 pip salah");
+  assert(requireSpec32("US100").tickValue === 0.2, "US100 tick salah");
+  assert(requireSpec32("US100").swap3DayWeekday === 5, "US100 triple bukan Jum");
+  assert(requireSpec32("AUDJPY_ORB").swap3DayWeekday === 3, "FX triple bukan Rab");
+});
+
+test("366. Rabu 2026-09-30 terdeteksi triple, Selasa tidak", () => {
+  assert(detectWednesdayTripleSwap(new Date(2026, 8, 30)) === true, "Rab gagal");
+  assert(detectWednesdayTripleSwap(new Date(2026, 8, 29)) === false, "Sel lolos");
+  const audjpy = requireSpec32("AUDJPY_ORB");
+  assert(isTripleDay(new Date(2026, 8, 30), audjpy) === true, "isTriple Rab gagal");
+  assert(isTripleDay(new Date(2026, 8, 29), audjpy) === false, "isTriple Sel lolos");
+  const us100 = requireSpec32("US100");
+  assert(isTripleDay(new Date(2026, 9, 2), us100) === true, "US100 Jum gagal");
+  assert(isTripleDay(new Date(2026, 8, 30), us100) === false, "US100 Rab lolos");
+  assert(getDayMultiplier(new Date(2026, 8, 30), audjpy) === 3, "mult Rab bukan 3");
+  assert(getDayMultiplier(new Date(2026, 8, 29), audjpy) === 1, "mult Sel bukan 1");
+});
+
+test("367. AUDJPY_ORB LONG 1 hari Senin = -0.79 USD", () => {
+  const r = calculateSwap({
+    instrument: requireSpec32("AUDJPY_ORB"),
+    daysHeld: 1,
+    leverage: 50,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 28), // Senin
+  });
+  assert(Math.abs(r.swapUSD - -0.79) < 0.01, `swapUSD=${r.swapUSD}`);
+  assert(r.daysMultiplier === 1, `mult=${r.daysMultiplier}`);
+  assert(r.tripleDayHit === false, "triple ikut hit");
+  assert(r.tickValueUsed === 0.63, "tick salah");
+});
+
+test("368. AUDJPY_ORB LONG 1 hari Rabu = -2.36 USD (3x)", () => {
+  const r = calculateSwap({
+    instrument: requireSpec32("AUDJPY_ORB"),
+    daysHeld: 1,
+    leverage: 50,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 30), // Rabu
+  });
+  assert(Math.abs(r.swapUSD - -2.36) < 0.01, `swapUSD=${r.swapUSD}`);
+  assert(r.daysMultiplier === 3, `mult=${r.daysMultiplier}`);
+  assert(r.tripleDayHit === true, "triple tidak hit");
+});
+
+test("369. SHORT memakai swapShort (inversi arah)", () => {
+  const monday = new Date(2026, 8, 28);
+  const long = calculateSwap({
+    instrument: requireSpec32("AUDJPY_ORB"),
+    daysHeld: 1,
+    leverage: 50,
+    direction: "LONG",
+    tradeDatetime: monday,
+  });
+  const short = calculateSwap({
+    instrument: requireSpec32("AUDJPY_ORB"),
+    daysHeld: 1,
+    leverage: 50,
+    direction: "SHORT",
+    tradeDatetime: monday,
+  });
+  assert(Math.abs(long.swapUSD - -0.79) < 0.01, `long=${long.swapUSD}`);
+  assert(Math.abs(short.swapUSD - -1.1) < 0.01, `short=${short.swapUSD}`);
+});
+
+test("370. non-JPY AUDCAD_ORB LONG 1 hari = -0.52 USD", () => {
+  const r = calculateSwap({
+    instrument: requireSpec32("AUDCAD_ORB"),
+    daysHeld: 1,
+    leverage: 50,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 28),
+  });
+  assert(Math.abs(r.swapUSD - -0.52) < 0.01, `swapUSD=${r.swapUSD}`);
+});
+
+test("371. EURUSD SHORT Finex 2 hari Senin = +3.86 USD", () => {
+  const r = calculateSwap({
+    instrument: requireSpec32("EURUSD"),
+    daysHeld: 2,
+    leverage: 100,
+    direction: "SHORT",
+    tradeDatetime: new Date(2026, 8, 28), // Sen+Sel, tanpa Rabu
+  });
+  assert(Math.abs(r.swapUSD - 3.86) < 0.01, `swapUSD=${r.swapUSD}`);
+  assert(r.effectiveDays === 2, `eff=${r.effectiveDays}`);
+});
+
+test("372. rentang Sel-Rab 2 hari = 1x+3x = 4x", () => {
+  const r = calculateSwap({
+    instrument: requireSpec32("AUDJPY_ORB"),
+    daysHeld: 2,
+    leverage: 50,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 29), // Selasa
+  });
+  assert(r.effectiveDays === 4, `eff=${r.effectiveDays}`);
+  assert(r.daysMultiplier === 2, `mult=${r.daysMultiplier}`);
+  assert(Math.abs(r.swapUSD - -3.15) < 0.01, `swapUSD=${r.swapUSD}`);
+  assert(r.tripleDayHit === true, "triple tidak hit");
+});
+
+test("373. semua 10 JPY pairs menghitung tanpa error", () => {
+  const monday = new Date(2026, 8, 28);
+  for (const s of getJPYPairSymbols32()) {
+    const spec = requireSpec32(s);
+    const r = calculateSwap({
+      instrument: spec,
+      daysHeld: 1,
+      leverage: 50,
+      direction: "LONG",
+      tradeDatetime: monday,
+    });
+    assert(Number.isFinite(r.swapUSD), `${s} swapUSD tidak finite`);
+    assert(r.tickValueUsed === 0.63, `${s} tick bukan 0.63`);
+  }
+});
+
+test("374. semua 32 simbol menghitung LONG/SHORT tanpa error", () => {
+  const monday = new Date(2026, 8, 28);
+  for (const s of Object.keys(INSTRUMENT_SPECS_32)) {
+    const spec = requireSpec32(s);
+    for (const direction of ["LONG", "SHORT"] as const) {
+      const r = calculateSwap({
+        instrument: spec,
+        daysHeld: 1,
+        leverage: 50,
+        direction,
+        tradeDatetime: monday,
+      });
+      assert(Number.isFinite(r.swapUSD), `${s}/${direction} tidak finite`);
+    }
+  }
+});
+
+test("375. edge: 0/negatif hari = 0, tanpa fallback -1.5%", () => {
+  const spec = requireSpec32("AUDJPY_ORB");
+  const zero = calculateSwap({
+    instrument: spec,
+    daysHeld: 0,
+    leverage: 50,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 28),
+  });
+  assert(zero.swapUSD === 0 && zero.effectiveDays === 0, "0 hari berbiaya");
+  const neg = calculateSwap({
+    instrument: spec,
+    daysHeld: -3,
+    leverage: 50,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 28),
+  });
+  assert(neg.swapUSD === 0, "negatif berbiaya");
+  const src = readSrc("src/lib/jpySwapCalculator.ts");
+  assert(src.includes("calculateSwap"), "fungsi utama hilang");
+});
+
+test("376. US100 Jumat triple, Senin normal", () => {
+  const us100 = requireSpec32("US100");
+  const fri = calculateSwap({
+    instrument: us100,
+    daysHeld: 1,
+    leverage: 100,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 9, 2), // Jumat 2026-10-02
+  });
+  assert(fri.tripleDayHit === true, "Jumat tidak triple");
+  assert(Math.abs(fri.swapUSD - -15.17) < 0.02, `fri=${fri.swapUSD}`);
+  const mon = calculateSwap({
+    instrument: us100,
+    daysHeld: 1,
+    leverage: 100,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 28),
+  });
+  assert(mon.tripleDayHit === false, "Senin ikut triple");
+  assert(Math.abs(mon.swapUSD - -5.06) < 0.02, `mon=${mon.swapUSD}`);
+});
+
+test("377. getJPYRate fallback deterministik", () => {
+  assert(getJPYRate("AUD", "JPY") === 0.0067, "quote JPY salah");
+  assert(getJPYRate("EUR", "USD") === 1.1, "EUR salah");
+  assert(getJPYRate("XXX", "USD") === 1.0, "unknown tidak fallback 1.0");
+});
+
+test("378. legacy swapCost tidak berubah (flat GBPUSD_ORB -2.25)", () => {
+  const cost = calculateSwapCost({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 1,
+  });
+  if (cost === null) throw new Error("legacy null");
+  assert(Math.abs(cost.swapCost - -2.25) < 1e-9, `legacy=${cost.swapCost}`);
+});
+
+test("379. legacy registry/dropdown 13-OTB + 10-Finex utuh", () => {
+  assert(getAvailableSymbols("orbitraderberjangka").length === 13, "OTB berubah");
+  assert(getAvailableSymbols("finex").length === 10, "Finex berubah");
+  assert(Object.keys(OTB_PRESETS).length === 13, "preset berubah");
+  assert(VERIFIED_OTB_SYMBOLS.length === 1, "verified berubah");
+});
+
+test("380. AUDNZD 0.00 long dihitung jujur (tanpa fabrikasi)", () => {
+  const r = calculateSwap({
+    instrument: requireSpec32("AUDNZD"),
+    daysHeld: 1,
+    leverage: 50,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 28),
+  });
+  assert(r.swapUSD === 0, `harus 0, dapat ${r.swapUSD}`);
+  const short = calculateSwap({
+    instrument: requireSpec32("AUDNZD"),
+    daysHeld: 1,
+    leverage: 50,
+    direction: "SHORT",
+    tradeDatetime: new Date(2026, 8, 28),
+  });
+  assert(Math.abs(short.swapUSD - -2.21) < 0.01, `short=${short.swapUSD}`);
+});
+
+test("381. NZDJPY_ORB LONG Rabu triple = -1.50x3x0.63", () => {
+  const r = calculateSwap({
+    instrument: requireSpec32("NZDJPY_ORB"),
+    daysHeld: 1,
+    leverage: 50,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 30),
+  });
+  assert(Math.abs(r.swapUSD - -2.84) < 0.02, `swapUSD=${r.swapUSD}`);
+});
+
+test("382. USDJPY Finex LONG positif + SHORT negatif", () => {
+  const monday = new Date(2026, 8, 28);
+  const spec = requireSpec32("USDJPY");
+  const long = calculateSwap({
+    instrument: spec,
+    daysHeld: 1,
+    leverage: 50,
+    direction: "LONG",
+    tradeDatetime: monday,
+  });
+  const short = calculateSwap({
+    instrument: spec,
+    daysHeld: 1,
+    leverage: 50,
+    direction: "SHORT",
+    tradeDatetime: monday,
+  });
+  assert(Math.abs(long.swapUSD - 1.23) < 0.02, `long=${long.swapUSD}`);
+  assert(Math.abs(short.swapUSD - -4.98) < 0.02, `short=${short.swapUSD}`);
+});
+
+test("383. GBPUSD_ORB spot-check prompt: LONG Mon -2.25x1x1.00", () => {
+  const r = calculateSwap({
+    instrument: requireSpec32("GBPUSD_ORB"),
+    daysHeld: 1,
+    leverage: 50,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 28),
+  });
+  assert(Math.abs(r.swapUSD - -2.25) < 0.001, `swapUSD=${r.swapUSD}`);
+});
+
+test("384. CADJPY Finex SHORT Senin = +0.96x1x0.63", () => {
+  const r = calculateSwap({
+    instrument: requireSpec32("CADJPY"),
+    daysHeld: 1,
+    leverage: 50,
+    direction: "SHORT",
+    tradeDatetime: new Date(2026, 8, 28),
+  });
+  assert(Math.abs(r.swapUSD - 0.6) < 0.02, `swapUSD=${r.swapUSD}`);
+});
+
+test("385. specs32 frozen (immutable registry paralel)", () => {
+  assert(Object.isFrozen(INSTRUMENT_SPECS_32), "registry tidak frozen");
+  assert(Object.isFrozen(OTB_SPECS_32), "OTB list tidak frozen");
+  assert(Object.isFrozen(FINEX_SPECS_32), "Finex list tidak frozen");
+  assert(
+    Object.isFrozen(requireSpec32("AUDJPY_ORB")),
+    "spec tidak frozen",
   );
 });
 

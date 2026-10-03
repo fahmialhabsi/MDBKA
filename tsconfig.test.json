@@ -31,6 +31,8 @@
     "src/lib/brokerRegistry.ts",
     "src/lib/brokerSymbols.ts",
     "src/lib/otbInstrumentConfig.ts",
+    "src/lib/instrumentSpecs32.ts",
+    "src/lib/jpySwapCalculator.ts",
     "src/services/fxRateService.ts",
     "src/services/dateService.ts",
     "src/services/quotesLogReader.test.ts",
