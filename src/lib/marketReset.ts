@@ -9,11 +9,12 @@ import {
   DEFAULT_BROKER_ID,
   ORBITRADER_BROKER_ID,
 } from "./brokerRegistry";
-import { exactOtbSymbol, isOtbSymbolVerified } from "./brokerSymbols";
+import { exactOtbSymbol } from "./brokerSymbols";
 import {
   calculateOtbTickValue,
   getOtbInstrumentProfile,
 } from "./otbInstrumentConfig";
+import { getSpec32FormDefaults } from "./spec32Wiring";
 import { traceOcrStage } from "./debugTrace";
 
 /** Field numerik MarketData yang dikosongkan (0) saat simbol berubah. */
@@ -400,14 +401,14 @@ function needsFill(value: number): boolean {
  * - Finex (default): pointValue/contractSize/buffer mengikuti preset
  *   instrumentConfig; perilaku lama byte-identik.
  * - OrbiTraderBerjangka: lookup EXACT (tanpa normalizeSymbol agar
- *   "GBPUSD_ORB" tidak terpangkas menjadi "GBPUSD"); HANYA simbol
- *   terverifikasi (lihat VERIFIED_OTB_SYMBOLS) yang memakai preset:
- *   pointValue dari kalkulator tick OTB, contractSize/minLot/lotStep
- *   dari preset terverifikasi; buffer dipertahankan.
- * - Simbol OTB pending (objek preset ada sebagai fixture tapi belum
- *   terverifikasi): kembalikan `previous` (referensi sama, tanpa
- *   partial apply, tanpa fallback Finex). Pengguna mengisi manual
- *   dari Specification; warning tampil via hasOtbPresetForSymbol.
+ *   "GBPUSD_ORB" tidak terpangkas menjadi "GBPUSD"); simbol terdaftar
+ *   di spec32 (16 OTB, Tahap 6D) yang memakai preset: pointValue dari
+ *   kalkulator tick OTB, contractSize/minLot/lotStep dari preset OTB,
+ *   commission dari spec32 (0.00); buffer dipertahankan.
+ * - Simbol di luar spec32 (invented/TBD): kembalikan `previous`
+ *   (referensi sama, tanpa partial apply, tanpa fallback Finex).
+ *   Pengguna mengisi manual dari Specification; warning tampil via
+ *   hasOtbPresetForSymbol.
  * - Default strategi hanya diisi bila kosong/invalid; equity/slippage
  *   TIDAK disentuh (wajib input/konfirmasi manual). Komisi OTB diisi dari
  *   preset terverifikasi bila kosong (user override dipertahankan).
@@ -418,9 +419,15 @@ export function applyBrokerPreset(
   brokerId: BrokerId = DEFAULT_BROKER_ID
 ): BrokerSettings {
   if (brokerId === ORBITRADER_BROKER_ID) {
-    // Kebijakan verifikasi: preset otomatis hanya untuk simbol
-    // terverifikasi. Simbol pending tidak memakai angka fixture.
-    if (!isOtbSymbolVerified(symbol)) {
+    // Tahap 6D: 16 simbol OTB aktif via spec32 (data CSV MT5 real).
+    // Gate verified = spec32 (commission 0.00 untuk semua 32 simbol).
+    // Simbol di luar spec32 (invented/TBD) → return previous
+    // (referensi sama, tanpa partial apply). OTB_PRESETS fixture tetap
+    // menjadi sumber profile fisik (pointValue/contractSize/minLot);
+    // commission diambil dari spec32, bukan fixture.
+    const spec32Defaults = getSpec32FormDefaults(symbol);
+
+    if (!spec32Defaults.verified) {
       return previous;
     }
 
@@ -434,10 +441,9 @@ export function applyBrokerPreset(
       ...previous,
       pointValue: calculateOtbTickValue(otb),
       contractSize: otb.contractSize,
-      commission:
-        otb.commission !== null && needsFill(previous.commission)
-          ? otb.commission.pricePerLot
-          : previous.commission,
+      commission: needsFill(previous.commission)
+        ? spec32Defaults.commission
+        : previous.commission,
       riskPercent: needsFill(previous.riskPercent)
         ? STRATEGY_DEFAULTS.riskPercent
         : previous.riskPercent,
