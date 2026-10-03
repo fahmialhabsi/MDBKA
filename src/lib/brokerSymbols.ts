@@ -36,6 +36,8 @@ export const OTB_ALL_SYMBOLS = [
  * Kebijakan verifikasi: GBPUSD_ORB (spec awal) + AUDCHF_ORB (Tahap 6E-1,
  * dikonfirmasi dari ekspor CSV terminal OTB 03 Okt 2026:
  * digits=5, tickSize=0.00001, swap -1.5/-1.5 percentage, min/max 0.1/10).
+ * + AUDJPY_ORB (Tahap 6E-2, ekspor CSV sama: digits=3, tickSize=0.001,
+ *   swap -1.25/-1.75 percentage, min/max 0.1/10).
  * Komisi 33/lot dipertahankan sesuai spec lama (kolom Commission=0.00
  * pada CSV dianggap tidak berlaku). Simbol lain di OTB_ALL_SYMBOLS
  * tetap tampil di dropdown (pending) tetapi wajib menampilkan warning
@@ -45,6 +47,7 @@ export const OTB_ALL_SYMBOLS = [
 export const VERIFIED_OTB_SYMBOLS: readonly string[] = Object.freeze([
   "GBPUSD_ORB",
   "AUDCHF_ORB",
+  "AUDJPY_ORB",
 ]);
 
 /** True bila simbol OTB terverifikasi (exact, case-sensitive). */
