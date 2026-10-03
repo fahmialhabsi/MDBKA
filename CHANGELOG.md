@@ -1,5 +1,15 @@
 # CHANGELOG MDBKA
 
+## v1.0.5-tahap6e — Verifikasi 10 Simbol OTB (4 Okt 2026)
+
+Tahap 6E: 10 simbol `_ORB` pending dikonfirmasi dari ekspor CSV terminal
+OTB 03 Okt 2026 (digits, tickSize, swap long/short, min/max volume cocok
+semua; komisi 33/lot dipertahankan, kolom Commission=0.00 CSV dianggap
+tidak berlaku). Gate `VERIFIED_OTB_SYMBOLS`: 1 → 11
+(GBPUSD + AUDCHF, AUDJPY, AUDNZD, AUDUSD, CADJPY, CHFJPY, EURAUD, EURCAD,
+GBPAUD, USDCAD). Tersisa AUDCAD + EURCHF pending (field default kelas
+menunggu jendela Specification). **407/407 tests lolos, zero regression.**
+
 ## v1.0.4-tahap6d — Spec32 Integration, 16 OTB (4 Okt 2026)
 
 Tahap 6D OPSI 2: integrasi spec32 + 16 simbol OTB terverifikasi
@@ -34,8 +44,8 @@ perubahan aditif dan backward-compatible; tidak perlu migrasi dari v1.0.0.
 ### Diperbaiki
 - Penomoran suite async bersifat lokal-suite (klarifikasi komentar)
 
-### Diketahui (deferred ke Tahap 6+)
-- 10 simbol OTB pending menunggu verifikasi Specification
+### Diketahui (deferred ke Tahap 6+; update 6E: tersisa 2)
+- 2 simbol OTB pending (AUDCAD, EURCHF) menunggu konfirmasi jendela Specification
 - Risiko JPY belum final; `maintenanceMargin` OTB placeholder
 - FX rate harian ECB; Finex demo 2 simbol
 

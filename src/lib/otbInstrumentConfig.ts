@@ -72,17 +72,22 @@ function freezeOtbProfile(
 }
 
 /**
- * Preset OTB terverifikasi dari Specification (per 02 Okt 2026).
- * Kunci = nama simbol OTB persis (case-sensitive).
+ * Preset OTB terverifikasi dari Specification (per 02 Okt 2026),
+ * cross-check ekspor CSV terminal OTB 03 Okt 2026 (Tahap 6E).
  *
  * Catatan data:
  * - tickValue tersimpan dalam PROFIT currency (nilainya sama dengan
  *   calculateOtbTickValue; cross-check di test). Konversi ke USD untuk
  *   pair non-USD-quote (AUDCAD, EURCHF) butuh rate — TBD tahap lanjut.
- * - Field bertanda VERIFY pada AUDCAD_ORB/EURCHF_ORB mengikuti default
- *   kelas forex GBPUSD_ORB (spread floating, stops 20, volume 0.1/10/0.1,
- *   komisi 33 range 0.01–1000); konfirmasi dari spec bila berbeda —
- *   perbaikannya satu baris + update test.
+ *   (Kolom Tick_Value CSV memakai konvensi deposit-USD, mis. AUDCAD 0.70;
+ *   bukan konflik, hanya konvensi berbeda.)
+ * - Field AUDCAD_ORB/EURCHF_ORB bertanda VERIFY mengikuti default kelas
+ *   forex GBPUSD_ORB; angka CSV cocok untuk digits/tickSize/swap/min/max
+ *   (maxVolume=10 terkonfirmasi CSV 6E). spreadMode, stopsLevel,
+ *   volumeStep, dan range komisi tetap menunggu konfirmasi jendela
+ *   Specification — perbaikannya satu baris + update test.
+ * - Komisi 33/lot dipertahankan (keputusan 6E); kolom Commission=0.00
+ *   pada CSV dianggap tidak berlaku untuk akun ini.
  */
 export const OTB_PRESETS: Record<string, OtbInstrumentProfile> =
   Object.freeze({
@@ -117,14 +122,14 @@ export const OTB_PRESETS: Record<string, OtbInstrumentProfile> =
       symbol: "AUDCAD_ORB",
       digits: 5,
       contractSize: 100000,
-      // VERIFY: mengikuti default kelas forex GBPUSD_ORB.
+      // VERIFY (jendela Specification): spreadMode mengikuti default kelas.
       spreadMode: "floating",
-      // VERIFY: mengikuti default kelas forex GBPUSD_ORB.
+      // VERIFY (jendela Specification): stopsLevel mengikuti default kelas.
       stopsLevel: 20,
       minVolume: 0.1,
-      // VERIFY: mengikuti default kelas forex GBPUSD_ORB.
+      // CSV 6E: maxVolume=10 terkonfirmasi.
       maxVolume: 10,
-      // VERIFY: mengikuti default kelas forex GBPUSD_ORB.
+      // VERIFY (jendela Specification): volumeStep mengikuti default kelas.
       volumeStep: 0.1,
       tickSize: 0.00001,
       // Nilai spec (unit profit currency, CAD); sama dengan kalkulator.
@@ -136,7 +141,7 @@ export const OTB_PRESETS: Record<string, OtbInstrumentProfile> =
       currencyMargin: "USD",
       contractCurrency: "AUD",
       calculationMode: "Forex",
-      // VERIFY: range mengikuti spec GBPUSD_ORB.
+      // VERIFY (jendela Specification): range komisi mengikuti GBPUSD_ORB.
       commission: {
         volumeMin: 0.01,
         volumeMax: 1000,
@@ -150,14 +155,14 @@ export const OTB_PRESETS: Record<string, OtbInstrumentProfile> =
       symbol: "EURCHF_ORB",
       digits: 5,
       contractSize: 100000,
-      // VERIFY: mengikuti default kelas forex GBPUSD_ORB.
+      // VERIFY (jendela Specification): spreadMode mengikuti default kelas.
       spreadMode: "floating",
-      // VERIFY: mengikuti default kelas forex GBPUSD_ORB.
+      // VERIFY (jendela Specification): stopsLevel mengikuti default kelas.
       stopsLevel: 20,
       minVolume: 0.1,
-      // VERIFY: mengikuti default kelas forex GBPUSD_ORB.
+      // CSV 6E: maxVolume=10 terkonfirmasi.
       maxVolume: 10,
-      // VERIFY: mengikuti default kelas forex GBPUSD_ORB.
+      // VERIFY (jendela Specification): volumeStep mengikuti default kelas.
       volumeStep: 0.1,
       tickSize: 0.00001,
       // Nilai spec (unit profit currency, CHF); sama dengan kalkulator.
@@ -169,7 +174,7 @@ export const OTB_PRESETS: Record<string, OtbInstrumentProfile> =
       currencyMargin: "USD",
       contractCurrency: "EUR",
       calculationMode: "Forex",
-      // VERIFY: range mengikuti spec GBPUSD_ORB.
+      // VERIFY (jendela Specification): range komisi mengikuti GBPUSD_ORB.
       commission: {
         volumeMin: 0.01,
         volumeMax: 1000,
