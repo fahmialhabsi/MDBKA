@@ -6,3 +6,5 @@ dist-tests/
 .env.local
 *.log
 .DS_Store
+
+*.tar.gz
