@@ -116,6 +116,14 @@ import {
   getJPYRate,
   isTripleDay,
 } from "../src/lib/jpySwapCalculator";
+import {
+  SPEC32_FALLBACK_COMMISSION,
+  SPEC32_FALLBACK_LEVERAGE,
+  getSpec32FormDefaults,
+  getSpec32SwapPreview,
+  isSpec32Available,
+  spec32VerificationNotice,
+} from "../src/lib/spec32Wiring";
 
 let passed = 0;
 let failed = 0;
@@ -5556,6 +5564,176 @@ test("385. specs32 frozen (immutable registry paralel)", () => {
     Object.isFrozen(requireSpec32("AUDJPY_ORB")),
     "spec tidak frozen",
   );
+});
+
+/* ---------------- Tahap 6C-safe additive (paralel, tanpa sentuh legacy): TEST 386-400 ---------------- */
+/* Adapter spec32Wiring + non-regresi legacy. Tidak ada rewrite test 1-385. */
+
+test("386. wiring form defaults OTB GBPUSD_ORB → 100000/0/verified", () => {
+  const d = getSpec32FormDefaults("GBPUSD_ORB");
+  assert(d.leverage === 100000, `leverage=${d.leverage}`);
+  assert(d.commission === 0, `commission=${d.commission}`);
+  assert(d.verified === true, "harus verified");
+  assert(isSpec32Available("GBPUSD_ORB") === true, "available gagal");
+});
+
+test("387. wiring form defaults Finex GBPUSD + US100", () => {
+  const gbp = getSpec32FormDefaults("GBPUSD");
+  assert(gbp.leverage === 100000 && gbp.commission === 0 && gbp.verified, "GBPUSD salah");
+  const us100 = getSpec32FormDefaults("US100");
+  assert(us100.leverage === 100000 && us100.commission === 0 && us100.verified, "US100 salah");
+});
+
+test("388. wiring fallback unknown/empty (tanpa fabrikasi)", () => {
+  const unknown = getSpec32FormDefaults("XYZ");
+  assert(unknown.leverage === SPEC32_FALLBACK_LEVERAGE, "fallback leverage salah");
+  assert(unknown.commission === SPEC32_FALLBACK_COMMISSION, "fallback commission salah");
+  assert(unknown.verified === false, "unknown dianggap verified");
+  assert(isSpec32Available("XYZ") === false, "unknown available");
+  assert(isSpec32Available("") === false, "empty available");
+});
+
+test("389. wiring semua 32 simbol verified available", () => {
+  for (const s of Object.keys(INSTRUMENT_SPECS_32)) {
+    const d = getSpec32FormDefaults(s);
+    assert(d.verified === true, `${s} tidak verified`);
+    assert(d.commission === 0, `${s} commission bukan 0`);
+    assert(isSpec32Available(s) === true, `${s} tidak available`);
+  }
+});
+
+test("390. wiring swap preview AUDJPY_ORB LONG Mon = -0.79", () => {
+  const r = getSpec32SwapPreview({
+    symbol: "AUDJPY_ORB",
+    daysHeld: 1,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 28),
+  });
+  if (r === null) throw new Error("preview null");
+  assert(Math.abs(r.swapUSD - -0.79) < 0.01, `swapUSD=${r.swapUSD}`);
+});
+
+test("391. wiring swap preview AUDJPY_ORB LONG Wed = -2.36 (3x)", () => {
+  const r = getSpec32SwapPreview({
+    symbol: "AUDJPY_ORB",
+    daysHeld: 1,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 8, 30),
+  });
+  if (r === null) throw new Error("preview null");
+  assert(Math.abs(r.swapUSD - -2.36) < 0.01, `swapUSD=${r.swapUSD}`);
+  assert(r.tripleDayHit === true, "triple tidak hit");
+});
+
+test("392. wiring swap preview null untuk unknown/0-hari", () => {
+  assert(
+    getSpec32SwapPreview({
+      symbol: "XYZ",
+      daysHeld: 1,
+      direction: "LONG",
+      tradeDatetime: new Date(2026, 8, 28),
+    }) === null,
+    "unknown harus null",
+  );
+  assert(
+    getSpec32SwapPreview({
+      symbol: "AUDJPY_ORB",
+      daysHeld: 0,
+      direction: "LONG",
+      tradeDatetime: new Date(2026, 8, 28),
+    }) === null,
+    "0 hari harus null",
+  );
+});
+
+test("393. wiring verification notice (null vs fallback)", () => {
+  assert(spec32VerificationNotice("GBPUSD_ORB") === null, "verified harus null");
+  assert(spec32VerificationNotice("") === null, "empty harus null");
+  const notice = spec32VerificationNotice("XYZ");
+  assert(notice !== null && notice.includes("XYZ"), `notice=${notice}`);
+});
+
+test("394. legacy non-regresi: swapCost flat GBPUSD_ORB tetap -2.25", () => {
+  const cost = calculateSwapCost({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 1,
+  });
+  if (cost === null) throw new Error("legacy null");
+  assert(Math.abs(cost.swapCost - -2.25) < 1e-9, `legacy=${cost.swapCost}`);
+});
+
+test("395. legacy non-regresi: dateService triple Sel-Rab = 4x", () => {
+  const total = calculateSwapWithTriple({
+    holdingDays: 2,
+    swapPerDay: 10,
+    startDate: new Date(2026, 8, 29),
+  });
+  assert(total === 40, `total=${total}`);
+});
+
+test("396. legacy non-regresi: preset Finex + OTB pending no-apply utuh", () => {
+  const finex = applyBrokerPreset(makeEmptyBroker(), "GBPUSD", "finex");
+  assert(finex.pointValue === 100000 && finex.commission === 0, "Finex berubah");
+  const previous = makeEmptyBroker();
+  assert(
+    applyBrokerPreset(previous, "AUDCAD_ORB", "orbitraderberjangka") === previous,
+    "pending ikut ter-apply",
+  );
+});
+
+test("397. wiring modul murni (tanpa impor legacy/UI)", () => {
+  const src = readSrc("src/lib/spec32Wiring.ts");
+  assert(src.includes("instrumentSpecs32"), "impor spec32 hilang");
+  assert(src.includes("jpySwapCalculator"), "impor kalkulator hilang");
+  assert(!src.includes("from \"./swapCost\""), "tercemar modul biaya legacy");
+  assert(!src.includes("from \"../calculations/swapCost\""), "tercemar kalkulator legacy");
+  assert(!src.includes("extraction/ExtractedDataForm"), "tercemar komponen form");
+  assert(!src.includes("result/AnalysisResult"), "tercemar komponen hasil");
+});
+
+test("398. wiring spot-check US100 Jumat triple via preview", () => {
+  const r = getSpec32SwapPreview({
+    symbol: "US100",
+    daysHeld: 1,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 9, 2), // Jumat 2026-10-02
+  });
+  if (r === null) throw new Error("preview null");
+  assert(r.tripleDayHit === true, "Jumat tidak triple");
+  assert(Math.abs(r.swapUSD - -15.17) < 0.02, `swapUSD=${r.swapUSD}`);
+});
+
+test("399. wiring spot-check AUDCAD_ORB LONG 2 hari = -1.05", () => {
+  const r = getSpec32SwapPreview({
+    symbol: "AUDCAD_ORB",
+    daysHeld: 2,
+    direction: "LONG",
+    tradeDatetime: new Date(2026, 9, 2), // Jum+Sab, tanpa triple
+  });
+  if (r === null) throw new Error("preview null");
+  assert(Math.abs(r.swapUSD - -1.05) < 0.01, `swapUSD=${r.swapUSD}`);
+});
+
+test("400. wiring SHORT memakai swapShort (USDJPY Finex)", () => {
+  const monday = new Date(2026, 8, 28);
+  const long = getSpec32SwapPreview({
+    symbol: "USDJPY",
+    daysHeld: 1,
+    direction: "LONG",
+    tradeDatetime: monday,
+  });
+  const short = getSpec32SwapPreview({
+    symbol: "USDJPY",
+    daysHeld: 1,
+    direction: "SHORT",
+    tradeDatetime: monday,
+  });
+  if (long === null || short === null) throw new Error("preview null");
+  assert(Math.abs(long.swapUSD - 1.23) < 0.02, `long=${long.swapUSD}`);
+  assert(Math.abs(short.swapUSD - -4.98) < 0.02, `short=${short.swapUSD}`);
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

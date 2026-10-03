@@ -33,6 +33,7 @@
     "src/lib/otbInstrumentConfig.ts",
     "src/lib/instrumentSpecs32.ts",
     "src/lib/jpySwapCalculator.ts",
+    "src/lib/spec32Wiring.ts",
     "src/services/fxRateService.ts",
     "src/services/dateService.ts",
     "src/services/quotesLogReader.test.ts",
