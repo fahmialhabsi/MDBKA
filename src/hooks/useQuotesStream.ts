@@ -107,6 +107,18 @@ export function useQuotesStream(
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
 
+  // Ganti simbol/sumber broker: buang quote lama agar tidak tampil
+  // basi selama koneksi ke sumber baru berlangsung.
+  // Reset fase-render (pola resmi React, tanpa cascading effect).
+  const streamKey = `${brokerId ?? "default"}:${symbol}`;
+  const [prevKey, setPrevKey] = useState(streamKey);
+  if (prevKey !== streamKey) {
+    setPrevKey(streamKey);
+    setQuote(null);
+    setIsConnected(false);
+    setError(null);
+  }
+
   useEffect(() => {
     let cancelled = false;
     const query = brokerId === undefined ? "" : `?broker=${brokerId}`;

@@ -7,6 +7,8 @@ export const LIVE_SOURCE_TEST_COUNT = 8;
 
 export async function runLiveSourceTests(): Promise<boolean> {
   let passCount = 0;
+  // Nomor label di bawah bersifat lokal-suite (bukan nomor urut global
+  // run-tests.ts); yang otoritatif adalah LIVE_SOURCE_TEST_COUNT.
   let testNum = 345;
 
   function check(name: string, cond: boolean): void {

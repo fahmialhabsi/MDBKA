@@ -41,6 +41,18 @@ export function useEquityStream(
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
 
+  // Ganti sumber broker: buang snapshot broker lama agar tidak tampil
+  // basi (berlabel Live) selama koneksi ke sumber baru berlangsung.
+  // Reset fase-render (pola resmi React, tanpa cascading effect).
+  // Hasil analisa sendiri sudah di-clear di App.handleBrokerChange.
+  const [brokerKey, setBrokerKey] = useState(brokerId);
+  if (brokerKey !== brokerId) {
+    setBrokerKey(brokerId);
+    setEquity(null);
+    setIsConnected(false);
+    setError(null);
+  }
+
   useEffect(() => {
     let cancelled = false;
     const query = equityBrokerQuery(brokerId);

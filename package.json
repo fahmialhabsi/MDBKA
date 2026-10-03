@@ -1,6 +1,6 @@
 {
   "name": "mdbka",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Trading Education & Risk Calculator untuk MetaTrader 5 (OTB + Finex).",
   "main": "index.js",
   "directories": {

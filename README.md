@@ -11,6 +11,9 @@ Trading Education & Risk Calculator untuk MetaTrader 5 (OTB + Finex)
 ✅ **FX Rate Live** — ECB daily rate, konversi CAD/CHF/JPY → USD
 ✅ **Swap Cost Calculator** — flat USD/lot (Finex) + percentage (OTB 10)
 ✅ **Holding Days Tracker** — intraday (0 hari) + swing (1-10 hari) holding cost
+✅ **Triple-Swap Wednesday** — auto-deteksi hari Rabu × 3
+✅ **Live Equity + Live Quotes** — SSE real-time dual-source (OTB + Finex), display-only
+✅ **Responsive Dashboard** — sidebar live sticky desktop, stack mobile
 
 ## 🚀 Cara Pakai
 
@@ -48,10 +51,10 @@ npm run dev
 
 ## ⚠️ Known Limitations
 
-- **Equity manual entry** — belum auto-connect MT5 live equity (TBD Tahap 5E)
-- **Triple-swap Wednesday** — belum model Rabu × 3 (Tahap 5E backlog)
+- **Live equity display-only** — tidak otomatis menimpa input equity manual (konfirmasi pengguna)
 - **FX rate daily** — update 1x sehari (ECB), bukan real-time minute
 - **Finex limited** — hanya 2 simbol untuk demo
+- **OTB pending** — 10 simbol `_ORB` menunggu verifikasi Specification (hanya `GBPUSD_ORB` terverifikasi)
 
 ## 🛠️ Tech Stack
 
@@ -59,7 +62,7 @@ npm run dev
 - OCR: regex + region-based text extraction
 - CSV: Papa Parse (50+ candle validation)
 - FX Rate: ECB free API (fallback hardcoded)
-- Test: 309/309 lolos (zero regression)
+- Test: 349/349 lolos (zero regression)
 
 ## 🔌 Tahap 5E-STEP2: Live Equity (Node.js Backend)
 
@@ -87,8 +90,16 @@ npm run dev:backend      # Backend 3000 (tsx watch server/index.ts)
 - GET `/api/equity/stream` — SSE stream + heartbeat 30 dtk
 - GET `/health` — liveness probe
 
+## 🔌 Tahap 5E-STEP3: Live Quotes + Dual-Source (OTB + Finex)
+
+- EA MT5 menulis `quotes.csv` (`Timestamp,Symbol,Bid,Ask`) per tick di tiap terminal
+- Backend me-resolve sumber via `?broker=finex|orbitraderberjangka` (absen = default OTB, unknown = 400, belum dikonfigurasi = 404 — tanpa fallback diam)
+- Env: `QUOTES_LOG_PATH` (OTB) + `QUOTES_LOG_PATH_FINEX` / `MT5_LOG_PATH_FINEX` (opsional, lihat `.env.example`)
+- Ganti broker di UI me-reset snapshot live + hasil analisa lama (tanpa data basi lintas broker)
+
 ## 📝 Version
 
+v1.0.1 — Tahap 5E Complete: dual-source live + responsive dashboard (3 Okt 2026)
 v1.0.0 — MVP Complete (2 Okt 2026)
 
 ## 📧 Usage Notes
