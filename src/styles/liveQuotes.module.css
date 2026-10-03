@@ -1,0 +1,185 @@
+/* LiveQuotes card — selaras design system MDBKA (dark slate + teal/emerald).
+   Display-only: styling tanpa logika. Angka memakai font monospace agar
+   digit Bid/Ask sejajar saat streaming. */
+
+.card {
+  border: 1px solid rgb(45 212 191 / 0.25);
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgb(15 23 42 / 0.9), rgb(2 6 23 / 0.95));
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+  padding: 22px;
+  color: #e2e8f0;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5eead4;
+  margin: 0;
+}
+
+.symbol {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #a7f3d0;
+  background: rgb(52 211 153 / 0.12);
+  border: 1px solid rgb(52 211 153 / 0.3);
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+
+.error {
+  font-size: 13px;
+  color: #fca5a5;
+  background: rgb(248 113 113 / 0.1);
+  border: 1px solid rgb(248 113 113 / 0.3);
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.cell {
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgb(2 6 23 / 0.6);
+  border: 1px solid rgb(148 163 184 / 0.15);
+}
+
+.cellBid {
+  border-color: rgb(96 165 250 / 0.4);
+}
+
+.cellAsk {
+  border-color: rgb(52 211 153 / 0.4);
+}
+
+.label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.labelBid {
+  color: #93c5fd;
+}
+
+.labelAsk {
+  color: #6ee7b7;
+}
+
+.value {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.valueBid {
+  color: #60a5fa;
+}
+
+.valueAsk {
+  color: #34d399;
+}
+
+.timestamp {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.empty {
+  font-size: 14px;
+  color: #94a3b8;
+  margin: 4px 0;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.statusLive {
+  color: #6ee7b7;
+}
+
+.statusPolling {
+  color: #fcd34d;
+}
+
+.statusOff {
+  color: #64748b;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.dotLive {
+  background: #34d399;
+  box-shadow: 0 0 8px rgb(52 211 153 / 0.9);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.dotPolling {
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgb(251 191 36 / 0.7);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.dotOff {
+  background: #475569;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dotLive,
+  .dotPolling {
+    animation: none;
+  }
+}

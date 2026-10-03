@@ -1,4 +1,5 @@
 import { useQuotesStream } from "../../hooks/useQuotesStream";
+import styles from "../../styles/liveQuotes.module.css";
 
 interface LiveQuotesProps {
   symbol: string;
@@ -7,42 +8,55 @@ interface LiveQuotesProps {
 export function LiveQuotes({ symbol }: LiveQuotesProps) {
   const { quote, isConnected, error } = useQuotesStream(symbol);
 
+  const dotClass = !isConnected
+    ? `${styles.dot} ${styles.dotOff}`
+    : quote
+      ? `${styles.dot} ${styles.dotLive}`
+      : `${styles.dot} ${styles.dotPolling}`;
+
   return (
-    <div className="rounded-lg border border-gray-300 bg-white p-4 shadow-sm">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">Live Quotes</h3>
-        <div
-          className={`h-2 w-2 rounded-full ${
-            isConnected ? "bg-green-500" : "bg-red-500"
-          }`}
-        />
+    <div className={styles.card}>
+      <div className={styles.header}>
+        <h3 className={styles.title}>Live Quotes</h3>
+        <span className={styles.symbol}>{symbol || "-"}</span>
+        <div className={dotClass} />
       </div>
 
-      {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+      {error && <p className={styles.error}>{error}</p>}
 
       {quote ? (
-        <div className="space-y-1">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Bid:</span>
-            <span className="font-mono font-semibold text-blue-600">
-              {quote.bid ? quote.bid.toFixed(5) : "-"}
-            </span>
+        <div>
+          <div className={styles.grid}>
+            <div className={`${styles.cell} ${styles.cellBid}`}>
+              <span className={`${styles.label} ${styles.labelBid}`}>Bid</span>
+              <span className={`${styles.value} ${styles.valueBid}`}>
+                {quote.bid ? quote.bid.toFixed(5) : "-"}
+              </span>
+            </div>
+            <div className={`${styles.cell} ${styles.cellAsk}`}>
+              <span className={`${styles.label} ${styles.labelAsk}`}>Ask</span>
+              <span className={`${styles.value} ${styles.valueAsk}`}>
+                {quote.ask ? quote.ask.toFixed(5) : "-"}
+              </span>
+            </div>
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Ask:</span>
-            <span className="font-mono font-semibold text-green-600">
-              {quote.ask ? quote.ask.toFixed(5) : "-"}
-            </span>
-          </div>
-          <div className="mt-2 text-xs text-gray-500">{quote.timestamp}</div>
+          <div className={styles.timestamp}>{quote.timestamp}</div>
         </div>
       ) : (
-        <p className="text-xs text-gray-500">Menunggu data...</p>
+        <p className={styles.empty}>Menunggu data...</p>
       )}
 
       {isConnected && !error && (
-        <p className="mt-2 text-xs text-gray-400">
-          {quote ? "SSE Connected" : "Polling..."}
+        <p
+          className={`${styles.footer} ${quote ? styles.statusLive : styles.statusPolling}`}
+        >
+          {quote ? "🟢 SSE Connected" : "🟡 Polling..."}
+        </p>
+      )}
+
+      {!isConnected && !error && (
+        <p className={`${styles.footer} ${styles.statusOff}`}>
+          🔴 Terputus — menunggu koneksi...
         </p>
       )}
     </div>
