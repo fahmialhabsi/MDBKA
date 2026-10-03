@@ -99,6 +99,7 @@ import {
   MT5LogReader,
   parseEquityFromText,
 } from "../server/services/mt5LogReader";
+import { isEquitySnapshot } from "../server/types/equity";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 
 let passed = 0;
@@ -4977,10 +4978,100 @@ test("332. Finex tidak terpengaruh kebijakan verifikasi OTB", () => {
   );
 });
 
-// Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream):
+/* Tahap 5E-3G — guard equity + pin kebijakan: TEST 336-338. */
+
+test("336. isEquitySnapshot menerima valid, menolak malformed", () => {
+  assert(
+    isEquitySnapshot({
+      timestamp: "2026-10-03T00:00:00.000Z",
+      balance: 1000.5,
+      equity: 1060,
+      profit: 59.5,
+      lastModified: "2026-10-03T00:00:00.000Z",
+    }),
+    "snapshot valid ditolak",
+  );
+  assert(
+    isEquitySnapshot({
+      timestamp: "t",
+      balance: 1,
+      equity: 2,
+      profit: 1,
+      tradeCount: 0,
+    }),
+    "tradeCount opsional ditolak",
+  );
+  assert(!isEquitySnapshot(null), "null lolos");
+  assert(!isEquitySnapshot({ bid: 1, ask: 2 }), "quote lolos sebagai equity");
+  assert(
+    !isEquitySnapshot({ timestamp: "t", balance: 1, equity: 2 }),
+    "profit hilang lolos",
+  );
+  assert(
+    !isEquitySnapshot({
+      timestamp: "t",
+      balance: 1,
+      equity: NaN,
+      profit: 0,
+    }),
+    "equity NaN lolos",
+  );
+  assert(
+    !isEquitySnapshot({
+      timestamp: "t",
+      balance: 1,
+      equity: 2,
+      profit: 1,
+      tradeCount: -1,
+    }),
+    "tradeCount negatif lolos",
+  );
+  const hook = readSrc("src/hooks/useEquityStream.ts");
+  assert(
+    hook.includes("isEquitySnapshot"),
+    "hook tidak memvalidasi payload equity",
+  );
+  assert(
+    !hook.includes("as EquitySnapshot"),
+    "cast langsung JSON->EquitySnapshot masih ada",
+  );
+});
+
+test("337. VERIFIED_OTB_SYMBOLS tetap hanya GBPUSD_ORB", () => {
+  assert(
+    VERIFIED_OTB_SYMBOLS.length === 1 &&
+      VERIFIED_OTB_SYMBOLS[0] === "GBPUSD_ORB",
+    "daftar verified berubah (12 pending tidak boleh aktif)",
+  );
+});
+
+test("338. kontrak SSE quotes tidak berubah", () => {
+  const types = readSrc("server/types/quotes.ts");
+  assert(
+    types.includes("QuoteSseEnvelope"),
+    "tipe envelope tunggal hilang",
+  );
+  assert(
+    types.includes('"init"') && types.includes('"update"'),
+    "varian init/update hilang",
+  );
+  const hook = readSrc("src/hooks/useQuotesStream.ts");
+  assert(
+    hook.includes("extractQuoteFromEnvelope") &&
+      hook.includes("extractQuoteFromRestPayload"),
+    "hook lepas dari helper envelope",
+  );
+  assert(
+    !hook.includes("as QuoteSnapshot"),
+    "cast langsung kembali muncul",
+  );
+});
+
+// Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +
+// 339-344 (hardening akses file MT5):
 // SATU runner async utama dengan SATU process.exit. Dua IIFE terpisah
-// dilarang (balapan exit + ringkasan ganda). Jumlah stream dibaca dari
-// QUOTES_STREAM_TEST_COUNT agar tidak hard-code di dua tempat.
+// dilarang (balapan exit + ringkasan ganda). Jumlah stream/hardening
+// dibaca dari konstanta suite agar tidak hard-code di dua tempat.
 (async () => {
   try {
     const allPassed = await runQuotesLogReaderTests();
@@ -5010,6 +5101,24 @@ test("332. Finex tidak terpengaruh kebijakan verifikasi OTB", () => {
     // Import gagal -> count tak terbaca; samakan dengan
     // QUOTES_STREAM_TEST_COUNT di src/hooks/useQuotesStream.test.ts.
     failed += 12;
+  }
+
+  try {
+    const {
+      READER_HARDENING_TEST_COUNT,
+      runReaderHardeningTests,
+    } = await import("../src/services/quotesLogReader.test");
+    const allPassed = await runReaderHardeningTests();
+    if (allPassed) {
+      passed += READER_HARDENING_TEST_COUNT;
+    } else {
+      failed += READER_HARDENING_TEST_COUNT;
+    }
+  } catch (e) {
+    console.error("✗ Reader hardening test suite error:", e);
+    // Samakan dengan READER_HARDENING_TEST_COUNT di
+    // src/services/quotesLogReader.test.ts.
+    failed += 6;
   }
 
   console.log(

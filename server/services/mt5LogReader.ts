@@ -53,6 +53,75 @@ function lastAmount(re: RegExp, text: string): number | null {
  * Profit: bila log tak menulis Profit, diderivasi equity - balance.
  * Mengembalikan null bila Balance maupun Equity tak ditemukan.
  */
+/**
+ * Parse satu baris CSV equity format:
+ * Timestamp,Balance,Equity[,Profit[,TradeCount]].
+ * Ketat: Balance/Equity wajib numerik finite, Equity >= 0; Profit bila
+ * ada wajib finite (bila tidak ada diderivasi equity - balance);
+ * TradeCount bila ada wajib integer >= 0. Baris header/non-numerik
+ * mengembalikan null (bukan angka fiktif).
+ */
+export function parseEquityCsvLine(line: string): ParsedEquity | null {
+  const cells = line.replace(/^\uFEFF/, "").split(",");
+  if (cells.length < 3) return null;
+  const numeric = /^-?[\d.]+$/;
+  const balanceRaw = (cells[1] ?? "").trim();
+  const equityRaw = (cells[2] ?? "").trim();
+  if (!numeric.test(balanceRaw) || !numeric.test(equityRaw)) return null;
+  const balance = Number(balanceRaw);
+  const equity = Number(equityRaw);
+  if (!Number.isFinite(balance) || !Number.isFinite(equity)) return null;
+  if (equity < 0) return null;
+  let profit: number | null = null;
+  if (cells.length >= 4) {
+    const profitRaw = (cells[3] ?? "").trim();
+    if (profitRaw.length > 0) {
+      if (!numeric.test(profitRaw)) return null;
+      profit = Number(profitRaw);
+      if (!Number.isFinite(profit)) return null;
+    }
+  }
+  let tradeCount: number | undefined;
+  if (cells.length >= 5) {
+    const tradesRaw = (cells[4] ?? "").trim();
+    if (tradesRaw.length > 0) {
+      if (!/^\d+$/.test(tradesRaw)) return null;
+      tradeCount = Math.max(0, Math.floor(Number(tradesRaw)));
+    }
+  }
+  return {
+    balance,
+    equity,
+    profit: profit ?? equity - balance,
+    ...(tradeCount !== undefined ? { tradeCount } : {}),
+  };
+}
+
+/**
+ * Parse seluruh isi CSV equity: baris valid TERAKHIR menang
+ * (deterministik untuk file yang di-append EA). Null bila tidak ada
+ * baris valid (bukan 0 fiktif).
+ */
+export function parseEquityCsvText(text: string): ParsedEquity | null {
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
+  let found: ParsedEquity | null = null;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const parsed = parseEquityCsvLine(line);
+    if (parsed !== null) found = parsed;
+  }
+  return found;
+}
+
+/**
+ * Parse snapshot equity dari teks: format `Key: value` dulu (prioritas,
+ * perilaku lama byte-identik), lalu fallback baris CSV ketat bila
+ * format teks tidak menemukan apa pun. Tidak pernah menebak angka.
+ */
+export function parseEquitySnapshotText(text: string): ParsedEquity | null {
+  return parseEquityFromText(text) ?? parseEquityCsvText(text);
+}
+
 export function parseEquityFromText(text: string): ParsedEquity | null {
   const balance = lastAmount(BALANCE_RE, text);
   const equity = lastAmount(EQUITY_RE, text);
@@ -175,7 +244,7 @@ export class MT5LogReader {
       return;
     }
 
-    const parsed = parseEquityFromText(text);
+    const parsed = parseEquitySnapshotText(text);
     if (parsed === null) return;
 
     const snapshot = readSnapshot(logFile, parsed);

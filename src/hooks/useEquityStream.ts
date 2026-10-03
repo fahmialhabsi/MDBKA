@@ -9,7 +9,10 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { EquitySnapshot } from "../../server/types/equity";
+import {
+  isEquitySnapshot,
+  type EquitySnapshot,
+} from "../../server/types/equity";
 
 const EQUITY_BASE_URL = "http://localhost:3000";
 
@@ -32,9 +35,12 @@ export function useEquityStream(pollIntervalMs = 5000): EquityStreamState {
       try {
         const res = await fetch(`${EQUITY_BASE_URL}/api/equity/latest`);
         if (!res.ok) throw new Error(`Backend HTTP ${res.status}`);
-        const data = (await res.json()) as EquitySnapshot;
+        const payload: unknown = (await res.json()) as unknown;
+        if (!isEquitySnapshot(payload)) {
+          throw new Error("Format equity tidak dikenal");
+        }
         if (!cancelled) {
-          setEquity(data);
+          setEquity(payload);
           setIsConnected(true);
           setError(null);
         }
@@ -64,9 +70,12 @@ export function useEquityStream(pollIntervalMs = 5000): EquityStreamState {
       };
       source.onmessage = (event: MessageEvent) => {
         try {
-          const data = JSON.parse(event.data) as EquitySnapshot;
+          const payload: unknown = JSON.parse(event.data) as unknown;
+          if (!isEquitySnapshot(payload)) {
+            throw new Error("Format equity tidak dikenal");
+          }
           if (!cancelled) {
-            setEquity(data);
+            setEquity(payload);
             setIsConnected(true);
             setError(null);
           }
