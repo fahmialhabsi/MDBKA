@@ -1,4 +1,5 @@
-﻿import type { MarketData } from "../../types/analysis";
+﻿import { useEffect } from "react";
+import type { MarketData } from "../../types/analysis";
 import type { BrokerId } from "../../types/broker";
 import {
   SUPPORTED_SYMBOLS,
@@ -82,6 +83,21 @@ export default function ExtractedDataForm({
       resistance: 0
     });
   }
+
+  // Auto-set symbol berdasarkan broker:
+  // - orbitraderberjangka → GBPUSD_ORB (dari MT5 EA)
+  // - finex / lainnya → GBPUSD (live forex)
+  // onChange broker → setSymbol otomatis, tanpa input manual ulang.
+  useEffect(() => {
+    const targetSymbol =
+      brokerId === "orbitraderberjangka" ? "GBPUSD_ORB" : "GBPUSD";
+    if (market.symbol !== targetSymbol) {
+      updateSymbol(targetSymbol);
+    }
+    // Hanya bereaksi terhadap pergantian broker (brokerId sebagai
+    // dependency); validasi, UI, dan logic lain tidak diubah.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brokerId]);
 
   function updateNumber(key: NumericField, value: string) {
     const parsed = parseMarketInput(value);

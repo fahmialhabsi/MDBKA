@@ -28,6 +28,7 @@ import { analyzeMarket } from "./calculations/decisionEngine";
 import { detectScaleMismatch } from "./calculations/scaleValidator";
 import { validateAnalysisInputs } from "./calculations/inputValidator";
 import { normalizeSymbol } from "./lib/instrumentConfig";
+import { parseCsvCandles } from "./lib/csvCandleParser";
 import { traceOcrStage } from "./lib/debugTrace";
 import {
   DEFAULT_BROKER_ID, ORBITRADER_BROKER_ID,
@@ -398,6 +399,31 @@ export default function App() {
   const handleCsvLoaded = useCallback((text: string, fileName: string) => {
     setSwingCsv(text);
     setConnectedCsvName(fileName);
+    // Isi OHLC + Bid/Ask dari candle terakhir CSV (data nyata pengguna,
+    // bukan angka fiktif). S/R tetap via deteksi swing; indikator
+    // (MA50/CCI/RSI/MACD/ATR) via screenshot OCR atau input manual.
+    // Timeframe diambil dari nama file (mis. *_H1.csv) bila ada.
+    const parsed = parseCsvCandles(text);
+    if (parsed.candles.length > 0) {
+      const last = parsed.candles[parsed.candles.length - 1];
+      const tfMatch =
+        /[_\-\s.](M1|M5|M15|M30|H1|H4|D1|W1|MN1)(?![A-Z0-9])/i.exec(
+          fileName,
+        );
+      const detectedTimeframe = tfMatch
+        ? tfMatch[1].toUpperCase()
+        : null;
+      setMarket((previous) => ({
+        ...previous,
+        open: last.open,
+        high: last.high,
+        low: last.low,
+        close: last.close,
+        bid: last.close,
+        ask: last.close,
+        ...(detectedTimeframe ? { timeframe: detectedTimeframe } : {}),
+      }));
+    }
     setSymbolNotice("");
     setSwingSource(null);
     clearAnalysisOutput();
