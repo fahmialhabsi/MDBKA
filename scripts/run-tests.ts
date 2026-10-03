@@ -6009,6 +6009,78 @@ test("410. spec32 modul murni: legacy registry Finex tidak rusak", () => {
   );
 });
 
+/* ---------------- Normalisasi harga JPY 6F-1: TEST 411-413 ---------------- */
+
+test("411. JPY quote-form (bid 109.764) = inverse-form (6F-1)", () => {
+  // UI meneruskan quote pasar; formula % butuh invers. Hasil quote-form
+  // harus identik dengan inverse-form (test 268), bukan meledak 10.000x.
+  const quote = requireSwapCost({
+    symbol: "AUDJPY_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "JUAL",
+    lot: 1,
+    holdingDays: 1,
+    currentPrice: 109.764,
+  });
+  const inverse = requireSwapCost({
+    symbol: "AUDJPY_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "JUAL",
+    lot: 1,
+    holdingDays: 1,
+    currentPrice: 1 / 109.764,
+  });
+  assert(
+    Math.abs(quote.swapCost - inverse.swapCost) < 1e-9,
+    `quote=${quote.swapCost} inverse=${inverse.swapCost}`,
+  );
+  assert(
+    Math.abs(quote.swapCost) < 1000,
+    `nosional JPY meledak: ${quote.swapCost}`,
+  );
+  assert(quote.swapPercentage === -1.75, "swapPercentage berubah");
+});
+
+test("412. CADJPY_ORB quote-form konsisten dengan inverse-form (6F-1)", () => {
+  const quote = requireSwapCost({
+    symbol: "CADJPY_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 2,
+    currentPrice: 110.749,
+  });
+  const inverse = requireSwapCost({
+    symbol: "CADJPY_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 2,
+    currentPrice: 1 / 110.749,
+  });
+  assert(
+    Math.abs(quote.swapCost - inverse.swapCost) < 1e-9,
+    `quote=${quote.swapCost} inverse=${inverse.swapCost}`,
+  );
+  assert(quote.swapPercentage === -1.25, "swapPercentage berubah");
+});
+
+test("413. non-JPY harga >1 tidak diinvers (USDCAD 1.42561, 6F-1)", () => {
+  // Gate 6F-1 hanya untuk profit JPY; pair lain byte-identik.
+  const cost = requireSwapCost({
+    symbol: "USDCAD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 1,
+    currentPrice: 1.42561,
+  });
+  assert(
+    Math.abs(cost.swapCost - -2138.415) < 1e-6,
+    `swapCost=${cost.swapCost} (100000×1.42561×-1.5%)`,
+  );
+});
+
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +
 // 339-344 (hardening akses file MT5):
 // SATU runner async utama dengan SATU process.exit. Dua IIFE terpisah

@@ -154,7 +154,16 @@ export function calculateSwapCost(args: {
     if (price === undefined || !Number.isFinite(price) || price <= 0)
       return null;
 
-    const notional = preset.contractSize * price;
+    // Tahap 6F-1: normalisasi harga pair JPY. UI meneruskan quote pasar
+    // (market.bid, mis. AUDJPY ≈ 109) sedangkan formula % memakai harga
+    // per-unit profit currency (invers, ≈ 0.0091; lihat test 268). Tanpa
+    // inversi, nosional meledak ~10.000x di produksi. Heuristik aman:
+    // profit JPY + price > 1 ⇒ bentuk quote ⇒ invers. Harga invers
+    // (< 1) dan pair non-JPY tidak tersentuh (byte-identik, test lama hijau).
+    const effectivePrice =
+      preset.currencyProfit === "JPY" && price > 1 ? 1 / price : price;
+
+    const notional = preset.contractSize * effectivePrice;
     // Tahap 5E-STEP1: % per hari → triple-swap bila startDate eksplisit.
     const perLotPerDay = notional * (swapValue / 100);
     const totalPerLot =
