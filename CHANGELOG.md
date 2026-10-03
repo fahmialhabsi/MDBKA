@@ -1,5 +1,20 @@
 # CHANGELOG MDBKA
 
+## v1.0.4-tahap6d — Spec32 Integration, 16 OTB (4 Okt 2026)
+
+Tahap 6D OPSI 2: integrasi spec32 + 16 simbol OTB terverifikasi
+(commission=0). HEAD `d968efe`. **407/407 tests lolos, zero regression.**
+
+### Ditambahkan
+- `src/lib/instrumentSpecs32.ts` — 32 instrument specs (data foundation Tahap 6B)
+- `src/lib/jpySwapCalculator.ts` — formula swap JPY
+- `src/lib/spec32Wiring.ts` + adapter layer Tahap 6C (parallel preview wiring, non-breaking)
+- Tahap 6D: spec32 integration, 16 OTB verified
+- Safety gate swap unverified di presentasi + label PENDING (Tahap 6A)
+
+### Progres test
+- v1.0.1: 349/349 → v1.0.2-tahap6-final: 382/382 → v1.0.3-tahap6c-safe: 397/397 → v1.0.4-tahap6d: 407/407
+
 ## v1.0.1 — Tahap 5E Complete (3 Okt 2026)
 
 Dual-source live + responsive dashboard. **Tanpa breaking changes** — semua

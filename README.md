@@ -62,7 +62,7 @@ npm run dev
 - OCR: regex + region-based text extraction
 - CSV: Papa Parse (50+ candle validation)
 - FX Rate: ECB free API (fallback hardcoded)
-- Test: 349/349 lolos (zero regression)
+- Test: 407/407 lolos (zero regression)
 
 ## 🔌 Tahap 5E-STEP2: Live Equity (Node.js Backend)
 
