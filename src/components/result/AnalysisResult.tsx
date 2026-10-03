@@ -14,6 +14,7 @@ import type { BrokerId } from "../../types/broker";
 import type { ValidationViewState } from "../../lib/validationView";
 import { attachSwapToResult } from "../../calculations/attachSwapToResult";
 import { getTripleSwapLabel } from "../../services/dateService";
+import { isOtbSymbolVerified } from "../../lib/brokerSymbols";
 import type { ExchangeRates } from "../../services/fxRateService";
 
 interface Props {
@@ -89,6 +90,12 @@ export default function AnalysisResult({
   );
 
   const showSwapBlock = brokerId === "orbitraderberjangka" && result !== null;
+
+  // Tahap 6A safety gate (lapisan presentasi): angka swap preset yang
+  // belum terverifikasi dari Specification TIDAK ditampilkan — diganti
+  // notice PENDING. calculateSwapCost/attachSwapToResult murni tidak
+  // berubah (kontrak function-level terkunci test 251-278).
+  const swapVerified = isOtbSymbolVerified(market.symbol);
 
   // Umpan balik klik Analisa yang eksplisit: selalu diutamakan bila ada.
   if (blockedReasons && blockedReasons.length > 0) {
@@ -351,7 +358,8 @@ export default function AnalysisResult({
 
           {attached !== null &&
             attached.swapDetail !== null &&
-            holdingDays > 0 && (
+            holdingDays > 0 &&
+            (swapVerified ? (
               <p
                 data-testid="swap-memo"
                 className="mt-3 text-sm text-slate-400"
@@ -376,7 +384,16 @@ export default function AnalysisResult({
                   </>
                 )}
               </p>
-            )}
+            ) : (
+              <p
+                data-testid="swap-pending"
+                className="mt-3 text-sm text-amber-200"
+              >
+                Swap {market.symbol} belum terverifikasi dari Specification
+                — angka swap disembunyikan hingga terverifikasi (tanpa angka
+                fiktif).
+              </p>
+            ))}
         </div>
       )}
 

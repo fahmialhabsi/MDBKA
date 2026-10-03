@@ -5067,6 +5067,71 @@ test("338. kontrak SSE quotes tidak berubah", () => {
   );
 });
 
+/* ---------------- Safety gate swap unverified (Tahap 6A): TEST 353-357 ---------------- */
+/* Nomor label suite-lokal (async suite memakai 339-352); otoritatif = counter.
+ * Gate di lapisan presentasi (AnalysisResult); calculateSwapCost /
+ * attachSwapToResult murni tidak berubah (test 251-278 terkunci). */
+
+test("353. swap function-level tetap passthrough untuk simbol pending (gate di UI)", () => {
+  const cost = calculateSwapCost({
+    symbol: "AUDJPY_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "JUAL",
+    lot: 1,
+    holdingDays: 1,
+    currentPrice: 98.5,
+  });
+  assert(cost !== null, "kontrak function-level berubah (harus non-null)");
+});
+
+test("354. hanya GBPUSD_ORB verified; 12 simbol lain pending", () => {
+  assert(isOtbSymbolVerified("GBPUSD_ORB"), "GBPUSD_ORB harus verified");
+  for (const s of [
+    "AUDCAD_ORB",
+    "EURCHF_ORB",
+    "AUDJPY_ORB",
+    "AUDCHF_ORB",
+    "NZDJPY_ORB",
+    "USDCHF_ORB",
+  ]) {
+    assert(!isOtbSymbolVerified(s), `${s} dianggap verified`);
+  }
+});
+
+test("355. AnalysisResult: memo swap digate verifikasi + PENDING notice", () => {
+  const src = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(src.includes("isOtbSymbolVerified"), "gate verifikasi hilang di hasil");
+  assert(src.includes('data-testid="swap-pending"'), "testid pending hilang");
+  assert(src.includes("belum terverifikasi"), "label PENDING hilang");
+  // Jalur verified tidak berubah: memo numerik tetap ada.
+  assert(src.includes('data-testid="swap-memo"'), "memo verified hilang");
+  assert(src.includes("/lot (profit"), "label profit currency hilang");
+});
+
+test("356. AnalysisResult: kontrak lama swap block utuh", () => {
+  const src = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(
+    src.includes('brokerId === "orbitraderberjangka"'),
+    "gate broker hilang",
+  );
+  assert(src.includes("attachSwapToResult"), "attach hilang");
+  assert(src.includes('data-testid="swap-holding-input"'), "spinner hilang");
+});
+
+test("357. attach verified GBPUSD_ORB tetap non-null (jalur rilis utuh)", () => {
+  const attached = attachSwapToResult(makeAnalysisResult("BELI", 1), {
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 1,
+  });
+  assert(
+    attached !== null && attached.swapDetail !== null,
+    "jalur verified rusak",
+  );
+});
+
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +
 // 339-344 (hardening akses file MT5):
 // SATU runner async utama dengan SATU process.exit. Dua IIFE terpisah
