@@ -33,13 +33,18 @@ export const OTB_ALL_SYMBOLS = [
 
 /**
  * Simbol OTB yang presetnya terverifikasi dari Specification broker.
- * Kebijakan verifikasi: HANYA GBPUSD_ORB. Simbol lain di OTB_ALL_SYMBOLS
+ * Kebijakan verifikasi: GBPUSD_ORB (spec awal) + AUDCHF_ORB (Tahap 6E-1,
+ * dikonfirmasi dari ekspor CSV terminal OTB 03 Okt 2026:
+ * digits=5, tickSize=0.00001, swap -1.5/-1.5 percentage, min/max 0.1/10).
+ * Komisi 33/lot dipertahankan sesuai spec lama (kolom Commission=0.00
+ * pada CSV dianggap tidak berlaku). Simbol lain di OTB_ALL_SYMBOLS
  * tetap tampil di dropdown (pending) tetapi wajib menampilkan warning
  * dan TIDAK memakai preset otomatis sampai data Specification lengkap.
  * Untuk memverifikasi simbol baru: tambahkan di sini + lengkapi test.
  */
 export const VERIFIED_OTB_SYMBOLS: readonly string[] = Object.freeze([
   "GBPUSD_ORB",
+  "AUDCHF_ORB",
 ]);
 
 /** True bila simbol OTB terverifikasi (exact, case-sensitive). */
