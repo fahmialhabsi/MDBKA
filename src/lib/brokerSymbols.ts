@@ -40,6 +40,8 @@ export const OTB_ALL_SYMBOLS = [
  *   swap -1.25/-1.75 percentage, min/max 0.1/10).
  * + AUDNZD_ORB (Tahap 6E-3, ekspor CSV sama: digits=5, tickSize=0.00001,
  *   swap 0.00/-2.21 percentage, min/max 0.1/10).
+ * + AUDUSD_ORB (Tahap 6E-4, ekspor CSV sama: digits=5, tickSize=0.00001,
+ *   swap -1.50/-1.50 percentage, min/max 0.1/10).
  * Komisi 33/lot dipertahankan sesuai spec lama (kolom Commission=0.00
  * pada CSV dianggap tidak berlaku). Simbol lain di OTB_ALL_SYMBOLS
  * tetap tampil di dropdown (pending) tetapi wajib menampilkan warning
@@ -51,6 +53,7 @@ export const VERIFIED_OTB_SYMBOLS: readonly string[] = Object.freeze([
   "AUDCHF_ORB",
   "AUDJPY_ORB",
   "AUDNZD_ORB",
+  "AUDUSD_ORB",
 ]);
 
 /** True bila simbol OTB terverifikasi (exact, case-sensitive). */
