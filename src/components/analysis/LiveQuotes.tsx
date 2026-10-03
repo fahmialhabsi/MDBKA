@@ -1,12 +1,19 @@
 import { useQuotesStream } from "../../hooks/useQuotesStream";
 import styles from "../../styles/liveQuotes.module.css";
+import type { BrokerId } from "../../types/broker";
 
 interface LiveQuotesProps {
   symbol: string;
+  /** Sumber live mengikuti broker aktif (default = sumber utama backend). */
+  brokerId?: BrokerId;
 }
 
-export function LiveQuotes({ symbol }: LiveQuotesProps) {
-  const { quote, isConnected, error } = useQuotesStream(symbol);
+export function LiveQuotes({ symbol, brokerId }: LiveQuotesProps) {
+  const { quote, isConnected, error } = useQuotesStream(
+    symbol,
+    5000,
+    brokerId,
+  );
 
   const dotClass = !isConnected
     ? `${styles.dot} ${styles.dotOff}`
@@ -15,14 +22,25 @@ export function LiveQuotes({ symbol }: LiveQuotesProps) {
       : `${styles.dot} ${styles.dotPolling}`;
 
   return (
-    <div className={styles.card}>
+    <div className={styles.card} data-testid="live-quotes">
       <div className={styles.header}>
         <h3 className={styles.title}>Live Quotes</h3>
         <span className={styles.symbol}>{symbol || "-"}</span>
         <div className={dotClass} />
       </div>
 
-      {error && <p className={styles.error}>{error}</p>}
+      {error && (
+        <p className={styles.error}>
+          {error}
+          {brokerId === "finex" && (
+            <>
+              {" "}
+              Sumber Finex belum dikonfigurasi? Isi QUOTES_LOG_PATH_FINEX di
+              .env backend lalu restart dev:backend.
+            </>
+          )}
+        </p>
+      )}
 
       {quote ? (
         <div>

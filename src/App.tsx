@@ -23,6 +23,9 @@ import BrokerSettingsForm from "./components/analysis/BrokerSettingsForm";
 import ValidationSummaryCard from "./components/analysis/ValidationSummaryCard";
 import SwingLevelsForm from "./components/analysis/SwingLevelsForm";
 import AnalysisResult from "./components/result/AnalysisResult";
+import { LiveEquity } from "./components/result/LiveEquity";
+import { LiveQuotes } from "./components/analysis/LiveQuotes";
+import dashboard from "./styles/dashboard.module.css";
 
 import { analyzeMarket } from "./calculations/decisionEngine";
 import { detectScaleMismatch } from "./calculations/scaleValidator";
@@ -559,9 +562,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-slate-950 text-white">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
+        <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between px-3 py-3 sm:px-4 lg:px-6">
           <div>
             <p className="text-xs font-bold tracking-[0.35em] text-emerald-400">
               MDBKA
@@ -578,20 +581,20 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl space-y-8 px-5 py-8 lg:px-8">
-        <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-950 p-7 lg:p-10">
+      <main className={`${dashboard.page} space-y-4 py-4 sm:space-y-6 sm:py-6`}>
+        <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-950 p-5 lg:p-7">
           <div className="max-w-3xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
               <Sparkles size={14} />
               Analisa trading lebih terstruktur
             </div>
 
-            <h2 className="text-4xl font-black leading-tight md:text-6xl">
+            <h2 className="text-3xl font-black leading-tight md:text-5xl">
               Mulai dari screenshot,
               <span className="text-emerald-400"> pahami keputusannya.</span>
             </h2>
 
-            <p className="mt-5 text-base leading-7 text-slate-300 md:text-lg">
+            <p className="mt-3 text-sm leading-6 text-slate-300 md:text-base">
               Tempel screenshot terminal trading, periksa data yang terbaca,
               lalu hitung Beli, Jual, atau Tunggu dengan parameter risiko yang
               dapat Anda ubah.
@@ -645,8 +648,9 @@ export default function App() {
           )}
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="space-y-6">
+        <div className={dashboard.workGrid}>
+          <div className={dashboard.mainCol}>
+            <div className="space-y-6">
             <Panel
               icon={<FileCheck2 size={20} />}
               title="1. Tempel atau upload screenshot"
@@ -815,9 +819,8 @@ export default function App() {
             >
               Kembalikan data contoh GBPUSD
             </button>
-          </div>
+            </div>
 
-          <aside className="lg:sticky lg:top-24 lg:self-start">
             <Panel
               icon={<Activity size={20} />}
               title="8. Hasil analisa"
@@ -836,8 +839,13 @@ export default function App() {
                 fxRates={fxRates}
               />
             </Panel>
+          </div>
+
+          <aside className={dashboard.sideCol} aria-label="Data live MT5">
+            <LiveQuotes symbol={market.symbol} brokerId={activeBrokerId} />
+            <LiveEquity brokerId={activeBrokerId} />
           </aside>
-        </section>
+        </div>
 
         <section className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-5 text-sm leading-6 text-amber-100">
           <strong>Peringatan penting:</strong> MDBKA hanya alat bantu analisa

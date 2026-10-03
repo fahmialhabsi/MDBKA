@@ -19,6 +19,8 @@ import type { QuotesLogReader } from "./services/quotesLogReader";
 export function createApp(
   reader: MT5LogReader,
   quotesReader: QuotesLogReader,
+  readerFinex: MT5LogReader | null = null,
+  quotesReaderFinex: QuotesLogReader | null = null,
 ): Express {
   const app = express();
   app.use(cors({ origin: FRONTEND_ORIGIN }));
@@ -28,8 +30,8 @@ export function createApp(
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  app.use("/api/equity", createEquityRoutes(reader));
-  app.use("/api/quotes", createQuotesRoutes(quotesReader));
+  app.use("/api/equity", createEquityRoutes(reader, readerFinex));
+  app.use("/api/quotes", createQuotesRoutes(quotesReader, quotesReaderFinex));
 
   return app;
 }

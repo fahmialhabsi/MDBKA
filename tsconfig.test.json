@@ -38,6 +38,8 @@
     "src/hooks/useQuotesStream.test.ts",
     "server/types/equity.ts",
     "server/types/quotes.ts",
+    "server/types/liveSource.ts",
+    "server/types/liveSource.test.ts",
     "server/services/mt5LogReader.ts",
     "server/services/quotesLogReader.ts"
   ]

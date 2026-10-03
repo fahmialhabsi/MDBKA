@@ -4,12 +4,15 @@
 
 .card {
   border: 1px solid rgb(45 212 191 / 0.25);
-  border-radius: 24px;
+  border-radius: 20px;
   background: linear-gradient(135deg, rgb(15 23 42 / 0.9), rgb(2 6 23 / 0.95));
   box-shadow: 0 10px 30px rgb(0 0 0 / 0.45);
-  padding: 22px;
+  padding: 16px;
   color: #e2e8f0;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .header {
@@ -95,10 +98,11 @@
 .value {
   display: block;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 26px;
+  font-size: 20px;
   line-height: 1.2;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .valueBid {
@@ -181,5 +185,59 @@
   .dotLive,
   .dotPolling {
     animation: none;
+  }
+}
+
+/* Corner-placement: compact di sidebar 300-320px, full-width di mobile.
+   Sticky diatur parent (dashboard.module.css); card hanya menjaga
+   ukuran compact + readable + tanpa horizontal scroll. */
+@media (min-width: 769px) {
+  .card {
+    padding: 16px;
+  }
+
+  .grid {
+    gap: 10px;
+  }
+
+  .cell {
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .card {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .value {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 375px) {
+  .grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .cell {
+    padding: 10px;
+  }
+
+  .value {
+    font-size: 16px;
+  }
+
+  .symbol {
+    max-width: 45%;
   }
 }

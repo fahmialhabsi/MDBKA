@@ -1,0 +1,100 @@
+/* Dashboard layout — full-viewport, tanpa horizontal scroll.
+   Desktop: form kiri + sidebar live kanan 320px (sticky top-right).
+   Tablet 768px: form 60% + live 300px. Mobile 375px: stack vertikal,
+   live cards di atas form (full-width, non-sticky). */
+
+.page {
+  width: 100%;
+  max-width: 1600px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 12px;
+  padding-right: 12px;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+@media (min-width: 640px) {
+  .page {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .page {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+
+.workGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+  width: 100%;
+  min-width: 0;
+}
+
+.mainCol {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sideCol {
+  width: 320px;
+  min-width: 0;
+  position: sticky;
+  top: 88px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: calc(100vh - 104px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+/* Tablet 768px: form ~60% + live 300px */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .workGrid {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 12px;
+  }
+
+  .sideCol {
+    width: 300px;
+  }
+}
+
+/* Mobile <=768px: stack vertikal, live cards di atas form, non-sticky */
+@media (max-width: 768px) {
+  .workGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .sideCol {
+    order: -1;
+    position: static;
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .mainCol {
+    order: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sideCol {
+    scroll-behavior: auto;
+  }
+}

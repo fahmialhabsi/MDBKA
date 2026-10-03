@@ -5121,6 +5121,24 @@ test("338. kontrak SSE quotes tidak berubah", () => {
     failed += 6;
   }
 
+  try {
+    const {
+      LIVE_SOURCE_TEST_COUNT,
+      runLiveSourceTests,
+    } = await import("../server/types/liveSource.test");
+    const allPassed = await runLiveSourceTests();
+    if (allPassed) {
+      passed += LIVE_SOURCE_TEST_COUNT;
+    } else {
+      failed += LIVE_SOURCE_TEST_COUNT;
+    }
+  } catch (e) {
+    console.error("✗ Live source test suite error:", e);
+    // Samakan dengan LIVE_SOURCE_TEST_COUNT di
+    // server/types/liveSource.test.ts.
+    failed += 8;
+  }
+
   console.log(
     `\n${passed} lolos, ${failed} gagal dari ${passed + failed} pengujian.`,
   );

@@ -41,12 +41,24 @@ const quotesLogPath =
     "quotes.csv",
   );
 
+// Dual-source Finex (opsional): diisi bila EA yang sama dipasang di
+// terminal MT5 Finex dan menulis equity.csv + quotes.csv sendiri.
+// Bila kosong → reader Finex null → route ?broker=finex menjawab
+// 404 jujur (tanpa fallback diam ke sumber OTB, tanpa angka fiktif).
+const finexLogPath = process.env.MT5_LOG_PATH_FINEX ?? "";
+const finexQuotesLogPath = process.env.QUOTES_LOG_PATH_FINEX ?? "";
+
 const reader = new MT5LogReader(logPath);
 const quotesReader = new QuotesLogReader(quotesLogPath);
+const readerFinex =
+  finexLogPath.trim() !== "" ? new MT5LogReader(finexLogPath) : null;
+const quotesReaderFinex =
+  finexQuotesLogPath.trim() !== "" ? new QuotesLogReader(finexQuotesLogPath) : null;
 
 const stopWatching = reader.startWatching();
+if (readerFinex !== null) readerFinex.startWatching();
 
-const app = createApp(reader, quotesReader);
+const app = createApp(reader, quotesReader, readerFinex, quotesReaderFinex);
 
 // Polling startup: tunggu data pertama kali tersedia
 async function startServer() {
@@ -65,6 +77,16 @@ async function startServer() {
     console.log(`⚠ Quotes reader will retry when file unlocks`);
   });
 
+  if (quotesReaderFinex !== null) {
+    await quotesReaderFinex.init().catch(() => {
+      console.log(`⚠ Finex quotes reader will retry when file unlocks`);
+    });
+  } else {
+    console.log(
+      `⚠ Finex source not configured (MT5_LOG_PATH_FINEX/QUOTES_LOG_PATH_FINEX empty): ?broker=finex answers 404`,
+    );
+  }
+
   const server = app.listen(PORT, () => {
     const latest = reader.getLatest();
     console.log(`✓ Backend running on http://localhost:${PORT}`);
@@ -76,6 +98,17 @@ async function startServer() {
       console.log(`⚠ MT5 data pending (still waiting for file access)`);
     }
     console.log(`✓ MT5 log watcher active on: ${logPath}`);
+    if (readerFinex !== null) {
+      const latestFinex = readerFinex.getLatest();
+      if (latestFinex) {
+        console.log(
+          `✓ Finex equity loaded: balance=${latestFinex.balance}, equity=${latestFinex.equity}`,
+        );
+      } else {
+        console.log(`⚠ Finex data pending (still waiting for file access)`);
+      }
+      console.log(`✓ Finex log watcher active on: ${finexLogPath}`);
+    }
   });
 
   return server;
@@ -87,6 +120,8 @@ function shutdown(): void {
   stopWatching();
   reader.stopWatching();
   quotesReader.destroy();
+  if (readerFinex !== null) readerFinex.stopWatching();
+  if (quotesReaderFinex !== null) quotesReaderFinex.destroy();
   serverPromise
     .then((server) => {
       server.close(() => {

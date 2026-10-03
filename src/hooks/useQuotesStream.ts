@@ -5,6 +5,7 @@ import {
   parseQuoteSseEnvelope,
   type QuoteSnapshot,
 } from "../../server/types/quotes";
+import type { BrokerId } from "../types/broker";
 
 const QUOTES_BASE_URL = "http://localhost:3000";
 
@@ -96,7 +97,11 @@ export function attachQuotesStream(
   };
 }
 
-export function useQuotesStream(symbol: string, pollIntervalMs = 5000): QuotesStreamState {
+export function useQuotesStream(
+  symbol: string,
+  pollIntervalMs = 5000,
+  brokerId?: BrokerId,
+): QuotesStreamState {
   const [quote, setQuote] = useState<QuoteSnapshot | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,11 +109,12 @@ export function useQuotesStream(symbol: string, pollIntervalMs = 5000): QuotesSt
 
   useEffect(() => {
     let cancelled = false;
+    const query = brokerId === undefined ? "" : `?broker=${brokerId}`;
 
     const fetchLatest = async (): Promise<void> => {
       try {
         const res = await fetch(
-          `${QUOTES_BASE_URL}/api/quotes/${encodeURIComponent(symbol)}`,
+          `${QUOTES_BASE_URL}/api/quotes/${encodeURIComponent(symbol)}${query}`,
         );
         if (!res.ok) throw new Error(`Backend HTTP ${res.status}`);
         const payload: unknown = (await res.json()) as unknown;
@@ -139,7 +145,7 @@ export function useQuotesStream(symbol: string, pollIntervalMs = 5000): QuotesSt
       // interface minimal yang dapat di-mock. Jalur DATA tidak memakai
       // cast apa pun (validasi via guard murni).
       const source = new EventSource(
-        `${QUOTES_BASE_URL}/api/quotes/${encodeURIComponent(symbol)}/stream`,
+        `${QUOTES_BASE_URL}/api/quotes/${encodeURIComponent(symbol)}/stream${query}`,
       ) as unknown as MinimalQuotesEventSource;
       detach = attachQuotesStream(source, {
         expectedSymbol: symbol,
@@ -189,7 +195,7 @@ export function useQuotesStream(symbol: string, pollIntervalMs = 5000): QuotesSt
         pollRef.current = null;
       }
     };
-  }, [symbol, pollIntervalMs]);
+  }, [symbol, pollIntervalMs, brokerId]);
 
   return { quote, isConnected, error };
 }

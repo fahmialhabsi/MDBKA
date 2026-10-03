@@ -10,17 +10,48 @@
 import { Router, type Request, type Response } from "express";
 import type { MT5LogReader } from "../services/mt5LogReader";
 import type { EquitySnapshot } from "../types/equity";
+import {
+  pickLiveSource,
+  resolveLiveBroker,
+} from "../types/liveSource";
 
 function sendSnapshot(res: Response, snapshot: EquitySnapshot): void {
   res.write(`data: ${JSON.stringify(snapshot)}\n\n`);
 }
 
-export function createEquityRoutes(reader: MT5LogReader): Router {
+/** Pilih reader equity per request via `?broker=`. null = 400/404. */
+function selectReader(
+  req: Request,
+  res: Response,
+  reader: MT5LogReader,
+  readerFinex: MT5LogReader | null,
+): MT5LogReader | null {
+  const broker = resolveLiveBroker(req.query.broker);
+  if (broker === null) {
+    res.status(400).json({ error: "Unknown broker (use finex|orbitraderberjangka)" });
+    return null;
+  }
+  const active = pickLiveSource(broker, reader, readerFinex);
+  if (active === null) {
+    res.status(404).json({
+      error: `Live source not configured for broker ${broker}`,
+    });
+    return null;
+  }
+  return active;
+}
+
+export function createEquityRoutes(
+  reader: MT5LogReader,
+  readerFinex: MT5LogReader | null = null,
+): Router {
   const router = Router();
 
   router.get("/latest", (_req: Request, res: Response) => {
     try {
-      const snapshot = reader.getLatest() ?? reader.refresh();
+      const active = selectReader(_req, res, reader, readerFinex);
+      if (active === null) return;
+      const snapshot = active.getLatest() ?? active.refresh();
       if (snapshot === null) {
         res.status(404).json({ error: "No equity data yet" });
         return;
@@ -35,20 +66,23 @@ export function createEquityRoutes(reader: MT5LogReader): Router {
 
   router.get("/stream", (req: Request, res: Response) => {
     try {
+      const active = selectReader(req, res, reader, readerFinex);
+      if (active === null) return;
+
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
       });
 
-      const initial = reader.getLatest() ?? reader.refresh();
+      const initial = active.getLatest() ?? active.refresh();
       if (initial !== null) {
         sendSnapshot(res, initial);
       } else {
         res.write(": connected, waiting for MT5 data\n\n");
       }
 
-      const unsubscribe = reader.onUpdate((snapshot) => {
+      const unsubscribe = active.onUpdate((snapshot) => {
         try {
           sendSnapshot(res, snapshot);
         } catch {

@@ -13,6 +13,7 @@ import {
   isEquitySnapshot,
   type EquitySnapshot,
 } from "../../server/types/equity";
+import type { BrokerId } from "../types/broker";
 
 const EQUITY_BASE_URL = "http://localhost:3000";
 
@@ -22,7 +23,19 @@ export interface EquityStreamState {
   readonly error: string | null;
 }
 
-export function useEquityStream(pollIntervalMs = 5000): EquityStreamState {
+/**
+ * Query broker untuk URL live (`?broker=finex|orbitraderberjangka`).
+ * brokerId absen → URL lama tanpa query (sumber default backend,
+ * backward-compatible penuh).
+ */
+export function equityBrokerQuery(brokerId?: BrokerId): string {
+  return brokerId === undefined ? "" : `?broker=${brokerId}`;
+}
+
+export function useEquityStream(
+  pollIntervalMs = 5000,
+  brokerId?: BrokerId,
+): EquityStreamState {
   const [equity, setEquity] = useState<EquitySnapshot | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,10 +43,13 @@ export function useEquityStream(pollIntervalMs = 5000): EquityStreamState {
 
   useEffect(() => {
     let cancelled = false;
+    const query = equityBrokerQuery(brokerId);
 
     const fetchLatest = async (): Promise<void> => {
       try {
-        const res = await fetch(`${EQUITY_BASE_URL}/api/equity/latest`);
+        const res = await fetch(
+          `${EQUITY_BASE_URL}/api/equity/latest${query}`,
+        );
         if (!res.ok) throw new Error(`Backend HTTP ${res.status}`);
         const payload: unknown = (await res.json()) as unknown;
         if (!isEquitySnapshot(payload)) {
@@ -61,7 +77,9 @@ export function useEquityStream(pollIntervalMs = 5000): EquityStreamState {
 
     let source: EventSource | null = null;
     try {
-      source = new EventSource(`${EQUITY_BASE_URL}/api/equity/stream`);
+      source = new EventSource(
+        `${EQUITY_BASE_URL}/api/equity/stream${query}`,
+      );
       source.onopen = () => {
         if (!cancelled) {
           setIsConnected(true);
@@ -106,7 +124,7 @@ export function useEquityStream(pollIntervalMs = 5000): EquityStreamState {
         pollRef.current = null;
       }
     };
-  }, [pollIntervalMs]);
+  }, [pollIntervalMs, brokerId]);
 
   return { equity, isConnected, error };
 }
