@@ -17,6 +17,10 @@ interface Props {
   brokerId?: BrokerId;
   onChange: (data: MarketData) => void;
   onSymbolChange?: (symbol: string) => void;
+  /** Hasil analisa terakhir (guard: hanya clear bila tidak null). */
+  result?: unknown;
+  /** Clear hasil analisa lama saat symbol berubah via auto-sync broker. */
+  setResult?: (value: null) => void;
 }
 
 type NumericField = Exclude<keyof MarketData, "symbol" | "timeframe">;
@@ -49,7 +53,9 @@ export default function ExtractedDataForm({
   market,
   brokerId,
   onChange,
-  onSymbolChange
+  onSymbolChange,
+  result,
+  setResult
 }: Props) {
   // Opsi dropdown mengikuti broker aktif dari satu sumber per broker:
   // Finex = SUPPORTED_SYMBOLS (instrumentConfig, perilaku lama);
@@ -93,6 +99,11 @@ export default function ExtractedDataForm({
       brokerId === "orbitraderberjangka" ? "GBPUSD_ORB" : "GBPUSD";
     if (market.symbol !== targetSymbol) {
       updateSymbol(targetSymbol);
+      // Symbol lama berganti: hasil analisa lama (symbol lama) tidak boleh
+      // dipakai API. Clear agar user Analisa Sekarang ulang dengan symbol baru.
+      if (result !== null) {
+        setResult?.(null);
+      }
     }
     // Hanya bereaksi terhadap pergantian broker (brokerId sebagai
     // dependency); validasi, UI, dan logic lain tidak diubah.

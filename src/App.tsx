@@ -691,6 +691,8 @@ export default function App() {
               <ExtractedDataForm
                 market={market}
                 brokerId={activeBrokerId}
+                result={result}
+                setResult={setResult}
                 onChange={(nextMarket) => {
                   setMarket(nextMarket);
                   setSymbolNotice("");
