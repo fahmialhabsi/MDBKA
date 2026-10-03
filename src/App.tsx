@@ -27,7 +27,7 @@ import AnalysisResult from "./components/result/AnalysisResult";
 import { analyzeMarket } from "./calculations/decisionEngine";
 import { detectScaleMismatch } from "./calculations/scaleValidator";
 import { validateAnalysisInputs } from "./calculations/inputValidator";
-import { normalizeSymbol } from "./lib/instrumentConfig";
+import { getInstrumentProfile, normalizeSymbol } from "./lib/instrumentConfig";
 import { parseCsvCandles } from "./lib/csvCandleParser";
 import { traceOcrStage } from "./lib/debugTrace";
 import {
@@ -127,6 +127,22 @@ const emptyBroker: BrokerSettings = {
   atrMultiplier: 0,
   targetRR: 0,
 };
+
+/**
+ * Ukuran 1 tick untuk simbol (dipakai sebagai spread minimal placeholder
+ * saat auto-fill Bid/Ask dari candle CSV). OTB dibaca dari profil
+ * Specification (EXACT, _ORB terjaga); selainnya dari instrumentConfig.
+ * Selalu > 0 agar guard ask > bid lolos.
+ */
+function tickSizeForSymbol(symbol: string): number {
+  const otb = getOtbInstrumentProfile(symbol.trim().toUpperCase());
+  if (otb !== null && otb.tickSize > 0) return otb.tickSize;
+  const profile = getInstrumentProfile(symbol);
+  if (profile.category !== "unknown" && profile.decimals > 0) {
+    return Math.pow(10, -profile.decimals);
+  }
+  return 0.00001;
+}
 
 export default function App() {
   const [swingCsv, setSwingCsv] = useState("");
@@ -403,6 +419,9 @@ export default function App() {
     // bukan angka fiktif). S/R tetap via deteksi swing; indikator
     // (MA50/CCI/RSI/MACD/ATR) via screenshot OCR atau input manual.
     // Timeframe diambil dari nama file (mis. *_H1.csv) bila ada.
+    // Bid = close terakhir; Ask = close + 1 tick (spread minimal agar
+    // lolos guard ask > bid — WAJIB diverifikasi via Live Quotes/MT5,
+    // karena spread asli hanya diketahui dari quote berjalan).
     const parsed = parseCsvCandles(text);
     if (parsed.candles.length > 0) {
       const last = parsed.candles[parsed.candles.length - 1];
@@ -413,16 +432,19 @@ export default function App() {
       const detectedTimeframe = tfMatch
         ? tfMatch[1].toUpperCase()
         : null;
-      setMarket((previous) => ({
-        ...previous,
-        open: last.open,
-        high: last.high,
-        low: last.low,
-        close: last.close,
-        bid: last.close,
-        ask: last.close,
-        ...(detectedTimeframe ? { timeframe: detectedTimeframe } : {}),
-      }));
+      setMarket((previous) => {
+        const tick = tickSizeForSymbol(previous.symbol);
+        return {
+          ...previous,
+          open: last.open,
+          high: last.high,
+          low: last.low,
+          close: last.close,
+          bid: last.close,
+          ask: last.close + tick,
+          ...(detectedTimeframe ? { timeframe: detectedTimeframe } : {}),
+        };
+      });
     }
     setSymbolNotice("");
     setSwingSource(null);

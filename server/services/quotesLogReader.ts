@@ -62,6 +62,9 @@ export class QuotesLogReader {
   private updateCallbacks: ((quotes: QuoteSnapshot[]) => void)[] = [];
   private retryCount = 0;
   private maxRetries = 3;
+  /** Retry khusus lock EA (terpisah dari retry generik). */
+  private lockRetryCount = 0;
+  private maxLockRetries = 6;
   private lastStatus: QuotesReaderStatus = "idle";
 
   constructor(logPath: string) {
@@ -88,9 +91,11 @@ export class QuotesLogReader {
 
   /**
    * Baca ulang file dan terapkan snapshot hanya bila valid.
-   * - file hilang/kosong/terkunci/berubah saat dibaca: cache valid lama
+   * - file hilang/kosong/berubah saat dibaca: cache valid lama
    *   dipertahankan (tidak diganti snapshot invalid/kosong), status
    *   dicatat jujur di getLastStatus().
+   * - file terkunci EA: retry terbatas dengan backoff; bila persisten,
+   *   fail-closed tanpa throw (watcher mencoba lagi saat file berubah).
    * - Konsistensi snapshot: size+mtime dicatat sebelum baca dan dicek
    *   lagi sesudahnya; bila berubah (EA sedang menulis), ulangi terbatas.
    */
@@ -98,11 +103,18 @@ export class QuotesLogReader {
     try {
       if (!fs.existsSync(this.logPath)) {
         this.lastStatus = "file_not_found";
-        console.warn(`⚠ [file_not_found] quotes.csv not found: ${this.logPath}`);
+        console.warn(
+          `⚠ [file_not_found] quotes.csv not found: ${this.logPath}`,
+        );
         return;
       }
 
       const before = fingerprint(this.logPath);
+      // Baca langsung via fs. Di Windows, sharing violation saat EA
+      // menahan file muncul sebagai EPERM → terklasifikasi jujur sebagai
+      // file_locked oleh isLockError. (cmd /c type gagal sama kerasnya
+      // saat terkunci, tetapi error-nya generik tanpa kode sehingga
+      // status menjadi tidak jujur + log meledak.)
       const data = fs.readFileSync(this.logPath, "utf-8");
       const after = fingerprint(this.logPath);
 
@@ -174,14 +186,38 @@ export class QuotesLogReader {
 
       this.quotes = parsed;
       this.retryCount = 0;
+      this.lockRetryCount = 0;
       this.lastStatus = "valid_snapshot";
       console.log(
         `✓ [valid_snapshot] quotes.csv loaded: ${parsed.length} rows` +
           (malformed > 0 ? ` (${malformed} baris invalid dilewati)` : ""),
       );
     } catch (error) {
+      // Lock EA (menulis tiap tick): coba lagi dengan jeda membesar.
+      // Bila lock persisten, fail-closed (cache dipertahankan, kembali
+      // normal agar watcher bisa mencoba lagi saat file berubah) —
+      // JANGAN throw agar log tidak meledak setiap tick.
       if (isLockError(error)) {
         this.lastStatus = "file_locked";
+        if (this.lockRetryCount < this.maxLockRetries) {
+          this.lockRetryCount++;
+          console.warn(
+            `⚠ [file_locked] quotes.csv terkunci (EA sedang menulis), ` +
+              `coba lagi ${this.lockRetryCount}/${this.maxLockRetries}...`,
+          );
+          await new Promise((r) =>
+            setTimeout(r, 250 * this.lockRetryCount),
+          );
+          return this.readQuotesFile();
+        }
+        this.lockRetryCount = 0;
+        console.warn(
+          `⚠ [file_locked] quotes.csv masih terkunci, cache dipertahankan, ` +
+            `coba lagi saat file berubah. ` +
+            `Perbaiki EA: FileClose tiap tulis atau tulis via file ` +
+            `sementara + rename atomic.`,
+        );
+        return;
       }
       if (this.retryCount < this.maxRetries) {
         this.retryCount++;
