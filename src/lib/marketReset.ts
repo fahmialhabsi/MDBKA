@@ -383,6 +383,12 @@ export function applyCsvSwingLevels(
   };
 }
 
+/**
+ * Komisi default Finex dari ekspor terminal 03 Okt 2026 (Tahap 6G):
+ * 1.00 USD/lot flat untuk semua simbol (kolom Commission CSV).
+ */
+export const FINEX_DEFAULT_COMMISSION = 1.0;
+
 /** Default strategi (bukan data broker): aman diisi saat belum ada nilai. */
 const STRATEGY_DEFAULTS = {
   riskPercent: 10,
@@ -399,12 +405,14 @@ function needsFill(value: number): boolean {
 /**
  * Menerapkan preset broker untuk simbol baru TANPA menebak data akun:
  * - Finex (default): pointValue/contractSize/buffer mengikuti preset
- *   instrumentConfig; perilaku lama byte-identik.
+ *   instrumentConfig; komisi diisi FINEX_DEFAULT_COMMISSION (1.00 USD/lot,
+ *   CSV terminal 03 Okt 2026, Tahap 6G) bila kosong; override manual
+ *   dipertahankan. Perilaku lama byte-identik kecuali auto-fill komisi.
  * - OrbiTraderBerjangka: lookup EXACT (tanpa normalizeSymbol agar
  *   "GBPUSD_ORB" tidak terpangkas menjadi "GBPUSD"); simbol terdaftar
  *   di spec32 (16 OTB, Tahap 6D) yang memakai preset: pointValue dari
  *   kalkulator tick OTB, contractSize/minLot/lotStep dari preset OTB,
- *   commission dari spec32 (0.00); buffer dipertahankan.
+ *   commission dari spec32 (33.00 OTB, Tahap 6G); buffer dipertahankan.
  * - Simbol di luar spec32 (invented/TBD): kembalikan `previous`
  *   (referensi sama, tanpa partial apply, tanpa fallback Finex).
  *   Pengguna mengisi manual dari Specification; warning tampil via
@@ -420,7 +428,7 @@ export function applyBrokerPreset(
 ): BrokerSettings {
   if (brokerId === ORBITRADER_BROKER_ID) {
     // Tahap 6D: 16 simbol OTB aktif via spec32 (data CSV MT5 real).
-    // Gate verified = spec32 (commission 0.00 untuk semua 32 simbol).
+    // Gate verified = spec32; commission per broker (OTB 33.00, Tahap 6G).
     // Simbol di luar spec32 (invented/TBD) → return previous
     // (referensi sama, tanpa partial apply). OTB_PRESETS fixture tetap
     // menjadi sumber profile fisik (pointValue/contractSize/minLot);
@@ -467,6 +475,11 @@ export function applyBrokerPreset(
     pointValue: preset.defaultPointValue,
     contractSize: preset.contractSize,
     buffer: preset.defaultBuffer,
+    // Tahap 6G: komisi Finex 1.00 USD/lot (CSV terminal); override manual
+    // dipertahankan (needsFill hanya mengisi nilai kosong/invalid).
+    commission: needsFill(previous.commission)
+      ? FINEX_DEFAULT_COMMISSION
+      : previous.commission,
     riskPercent: needsFill(previous.riskPercent)
       ? STRATEGY_DEFAULTS.riskPercent
       : previous.riskPercent,

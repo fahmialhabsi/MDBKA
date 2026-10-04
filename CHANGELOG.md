@@ -1,5 +1,15 @@
 # CHANGELOG MDBKA
 
+## v1.0.8-tahap6g — Komisi Broker + Margin Getter (4 Okt 2026)
+
+Keputusan broker dari CSV terminal 03 Okt 2026 (kolom Commission):
+spec32 OTB 0.00 → **33.00 USD/lot**, Finex tanpa auto-fill → default
+**1.00 USD/lot** (`FINEX_DEFAULT_COMMISSION`, override manual kept).
+Validator komisi 33 kini konsisten tanpa warning untuk semua 13 simbol.
+Baru: `getOtbMarginRequirements()` (data-layer display-only,
+100000/100000/50000; decision engine tidak tersentuh).
+**412/412 tests lolos** (410 + 414 margin + 415 matriks komisi).
+
 ## v1.0.7-tahap6e-final — 13/13 OTB Verified (4 Okt 2026)
 
 Tahap 6E-11/12: AUDCAD_ORB + EURCHF_ORB dikonfirmasi dari 9 kolom baru

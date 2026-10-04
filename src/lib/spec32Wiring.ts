@@ -32,8 +32,8 @@ export const SPEC32_FALLBACK_COMMISSION = 0;
 
 /**
  * Default form per simbol dari spec32 (murni).
- * - Terdaftar + VERIFIED → leverage/commission dari spec (commission 0.00
- *   untuk semua 32 simbol regulasi 6B).
+ * - Terdaftar + VERIFIED → leverage/commission dari spec (commission
+ *   per broker: OTB 33.00, Finex 1.00 — CSV terminal 03 Okt 2026, 6G).
  * - Selain itu → fallback 50/0 + verified=false (pengguna isi manual).
  */
 export function getSpec32FormDefaults(symbol: string): Spec32FormDefaults {

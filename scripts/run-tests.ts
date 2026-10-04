@@ -19,6 +19,7 @@ import {
   normalizeSymbol,
 } from "../src/lib/instrumentConfig";
 import {
+  FINEX_DEFAULT_COMMISSION,
   RESET_MARKET_FIELDS,
   applyBrokerPreset,
   applyCsvSwingLevels,
@@ -70,6 +71,7 @@ import {
   OTB_PRESETS,
   calculateOtbTickValue,
   getOtbInstrumentProfile,
+  getOtbMarginRequirements,
 } from "../src/lib/otbInstrumentConfig";
 import {
   OTB_ALL_SYMBOLS,
@@ -3037,8 +3039,8 @@ test("217. OTB preset dipilih bila broker orbitraderberjangka", () => {
   assert(applied.buffer === 0, "buffer OTB dikarang (tidak ada datanya)");
   assert(applied.equity === 0, "equity ikut ditebak");
   assert(
-    applied.commission === 0,
-    `komisi OTB tidak terisi: ${applied.commission} (spec32 6D)`,
+    applied.commission === 33,
+    `komisi OTB tidak terisi: ${applied.commission} (spec32 33, 6G)`,
   );
   assert(applied.slippage === 0, "slippage ikut ditebak");
   assert(applied.riskPercent === 10, "default strategi tidak diisi");
@@ -3165,7 +3167,7 @@ test("223. validator OTB menolak minLot di bawah 0.1 via warning", () => {
   );
 });
 
-test("224. Finex byte-identik sebelum/sesudah wiring OTB", () => {
+test("224. Finex byte-identik sebelum/sesudah wiring OTB (komisi 1.00 6G)", () => {
   const result = applyBrokerPreset(makeValidBroker(), "GBPUSD");
   const expected: BrokerSettings = {
     equity: 8.99,
@@ -3174,7 +3176,8 @@ test("224. Finex byte-identik sebelum/sesudah wiring OTB", () => {
     lotStep: 0.01,
     pointValue: 100000,
     contractSize: 100000,
-    commission: 0,
+    // 6G: auto-fill komisi Finex 1.00 (CSV terminal); field lain identik.
+    commission: 1,
     slippage: 0,
     buffer: 0.00005,
     atrMultiplier: 1.2,
@@ -3768,18 +3771,18 @@ function otbBrokerWithCommission(commission: number): BrokerSettings {
   return { ...makeValidBroker(), commission };
 }
 
-test("245. komisi GBPUSD_ORB auto-fill 0 (spec32 Tahap 6D)", () => {
+test("245. komisi GBPUSD_ORB auto-fill 33 (spec32 Tahap 6G)", () => {
   const applied = applyBrokerPreset(
     makeEmptyBroker(),
     "GBPUSD_ORB",
     "orbitraderberjangka",
   );
-  assert(applied.commission === 0, `komisi=${applied.commission} (spec32 0)`);
+  assert(applied.commission === 33, `komisi=${applied.commission} (spec32 33)`);
 });
 
-test("246. komisi AUDCAD_ORB aktif via spec32 (commission=0)", () => {
-  // Tahap 6D: AUDCAD_ORB terdaftar di spec32 → preset ter-apply dengan
-  // commission spec32 (0.00); profile fisik (pointValue/minLot) tetap
+test("246. komisi AUDCAD_ORB aktif via spec32 (commission=33)", () => {
+  // Tahap 6G: AUDCAD_ORB terdaftar di spec32 → preset ter-apply dengan
+  // commission spec32 (33.00 CSV); profile fisik (pointValue/minLot) tetap
   // dari OTB_PRESETS. Override manual pengguna dipertahankan.
   const previous = makeEmptyBroker();
   const applied = applyBrokerPreset(
@@ -3788,7 +3791,7 @@ test("246. komisi AUDCAD_ORB aktif via spec32 (commission=0)", () => {
     "orbitraderberjangka",
   );
   assert(applied !== previous, "preset spec32 tidak ter-apply");
-  assert(applied.commission === 0, `komisi=${applied.commission} (spec32 0)`);
+  assert(applied.commission === 33, `komisi=${applied.commission} (spec32 33)`);
   assert(applied.pointValue === 1, `pointValue=${applied.pointValue}`);
   assert(applied.minLot === 0.1, `minLot=${applied.minLot}`);
   const manual = applyBrokerPreset(
@@ -3819,9 +3822,9 @@ test("246. komisi AUDCAD_ORB aktif via spec32 (commission=0)", () => {
   );
 });
 
-test("247. komisi EURCHF_ORB aktif via spec32 (commission=0)", () => {
-  // Tahap 6D: EURCHF_ORB terdaftar di spec32 → preset ter-apply dengan
-  // commission spec32 (0.00); profile fisik tetap dari OTB_PRESETS.
+test("247. komisi EURCHF_ORB aktif via spec32 (commission=33)", () => {
+  // Tahap 6G: EURCHF_ORB terdaftar di spec32 → preset ter-apply dengan
+  // commission spec32 (33.00); profile fisik tetap dari OTB_PRESETS.
   const previous = makeEmptyBroker();
   const applied = applyBrokerPreset(
     previous,
@@ -3829,7 +3832,7 @@ test("247. komisi EURCHF_ORB aktif via spec32 (commission=0)", () => {
     "orbitraderberjangka",
   );
   assert(applied !== previous, "preset spec32 tidak ter-apply");
-  assert(applied.commission === 0, `komisi=${applied.commission} (spec32 0)`);
+  assert(applied.commission === 33, `komisi=${applied.commission} (spec32 33)`);
   assert(applied.pointValue === 1, `pointValue=${applied.pointValue}`);
 });
 
@@ -3845,11 +3848,23 @@ test("248. komisi simbol OTB TBD tetap kosong", () => {
   assert(result.commission === 0, "komisi berubah tanpa preset");
 });
 
-test("249. komisi Finex tetap manual tanpa auto-fill", () => {
+test("249. komisi Finex auto-fill 1.00 + override manual", () => {
+  // Tahap 6G: Finex 1.00 USD/lot (CSV terminal). Kosong → 1.00;
+  // input manual dipertahankan.
   const viaDefault = applyBrokerPreset(makeEmptyBroker(), "GBPUSD");
-  assert(viaDefault.commission === 0, "Finex ikut auto-fill komisi");
+  assert(viaDefault.commission === 1, "Finex tidak auto-fill komisi 1.00");
   const viaFinex = applyBrokerPreset(makeEmptyBroker(), "GBPUSD", "finex");
-  assert(viaFinex.commission === 0, "jalur finex ikut auto-fill komisi");
+  assert(viaFinex.commission === 1, "jalur finex tidak auto-fill komisi 1.00");
+  assert(
+    FINEX_DEFAULT_COMMISSION === 1,
+    `konstanta=${FINEX_DEFAULT_COMMISSION}`,
+  );
+  const manual = applyBrokerPreset(
+    { ...makeEmptyBroker(), commission: 5 },
+    "GBPUSD",
+    "finex",
+  );
+  assert(manual.commission === 5, "override komisi Finex tertimpa");
 });
 
 test("250. user bisa override komisi OTB + guard info menyimpang", () => {
@@ -5072,7 +5087,7 @@ test("330. 13/13 simbol verified end-to-end (preset+warning+validator)", () => {
     "GBPUSD_ORB",
     "orbitraderberjangka",
   );
-  assert(applied.commission === 0, "komisi verified tidak terisi (spec32 6D)");
+  assert(applied.commission === 33, "komisi verified tidak terisi (spec32 33, 6G)");
   assert(applied.minLot === 0.1, "minLot verified tidak terisi");
   assert(
     getOtbDetectedNotice("finex", "GBPUSD_ORB") !== null,
@@ -5084,7 +5099,7 @@ test("331. 0 simbol pending; 13/13 ter-apply via spec32 (6E-11/12)", () => {
   // Tahap 6E-1..6E-12: seluruh 13 simbol OTB verified (gate lama).
   // Tidak ada pending tersisa: VERIFIED_OTB_SYMBOLS = 13, semua simbol
   // tanpa warning verifikasi, banner pindah tampil, preset spec32
-  // (commission 0) ter-apply. Blok validator anti-warning-fixture untuk
+  // (commission 33) ter-apply. Blok validator anti-warning-fixture untuk
   // pending dihapus (jalur pending tidak ada lagi); perilaku validator
   // untuk verified dikunci test 246/330.
   const pending = (OTB_ALL_SYMBOLS as readonly string[]).filter(
@@ -5103,8 +5118,8 @@ test("331. 0 simbol pending; 13/13 ter-apply via spec32 (6E-11/12)", () => {
       `${symbol} preset spec32 tidak ter-apply`,
     );
     assert(
-      applied.commission === 0,
-      `${symbol} commission=${applied.commission} (spec32 0)`,
+      applied.commission === 33,
+      `${symbol} commission=${applied.commission} (spec32 33)`,
     );
     assert(
       getOtbDetectedNotice("finex", symbol) !== null,
@@ -5131,8 +5146,8 @@ test("332. Finex tidak terpengaruh kebijakan verifikasi OTB", () => {
   );
   const preset = applyBrokerPreset(makeEmptyBroker(), "GBPUSD", "finex");
   assert(
-    preset.pointValue === 100000 && preset.commission === 0,
-    "preset Finex berubah",
+    preset.pointValue === 100000 && preset.commission === 1,
+    "preset Finex berubah di luar komisi 6G",
   );
 });
 
@@ -5329,12 +5344,16 @@ test("358. specs32 berisi 32 simbol (16 OTB + 16 Finex)", () => {
     assert(!s.endsWith("_ORB"), `${s} bocor _ORB ke Finex`);
 });
 
-test("359. semua specs32 VERIFIED + commission 0.00", () => {
+test("359. semua specs32 VERIFIED + commission per broker (6G)", () => {
   for (const [symbol, spec] of Object.entries(INSTRUMENT_SPECS_32)) {
     assert(spec.symbol === symbol, `key/symbol beda: ${symbol}`);
     assert(spec.status === "VERIFIED", `${symbol} bukan VERIFIED`);
     assert(isSpec32Verified(symbol), `${symbol} helper verified gagal`);
-    assert(spec.commission === 0, `${symbol} commission=${spec.commission}`);
+    const expected = spec.broker === "orbitraderberjangka" ? 33 : 1;
+    assert(
+      spec.commission === expected,
+      `${symbol} commission=${spec.commission} (expect ${expected})`,
+    );
   }
   assert(getInstrumentSpec32("XYZ") === null, "unknown harus null");
   assert(getInstrumentSpec32("gbpusd_orb") === null, "harus exact case-sensitive");
@@ -5724,19 +5743,19 @@ test("385. specs32 frozen (immutable registry paralel)", () => {
 /* ---------------- Tahap 6C-safe additive (paralel, tanpa sentuh legacy): TEST 386-400 ---------------- */
 /* Adapter spec32Wiring + non-regresi legacy. Tidak ada rewrite test 1-385. */
 
-test("386. wiring form defaults OTB GBPUSD_ORB → 100000/0/verified", () => {
+test("386. wiring form defaults OTB GBPUSD_ORB → 100000/33/verified", () => {
   const d = getSpec32FormDefaults("GBPUSD_ORB");
   assert(d.leverage === 100000, `leverage=${d.leverage}`);
-  assert(d.commission === 0, `commission=${d.commission}`);
+  assert(d.commission === 33, `commission=${d.commission}`);
   assert(d.verified === true, "harus verified");
   assert(isSpec32Available("GBPUSD_ORB") === true, "available gagal");
 });
 
 test("387. wiring form defaults Finex GBPUSD + US100", () => {
   const gbp = getSpec32FormDefaults("GBPUSD");
-  assert(gbp.leverage === 100000 && gbp.commission === 0 && gbp.verified, "GBPUSD salah");
+  assert(gbp.leverage === 100000 && gbp.commission === 1 && gbp.verified, "GBPUSD salah");
   const us100 = getSpec32FormDefaults("US100");
-  assert(us100.leverage === 100000 && us100.commission === 0 && us100.verified, "US100 salah");
+  assert(us100.leverage === 100000 && us100.commission === 1 && us100.verified, "US100 salah");
 });
 
 test("388. wiring fallback unknown/empty (tanpa fabrikasi)", () => {
@@ -5748,11 +5767,12 @@ test("388. wiring fallback unknown/empty (tanpa fabrikasi)", () => {
   assert(isSpec32Available("") === false, "empty available");
 });
 
-test("389. wiring semua 32 simbol verified available", () => {
+test("389. wiring semua 32 simbol verified available (komisi per broker)", () => {
   for (const s of Object.keys(INSTRUMENT_SPECS_32)) {
     const d = getSpec32FormDefaults(s);
     assert(d.verified === true, `${s} tidak verified`);
-    assert(d.commission === 0, `${s} commission bukan 0`);
+    const expected = s.endsWith("_ORB") ? 33 : 1;
+    assert(d.commission === expected, `${s} commission bukan ${expected}`);
     assert(isSpec32Available(s) === true, `${s} tidak available`);
   }
 });
@@ -5831,14 +5851,14 @@ test("395. legacy non-regresi: dateService triple Sel-Rab = 4x", () => {
 
 test("396. legacy non-regresi: preset Finex utuh + OTB spec32 aktif", () => {
   const finex = applyBrokerPreset(makeEmptyBroker(), "GBPUSD", "finex");
-  assert(finex.pointValue === 100000 && finex.commission === 0, "Finex berubah");
-  // Tahap 6D: AUDCAD_ORB kini aktif via spec32 (commission 0, bukan no-apply).
+  assert(finex.pointValue === 100000 && finex.commission === 1, "Finex berubah di luar komisi 6G");
+  // Tahap 6G: AUDCAD_ORB aktif via spec32 (commission 33, bukan no-apply).
   const applied = applyBrokerPreset(
     makeEmptyBroker(),
     "AUDCAD_ORB",
     "orbitraderberjangka",
   );
-  assert(applied.commission === 0, "spec32 commission bukan 0");
+  assert(applied.commission === 33, "spec32 commission bukan 33");
 });
 
 test("397. wiring modul murni (tanpa impor legacy/UI)", () => {
@@ -5893,14 +5913,15 @@ test("400. wiring SHORT memakai swapShort (USDJPY Finex)", () => {
   assert(Math.abs(short.swapUSD - -4.98) < 0.02, `short=${short.swapUSD}`);
 });
 
-/* ---------------- Tahap 6D spec32 integration: TEST 401-410 ---------------- */
-/* applyBrokerPreset OTB kini memakai commission spec32 (0.00); fixture
- * OTB_PRESETS (33) tetap terkunci sebagai data-layer (test 408). */
+/* ---------------- Tahap 6D spec32 integration + 6G komisi broker: TEST 401-410 ---------------- */
+/* applyBrokerPreset OTB memakai commission spec32 (33.00 OTB / 1.00 Finex,
+ * CSV terminal 03 Okt 2026); fixture OTB_PRESETS (33) tetap terkunci
+ * sebagai data-layer (test 408). */
 
 test("401. getSpec32FormDefaults: AUDJPY_ORB verified → leverage/commission", () => {
   const defaults = getSpec32FormDefaults("AUDJPY_ORB");
   assert(defaults.verified === true, "AUDJPY_ORB harus verified");
-  assert(defaults.commission === 0, `commission=${defaults.commission} (expect 0)`);
+  assert(defaults.commission === 33, `commission=${defaults.commission} (expect 33)`);
   assert(defaults.leverage === 100000, `leverage=${defaults.leverage}`);
 });
 
@@ -5923,20 +5944,20 @@ test("404. spec32VerificationNotice: null verified, warning unknown, null empty"
   assert(spec32VerificationNotice("") === null, "empty return null");
 });
 
-test("405. applyBrokerPreset: AUDJPY_ORB → commission=0 + pointValue OTB", () => {
-  // commission dari spec32 (0.00); pointValue dari kalkulator tick OTB
+test("405. applyBrokerPreset: AUDJPY_ORB → commission=33 + pointValue OTB", () => {
+  // commission dari spec32 (33.00, 6G); pointValue dari kalkulator tick OTB
   // (0.001 × 100000 = 100) — BUKAN tickValue spec32 (0.63).
   const applied = applyBrokerPreset(
     makeEmptyBroker(),
     "AUDJPY_ORB",
     "orbitraderberjangka",
   );
-  assert(applied.commission === 0, `commission=${applied.commission} (spec32)`);
+  assert(applied.commission === 33, `commission=${applied.commission} (spec32)`);
   assert(applied.pointValue === 100, `pointValue=${applied.pointValue} (kalkulator OTB)`);
   assert(applied.minLot === 0.1, `minLot=${applied.minLot}`);
 });
 
-test("406. applyBrokerPreset: 16 OTB spec32 semua commission=0", () => {
+test("406. applyBrokerPreset: 16 OTB spec32 semua commission=33", () => {
   assert(OTB_SPECS_32.length === 16, "spec32 OTB harus 16");
   for (const symbol of OTB_SPECS_32) {
     const applied = applyBrokerPreset(
@@ -5944,9 +5965,10 @@ test("406. applyBrokerPreset: 16 OTB spec32 semua commission=0", () => {
       symbol,
       "orbitraderberjangka",
     );
-    // 13 simbol berprofile OTB ter-apply; 3 tanpa profile (NZDJPY/USDCHF/
-    // USDJPY_ORB) tetap return previous — keduanya sah, commission 0.
-    assert(applied.commission === 0, `${symbol} commission=${applied.commission}`);
+    // 13 simbol berprofile OTB ter-apply (commission 33); 3 tanpa profile
+    // (NZDJPY/USDCHF/USDJPY_ORB) tetap return previous (commission 0).
+    const expected = getOtbInstrumentProfile(symbol) === null ? 0 : 33;
+    assert(applied.commission === expected, `${symbol} commission=${applied.commission}`);
   }
 });
 
@@ -6055,8 +6077,38 @@ test("413. non-JPY harga >1 tidak diinvers (USDCAD 1.42561, 6F-1)", () => {
   });
   assert(
     Math.abs(cost.swapCost - -2138.415) < 1e-6,
-    `swapCost=${cost.swapCost} (100000×1.42561×-1.5%)`,
+    `swapCost=${cost.swapCost} (100000x1.42561x-1.5%)`,
   );
+});
+
+/* ---------------- Komisi broker 6G + margin getter: TEST 414-415 ---------------- */
+
+test("414. getOtbMarginRequirements: statis CSV + null invented (6G)", () => {
+  // Data-layer murni (display-only); decision engine tidak tersentuh.
+  for (const s of ["GBPUSD_ORB", "AUDCAD_ORB", "EURCHF_ORB", "AUDJPY_ORB"]) {
+    const m = getOtbMarginRequirements(s);
+    if (m === null) throw new Error(`margin ${s} hilang`);
+    assert(m.symbol === s, `symbol=${m.symbol}`);
+    assert(m.initialMargin === 100000, `${s} initial=${m.initialMargin}`);
+    assert(m.maintenanceMargin === 100000, `${s} maintenance=${m.maintenanceMargin}`);
+    assert(m.hedgedMargin === 50000, `${s} hedged=${m.hedgedMargin}`);
+    assert(Object.isFrozen(m), `${s} tidak frozen`);
+  }
+  assert(getOtbMarginRequirements("EURUSD_ORB") === null, "invented harus null");
+  assert(getOtbMarginRequirements("GBPUSD") === null, "Finex harus null");
+});
+
+test("415. matriks komisi broker 6G: OTB 33 / Finex 1 / fallback 0", () => {
+  assert(requireSpec32("GBPUSD_ORB").commission === 33, "OTB harus 33");
+  assert(requireSpec32("AUDJPY_ORB").commission === 33, "OTB JPY harus 33");
+  assert(requireSpec32("GBPUSD").commission === 1, "Finex harus 1");
+  assert(requireSpec32("US100").commission === 1, "US100 harus 1");
+  assert(
+    getSpec32FormDefaults("XYZ").commission === SPEC32_FALLBACK_COMMISSION,
+    "fallback berubah",
+  );
+  const finex = applyBrokerPreset(makeEmptyBroker(), "EURUSD", "finex");
+  assert(finex.commission === FINEX_DEFAULT_COMMISSION, "Finex default bukan 1");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

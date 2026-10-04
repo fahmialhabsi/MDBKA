@@ -6,8 +6,10 @@
  *   Seluruh 354 locked tests tetap hijau byte-identik.
  * - Sumber angka: CSV ekspor terminal MT5 (lihat prompt Tahap 6B):
  *   OTB 16 simbol (suffiks _ORB) + Finex 16 simbol (tanpa suffiks,
- *   termasuk US100). Commission = 0.00 untuk semua (kebijakan broker:
- *   OTB points-based, Finex spread-only).
+ *   termasuk US100). Commission per broker dari ekspor terminal 03 Okt 2026
+ *   (kolom Commission CSV, dikonfirmasi panel Specification):
+ *   OTB (_ORB) = 33.00 USD/lot flat, Finex = 1.00 USD/lot flat.
+ *   (Tahap 6D memakai 0.00; dikoreksi Tahap 6G ke angka broker.)
  * - Catatan JPY: target 16-simbol hanya memuat 5 JPY pair per broker
  *   (AUDJPY, CADJPY, CHFJPY, NZDJPY, USDJPY). EURJPY/GBPJPY disebut di
  *   prompt tetapi TIDAK ada di data CSV 16-simbol, sehingga TIDAK
@@ -33,7 +35,7 @@ export interface InstrumentSpec {
   tickValue: number;
   /** Contract size dari CSV (100000 untuk FX). */
   leverage: number;
-  /** USD per lot; 0.00 untuk semua 32 simbol (Tahap 6B lock-in). */
+  /** USD per lot dari kolom Commission CSV (OTB 33.00, Finex 1.00). */
   commission: number;
   /** Swap pips/hari Sen-Kam (dari CSV, bisa negatif/positif/nol). */
   swapLong: number;
@@ -71,7 +73,8 @@ function fx(
     tickSize: pip,
     tickValue,
     leverage: 100000,
-    commission: 0.0,
+    // Tahap 6G: komisi per broker dari CSV (OTB 33.00, Finex 1.00).
+    commission: broker === "orbitraderberjangka" ? 33.0 : 1.0,
     swapLong,
     swapShort,
     ...(isJPYPair ? { swapWedMultiplier: 3 } : {}),
@@ -274,7 +277,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 0.2,
       leverage: 100000,
-      commission: 0.0,
+      commission: 1.0,
       swapLong: -25.29,
       swapShort: -117.17,
       swapWedMultiplier: 3,

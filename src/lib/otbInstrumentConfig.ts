@@ -476,3 +476,32 @@ export function calculateOtbTickValue(
 ): number {
   return profile.tickSize * profile.contractSize;
 }
+
+/** Kebutuhan margin OTB per simbol (data-layer, display-only). */
+export interface OtbMarginRequirements {
+  readonly symbol: string;
+  readonly initialMargin: number;
+  readonly maintenanceMargin: number;
+  readonly hedgedMargin: number;
+}
+
+/**
+ * Tahap 6G: ambil kebutuhan margin OTB, atau null bila simbol belum
+ * terdaftar. Nilai dari ekspor CSV terminal (OTB statis:
+ * 100000/100000/50000 untuk FX). Murni; TIDAK dipakai decision engine
+ * (tanpa validasi margin otomatis) — display-only sampai ada kebutuhan.
+ */
+export function getOtbMarginRequirements(
+  symbol: string
+): OtbMarginRequirements | null {
+  const preset = getOtbInstrumentProfile(symbol);
+
+  if (preset === null) return null;
+
+  return Object.freeze({
+    symbol: preset.symbol,
+    initialMargin: preset.initialMargin,
+    maintenanceMargin: preset.maintenanceMargin,
+    hedgedMargin: preset.hedgedMargin,
+  });
+}
