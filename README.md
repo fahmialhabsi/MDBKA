@@ -21,6 +21,7 @@ Trading Education & Risk Calculator untuk MetaTrader 5 (OTB + Finex)
 ```bash
 npm install
 npm run dev
+# Satu perintah menjalankan frontend 5173 + backend 3000 sekaligus.
 # Buka http://localhost:5173
 ```
 
@@ -68,12 +69,12 @@ npm run dev
 
 ### Running
 ```bash
-# Terminal 1+2 sekaligus:
-npm run dev:both
+npm run dev
+# Frontend 5173 + backend 3000 sekaligus (satu perintah).
 
 # Atau terpisah:
-npm run dev              # Frontend 5173
-npm run dev:backend      # Backend 3000 (tsx watch server/index.ts)
+npm run dev:frontend   # Frontend 5173 saja
+npm run dev:backend    # Backend 3000 saja (tsx watch server/index.ts)
 ```
 
 ### MT5 Integration

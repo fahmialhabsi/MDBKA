@@ -10,9 +10,10 @@
   "scripts": {
     "test": "tsc -p tsconfig.test.json && node scripts/prepare-tests.mjs && node dist-tests/scripts/run-tests.js",
     "lint": "eslint .",
-    "dev": "vite",
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "vite",
     "dev:backend": "tsx watch server/index.ts",
-    "dev:both": "concurrently \"npm run dev\" \"npm run dev:backend\"",
+    "dev:both": "npm run dev",
     "build": "tsc -b && vite build",
     "build:backend": "tsc -p tsconfig.server.json",
     "preview": "vite preview"
