@@ -1,5 +1,14 @@
 # CHANGELOG MDBKA
 
+## v1.1.0-fase1 — Monitor Posisi + Sinyal Exit (5 Okt 2026)
+
+Fase 1 (scope 5 simbol live Finex): form entry manual (localStorage,
+tanpa order) + dashboard P&L live + sinyal exit rule-based
+(TP/SL tersentuh, dekat TP/SL 15%, drift ≥50% risiko). P&L first-principles
+(selisisih×contract×lot → USD via FX) tervalidasi persis vs laporan
+broker 91811209 (USDCHF +1.42, GBPUSD −1.44, AUDCAD −1.35).
+**432/432 tests lolos** (428 + 432/433/434/435).
+
 ## Unreleased — Proxy Kurs ECB via Backend (4 Okt 2026)
 
 Fix dari laporan console: fetch ECB langsung dari browser diblokir CORS

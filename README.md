@@ -13,6 +13,7 @@ Trading Education & Risk Calculator untuk MetaTrader 5 (OTB + Finex)
 ✅ **Holding Days Tracker** — intraday (0 hari) + swing (1-10 hari) holding cost
 ✅ **Triple-Swap Wednesday** — auto-deteksi hari Rabu × 3
 ✅ **Live Equity + Live Quotes** — SSE real-time dual-source (OTB + Finex), display-only
+✅ **Monitor Posisi Manual** — catat posisi MT5, P&L live + sinyal exit (TP/SL/near/drift), tanpa order
 ✅ **Responsive Dashboard** — sidebar live sticky desktop, stack mobile
 
 ## 🚀 Cara Pakai
@@ -82,7 +83,7 @@ agregator candle masa depan.
 - OCR: regex + region-based text extraction
 - CSV: Papa Parse (50+ candle validation)
 - FX Rate: ECB free API (fallback hardcoded)
-- Test: 428/428 lolos (zero regression)
+- Test: 432/432 lolos (zero regression)
 
 ## 🔌 Tahap 5E-STEP2: Live Equity (Node.js Backend)
 

@@ -9,6 +9,7 @@ import {
 import {
   Activity,
   BarChart3,
+  Briefcase,
   Calculator,
   FileCheck2,
   ShieldCheck,
@@ -24,6 +25,7 @@ import ValidationSummaryCard from "./components/analysis/ValidationSummaryCard";
 import SwingLevelsForm from "./components/analysis/SwingLevelsForm";
 import AnalysisResult from "./components/result/AnalysisResult";
 import { LiveEquity } from "./components/result/LiveEquity";
+import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
 import { LiveQuotes } from "./components/analysis/LiveQuotes";
 import dashboard from "./styles/dashboard.module.css";
 
@@ -844,6 +846,14 @@ export default function App() {
                 brokerId={activeBrokerId}
                 fxRates={fxRates}
               />
+            </Panel>
+
+            <Panel
+              icon={<Briefcase size={20} />}
+              title="9. Monitor posisi (manual)"
+              description="Catat posisi MT5 manual; pantau P&L live + sinyal exit. Tanpa order."
+            >
+              <HoldingsMonitor brokerId={activeBrokerId} fxRates={fxRates} />
             </Panel>
           </div>
 

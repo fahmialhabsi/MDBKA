@@ -103,6 +103,14 @@ import {
   FX_CACHE_TTL_MS,
   isFxCacheFresh,
 } from "../server/routes/fxRoutes";
+import {
+  ADVERSE_DRIFT_PCT,
+  NEAR_LEVEL_PCT,
+  calculateHoldingPnL,
+  evaluateExitSignal,
+  validateHoldingInput,
+  type Holding,
+} from "../src/lib/exitMonitor";
 import { FRONTEND_ORIGIN } from "../server/app";
 import {
   OTB_ALL_SYMBOLS,
@@ -6516,6 +6524,148 @@ test("431. frontend via proxy dulu, direct tetap cadangan (readSrc)", () => {
   assert(appSrc.includes("fetchBackendRates"), "App tak pakai proxy");
   assert(appSrc.includes("fetchECBRates"), "App kehilangan cadangan direct (regresi test 294)");
   assert(appSrc.includes("API_BASE_URL"), "App tak pakai base URL env");
+});
+
+/* ---------------- Monitor posisi + sinyal exit F1: TEST 432-435 ---------------- */
+
+function makeHolding(overrides: Partial<Holding> = {}): Holding {
+  return {
+    id: "h-test",
+    symbol: "USDCHF",
+    brokerId: "finex",
+    direction: "BELI",
+    lot: 0.01,
+    entryPrice: 0.83231,
+    sl: 0.82724,
+    tp: 0.84224,
+    entryTime: "2026-09-29T06:04:06.000Z",
+    createdAt: "2026-09-29T06:04:06.000Z",
+    ...overrides,
+  };
+}
+
+/** Konverter FX deterministik untuk test (ECB 1 CHF = 1/0.832 USD). */
+function testToUsd(amount: number, currency: string): number | null {
+  if (currency === "USD") return amount;
+  if (currency === "CHF") return (amount / 0.832) * 1;
+  if (currency === "CAD") return (amount / 1.42) * 1;
+  if (currency === "JPY") return (amount / 157.0) * 1;
+  if (currency === "AUD" || currency === "EUR" || currency === "GBP" || currency === "NZD") {
+    return amount * 1;
+  }
+  return null;
+}
+
+test("432. P&L cocok laporan broker 91811209 (real history)", () => {
+  // USDCHF buy 0.01 @0.83231 → bid 0.83349 = +1.42 (laporan).
+  const usdchf = calculateHoldingPnL(
+    makeHolding(),
+    0.83349,
+    0.8336,
+    testToUsd,
+  );
+  if (usdchf === null) throw new Error("pnl null");
+  assert(usdchf.currency === "USD", `ccy=${usdchf.currency}`);
+  assert(Math.abs((usdchf?.value ?? 0) - 1.42) < 0.03, `pnl=${usdchf?.value}`);
+  // GBPUSD buy 0.01 @1.32483 → 1.32339 = -1.44 (laporan, tanpa konversi).
+  const gbpusd = calculateHoldingPnL(
+    makeHolding({ symbol: "GBPUSD", entryPrice: 1.32483, sl: 1.31977, tp: 1.33477 }),
+    1.32339,
+    1.3235,
+    testToUsd,
+  );
+  assert(gbpusd?.currency === "USD", "GBPUSD harus USD langsung");
+  assert(Math.abs((gbpusd?.value ?? 0) - -1.44) < 1e-9, `pnl=${gbpusd?.value}`);
+  // AUDCAD buy 0.01 @0.99345 → 0.99154 ≈ -1.35 via konversi (bukan -1.91 mentah).
+  const audcad = calculateHoldingPnL(
+    makeHolding({ symbol: "AUDCAD", entryPrice: 0.99345, sl: 0.98975, tp: 1.00475 }),
+    0.99154,
+    0.9916,
+    testToUsd,
+  );
+  assert(audcad?.currency === "USD", "AUDCAD harus terkonversi USD");
+  assert(Math.abs((audcad?.value ?? 0) - -1.35) < 0.05, `pnl=${audcad?.value}`);
+  // Tanpa converter: nilai profit-ccy berlabel jujur.
+  const raw = calculateHoldingPnL(
+    makeHolding({ symbol: "AUDCAD", entryPrice: 0.99345, sl: 0.98975, tp: 1.00475 }),
+    0.99154,
+    0.9916,
+  );
+  assert(raw?.currency === "CAD", "tanpa converter harus CAD");
+  // Invalid → null; simbol unknown → null.
+  assert(calculateHoldingPnL(makeHolding(), 0, 0.8, testToUsd) === null, "bid 0 lolos");
+  assert(
+    calculateHoldingPnL(makeHolding({ symbol: "XYZ" }), 1, 2, testToUsd) === null,
+    "unknown lolos",
+  );
+});
+
+test("433. evaluateExitSignal: TP/SL/near/drift/HOLD", () => {
+  assert(NEAR_LEVEL_PCT === 15 && ADVERSE_DRIFT_PCT === 50, "ambang berubah");
+  const base = makeHolding();
+  // TP tersentuh (bid 0.84224 ≥ TP).
+  const tp = evaluateExitSignal(base, 0.8423, 0.8424, testToUsd);
+  assert(tp.signal === "EXIT_TAKE_PROFIT", `sinyal=${tp.signal}`);
+  // SL tersentuh (bid 0.82724 ≤ SL).
+  const sl = evaluateExitSignal(base, 0.8272, 0.8273, testToUsd);
+  assert(sl.signal === "EXIT_STOP_LOSS", `sinyal=${sl.signal}`);
+  // Tengah koridor → HOLD.
+  const hold = evaluateExitSignal(base, 0.834, 0.8341, testToUsd);
+  assert(hold.signal === "HOLD", `sinyal=${hold.signal}`);
+  assert(hold.risk !== null && hold.reward !== null, "risk/reward hilang");
+  // JUAL terbalik: ask ≤ TP → TP; ask ≥ SL → SL.
+  const short = makeHolding({ direction: "JUAL", entryPrice: 0.83523, sl: 0.83802, tp: 0.83202 });
+  const shortTp = evaluateExitSignal(short, 0.8319, 0.832, testToUsd);
+  assert(shortTp.signal === "EXIT_TAKE_PROFIT", `short TP=${shortTp.signal}`);
+  const shortSl = evaluateExitSignal(short, 0.8379, 0.8381, testToUsd);
+  assert(shortSl.signal === "EXIT_STOP_LOSS", `short SL=${shortSl.signal}`);
+  // Drift: rugi ~60% risiko (di luar band near 15%, di atas ambang 50%).
+  const drift = evaluateExitSignal(base, 0.8296, 0.8297, testToUsd);
+  assert(drift.signal === "WARN_ADVERSE_DRIFT", `drift=${drift.signal} (${drift.pnl})`);
+  // Dekat TP: dalam 15% rentang (0.84224-0.82724=0.015 → band 0.00225).
+  const near = evaluateExitSignal(base, 0.841, 0.8411, testToUsd);
+  assert(near.signal === "WARN_NEAR_TP", `near=${near.signal}`);
+  // Invalid → HOLD + alasan.
+  const bad = evaluateExitSignal(base, 0, 0, testToUsd);
+  assert(bad.signal === "HOLD" && bad.pnl === null, "invalid tak HOLD");
+});
+
+test("434. validateHoldingInput: sisi SL/TP + spec", () => {
+  assert(
+    validateHoldingInput({ symbol: "USDCHF", direction: "BELI", lot: 0.01, entryPrice: 0.83, sl: 0.82, tp: 0.84 }).length === 0,
+    "input valid ditolak",
+  );
+  const wrongSide = validateHoldingInput({ symbol: "USDCHF", direction: "BELI", lot: 0.01, entryPrice: 0.83, sl: 0.84, tp: 0.82 });
+  assert(wrongSide.some((m) => m.includes("BELI")), "sisi BELI salah lolos");
+  const wrongSell = validateHoldingInput({ symbol: "USDCHF", direction: "JUAL", lot: 0.01, entryPrice: 0.83, sl: 0.82, tp: 0.84 });
+  assert(wrongSell.some((m) => m.includes("JUAL")), "sisi JUAL salah lolos");
+  assert(validateHoldingInput({ symbol: "", direction: "BELI", lot: 0.01, entryPrice: 0.83, sl: 0.82, tp: 0.84 }).length > 0, "simbol kosong lolos");
+  assert(validateHoldingInput({ symbol: "USDCHF", direction: "BELI", lot: 0, entryPrice: 0.83, sl: 0.82, tp: 0.84 }).length > 0, "lot 0 lolos");
+  assert(
+    validateHoldingInput({ symbol: "XYZ", direction: "BELI", lot: 0.01, entryPrice: 1, sl: 0.9, tp: 1.1 }).some((m) => m.includes("spec")),
+    "unknown tanpa peringatan spec",
+  );
+});
+
+test("435. wiring holdings: komponen + mount App (readSrc)", () => {
+  for (const f of [
+    "src/components/holdings/HoldingsForm.tsx",
+    "src/components/holdings/HoldingsDashboard.tsx",
+    "src/components/holdings/HoldingsMonitor.tsx",
+    "src/hooks/useHoldingsQuotes.ts",
+  ]) {
+    const src = readSrc(f);
+    assert(!src.includes("import.meta."), `${f} tak CJS-safe`);
+  }
+  const form = readSrc("src/components/holdings/HoldingsForm.tsx");
+  assert(form.includes("validateHoldingInput"), "form tak validasi");
+  assert(form.includes("Tanpa order") || form.includes("tanpa order"), "label tanpa-order hilang");
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes("evaluateExitSignal"), "dashboard tak evaluasi sinyal");
+  assert(dash.includes("holdings-dashboard"), "testid dashboard hilang");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("HoldingsMonitor"), "monitor tak terpasang di App");
+  assert(app.includes("Monitor posisi"), "panel monitor hilang");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +
