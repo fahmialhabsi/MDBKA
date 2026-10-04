@@ -8,3 +8,7 @@ dist-tests/
 .DS_Store
 
 *.tar.gz
+
+# Spreadsheets kerja (sumber ekspor CSV, bukan bagian repo)
+*.xls
+*.xlsx
