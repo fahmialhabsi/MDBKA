@@ -134,7 +134,119 @@ export class TickHistoryLogger {
     this.broker = broker;
     this.tzOffsetHours = tzOffsetHours;
     fs.mkdirSync(this.dir, { recursive: true });
+    this.loadSeenFromDisk();
+    const compacted = this.compact();
+    if (compacted.dupesRemoved > 0) {
+      console.log(
+        `✓ History ${broker}: compact ${compacted.dupesRemoved} baris duplikat dari ${compacted.filesCompacted} file`,
+      );
+    }
     this.prune();
+  }
+
+  /**
+   * Muat kunci tick yang sudah tersimpan ke memori (dedup lintas restart).
+   * Tanpa ini, backfill setiap start backend menulis ulang tick lama.
+   * Dibatasi MAX_SEEN_KEYS (file terbaru dulu bila melebihi batas).
+   */
+  private loadSeenFromDisk(): void {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(this.dir);
+    } catch {
+      return;
+    }
+    const files = entries
+      .filter((n) => /^ticks-\d{4}-\d{2}-\d{2}\.jsonl$/.test(n))
+      .sort()
+      .reverse();
+    for (const name of files) {
+      let text: string;
+      try {
+        text = fs.readFileSync(path.join(this.dir, name), "utf-8");
+      } catch {
+        continue;
+      }
+      for (const line of text.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed === "") continue;
+        try {
+          const rec = JSON.parse(trimmed) as Partial<HistoryTick>;
+          if (
+            typeof rec.symbol === "string" &&
+            typeof rec.ts_raw === "string" &&
+            typeof rec.bid === "number" &&
+            typeof rec.ask === "number"
+          ) {
+            this.seen.add(tickKey(rec.symbol, rec.ts_raw, rec.bid, rec.ask));
+            if (this.seen.size >= MAX_SEEN_KEYS) return;
+          }
+        } catch {
+          // Baris korup dilewati (coverage juga melewatinya).
+        }
+      }
+    }
+  }
+
+  /**
+   * Tulis ulang file dengan baris duplikat dibuang (pertahankan kemunculan
+   * pertama). Sekali jalan saat init; murah pada skala personal.
+   */
+  compact(): { filesCompacted: number; dupesRemoved: number } {
+    let filesCompacted = 0;
+    let dupesRemoved = 0;
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(this.dir);
+    } catch {
+      return { filesCompacted, dupesRemoved };
+    }
+    for (const name of entries) {
+      if (!/^ticks-\d{4}-\d{2}-\d{2}\.jsonl$/.test(name)) continue;
+      const full = path.join(this.dir, name);
+      let text: string;
+      try {
+        text = fs.readFileSync(full, "utf-8");
+      } catch {
+        continue;
+      }
+      const seenLocal = new Set<string>();
+      const kept: string[] = [];
+      let removed = 0;
+      for (const line of text.split("\n")) {
+        if (line.trim() === "") continue;
+        let key: string | null = null;
+        try {
+          const rec = JSON.parse(line) as Partial<HistoryTick>;
+          if (
+            typeof rec.symbol === "string" &&
+            typeof rec.ts_raw === "string" &&
+            typeof rec.bid === "number" &&
+            typeof rec.ask === "number"
+          ) {
+            key = tickKey(rec.symbol, rec.ts_raw, rec.bid, rec.ask);
+          }
+        } catch {
+          key = null;
+        }
+        if (key === null || seenLocal.has(key)) {
+          removed++;
+          continue;
+        }
+        seenLocal.add(key);
+        kept.push(line);
+      }
+      if (removed > 0) {
+        try {
+          fs.writeFileSync(full, kept.length > 0 ? kept.join("\n") + "\n" : "");
+          filesCompacted++;
+          dupesRemoved += removed;
+        } catch {
+          // Gagal tulis: biarkan file apa adanya.
+        }
+      }
+    }
+    return { filesCompacted, dupesRemoved };
   }
 
   /** Hapus file harian lebih tua dari retensi (default 120 hari). */

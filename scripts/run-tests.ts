@@ -6441,6 +6441,20 @@ test("428. TickHistoryLogger: tulis, dedup, coverage, prune (temp dir)", () => {
     assert(fs.existsSync(path.join(dir, "otb", keepF)), "file kemarin ikut terhapus");
     const totals = logger.getTotals();
     assert(totals.appended === 2 && totals.skipped === 8, `totals=${JSON.stringify(totals)}`);
+    // Restart backend (proses baru, memori kosong): kunci dimuat dari disk,
+    // backfill ulang TIDAK menulis duplikat.
+    const logger2 = new TickHistoryLogger(dir, "otb", 3);
+    const r3 = logger2.ingest(batch, true);
+    assert(r3.appended === 0, `restart menulis ulang: +${r3.appended}`);
+    assert(r3.skipped === 5, "restart tak skip semua");
+    // Compaction: duplikat manual di file dibersihkan saat init.
+    const histFile = path.join(dir, "otb", "ticks-2026-10-02.jsonl");
+    const before = fs.readFileSync(histFile, "utf-8").split("\n").filter((l: string) => l.trim() !== "").length;
+    fs.appendFileSync(histFile, fs.readFileSync(histFile, "utf-8"));
+    const logger3 = new TickHistoryLogger(dir, "otb", 3);
+    const after = fs.readFileSync(histFile, "utf-8").split("\n").filter((l: string) => l.trim() !== "").length;
+    assert(after === before, `compact gagal: ${before} → ${after}`);
+    void logger3;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
