@@ -78,6 +78,14 @@ import {
   DEFAULT_API_BASE_URL,
   resolveApiBaseUrl,
 } from "../src/lib/apiBaseUrl";
+import {
+  CLEARLY_STALE_AFTER_MS,
+  STALE_AFTER_MS,
+  formatAge,
+  isClearlyStale,
+  isStale,
+  parseSnapshotTime,
+} from "../src/lib/dataFreshness";
 import { FRONTEND_ORIGIN } from "../server/app";
 import {
   OTB_ALL_SYMBOLS,
@@ -6249,6 +6257,57 @@ test("421. CORS origin backend dari env + default lokal", () => {
   const src = readSrc("server/app.ts");
   assert(src.includes("FRONTEND_ORIGIN"), "env FRONTEND_ORIGIN hilang");
   assert(src.includes('process.env?.["FRONTEND_ORIGIN"]'), "baca env hilang");
+});
+
+/* ---------------- Kesegaran data live P2: TEST 422-424 ---------------- */
+
+test("422. parseSnapshotTime MT5 + ISO + invalid", () => {
+  const mt5 = parseSnapshotTime("2026.10.02 22:54:59");
+  assert(mt5 === Date.UTC(2026, 9, 2, 22, 54, 59), `mt5=${mt5}`);
+  const iso = parseSnapshotTime("2026-10-04T06:54:37.014Z");
+  assert(iso === Date.parse("2026-10-04T06:54:37.014Z"), `iso=${iso}`);
+  assert(parseSnapshotTime("") === null, "empty harus null");
+  assert(parseSnapshotTime("kemarin sore") === null, "sampah harus null");
+  assert(parseSnapshotTime("2026-13-99T99:99:99Z") === null, "tanggal rusak harus null");
+});
+
+test("423. isStale ambang 15 mnt + formatAge bucket", () => {
+  const now = 1_700_000_000_000;
+  assert(STALE_AFTER_MS === 15 * 60 * 1000, "ambang berubah");
+  assert(isStale(now - 60 * 1000, now) === false, "1 mnt dianggap basi");
+  assert(isStale(now - 16 * 60 * 1000, now) === true, "16 mnt tak basi");
+  assert(isStale(null, now) === false, "null menuduh basi");
+  assert(isStale(now - 60 * 1000, now, 30 * 1000) === true, "threshold custom diabaikan");
+  assert(formatAge(30 * 1000) === "baru saja", "detik salah");
+  assert(formatAge(5 * 60 * 1000) === "5 mnt lalu", "menit salah");
+  assert(formatAge(3 * 3600 * 1000) === "3 jam lalu", "jam salah");
+  assert(formatAge(3 * 86400 * 1000) === "3 hari lalu", "hari salah");
+  assert(formatAge(-5) === "baru saja", "negatif salah");
+  // Seed jelas-basi: gap weekend terdeteksi, tick segar tidak.
+  assert(CLEARLY_STALE_AFTER_MS === 12 * 3600 * 1000, "margin seed berubah");
+  assert(
+    isClearlyStale("2026.10.02 22:54:59", Date.UTC(2026, 9, 4, 12, 0, 0)) === true,
+    "gap 2 hari tak terdeteksi",
+  );
+  const freshTs = new Date(now - 60 * 1000).toISOString();
+  assert(isClearlyStale(freshTs, now) === false, "tick segar dituduh basi");
+  assert(isClearlyStale(undefined, now) === false, "undefined basi");
+  assert(isClearlyStale("sampah", now) === false, "sampah basi");
+});
+
+test("424. panel live wiring dataFreshness + teks basi (readSrc)", () => {
+  for (const f of [
+    "src/components/analysis/LiveQuotes.tsx",
+    "src/components/result/LiveEquity.tsx",
+  ]) {
+    const src = readSrc(f);
+    assert(src.includes("lib/dataFreshness"), `${f} tak impor dataFreshness`);
+    assert(src.includes("isStale"), `${f} tak memakai isStale`);
+    assert(src.includes("basi"), `${f} tak render label basi`);
+  }
+  const helper = readSrc("src/lib/dataFreshness.ts");
+  assert(!helper.includes("import.meta."), "helper tak CJS-safe");
+  assert(!helper.includes("document"), "helper menyentuh DOM");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

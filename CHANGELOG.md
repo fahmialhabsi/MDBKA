@@ -1,5 +1,13 @@
 # CHANGELOG MDBKA
 
+## v1.0.11-p2-freshness — Label Data-Basi Live (4 Okt 2026)
+
+P2: panel LiveQuotes/LiveEquity menampilkan umur data + "data basi"
+bila tick berhenti (>15 mnt tanpa payload baru atau snapshot >12 jam).
+Anti-timezone: umur dari jam klien, bukan timestamp server MT5
+(akhir pekan otomatis basi). Helper murni `src/lib/dataFreshness.ts`
++ `useNow`. **421/421 tests lolos** (418 + 422/423/424).
+
 ## v1.0.10-prod — Jalur Produksi + URL via Env (4 Okt 2026)
 
 P0: base URL backend frontend via `VITE_API_BASE_URL`

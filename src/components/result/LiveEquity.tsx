@@ -15,8 +15,14 @@
  */
 
 import { Activity, Wallet } from "lucide-react";
-import type { JSX } from "react";
+import { useRef, type JSX } from "react";
 import { useEquityStream } from "../../hooks/useEquityStream";
+import { useNow } from "../../hooks/useNow";
+import {
+  formatAge,
+  isClearlyStale,
+  isStale,
+} from "../../lib/dataFreshness";
 import type { EquitySnapshot } from "../../../server/types/equity";
 import type { BrokerId } from "../../types/broker";
 
@@ -84,6 +90,31 @@ export function LiveEquity({
   brokerId?: BrokerId;
 }): JSX.Element {
   const { equity, isConnected, error } = useEquityStream(5000, brokerId);
+
+  // Tahap P2 — kesegaran data (anti-timezone, sama seperti LiveQuotes).
+  // Lihat catatan disable terlingkup di LiveQuotes.tsx.
+  const nowMs = useNow();
+  /* eslint-disable react-hooks/refs, react-hooks/purity -- P2: sinkron ref prev-payload saat render, tanpa cascade (guard payloadKey berubah) */
+  const payloadKey = equity
+    ? `${equity.timestamp}|${equity.balance}|${equity.equity}`
+    : "";
+  const prevKeyRef = useRef("");
+  const lastMsRef = useRef<number | null>(null);
+  if (payloadKey !== "" && payloadKey !== prevKeyRef.current) {
+    prevKeyRef.current = payloadKey;
+    lastMsRef.current = Date.now();
+  }
+  const lastChangeMs = lastMsRef.current;
+  const stale =
+    equity !== null &&
+    (isStale(lastChangeMs, nowMs) ||
+      isClearlyStale(equity.timestamp, nowMs) ||
+      isClearlyStale(equity.lastModified, nowMs));
+  const ageLabel =
+    equity !== null && lastChangeMs !== null
+      ? formatAge(nowMs - lastChangeMs)
+      : null;
+  /* eslint-enable react-hooks/refs, react-hooks/purity */
 
   const metrics =
     equity !== null
@@ -195,6 +226,8 @@ export function LiveEquity({
       {equity !== null && (
         <p className="mt-3 text-xs text-slate-500">
           Update terakhir: {equity.timestamp}
+          {ageLabel !== null ? ` (${ageLabel})` : ""}
+          {stale ? " — data basi" : ""}
           {equity.account !== undefined && equity.account !== ""
             ? ` · Akun ${equity.account}`
             : ""}

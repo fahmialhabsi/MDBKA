@@ -1,4 +1,11 @@
+import { useRef } from "react";
 import { useQuotesStream } from "../../hooks/useQuotesStream";
+import { useNow } from "../../hooks/useNow";
+import {
+  formatAge,
+  isClearlyStale,
+  isStale,
+} from "../../lib/dataFreshness";
 import styles from "../../styles/liveQuotes.module.css";
 import type { BrokerId } from "../../types/broker";
 
@@ -14,6 +21,32 @@ export function LiveQuotes({ symbol, brokerId }: LiveQuotesProps) {
     5000,
     brokerId,
   );
+
+  // Tahap P2 — kesegaran data (anti-timezone): catat kapan payload BERUBAH
+  // menurut jam klien; seed awal dari timestamp snapshot (margin 12 jam).
+  // Pola adjust-during-render yang React-endorse; lint refs/purity
+  // experimental dimatikan terlingkup untuk blok ini saja (bukan file).
+  const nowMs = useNow();
+  /* eslint-disable react-hooks/refs, react-hooks/purity -- P2: sinkron ref prev-payload saat render, tanpa cascade (guard payloadKey berubah) */
+  const payloadKey = quote
+    ? `${quote.timestamp}|${quote.bid}|${quote.ask}`
+    : "";
+  const prevKeyRef = useRef("");
+  const lastMsRef = useRef<number | null>(null);
+  if (payloadKey !== "" && payloadKey !== prevKeyRef.current) {
+    prevKeyRef.current = payloadKey;
+    lastMsRef.current = Date.now();
+  }
+  const lastChangeMs = lastMsRef.current;
+  const stale =
+    quote !== null &&
+    (isStale(lastChangeMs, nowMs) ||
+      isClearlyStale(quote.timestamp, nowMs));
+  const ageLabel =
+    quote !== null && lastChangeMs !== null
+      ? formatAge(nowMs - lastChangeMs)
+      : null;
+  /* eslint-enable react-hooks/refs, react-hooks/purity */
 
   const dotClass = !isConnected
     ? `${styles.dot} ${styles.dotOff}`
@@ -66,9 +99,13 @@ export function LiveQuotes({ symbol, brokerId }: LiveQuotesProps) {
 
       {isConnected && !error && (
         <p
-          className={`${styles.footer} ${quote ? styles.statusLive : styles.statusPolling}`}
+          className={`${styles.footer} ${quote && !stale ? styles.statusLive : styles.statusPolling}`}
         >
-          {quote ? "🟢 SSE Connected" : "🟡 Polling..."}
+          {quote
+            ? stale
+              ? `🟠 Data basi — update terakhir ${ageLabel ?? quote.timestamp}`
+              : "🟢 SSE Connected"
+            : "🟡 Polling..."}
         </p>
       )}
 

@@ -73,7 +73,7 @@ lalu `npm run build` ulang (URL frontend dibake saat build).
 - OCR: regex + region-based text extraction
 - CSV: Papa Parse (50+ candle validation)
 - FX Rate: ECB free API (fallback hardcoded)
-- Test: 412/412 lolos (zero regression)
+- Test: 421/421 lolos (zero regression)
 
 ## 🔌 Tahap 5E-STEP2: Live Equity (Node.js Backend)
 
