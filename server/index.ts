@@ -14,6 +14,11 @@ import * as path from "node:path";
 import { createApp } from "./app";
 import { MT5LogReader } from "./services/mt5LogReader";
 import { QuotesLogReader } from "./services/quotesLogReader";
+import {
+  DEFAULT_RETENTION_DAYS,
+  TickHistoryLogger,
+  resolveTzOffset,
+} from "./services/tickHistory";
 
 dotenv.config();
 
@@ -58,7 +63,65 @@ const quotesReaderFinex =
 const stopWatching = reader.startWatching();
 if (readerFinex !== null) readerFinex.startWatching();
 
-const app = createApp(reader, quotesReader, readerFinex, quotesReaderFinex);
+// Tahap HIST-1: arsip tick per broker ke JSONL harian (data/history/).
+// Mulai akumulasi sejak backend jalan (penting sebelum agregator).
+// Direktori + retensi + offset zona server MT5 via env (lihat .env.example).
+const historyDirRaw = process.env.HISTORY_DIR?.trim() ?? "";
+const historyDir =
+  historyDirRaw !== ""
+    ? historyDirRaw
+    : path.join(process.cwd(), "data", "history");
+const historyRetentionDays = Number(process.env.HISTORY_RETENTION_DAYS);
+const historyOtb = new TickHistoryLogger(
+  historyDir,
+  "otb",
+  resolveTzOffset(process.env.MT5_TZ_OFFSET_OTB),
+);
+const historyFinex =
+  quotesReaderFinex !== null
+    ? new TickHistoryLogger(
+        historyDir,
+        "finex",
+        resolveTzOffset(process.env.MT5_TZ_OFFSET_FINEX),
+      )
+    : null;
+historyOtb.prune(Number.isFinite(historyRetentionDays) ? historyRetentionDays : DEFAULT_RETENTION_DAYS);
+if (historyFinex !== null) {
+  historyFinex.prune(Number.isFinite(historyRetentionDays) ? historyRetentionDays : DEFAULT_RETENTION_DAYS);
+}
+
+let historyBackfilled = false;
+quotesReader.onUpdate((quotes) => {
+  const first = !historyBackfilled;
+  historyBackfilled = true;
+  const { appended, skipped } = historyOtb.ingest(quotes, first);
+  if (appended > 0 || first) {
+    console.log(
+      `✓ History OTB: +${appended} tick${first ? " (backfill awal)" : ""}` +
+        (skipped > 0 ? `, ${skipped} dilewati (duplikat/invalid)` : ""),
+    );
+  }
+});
+if (quotesReaderFinex !== null && historyFinex !== null) {
+  const finexLogger = historyFinex;
+  let finexBackfilled = false;
+  quotesReaderFinex.onUpdate((quotes) => {
+    const first = !finexBackfilled;
+    finexBackfilled = true;
+    const { appended, skipped } = finexLogger.ingest(quotes, first);
+    if (appended > 0 || first) {
+      console.log(
+        `✓ History Finex: +${appended} tick${first ? " (backfill awal)" : ""}` +
+          (skipped > 0 ? `, ${skipped} dilewati (duplikat/invalid)` : ""),
+      );
+    }
+  });
+}
+
+const app = createApp(reader, quotesReader, readerFinex, quotesReaderFinex, {
+  otb: historyOtb,
+  finex: historyFinex,
+});
 
 // Polling startup: tunggu data pertama kali tersedia
 async function startServer() {
@@ -85,6 +148,18 @@ async function startServer() {
     console.log(
       `⚠ Finex source not configured (MT5_LOG_PATH_FINEX/QUOTES_LOG_PATH_FINEX empty): ?broker=finex answers 404`,
     );
+  }
+
+  // Backfill arsip histori dari isi file saat ini (init tidak notify;
+  // refresh membaca ulang + notify → ingest full sekali). Setelah itu
+  // watcher menambah tail otomatis tiap file berubah.
+  await quotesReader.refresh().catch(() => {
+    console.log(`⚠ History OTB backfill ditunda (baca ulang gagal)`);
+  });
+  if (quotesReaderFinex !== null) {
+    await quotesReaderFinex.refresh().catch(() => {
+      console.log(`⚠ History Finex backfill ditunda (baca ulang gagal)`);
+    });
   }
 
   const server = app.listen(PORT, () => {

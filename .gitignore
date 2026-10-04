@@ -12,3 +12,6 @@ dist-tests/
 # Spreadsheets kerja (sumber ekspor CSV, bukan bagian repo)
 *.xls
 *.xlsx
+
+# Arsip tick histori (data/history, tumbuh tiap hari — jangan commit)
+data/

@@ -35,6 +35,15 @@ Akses non-localhost: isi `.env` (lihat `.env.example`) —
 `FRONTEND_ORIGIN` untuk CORS backend, `VITE_API_BASE_URL` untuk frontend
 lalu `npm run build` ulang (URL frontend dibake saat build).
 
+### Arsip Tick Histori
+Backend mengarsipkan setiap tick valid ke JSONL harian
+(`data/history/{otb,finex}/ticks-YYYY-MM-DD.jsonl`, git-ignored) —
+dedup otomatis, retensi default 120 hari, timestamp dinormalisasi ke UTC
+(offset zona server MT5 via `MT5_TZ_OFFSET_OTB/_FINEX`).
+Cakupan arsip: `GET /api/history/coverage` (per broker/simbol/rentang).
+Biarkan backend jalan saat market buka agar histori terkumpul untuk
+agregator candle masa depan.
+
 ### Workflow Analisis
 1. **Screenshot** → Terminal trading (Market Watch + Data Window region)
 2. **Upload CSV** → Export 50+ candle dari MT5
@@ -73,7 +82,7 @@ lalu `npm run build` ulang (URL frontend dibake saat build).
 - OCR: regex + region-based text extraction
 - CSV: Papa Parse (50+ candle validation)
 - FX Rate: ECB free API (fallback hardcoded)
-- Test: 421/421 lolos (zero regression)
+- Test: 426/426 lolos (zero regression)
 
 ## 🔌 Tahap 5E-STEP2: Live Equity (Node.js Backend)
 

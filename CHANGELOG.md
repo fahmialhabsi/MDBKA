@@ -1,5 +1,14 @@
 # CHANGELOG MDBKA
 
+## v1.0.12-tick-history — Arsip Tick per Simbol (4 Okt 2026)
+
+HIST-1: `TickHistoryLogger` mengarsipkan tick ke JSONL harian per broker
+(dedup identik, prune retensi, timestamp MT5 → UTC via offset env).
+Backfill sekali saat start + tail otomatis via watcher. Endpoint
+`GET /api/history/coverage` (per simbol: count/first/last).
+**426/426 tests lolos** (423 + 427/428/429), lint clean, build OK.
+Akumulasi dimulai: biarkan backend jalan saat market buka.
+
 ## v1.0.11-p2-freshness — Label Data-Basi Live (4 Okt 2026)
 
 P2: panel LiveQuotes/LiveEquity menampilkan umur data + "data basi"

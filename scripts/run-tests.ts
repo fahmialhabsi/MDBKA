@@ -90,6 +90,15 @@ import {
   isStale,
   parseSnapshotTime,
 } from "../src/lib/dataFreshness";
+import {
+  DEFAULT_RETENTION_DAYS,
+  DEFAULT_TZ_OFFSET_HOURS,
+  TickHistoryLogger,
+  historyFileName,
+  normalizeTsToUtc,
+  resolveTzOffset,
+  tickKey,
+} from "../server/services/tickHistory";
 import { FRONTEND_ORIGIN } from "../server/app";
 import {
   OTB_ALL_SYMBOLS,
@@ -6357,6 +6366,100 @@ test("426. SwingLevelsForm memakai guard ganda (readSrc)", () => {
     src.includes("checkInstrumentMismatch"),
     "guard skala hilang (regresi)",
   );
+});
+
+/* ---------------- Arsip tick histori HIST-1: TEST 427-429 ---------------- */
+
+test("427. normalizeTsToUtc + resolveTzOffset + filename + dedup key", () => {
+  assert(DEFAULT_TZ_OFFSET_HOURS === 3, "default offset berubah");
+  assert(DEFAULT_RETENTION_DAYS === 120, "default retensi berubah");
+  // MT5 "22:54:59" server +3 → 19:54:59Z.
+  assert(
+    normalizeTsToUtc("2026.10.02 22:54:59", 3) === "2026-10-02T19:54:59.000Z",
+    "konversi MT5 salah",
+  );
+  assert(
+    normalizeTsToUtc("2026.10.02 22:54:59", 0) === "2026-10-02T22:54:59.000Z",
+    "offset 0 salah",
+  );
+  assert(
+    normalizeTsToUtc("2026-10-04T06:54:37.014Z", 3) === "2026-10-04T06:54:37.014Z",
+    "ISO harus passthrough",
+  );
+  assert(normalizeTsToUtc("", 3) === null, "empty harus null");
+  assert(normalizeTsToUtc("sampah", 3) === null, "sampah harus null");
+  assert(resolveTzOffset("3") === 3, "string offset gagal");
+  assert(resolveTzOffset(99) === 3, "offset liar harus default");
+  assert(resolveTzOffset(undefined) === 3, "undefined harus default");
+  assert(
+    historyFileName("2026-10-02T19:54:59.000Z") === "ticks-2026-10-02.jsonl",
+    "bucket harian salah",
+  );
+  assert(
+    tickKey("A", "t", 1, 2) !== tickKey("A", "t", 1, 3),
+    "key tak membedakan bid/ask",
+  );
+  assert(tickKey("A", "t", 1, 2) === tickKey("A", "t", 1, 2), "key tak stabil");
+});
+
+test("428. TickHistoryLogger: tulis, dedup, coverage, prune (temp dir)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mdbka-hist-"));
+  try {
+    const logger = new TickHistoryLogger(dir, "otb", 3);
+    const batch = [
+      { timestamp: "2026.10.02 22:54:59", symbol: "CADJPY_ORB", bid: 110.701, ask: 110.749 },
+      { timestamp: "2026.10.02 22:54:59", symbol: "CADJPY_ORB", bid: 110.701, ask: 110.749 },
+      { timestamp: "2026.10.02 22:55:01", symbol: "GBPUSD_ORB", bid: 1.3237, ask: 1.32393 },
+      { timestamp: "", symbol: "X", bid: 1, ask: 2 },
+      { timestamp: "2026.10.02 22:55:02", symbol: "Y", bid: 0, ask: 0 },
+    ];
+    const r1 = logger.ingest(batch, true);
+    assert(r1.appended === 2, `appended=${r1.appended} (duplikat+invalid harus dilewati)`);
+    assert(r1.skipped === 3, `skipped=${r1.skipped}`);
+    const r2 = logger.ingest(batch, false);
+    assert(r2.appended === 0, "re-ingest menulis ulang");
+    assert(r2.skipped === 5, "re-ingest tak skip semua");
+    const cov = logger.coverage();
+    assert(cov.broker === "otb", "broker salah");
+    assert(cov.files === 1, `files=${cov.files}`);
+    assert(cov.symbols["CADJPY_ORB"]?.count === 1, "count CADJPY salah");
+    assert(
+      cov.symbols["CADJPY_ORB"]?.first === "2026-10-02T19:54:59.000Z",
+      "first salah (UTC)",
+    );
+    assert(cov.symbols["GBPUSD_ORB"]?.count === 1, "count GBPUSD salah");
+    // Prune: file purba terhapus, file kemarin bertahan.
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const oldF = `ticks-${fmt(new Date(Date.now() - 200 * 86400 * 1000))}.jsonl`;
+    const keepF = `ticks-${fmt(new Date(Date.now() - 86400 * 1000))}.jsonl`;
+    fs.writeFileSync(path.join(dir, "otb", oldF), "");
+    fs.writeFileSync(path.join(dir, "otb", keepF), "");
+    assert(logger.prune(120) === 1, "prune tak hapus file purba");
+    assert(fs.existsSync(path.join(dir, "otb", keepF)), "file kemarin ikut terhapus");
+    const totals = logger.getTotals();
+    assert(totals.appended === 2 && totals.skipped === 8, `totals=${JSON.stringify(totals)}`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("429. wiring histori: subscribe + backfill + route + env (readSrc)", () => {
+  const index = readSrc("server/index.ts");
+  assert(index.includes("TickHistoryLogger"), "logger tak di-wire di index");
+  assert(index.includes(".onUpdate("), "subscribe onUpdate hilang");
+  assert(index.includes(".refresh()"), "backfill refresh hilang");
+  assert(index.includes("/api/history/coverage") || readSrc("server/app.ts").includes("/api/history/coverage"), "route coverage hilang");
+  const app = readSrc("server/app.ts");
+  assert(app.includes("history"), "app tak kenal history");
+  const envExample = readSrc(".env.example");
+  assert(envExample.includes("HISTORY_DIR"), "HISTORY_DIR tak didokumentasikan");
+  assert(envExample.includes("MT5_TZ_OFFSET_OTB"), "offset OTB tak didokumentasikan");
+  assert(envExample.includes("MT5_TZ_OFFSET_FINEX"), "offset Finex tak didokumentasikan");
+  const gitignore = readSrc(".gitignore");
+  assert(gitignore.includes("data/"), "data/ tak di-ignore (arsip ikut commit!)");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

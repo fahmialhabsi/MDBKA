@@ -32,6 +32,7 @@
     "src/lib/brokerSymbols.ts",
     "src/lib/apiBaseUrl.ts",
     "src/lib/dataFreshness.ts",
+    "server/services/tickHistory.ts",
     "src/lib/otbInstrumentConfig.ts",
     "src/lib/instrumentSpecs32.ts",
     "src/lib/jpySwapCalculator.ts",

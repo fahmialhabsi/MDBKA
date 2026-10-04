@@ -10,6 +10,7 @@ import cors from "cors";
 import type { MT5LogReader } from "./services/mt5LogReader";
 import { createEquityRoutes } from "./routes/equityRoutes";
 import { createQuotesRoutes } from "./routes/quotesRoutes";
+import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
 
 /**
  * Origin frontend yang diizinkan CORS (B2: browser → backend).
@@ -30,6 +31,10 @@ export function createApp(
   quotesReader: QuotesLogReader,
   readerFinex: MT5LogReader | null = null,
   quotesReaderFinex: QuotesLogReader | null = null,
+  history: {
+    readonly otb: TickHistoryLogger | null;
+    readonly finex: TickHistoryLogger | null;
+  } | null = null,
 ): Express {
   const app = express();
   app.use(cors({ origin: FRONTEND_ORIGIN }));
@@ -41,6 +46,19 @@ export function createApp(
 
   app.use("/api/equity", createEquityRoutes(reader, readerFinex));
   app.use("/api/quotes", createQuotesRoutes(quotesReader, quotesReaderFinex));
+
+  // Tahap HIST-1: cakupan arsip tick (per broker/simbol/rentang).
+  // Fail-closed jujur: logger absen → null (bukan 404), agar dashboard
+  // coverage tetap render tanpa mengarang ketiadaan data.
+  app.get("/api/history/coverage", (_req, res) => {
+    const cover = (logger: TickHistoryLogger | null | undefined): BrokerCoverage | null =>
+      logger === null || logger === undefined ? null : logger.coverage();
+    res.json({
+      otb: cover(history?.otb),
+      finex: cover(history?.finex),
+      timestamp: new Date().toISOString(),
+    });
+  });
 
   return app;
 }
