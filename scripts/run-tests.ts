@@ -3982,7 +3982,7 @@ test("254. holdingDays=0 atau negatif = nol biaya", () => {
   assert(negative.swapCost === 0, "holding negatif berbiaya");
 });
 
-test("255. arah short memakai swapShort + default 1 hari [angka fixture pending]", () => {
+test("255. arah short memakai swapShort + default 1 hari", () => {
   const cost = requireSwapCost({
     symbol: "AUDCAD_ORB",
     brokerId: "orbitraderberjangka",
@@ -4704,7 +4704,7 @@ test("291. convertToUSD(-49 JPY) ≈ -0.304 USD (AUDJPY swap)", () => {
   );
 });
 
-test("292. attachSwapToResult dengan fxRates → swapCostInUSD populated [angka fixture pending]", () => {
+test("292. attachSwapToResult dengan fxRates → swapCostInUSD populated", () => {
   const attached = attachSwapToResult(makeAnalysisResult("BELI", 0.5), {
     symbol: "AUDCHF_ORB",
     brokerId: "orbitraderberjangka",
@@ -4731,7 +4731,7 @@ test("292. attachSwapToResult dengan fxRates → swapCostInUSD populated [angka 
   );
 });
 
-test("293. attachSwapToResult tanpa fxRates → swapCostInUSD null (fallback) [angka fixture pending]", () => {
+test("293. attachSwapToResult tanpa fxRates → swapCostInUSD null (fallback)", () => {
   const attached = attachSwapToResult(makeAnalysisResult("BELI", 0.5), {
     symbol: "AUDCHF_ORB",
     brokerId: "orbitraderberjangka",
@@ -4776,7 +4776,7 @@ test("295. Fallback rate used jika ECB fetch gagal", () => {
   assert(empty.USD === 1 && empty.EUR === 1.0, "parse kosong tidak default");
 });
 
-test("296. Display memo USD (dari AUD @1.6512) [angka fixture pending]", () => {
+test("296. Display memo USD (dari AUD @1.6512)", () => {
   const attached = attachSwapToResult(makeAnalysisResult("BELI", 0.5), {
     symbol: "AUDCHF_ORB",
     brokerId: "orbitraderberjangka",

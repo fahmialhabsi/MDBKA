@@ -63,9 +63,10 @@ perubahan aditif dan backward-compatible; tidak perlu migrasi dari v1.0.0.
 ### Diperbaiki
 - Penomoran suite async bersifat lokal-suite (klarifikasi komentar)
 
-### Diketahui (update 6E-final: tidak ada pending OTB tersisa)
+### Diketahui (update 6G: tidak ada pending OTB tersisa)
 - spreadMode floating = default kelas (tidak ada di ekspor CSV MT5)
-- Risiko JPY belum final; `maintenanceMargin` OTB placeholder
+- Harga quote JPY dinormalisasi ke invers di jalur percentage (6F-1);
+  margin OTB tersedia via getter display-only (6G)
 - FX rate harian ECB; Finex demo 2 simbol
 
 ## v1.0.0 — MVP Complete (2 Okt 2026)
