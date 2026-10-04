@@ -2960,8 +2960,8 @@ test("213. simbol OTB tak terverifikasi mengembalikan null", () => {
     getOtbInstrumentProfile("gbpusd_orb") === null,
     "lookup harus exact (case-sensitive)",
   );
-  // 5D-EXT1: 3 flat + 10 percentage = 13 preset.
-  assert(Object.keys(OTB_PRESETS).length === 13, "preset fiktif terdaftar");
+  // 5D-EXT1: 3 flat + 10 percentage = 13 preset; 6H: +3 percentage = 16.
+  assert(Object.keys(OTB_PRESETS).length === 16, "preset fiktif terdaftar");
   assert(
     getOtbInstrumentProfile("AUDCAD_ORB") !== null,
     "preset AUDCAD_ORB hilang",
@@ -3233,19 +3233,22 @@ test("226. dropdown Finex menampilkan US100 dan GBPUSD", () => {
   assert(form.includes("symbolOptions.map"), "render opsi hilang");
 });
 
-test("227. dropdown OTB menampilkan 13 simbol broker", () => {
+test("227. dropdown OTB menampilkan 16 simbol broker", () => {
   const otb = getAvailableSymbols("orbitraderberjangka");
-  assert(otb.length === 13, `daftar OTB=${JSON.stringify(otb)}`);
+  assert(otb.length === 16, `daftar OTB=${JSON.stringify(otb)}`);
   assert(otb[0] === "AUDCAD_ORB", "urutan dropdown berubah");
   assert(otb.includes("GBPUSD_ORB"), "GBPUSD_ORB hilang");
   assert(otb.includes("AUDCAD_ORB"), "AUDCAD_ORB hilang");
   assert(otb.includes("EURCHF_ORB"), "EURCHF_ORB hilang");
   assert(otb.includes("AUDCHF_ORB"), "simbol TBD hilang dari daftar");
   assert(otb.includes("USDCAD_ORB"), "USDCAD_ORB hilang dari daftar");
+  assert(otb.includes("NZDJPY_ORB"), "NZDJPY_ORB hilang dari daftar");
+  assert(otb.includes("USDCHF_ORB"), "USDCHF_ORB hilang dari daftar");
+  assert(otb.includes("USDJPY_ORB"), "USDJPY_ORB hilang dari daftar");
 });
 
-test("228. 13/13 simbol verified tanpa warning (6E-11/12)", () => {
-  // Kebijakan verifikasi (6E-11/12): 13/13 verified; tidak ada simbol
+test("228. 16/16 simbol verified tanpa warning (6H)", () => {
+  // Kebijakan verifikasi (6H): 16/16 verified; tidak ada simbol
   // pending tersisa. Simbol invented di luar dropdown tetap null.
   const otb = getAvailableSymbols("orbitraderberjangka");
   assert(otb.includes("AUDCHF_ORB"), "AUDCHF_ORB tidak terdaftar di dropdown");
@@ -3296,6 +3299,18 @@ test("228. 13/13 simbol verified tanpa warning (6E-11/12)", () => {
   assert(
     hasOtbPresetForSymbol("EURCHF_ORB", "orbitraderberjangka") === true,
     "EURCHF_ORB verified 6E-12 harus tanpa warning",
+  );
+  assert(
+    hasOtbPresetForSymbol("NZDJPY_ORB", "orbitraderberjangka") === true,
+    "NZDJPY_ORB verified 6H harus tanpa warning",
+  );
+  assert(
+    hasOtbPresetForSymbol("USDCHF_ORB", "orbitraderberjangka") === true,
+    "USDCHF_ORB verified 6H harus tanpa warning",
+  );
+  assert(
+    hasOtbPresetForSymbol("USDJPY_ORB", "orbitraderberjangka") === true,
+    "USDJPY_ORB verified 6H harus tanpa warning",
   );
   assert(
     !hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka"),
@@ -3557,13 +3572,13 @@ test("238. OCR mengenali EURCHF_ORB dan merge menjaga simbol OTB", () => {
   );
 });
 
-test("239. dropdown OTB 13 simbol, 13/13 terverifikasi", () => {
+test("239. dropdown OTB 16 simbol, 16/16 terverifikasi", () => {
   const symbols = getAvailableSymbols("orbitraderberjangka");
-  assert(symbols.length === 13, `expected 13, got ${symbols.length}`);
+  assert(symbols.length === 16, `expected 16, got ${symbols.length}`);
   assert(symbols.includes("GBPUSD_ORB"), "GBPUSD_ORB missing");
   assert(symbols.includes("AUDCAD_ORB"), "AUDCAD_ORB missing");
   assert(symbols.includes("EURCHF_ORB"), "EURCHF_ORB missing");
-  // Kebijakan verifikasi (6E-11/12): 13/13 verified, tanpa pending.
+  // Kebijakan verifikasi (6H): 16/16 verified, tanpa pending.
   assert(
     hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
     "GBPUSD_ORB harus terverifikasi",
@@ -3615,6 +3630,18 @@ test("239. dropdown OTB 13 simbol, 13/13 terverifikasi", () => {
   assert(
     hasOtbPresetForSymbol("EURCHF_ORB", "orbitraderberjangka") === true,
     "EURCHF_ORB harus terverifikasi (6E-12)",
+  );
+  assert(
+    hasOtbPresetForSymbol("NZDJPY_ORB", "orbitraderberjangka") === true,
+    "NZDJPY_ORB harus terverifikasi (6H)",
+  );
+  assert(
+    hasOtbPresetForSymbol("USDCHF_ORB", "orbitraderberjangka") === true,
+    "USDCHF_ORB harus terverifikasi (6H)",
+  );
+  assert(
+    hasOtbPresetForSymbol("USDJPY_ORB", "orbitraderberjangka") === true,
+    "USDJPY_ORB harus terverifikasi (6H)",
   );
   for (const symbol of symbols) {
     assert(
@@ -3678,7 +3705,7 @@ test("242. banner pindah tampil untuk EURCHF_ORB verified (6E-12)", () => {
   );
 });
 
-test("243. hasOtbPresetForSymbol true untuk 13/13 simbol verified", () => {
+test("243. hasOtbPresetForSymbol true untuk 16/16 simbol verified", () => {
   assert(
     hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
     "GBPUSD_ORB harus terverifikasi",
@@ -3731,7 +3758,19 @@ test("243. hasOtbPresetForSymbol true untuk 13/13 simbol verified", () => {
     hasOtbPresetForSymbol("EURCHF_ORB", "orbitraderberjangka") === true,
     "EURCHF_ORB harus terverifikasi (6E-12)",
   );
-  // Kebijakan verifikasi (6E-11/12): tidak ada pending tersisa;
+  assert(
+    hasOtbPresetForSymbol("NZDJPY_ORB", "orbitraderberjangka") === true,
+    "NZDJPY_ORB harus terverifikasi (6H)",
+  );
+  assert(
+    hasOtbPresetForSymbol("USDCHF_ORB", "orbitraderberjangka") === true,
+    "USDCHF_ORB harus terverifikasi (6H)",
+  );
+  assert(
+    hasOtbPresetForSymbol("USDJPY_ORB", "orbitraderberjangka") === true,
+    "USDJPY_ORB harus terverifikasi (6H)",
+  );
+  // Kebijakan verifikasi (6H): tidak ada pending tersisa;
   // invented tetap false.
   assert(
     hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka") === false,
@@ -3739,11 +3778,11 @@ test("243. hasOtbPresetForSymbol true untuk 13/13 simbol verified", () => {
   );
 });
 
-test("244. OTB_PRESETS berisi 13 objek (13/13 verified)", () => {
+test("244. OTB_PRESETS berisi 16 objek (16/16 verified)", () => {
   const keys = Object.keys(OTB_PRESETS);
-  // 13/13 simbol terverifikasi via VERIFIED_OTB_SYMBOLS
-  // (GBPUSD + 6E-1..6E-12, lengkap dari CSV terminal 03 Okt 2026).
-  assert(keys.length === 13, `expected 13 presets, got ${keys.length}`);
+  // 16/16 simbol terverifikasi via VERIFIED_OTB_SYMBOLS
+  // (GBPUSD + 6E-1..6E-12 + 6H: NZDJPY, USDCHF, USDJPY).
+  assert(keys.length === 16, `expected 16 presets, got ${keys.length}`);
   assert(keys.includes("GBPUSD_ORB"), "GBPUSD_ORB hilang dari preset");
   assert(keys.includes("AUDCAD_ORB"), "AUDCAD_ORB hilang dari preset");
   assert(keys.includes("EURCHF_ORB"), "EURCHF_ORB hilang dari preset");
@@ -4533,9 +4572,9 @@ test("278. return format validation (semua field baru hadir)", () => {
 
 /* ---------------- Expand OTB_PRESETS 5D-STEP1: TEST 279-286 ---------------- */
 
-test("279. OTB_PRESETS size = 13 (13/13 verified)", () => {
+test("279. OTB_PRESETS size = 16 (16/16 verified)", () => {
   const keys = Object.keys(OTB_PRESETS);
-  assert(keys.length === 13, `expected 13 presets, got ${keys.length}`);
+  assert(keys.length === 16, `expected 16 presets, got ${keys.length}`);
   for (const s of ["GBPUSD_ORB", "AUDCAD_ORB", "EURCHF_ORB"]) {
     assert(keys.includes(s), `${s} hilang`);
   }
@@ -4550,11 +4589,14 @@ test("279. OTB_PRESETS size = 13 (13/13 verified)", () => {
     "EURCAD_ORB",
     "GBPAUD_ORB",
     "USDCAD_ORB",
+    "NZDJPY_ORB",
+    "USDCHF_ORB",
+    "USDJPY_ORB",
   ]) {
     assert(keys.includes(s), `${s} hilang`);
   }
   const symbols = getAvailableSymbols("orbitraderberjangka");
-  assert(symbols.length === 13, `dropdown=${symbols.length}`);
+  assert(symbols.length === 16, `dropdown=${symbols.length}`);
 });
 
 test("280. AUDCHF_ORB preset exists + digits=5 [verified 6E-1]", () => {
@@ -4631,6 +4673,57 @@ test("286. USDCAD_ORB all fields present [verified 6E-10]", () => {
   assert(p.digits === 5, "digits bukan 5");
   assert(p.minVolume === 0.1 && p.maxVolume === 10, "volume salah");
   assert(p.initialMargin === 100000, "margin salah");
+});
+
+/* ---------------- Preset 6H (NZDJPY/USDCHF/USDJPY): TEST 416-418 ---------------- */
+
+test("416. NZDJPY_ORB preset dari CSV [verified 6H]", () => {
+  const p = getOtbInstrumentProfile("NZDJPY_ORB");
+  if (p === null) throw new Error("preset NZDJPY_ORB hilang");
+  assert(p.digits === 3, `digits=${p.digits}`);
+  assert(p.tickSize === 0.001, "tickSize salah");
+  assert(calculateOtbTickValue(p) === 100, "tick value bukan 100 JPY");
+  assert(p.contractCurrency === "NZD", "contract bukan NZD");
+  assert(p.currencyProfit === "JPY", "profit bukan JPY");
+  assert(p.swapLong === -1.5 && p.swapShort === -1.5, "swap salah (CSV)");
+  assert(p.swapType === "percentage", "swapType bukan percentage");
+  assert(p.commission?.pricePerLot === 33, "komisi bukan 33");
+  assert(p.stopsLevel === 20, "stops bukan 20 (CSV)");
+  assert(p.volumeStep === 0.1, "step bukan 0.1 (CSV)");
+  assert(p.minVolume === 0.1 && p.maxVolume === 10, "volume salah");
+  assert(
+    p.initialMargin === 100000 && p.maintenanceMargin === 100000,
+    "margin salah",
+  );
+  assert(p.hedgedMargin === 50000, "hedged salah");
+  assert(isOtbSymbolVerified("NZDJPY_ORB"), "gate belum verified");
+});
+
+test("417. USDCHF_ORB preset dari CSV [verified 6H]", () => {
+  const p = getOtbInstrumentProfile("USDCHF_ORB");
+  if (p === null) throw new Error("preset USDCHF_ORB hilang");
+  assert(p.digits === 5, `digits=${p.digits}`);
+  assert(p.contractSize === 100000, "contractSize salah");
+  assert(p.contractCurrency === "USD", "contract bukan USD");
+  assert(p.currencyProfit === "CHF", "profit bukan CHF");
+  assert(p.swapLong === -1.5 && p.swapShort === -1.5, "swap salah (CSV)");
+  assert(p.swapType === "percentage", "swapType bukan percentage");
+  assert(p.commission?.pricePerLot === 33, "komisi bukan 33");
+  assert(p.stopsLevel === 20, "stops bukan 20 (CSV)");
+  assert(isOtbSymbolVerified("USDCHF_ORB"), "gate belum verified");
+});
+
+test("418. USDJPY_ORB preset dari CSV [verified 6H]", () => {
+  const p = getOtbInstrumentProfile("USDJPY_ORB");
+  if (p === null) throw new Error("preset USDJPY_ORB hilang");
+  assert(p.digits === 3, `digits=${p.digits}`);
+  assert(calculateOtbTickValue(p) === 100, "tick value bukan 100 JPY");
+  assert(p.contractCurrency === "USD", "contract bukan USD");
+  assert(p.currencyProfit === "JPY", "profit bukan JPY");
+  assert(p.swapLong === -1.0 && p.swapShort === -2.0, "swap salah (CSV)");
+  assert(p.swapType === "percentage", "swapType bukan percentage");
+  assert(p.commission?.pricePerLot === 33, "komisi bukan 33");
+  assert(isOtbSymbolVerified("USDJPY_ORB"), "gate belum verified");
 });
 
 /* ---------------- ECB Daily Rate + FX Conversion 5D-STEP2: TEST 287-296 ---------------- */
@@ -5044,10 +5137,10 @@ test("309. CORS localhost:5173 + frontend SSE wiring + LiveEquity terpasang", ()
 });
 
 /* Kebijakan verifikasi OTB: TEST 330-332.
- * 13/13 verified (GBPUSD + 6E-1..6E-12); tidak ada pending tersisa.
+ * 16/16 verified (GBPUSD + 6E-1..6E-12 + 6H: NZDJPY, USDCHF, USDJPY).
  * Finex byte-identik; SSE 318-329 tidak tersentuh. */
 
-test("330. 13/13 simbol verified end-to-end (preset+warning+validator)", () => {
+test("330. 16/16 simbol verified end-to-end (preset+warning+validator)", () => {
   assert(isOtbSymbolVerified("GBPUSD_ORB") === true, "GBPUSD_ORB harus verified");
   assert(isOtbSymbolVerified("AUDCHF_ORB") === true, "AUDCHF_ORB harus verified (6E-1)");
   assert(isOtbSymbolVerified("AUDJPY_ORB") === true, "AUDJPY_ORB harus verified (6E-2)");
@@ -5061,8 +5154,11 @@ test("330. 13/13 simbol verified end-to-end (preset+warning+validator)", () => {
   assert(isOtbSymbolVerified("USDCAD_ORB") === true, "USDCAD_ORB harus verified (6E-10)");
   assert(isOtbSymbolVerified("AUDCAD_ORB") === true, "AUDCAD_ORB harus verified (6E-11)");
   assert(isOtbSymbolVerified("EURCHF_ORB") === true, "EURCHF_ORB harus verified (6E-12)");
+  assert(isOtbSymbolVerified("NZDJPY_ORB") === true, "NZDJPY_ORB harus verified (6H)");
+  assert(isOtbSymbolVerified("USDCHF_ORB") === true, "USDCHF_ORB harus verified (6H)");
+  assert(isOtbSymbolVerified("USDJPY_ORB") === true, "USDJPY_ORB harus verified (6H)");
   assert(
-    VERIFIED_OTB_SYMBOLS.length === 13 &&
+    VERIFIED_OTB_SYMBOLS.length === 16 &&
       VERIFIED_OTB_SYMBOLS.includes("GBPUSD_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("AUDCHF_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("AUDJPY_ORB") &&
@@ -5075,8 +5171,11 @@ test("330. 13/13 simbol verified end-to-end (preset+warning+validator)", () => {
       VERIFIED_OTB_SYMBOLS.includes("GBPAUD_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("USDCAD_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("AUDCAD_ORB") &&
-      VERIFIED_OTB_SYMBOLS.includes("EURCHF_ORB"),
-    "daftar verified berubah di luar 6E-11/12",
+      VERIFIED_OTB_SYMBOLS.includes("EURCHF_ORB") &&
+      VERIFIED_OTB_SYMBOLS.includes("NZDJPY_ORB") &&
+      VERIFIED_OTB_SYMBOLS.includes("USDCHF_ORB") &&
+      VERIFIED_OTB_SYMBOLS.includes("USDJPY_ORB"),
+    "daftar verified berubah di luar 6H",
   );
   assert(
     hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
@@ -5095,9 +5194,9 @@ test("330. 13/13 simbol verified end-to-end (preset+warning+validator)", () => {
   );
 });
 
-test("331. 0 simbol pending; 13/13 ter-apply via spec32 (6E-11/12)", () => {
-  // Tahap 6E-1..6E-12: seluruh 13 simbol OTB verified (gate lama).
-  // Tidak ada pending tersisa: VERIFIED_OTB_SYMBOLS = 13, semua simbol
+test("331. 0 simbol pending; 16/16 ter-apply via spec32 (6H)", () => {
+  // Tahap 6E-1..6E-12 + 6H: seluruh 16 simbol OTB verified (gate lama).
+  // Tidak ada pending tersisa: VERIFIED_OTB_SYMBOLS = 16, semua simbol
   // tanpa warning verifikasi, banner pindah tampil, preset spec32
   // (commission 33) ter-apply. Blok validator anti-warning-fixture untuk
   // pending dihapus (jalur pending tidak ada lagi); perilaku validator
@@ -5128,7 +5227,7 @@ test("331. 0 simbol pending; 13/13 ter-apply via spec32 (6E-11/12)", () => {
   }
   // Dropdown tetap menampilkan semuanya (tidak ada simbol dihapus).
   const dropdown = getAvailableSymbols("orbitraderberjangka");
-  assert(dropdown.length === 13, "simbol hilang dari dropdown");
+  assert(dropdown.length === 16, "simbol hilang dari dropdown");
 });
 
 test("332. Finex tidak terpengaruh kebijakan verifikasi OTB", () => {
@@ -5210,9 +5309,9 @@ test("336. isEquitySnapshot menerima valid, menolak malformed", () => {
   );
 });
 
-test("337. VERIFIED_OTB_SYMBOLS = 13 simbol (6E-11/12)", () => {
+test("337. VERIFIED_OTB_SYMBOLS = 16 simbol (6H)", () => {
   assert(
-    VERIFIED_OTB_SYMBOLS.length === 13 &&
+    VERIFIED_OTB_SYMBOLS.length === 16 &&
       VERIFIED_OTB_SYMBOLS[0] === "GBPUSD_ORB" &&
       VERIFIED_OTB_SYMBOLS[1] === "AUDCHF_ORB" &&
       VERIFIED_OTB_SYMBOLS[2] === "AUDJPY_ORB" &&
@@ -5225,8 +5324,11 @@ test("337. VERIFIED_OTB_SYMBOLS = 13 simbol (6E-11/12)", () => {
       VERIFIED_OTB_SYMBOLS[9] === "GBPAUD_ORB" &&
       VERIFIED_OTB_SYMBOLS[10] === "USDCAD_ORB" &&
       VERIFIED_OTB_SYMBOLS[11] === "AUDCAD_ORB" &&
-      VERIFIED_OTB_SYMBOLS[12] === "EURCHF_ORB",
-    "daftar verified berubah di luar 6E-11/12",
+      VERIFIED_OTB_SYMBOLS[12] === "EURCHF_ORB" &&
+      VERIFIED_OTB_SYMBOLS[13] === "NZDJPY_ORB" &&
+      VERIFIED_OTB_SYMBOLS[14] === "USDCHF_ORB" &&
+      VERIFIED_OTB_SYMBOLS[15] === "USDJPY_ORB",
+    "daftar verified berubah di luar 6H",
   );
 });
 
@@ -5269,7 +5371,7 @@ test("353. swap function-level tetap passthrough untuk simbol pending (gate di U
   assert(cost !== null, "kontrak function-level berubah (harus non-null)");
 });
 
-test("354. 13/13 OTB verified; non-OTB tetap unverified", () => {
+test("354. 16/16 OTB verified; invented tetap unverified", () => {
   assert(isOtbSymbolVerified("GBPUSD_ORB"), "GBPUSD_ORB harus verified");
   assert(isOtbSymbolVerified("AUDCHF_ORB"), "AUDCHF_ORB harus verified (6E-1)");
   assert(isOtbSymbolVerified("AUDJPY_ORB"), "AUDJPY_ORB harus verified (6E-2)");
@@ -5283,12 +5385,10 @@ test("354. 13/13 OTB verified; non-OTB tetap unverified", () => {
   assert(isOtbSymbolVerified("USDCAD_ORB"), "USDCAD_ORB harus verified (6E-10)");
   assert(isOtbSymbolVerified("AUDCAD_ORB"), "AUDCAD_ORB harus verified (6E-11)");
   assert(isOtbSymbolVerified("EURCHF_ORB"), "EURCHF_ORB harus verified (6E-12)");
-  for (const s of [
-    "NZDJPY_ORB",
-    "USDCHF_ORB",
-  ]) {
-    assert(!isOtbSymbolVerified(s), `${s} dianggap verified`);
-  }
+  assert(isOtbSymbolVerified("NZDJPY_ORB"), "NZDJPY_ORB harus verified (6H)");
+  assert(isOtbSymbolVerified("USDCHF_ORB"), "USDCHF_ORB harus verified (6H)");
+  assert(isOtbSymbolVerified("USDJPY_ORB"), "USDJPY_ORB harus verified (6H)");
+  assert(!isOtbSymbolVerified("EURUSD_ORB"), "invented dianggap verified");
 });
 
 test("355. AnalysisResult: memo swap digate verifikasi + PENDING notice", () => {
@@ -5650,11 +5750,11 @@ test("378. legacy swapCost tidak berubah (flat GBPUSD_ORB -2.25)", () => {
   assert(Math.abs(cost.swapCost - -2.25) < 1e-9, `legacy=${cost.swapCost}`);
 });
 
-test("379. legacy registry/dropdown 13-OTB + 10-Finex utuh", () => {
-  assert(getAvailableSymbols("orbitraderberjangka").length === 13, "OTB berubah");
+test("379. legacy registry/dropdown 16-OTB + 10-Finex utuh", () => {
+  assert(getAvailableSymbols("orbitraderberjangka").length === 16, "OTB berubah");
   assert(getAvailableSymbols("finex").length === 10, "Finex berubah");
-  assert(Object.keys(OTB_PRESETS).length === 13, "preset berubah");
-  assert(VERIFIED_OTB_SYMBOLS.length === 13, "verified berubah di luar 6E-11/12");
+  assert(Object.keys(OTB_PRESETS).length === 16, "preset berubah");
+  assert(VERIFIED_OTB_SYMBOLS.length === 16, "verified berubah di luar 6H");
 });
 
 test("380. AUDNZD 0.00 long dihitung jujur (tanpa fabrikasi)", () => {
@@ -5965,8 +6065,7 @@ test("406. applyBrokerPreset: 16 OTB spec32 semua commission=33", () => {
       symbol,
       "orbitraderberjangka",
     );
-    // 13 simbol berprofile OTB ter-apply (commission 33); 3 tanpa profile
-    // (NZDJPY/USDCHF/USDJPY_ORB) tetap return previous (commission 0).
+    // 6H: 16/16 simbol berprofile OTB ter-apply (commission 33).
     const expected = getOtbInstrumentProfile(symbol) === null ? 0 : 33;
     assert(applied.commission === expected, `${symbol} commission=${applied.commission}`);
   }

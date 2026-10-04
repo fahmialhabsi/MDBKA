@@ -1,5 +1,12 @@
 # CHANGELOG MDBKA
 
+## v1.0.9-tahap6h — 3 Preset Baru, 16/16 OTB (4 Okt 2026)
+
+Tahap 6H: preset baru NZDJPY_ORB, USDCHF_ORB, USDJPY_ORB dari ekspor CSV
+terminal (stops 20, step 0.10, margin 100k/100k/50k, Forex, komisi 33,
+swap percentage sesuai CSV). Dropdown + gate 13 → 16/16 verified.
+**415/415 tests lolos** (412 + 416/417/418 preset baru), zero regression.
+
 ## v1.0.8-tahap6g — Komisi Broker + Margin Getter (4 Okt 2026)
 
 Keputusan broker dari CSV terminal 03 Okt 2026 (kolom Commission):

@@ -14,7 +14,7 @@ import type { BrokerId } from "../types/broker";
  *   seperti _ORB signifikan.
  */
 
-/** Daftar simbol OTB dari broker (termasuk yang presetnya masih TBD). */
+/** Daftar simbol OTB dari broker (16/16 verified sejak 6H). */
 export const OTB_ALL_SYMBOLS = [
   "AUDCAD_ORB",
   "AUDCHF_ORB",
@@ -28,7 +28,10 @@ export const OTB_ALL_SYMBOLS = [
   "EURCHF_ORB",
   "GBPAUD_ORB",
   "GBPUSD_ORB",
+  "NZDJPY_ORB",
   "USDCAD_ORB",
+  "USDCHF_ORB",
+  "USDJPY_ORB",
 ] as const;
 
 /**
@@ -38,6 +41,8 @@ export const OTB_ALL_SYMBOLS = [
  * 03 Okt 2026 kolom baru: Stops_Level=20, Volume_Step=0.10,
  * Initial/Maintenance/Hedged = 100000/100000/50000, Forex,
  * Profit=quote, Margin=USD, Commission 33.00) = 13/13 terverifikasi.
+ * Tahap 6H: + NZDJPY_ORB, USDCHF_ORB, USDJPY_ORB (preset baru dari CSV) =
+ * 16/16 terverifikasi.
  * spreadMode floating = default kelas (tidak ada di ekspor CSV).
  * Komisi 33/lot dipertahankan (kolom Commission CSV 33.00 cocok).
  */
@@ -55,6 +60,9 @@ export const VERIFIED_OTB_SYMBOLS: readonly string[] = Object.freeze([
   "USDCAD_ORB",
   "AUDCAD_ORB",
   "EURCHF_ORB",
+  "NZDJPY_ORB",
+  "USDCHF_ORB",
+  "USDJPY_ORB",
 ]);
 
 /** True bila simbol OTB terverifikasi (exact, case-sensitive). */

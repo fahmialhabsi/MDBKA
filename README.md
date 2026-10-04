@@ -3,7 +3,7 @@ Trading Education & Risk Calculator untuk MetaTrader 5 (OTB + Finex)
 
 ## 📋 Features
 
-✅ **13 Simbol OTB** (13/13 terverifikasi ekspor CSV terminal Tahap 6E)
+✅ **16 Simbol OTB** (16/16 terverifikasi ekspor CSV terminal Tahap 6E+6H)
 ✅ **OCR Auto-Extract** — screenshot Market Watch & Data Window → parsed otomatis
 ✅ **Dual Broker Support** — Finex (default) + OrbiTraderBerjangka
 ✅ **Risk Calculator** — equity risk %, lot recommendation, P&L projection
@@ -47,7 +47,7 @@ npm run dev
 - (Expandable)
 
 **OrbiTraderBerjangka (OTB)**
-- Verified (13/13): GBPUSD_ORB + 10 simbol Tahap 6E (AUDCHF, AUDJPY, AUDNZD, AUDUSD, CADJPY, CHFJPY, EURAUD, EURCAD, GBPAUD, USDCAD) + AUDCAD_ORB, EURCHF_ORB (Tahap 6E-11/12: stops 20, step 0.10, margin 100k/100k/50k, komisi 33 — dikonfirmasi ekspor CSV terminal 03 Okt 2026)
+- Verified (16/16): GBPUSD_ORB + 10 simbol Tahap 6E + AUDCAD_ORB, EURCHF_ORB (6E-11/12) + NZDJPY_ORB, USDCHF_ORB, USDJPY_ORB (6H, preset baru dari CSV 03 Okt 2026: stops 20, step 0.10, margin 100k/100k/50k, komisi 33)
 - Pending (0)
 
 ## ⚠️ Known Limitations
