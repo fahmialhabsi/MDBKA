@@ -10,7 +10,11 @@ import {
   resolveSwingLevels,
   type Candle,
 } from "../src/calculations/swingDetector";
-import { checkInstrumentMismatch } from "../src/lib/instrumentMismatch";
+import {
+  DEVIATION_WARN_PCT,
+  checkInstrumentMismatch,
+  checkPriceDeviation,
+} from "../src/lib/instrumentMismatch";
 import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
@@ -6308,6 +6312,51 @@ test("424. panel live wiring dataFreshness + teks basi (readSrc)", () => {
   const helper = readSrc("src/lib/dataFreshness.ts");
   assert(!helper.includes("import.meta."), "helper tak CJS-safe");
   assert(!helper.includes("document"), "helper menyentuh DOM");
+});
+
+/* ---------------- Guard deviasi CSV vs harga berjalan: TEST 425-426 ---------------- */
+
+function makeFlatCandles(close: number, count: number): Candle[] {
+  const out: Candle[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push(makeCandle(`t${i}`, close, close + 0.0002, close - 0.0002, close));
+  }
+  return out;
+}
+
+test("425. checkPriceDeviation: cocok null, salah-pair warning", () => {
+  assert(DEVIATION_WARN_PCT === 10, "ambang berubah");
+  // GBPUSD CSV (~1.3240) vs harga 1.3248 → <0.1%, lolos.
+  assert(
+    checkPriceDeviation(makeFlatCandles(1.324, 10), 1.3248) === null,
+    "pair benar ikut warning",
+  );
+  // AUDCAD CSV (~0.99) ditempel untuk GBPUSD (1.32) → ~25%, warning.
+  const warned = checkPriceDeviation(makeFlatCandles(0.99, 10), 1.32);
+  assert(warned !== null, "pair salah lolos diam-diam");
+  if (warned !== null) {
+    assert(warned.includes("25."), `persen hilang: ${warned}`);
+    assert(warned.includes("CSV"), "sumber CSV tak disebut");
+  }
+  // Batas: 9% lolos, 11% warning (hindari batas biner persis 10%).
+  assert(checkPriceDeviation(makeFlatCandles(1.09, 5), 1.0) === null, "9% gagal");
+  assert(
+    checkPriceDeviation(makeFlatCandles(1.11, 5), 1.0) !== null,
+    "11% lolos",
+  );
+  // Invalid dilewati tanpa tuduhan.
+  assert(checkPriceDeviation([], 1.32) === null, "kosong warning");
+  assert(checkPriceDeviation(makeFlatCandles(1.32, 5), 0) === null, "harga 0 warning");
+  assert(checkPriceDeviation(makeFlatCandles(1.32, 5), NaN) === null, "NaN warning");
+});
+
+test("426. SwingLevelsForm memakai guard ganda (readSrc)", () => {
+  const src = readSrc("src/components/analysis/SwingLevelsForm.tsx");
+  assert(src.includes("checkPriceDeviation"), "guard deviasi tak di-wire");
+  assert(
+    src.includes("checkInstrumentMismatch"),
+    "guard skala hilang (regresi)",
+  );
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

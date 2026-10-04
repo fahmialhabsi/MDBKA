@@ -4,7 +4,7 @@ import {
   type SwingLevelSource,
 } from "../../calculations/swingDetector";
 import { parseCsvCandles } from "../../lib/csvCandleParser";
-import { checkInstrumentMismatch } from "../../lib/instrumentMismatch";
+import { checkInstrumentMismatch, checkPriceDeviation } from "../../lib/instrumentMismatch";
 import {
   formatInstrumentPrice,
   getInstrumentProfile,
@@ -51,8 +51,12 @@ export default function SwingLevelsForm({
 
   const minimumCandles = strength * 2 + 1;
 
+  // Guard ganda: skala instrumen dulu, lalu deviasi relatif terhadap
+  // harga berjalan (menangkap CSV pair se-skala yang salah).
   const mismatch = useMemo(
-    () => checkInstrumentMismatch(candles, symbol, currentPrice),
+    () =>
+      checkInstrumentMismatch(candles, symbol, currentPrice) ??
+      checkPriceDeviation(candles, currentPrice),
     [candles, symbol, currentPrice],
   );
 
