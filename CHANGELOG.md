@@ -1,5 +1,14 @@
 # CHANGELOG MDBKA
 
+## v1.0.7-tahap6e-final — 13/13 OTB Verified (4 Okt 2026)
+
+Tahap 6E-11/12: AUDCAD_ORB + EURCHF_ORB dikonfirmasi dari 9 kolom baru
+ekspor CSV terminal OTB (Stops_Level=20, Volume_Step=0.10, margin
+100000/100000/50000, Forex, profit=quote, margin=USD, komisi 33.00).
+Gate `VERIFIED_OTB_SYMBOLS`: 11 → 13/13, tidak ada pending tersisa.
+Validator komisi 33 kini aktif untuk AUDCAD (test 246 diperbarui).
+**410/410 tests lolos** (407 + 3 JPY 6F-1), zero regression.
+
 ## v1.0.5-tahap6e — Verifikasi 10 Simbol OTB (4 Okt 2026)
 
 Tahap 6E: 10 simbol `_ORB` pending dikonfirmasi dari ekspor CSV terminal
@@ -44,8 +53,8 @@ perubahan aditif dan backward-compatible; tidak perlu migrasi dari v1.0.0.
 ### Diperbaiki
 - Penomoran suite async bersifat lokal-suite (klarifikasi komentar)
 
-### Diketahui (deferred ke Tahap 6+; update 6E: tersisa 2)
-- 2 simbol OTB pending (AUDCAD, EURCHF) menunggu konfirmasi jendela Specification
+### Diketahui (update 6E-final: tidak ada pending OTB tersisa)
+- spreadMode floating = default kelas (tidak ada di ekspor CSV MT5)
 - Risiko JPY belum final; `maintenanceMargin` OTB placeholder
 - FX rate harian ECB; Finex demo 2 simbol
 

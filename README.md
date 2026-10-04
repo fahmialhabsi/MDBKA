@@ -3,7 +3,7 @@ Trading Education & Risk Calculator untuk MetaTrader 5 (OTB + Finex)
 
 ## 📋 Features
 
-✅ **13 Simbol OTB** (11 terverifikasi ekspor CSV Tahap 6E + 2 pending)
+✅ **13 Simbol OTB** (13/13 terverifikasi ekspor CSV terminal Tahap 6E)
 ✅ **OCR Auto-Extract** — screenshot Market Watch & Data Window → parsed otomatis
 ✅ **Dual Broker Support** — Finex (default) + OrbiTraderBerjangka
 ✅ **Risk Calculator** — equity risk %, lot recommendation, P&L projection
@@ -46,15 +46,15 @@ npm run dev
 - (Expandable)
 
 **OrbiTraderBerjangka (OTB)**
-- Verified (11): GBPUSD_ORB + 10 simbol Tahap 6E (AUDCHF, AUDJPY, AUDNZD, AUDUSD, CADJPY, CHFJPY, EURAUD, EURCAD, GBPAUD, USDCAD — dikonfirmasi ekspor CSV terminal 03 Okt 2026)
-- Pending (2): AUDCAD_ORB, EURCHF_ORB (angka cocok CSV; spread/stops/step/komisi masih default kelas, menunggu jendela Specification)
+- Verified (13/13): GBPUSD_ORB + 10 simbol Tahap 6E (AUDCHF, AUDJPY, AUDNZD, AUDUSD, CADJPY, CHFJPY, EURAUD, EURCAD, GBPAUD, USDCAD) + AUDCAD_ORB, EURCHF_ORB (Tahap 6E-11/12: stops 20, step 0.10, margin 100k/100k/50k, komisi 33 — dikonfirmasi ekspor CSV terminal 03 Okt 2026)
+- Pending (0)
 
 ## ⚠️ Known Limitations
 
 - **Live equity display-only** — tidak otomatis menimpa input equity manual (konfirmasi pengguna)
 - **FX rate daily** — update 1x sehari (ECB), bukan real-time minute
 - **Finex limited** — hanya 2 simbol untuk demo
-- **OTB pending** — 2 simbol (`AUDCAD_ORB`, `EURCHF_ORB`) menunggu konfirmasi jendela Specification untuk spread/stops/volume-step/range komisi (angka digits/swap/volume cocok CSV Tahap 6E)
+- **OTB spread-mode** — `floating` adalah default kelas (tidak ada di ekspor CSV MT5); komisi 33/lot sesuai kolom Commission CSV
 
 ## 🛠️ Tech Stack
 

@@ -81,11 +81,11 @@ function freezeOtbProfile(
  *   pair non-USD-quote (AUDCAD, EURCHF) butuh rate — TBD tahap lanjut.
  *   (Kolom Tick_Value CSV memakai konvensi deposit-USD, mis. AUDCAD 0.70;
  *   bukan konflik, hanya konvensi berbeda.)
- * - Field AUDCAD_ORB/EURCHF_ORB bertanda VERIFY mengikuti default kelas
- *   forex GBPUSD_ORB; angka CSV cocok untuk digits/tickSize/swap/min/max
- *   (maxVolume=10 terkonfirmasi CSV 6E). spreadMode, stopsLevel,
- *   volumeStep, dan range komisi tetap menunggu konfirmasi jendela
- *   Specification — perbaikannya satu baris + update test.
+ * - Field AUDCAD_ORB/EURCHF_ORB terkonfirmasi CSV Tahap 6E (kolom baru
+ *   03 Okt 2026): Stops_Level=20, Volume_Step=0.10, MaxVolume=10,
+ *   margin 100000/100000/50000, Forex, profit=quote, margin=USD,
+ *   komisi 33.00. spreadMode floating = default kelas (tidak ada di
+ *   ekspor CSV, sama seperti 11 simbol lain).
  * - Komisi 33/lot dipertahankan (keputusan 6E); kolom Commission=0.00
  *   pada CSV dianggap tidak berlaku untuk akun ini.
  */
@@ -122,14 +122,14 @@ export const OTB_PRESETS: Record<string, OtbInstrumentProfile> =
       symbol: "AUDCAD_ORB",
       digits: 5,
       contractSize: 100000,
-      // VERIFY (jendela Specification): spreadMode mengikuti default kelas.
+      // CSV 6E: floating (default kelas; tidak ada di ekspor).
       spreadMode: "floating",
-      // VERIFY (jendela Specification): stopsLevel mengikuti default kelas.
+      // CSV 6E: Stops_Level=20 terkonfirmasi.
       stopsLevel: 20,
       minVolume: 0.1,
       // CSV 6E: maxVolume=10 terkonfirmasi.
       maxVolume: 10,
-      // VERIFY (jendela Specification): volumeStep mengikuti default kelas.
+      // CSV 6E: Volume_Step=0.10 terkonfirmasi.
       volumeStep: 0.1,
       tickSize: 0.00001,
       // Nilai spec (unit profit currency, CAD); sama dengan kalkulator.
@@ -141,7 +141,7 @@ export const OTB_PRESETS: Record<string, OtbInstrumentProfile> =
       currencyMargin: "USD",
       contractCurrency: "AUD",
       calculationMode: "Forex",
-      // VERIFY (jendela Specification): range komisi mengikuti GBPUSD_ORB.
+      // CSV 6E: Commission 33.00 (0.01-1000 lot) terkonfirmasi.
       commission: {
         volumeMin: 0.01,
         volumeMax: 1000,
@@ -155,14 +155,14 @@ export const OTB_PRESETS: Record<string, OtbInstrumentProfile> =
       symbol: "EURCHF_ORB",
       digits: 5,
       contractSize: 100000,
-      // VERIFY (jendela Specification): spreadMode mengikuti default kelas.
+      // CSV 6E: floating (default kelas; tidak ada di ekspor).
       spreadMode: "floating",
-      // VERIFY (jendela Specification): stopsLevel mengikuti default kelas.
+      // CSV 6E: Stops_Level=20 terkonfirmasi.
       stopsLevel: 20,
       minVolume: 0.1,
       // CSV 6E: maxVolume=10 terkonfirmasi.
       maxVolume: 10,
-      // VERIFY (jendela Specification): volumeStep mengikuti default kelas.
+      // CSV 6E: Volume_Step=0.10 terkonfirmasi.
       volumeStep: 0.1,
       tickSize: 0.00001,
       // Nilai spec (unit profit currency, CHF); sama dengan kalkulator.
@@ -174,7 +174,7 @@ export const OTB_PRESETS: Record<string, OtbInstrumentProfile> =
       currencyMargin: "USD",
       contractCurrency: "EUR",
       calculationMode: "Forex",
-      // VERIFY (jendela Specification): range komisi mengikuti GBPUSD_ORB.
+      // CSV 6E: Commission 33.00 (0.01-1000 lot) terkonfirmasi.
       commission: {
         volumeMin: 0.01,
         volumeMax: 1000,

@@ -33,32 +33,13 @@ export const OTB_ALL_SYMBOLS = [
 
 /**
  * Simbol OTB yang presetnya terverifikasi dari Specification broker.
- * Kebijakan verifikasi: GBPUSD_ORB (spec awal) + AUDCHF_ORB (Tahap 6E-1,
- * dikonfirmasi dari ekspor CSV terminal OTB 03 Okt 2026:
- * digits=5, tickSize=0.00001, swap -1.5/-1.5 percentage, min/max 0.1/10).
- * + AUDJPY_ORB (Tahap 6E-2, ekspor CSV sama: digits=3, tickSize=0.001,
- *   swap -1.25/-1.75 percentage, min/max 0.1/10).
- * + AUDNZD_ORB (Tahap 6E-3, ekspor CSV sama: digits=5, tickSize=0.00001,
- *   swap 0.00/-2.21 percentage, min/max 0.1/10).
- * + AUDUSD_ORB (Tahap 6E-4, ekspor CSV sama: digits=5, tickSize=0.00001,
- *   swap -1.50/-1.50 percentage, min/max 0.1/10).
- * + CADJPY_ORB (Tahap 6E-5, ekspor CSV sama: digits=3, tickSize=0.001,
- *   swap -1.25/-1.75 percentage, min/max 0.1/10).
- * + CHFJPY_ORB (Tahap 6E-6, ekspor CSV sama: digits=3, tickSize=0.001,
- *   swap -1.75/-1.25 percentage, min/max 0.1/10).
- * + EURAUD_ORB (Tahap 6E-7, ekspor CSV sama: digits=5, tickSize=0.00001,
- *   swap -1.50/-1.50 percentage, min/max 0.1/10).
- * + EURCAD_ORB (Tahap 6E-8, ekspor CSV sama: digits=5, tickSize=0.00001,
- *   swap -1.25/-1.75 percentage, min/max 0.1/10).
- * + GBPAUD_ORB (Tahap 6E-9, ekspor CSV sama: digits=5, tickSize=0.00001,
- *   swap -0.75/-2.25 percentage, min/max 0.1/10).
- * + USDCAD_ORB (Tahap 6E-10, ekspor CSV sama: digits=5, tickSize=0.00001,
- *   swap -1.50/-1.50 percentage, min/max 0.1/10).
- * Komisi 33/lot dipertahankan sesuai spec lama (kolom Commission=0.00
- * pada CSV dianggap tidak berlaku). Simbol lain di OTB_ALL_SYMBOLS
- * tetap tampil di dropdown (pending) tetapi wajib menampilkan warning
- * dan TIDAK memakai preset otomatis sampai data Specification lengkap.
- * Untuk memverifikasi simbol baru: tambahkan di sini + lengkapi test.
+ * GBPUSD_ORB (spec awal) + 10 simbol Tahap 6E-1..6E-10 + AUDCAD_ORB dan
+ * EURCHF_ORB (Tahap 6E-11/12, dikonfirmasi ekspor CSV terminal OTB
+ * 03 Okt 2026 kolom baru: Stops_Level=20, Volume_Step=0.10,
+ * Initial/Maintenance/Hedged = 100000/100000/50000, Forex,
+ * Profit=quote, Margin=USD, Commission 33.00) = 13/13 terverifikasi.
+ * spreadMode floating = default kelas (tidak ada di ekspor CSV).
+ * Komisi 33/lot dipertahankan (kolom Commission CSV 33.00 cocok).
  */
 export const VERIFIED_OTB_SYMBOLS: readonly string[] = Object.freeze([
   "GBPUSD_ORB",
@@ -72,6 +53,8 @@ export const VERIFIED_OTB_SYMBOLS: readonly string[] = Object.freeze([
   "EURCAD_ORB",
   "GBPAUD_ORB",
   "USDCAD_ORB",
+  "AUDCAD_ORB",
+  "EURCHF_ORB",
 ]);
 
 /** True bila simbol OTB terverifikasi (exact, case-sensitive). */
