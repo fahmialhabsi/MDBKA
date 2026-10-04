@@ -10,7 +10,6 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist-server",
-    "rootDir": "./server",
     "noEmitOnError": true,
     "types": ["node"]
   },

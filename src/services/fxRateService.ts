@@ -44,6 +44,8 @@ export const ECB_DAILY_URL =
  * Parse XML ECB: <Cube currency="USD" rate="1.0831"/>.
  * Regex sederhana, sufficient untuk 8 currency. Unknown currency
  * diabaikan; missing currency mempertahankan default 1.
+ * ECB live memakai SINGLE quote (currency='USD') — kedua gaya diterima
+ * (bug produksi: hanya double-quote sehingga selalu default).
  */
 export function parseECBXml(xml: string): ExchangeRates {
   const result: ExchangeRates = {
@@ -57,11 +59,11 @@ export function parseECBXml(xml: string): ExchangeRates {
     NZD: 1,
   };
 
-  const regex = /<Cube currency="([A-Z]{3})" rate="([\d.]+)"/g;
+  const regex = /<Cube currency=(["'])([A-Z]{3})\1 rate=(["'])([\d.]+)\3/g;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(xml)) !== null) {
-    const currency = match[1];
-    const rate = parseFloat(match[2]);
+    const currency = match[2];
+    const rate = parseFloat(match[4]);
     if (!Number.isFinite(rate) || rate <= 0) continue;
     switch (currency) {
       case "EUR":
@@ -115,6 +117,36 @@ export async function fetchECBRates(): Promise<ExchangeRates> {
   } catch (error) {
     console.warn("ECB fetch error, using fallback:", error);
     return FALLBACK_RATES;
+  }
+}
+
+/**
+ * Tahap FX-PROXY — ambil kurs via backend sendiri (same-origin, bebas
+ * blokir CORS ECB). Dipakai App.tsx SEBELUM direct fetchECBRates.
+ * Null bila backend mati/respons invalid → pemanggil lanjut ke
+ * fetchECBRates()/FALLBACK_RATES. Tidak pernah throw; tidak dipanggil
+ * saat unit test (tanpa network call).
+ */
+export async function fetchBackendRates(
+  baseUrl: string,
+): Promise<ExchangeRates | null> {
+  try {
+    const doFetch = resolveFetch();
+    if (doFetch === null) return null;
+    const url = `${baseUrl.replace(/\/+$/, "")}/api/fx/ecb`;
+    const response = await doFetch(url);
+    if (!response.ok) return null;
+    const data = (await (
+      response as unknown as { json(): Promise<unknown> }
+    ).json()) as Record<string, unknown>;
+    for (const key of ["EUR", "USD", "AUD", "CAD", "CHF", "GBP", "JPY", "NZD"]) {
+      if (typeof data[key] !== "number" || !Number.isFinite(data[key])) {
+        return null;
+      }
+    }
+    return data as unknown as ExchangeRates;
+  } catch {
+    return null;
   }
 }
 

@@ -10,6 +10,7 @@ import cors from "cors";
 import type { MT5LogReader } from "./services/mt5LogReader";
 import { createEquityRoutes } from "./routes/equityRoutes";
 import { createQuotesRoutes } from "./routes/quotesRoutes";
+import { createFxRoutes } from "./routes/fxRoutes";
 import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
 
 /**
@@ -46,6 +47,7 @@ export function createApp(
 
   app.use("/api/equity", createEquityRoutes(reader, readerFinex));
   app.use("/api/quotes", createQuotesRoutes(quotesReader, quotesReaderFinex));
+  app.use("/api/fx", createFxRoutes());
 
   // Tahap HIST-1: cakupan arsip tick (per broker/simbol/rentang).
   // Fail-closed jujur: logger absen → null (bukan 404), agar dashboard

@@ -99,6 +99,10 @@ import {
   resolveTzOffset,
   tickKey,
 } from "../server/services/tickHistory";
+import {
+  FX_CACHE_TTL_MS,
+  isFxCacheFresh,
+} from "../server/routes/fxRoutes";
 import { FRONTEND_ORIGIN } from "../server/app";
 import {
   OTB_ALL_SYMBOLS,
@@ -4798,6 +4802,15 @@ test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   assert(Math.abs(rates.JPY - 161.25) < 1e-9, `JPY=${rates.JPY}`);
   assert(Math.abs(rates.AUD - 1.6512) < 1e-9, `AUD=${rates.AUD}`);
   assert(rates.EUR === 1.0, "EUR base berubah");
+  // ECB live memakai single-quote (bug produksi: selalu default).
+  const live =
+    `<Cube time="2026-10-03">` +
+    `<Cube currency='USD' rate='1.1225'/>` +
+    `<Cube currency='JPY' rate='176.99'/>` +
+    `</Cube>`;
+  const liveRates = parseECBXml(live);
+  assert(Math.abs(liveRates.USD - 1.1225) < 1e-9, `live USD=${liveRates.USD}`);
+  assert(Math.abs(liveRates.JPY - 176.99) < 1e-9, `live JPY=${liveRates.JPY}`);
 });
 
 test("289. convertToUSD(100 AUD) ≈ 65.59 USD", () => {
@@ -6474,6 +6487,35 @@ test("429. wiring histori: subscribe + backfill + route + env (readSrc)", () => 
   assert(envExample.includes("MT5_TZ_OFFSET_FINEX"), "offset Finex tak didokumentasikan");
   const gitignore = readSrc(".gitignore");
   assert(gitignore.includes("data/"), "data/ tak di-ignore (arsip ikut commit!)");
+});
+
+/* ---------------- Proxy kurs ECB via backend (FX-PROXY): TEST 430-431 ---------------- */
+
+test("430. isFxCacheFresh + route terdaftar + parser dipakai ulang", () => {
+  assert(FX_CACHE_TTL_MS === 12 * 3600 * 1000, "TTL cache berubah");
+  const now = 1_700_000_000_000;
+  assert(isFxCacheFresh(now - 1000, now) === true, "cache segar ditolak");
+  assert(isFxCacheFresh(now - 13 * 3600 * 1000, now) === false, "cache basi diterima");
+  assert(isFxCacheFresh(NaN, now) === false, "NaN diterima");
+  const app = readSrc("server/app.ts");
+  assert(app.includes("/api/fx"), "route /api/fx tak mount");
+  const routes = readSrc("server/routes/fxRoutes.ts");
+  assert(routes.includes('"/ecb"'), "endpoint /ecb hilang");
+  assert(routes.includes("parseECBXml"), "parser tak dipakai ulang");
+  assert(routes.includes("FALLBACK_RATES"), "fallback hilang");
+  assert(routes.includes("FX_CACHE_TTL_MS"), "konstanta TTL hilang");
+});
+
+test("431. frontend via proxy dulu, direct tetap cadangan (readSrc)", () => {
+  const service = readSrc("src/services/fxRateService.ts");
+  assert(service.includes("fetchBackendRates"), "fetchBackendRates hilang");
+  assert(service.includes("/api/fx/ecb"), "URL proxy hilang");
+  assert(service.includes("fetchECBRates"), "direct fetch hilang (regresi test 287)");
+  assert(service.includes("eurofxref-daily.xml"), "ECB URL hilang (regresi test 287)");
+  const appSrc = readSrc("src/App.tsx");
+  assert(appSrc.includes("fetchBackendRates"), "App tak pakai proxy");
+  assert(appSrc.includes("fetchECBRates"), "App kehilangan cadangan direct (regresi test 294)");
+  assert(appSrc.includes("API_BASE_URL"), "App tak pakai base URL env");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

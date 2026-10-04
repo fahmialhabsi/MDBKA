@@ -1,5 +1,13 @@
 # CHANGELOG MDBKA
 
+## Unreleased — Proxy Kurs ECB via Backend (4 Okt 2026)
+
+Fix dari laporan console: fetch ECB langsung dari browser diblokir CORS
+(selalu fallback basi) + parser hanya cocok double-quote padahal ECB live
+memakai single-quote (selalu default 1). Kini `GET /api/fx/ecb` (cache
+12 jam) + frontend via proxy dulu, direct+FALLBACK cadangan. Tes 288
+dikunci untuk kedua gaya quote. **428/428 tests lolos.**
+
 ## v1.0.12-tick-history — Arsip Tick per Simbol (4 Okt 2026)
 
 HIST-1: `TickHistoryLogger` mengarsipkan tick ke JSONL harian per broker

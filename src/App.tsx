@@ -61,9 +61,11 @@ import {
   getValidationViewState,
 } from "./lib/validationView";
 import {
+  fetchBackendRates,
   fetchECBRates, convertToUSD,
   type ExchangeRates,
 } from "./services/fxRateService";
+import { API_BASE_URL } from "./lib/apiBaseUrl";
 
 const initialMarket: MarketData = {
   symbol: "GBPUSD",
@@ -168,13 +170,17 @@ export default function App() {
     null,
   );
   // Tahap 5D-STEP2: ECB daily rate 1x saat app init, cache selama session.
+  // Tahap FX-PROXY: via backend sendiri dulu (bebas blokir CORS ECB);
+  // direct fetchECBRates hanya cadangan (konteks Node/test).
   const [fxRates, setFxRates] = useState<ExchangeRates | null>(null);
 
   useEffect(() => {
-    fetchECBRates().then((rates) => {
-      setFxRates(rates);
-      console.log("FX rates loaded:", rates.fetchedAt);
-    });
+    fetchBackendRates(API_BASE_URL)
+      .then((viaBackend) => viaBackend ?? fetchECBRates())
+      .then((rates) => {
+        setFxRates(rates);
+        console.log("FX rates loaded:", rates.fetchedAt);
+      });
   }, []);
 
   const lastSymbol = useRef(initialMarket.symbol);
