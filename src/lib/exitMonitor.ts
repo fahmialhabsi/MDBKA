@@ -31,6 +31,8 @@ export interface Holding {
   /** ISO entry (opsional, untuk umur posisi). */
   readonly entryTime: string;
   readonly createdAt: string;
+  /** Equity akun USD saat entry (opsional, untuk margin guard 10%). */
+  readonly accountEquity?: number;
 }
 
 export type ExitSignal =
@@ -38,6 +40,7 @@ export type ExitSignal =
   | "EXIT_STOP_LOSS"
   | "WARN_NEAR_TP"
   | "WARN_NEAR_SL"
+  | "WARN_PRICE_DRIFT"
   | "WARN_ADVERSE_DRIFT"
   | "HOLD";
 
@@ -61,6 +64,12 @@ export interface ExitEvaluation {
 export const NEAR_LEVEL_PCT = 15;
 /** Ambang drift: rugi berjalan ≥ 50% risiko terencana. */
 export const ADVERSE_DRIFT_PCT = 50;
+/** Ambang drift harga: merugikan ≥ 0,5% dari entry (−2% tak terpicu: SL tipikal 0,6–1,2%). */
+export const PRICE_DRIFT_PCT = 0.5;
+/** Guard margin: risiko terencana > 10% equity → warning pasif. */
+export const MARGIN_GUARD_PCT = 10;
+/** R:R minimal layak: reward ≥ 2× risiko. */
+export const MIN_REWARD_RISK = 2;
 
 /** Harga acuan keluar: BELI keluar di bid, JUAL keluar di ask. */
 export function exitReferencePrice(
@@ -160,8 +169,8 @@ function round2(value: number): number {
 
 /**
  * Evaluasi sinyal exit untuk satu holding pada harga berjalan.
- * Urutan: TP tersentuh → SL tersentuh → dekat TP/SL → drift merugikan
- * → HOLD. Tak pernah throw; input invalid → HOLD + alasan.
+ * Urutan: TP tersentuh → SL tersentuh → dekat TP/SL → drift harga 0,5%
+ * → drift risiko 50% → HOLD. Tak pernah throw; input invalid → HOLD.
  */
 export function evaluateExitSignal(
   holding: Holding,
@@ -281,6 +290,27 @@ export function evaluateExitSignal(
     pnlValue !== null &&
     riskValue !== null &&
     riskValue > 0 &&
+    pnlCcy === planCcy
+  ) {
+    const adversePct =
+      holding.direction === "BELI"
+        ? ((holding.entryPrice - ref) / holding.entryPrice) * 100
+        : ((ref - holding.entryPrice) / holding.entryPrice) * 100;
+    if (adversePct >= PRICE_DRIFT_PCT) {
+      return {
+        signal: "WARN_PRICE_DRIFT",
+        reasons: [
+          `Harga ${adversePct.toFixed(2)}% merugikan dari entry (≥${PRICE_DRIFT_PCT}%). Pertimbangkan keluar dini.`,
+        ],
+        ...base,
+      };
+    }
+  }
+
+  if (
+    pnlValue !== null &&
+    riskValue !== null &&
+    riskValue > 0 &&
     pnlValue < 0 &&
     pnlCcy === planCcy &&
     Math.abs(pnlValue) >= (riskValue * ADVERSE_DRIFT_PCT) / 100
@@ -298,6 +328,90 @@ export function evaluateExitSignal(
 }
 
 /**
+ * Margin guard pasif Phase 2: risiko terencana vs equity akun.
+ * Warning bila risiko > MARGIN_GUARD_PCT% equity. Butuh converter untuk
+ * profit-ccy non-USD (risiko vs equity USD harus se-mata-uang);
+ * tanpa converter yang memadai → null (jujur, bukan tebakan).
+ * Tak pernah throw.
+ */
+export function checkMarginGuard(
+  holding: Pick<
+    Holding,
+    "symbol" | "lot" | "entryPrice" | "sl" | "accountEquity"
+  >,
+  convertToUsd?: (amount: number, currency: string) => number | null,
+): string | null {
+  const equity = holding.accountEquity;
+  if (equity === undefined) return null;
+  if (!Number.isFinite(equity) || equity <= 0) return null;
+  const risk = plannedValue(
+    holding.symbol,
+    holding.lot,
+    Math.abs(holding.entryPrice - holding.sl),
+    convertToUsd,
+  );
+  if (risk === null || !Number.isFinite(risk.value) || risk.value <= 0) {
+    return null;
+  }
+  let riskUsd: number | null = null;
+  if (risk.currency === "USD") {
+    riskUsd = risk.value;
+  } else if (convertToUsd !== undefined) {
+    const converted = convertToUsd(risk.value, risk.currency);
+    if (converted !== null && Number.isFinite(converted)) riskUsd = converted;
+  }
+  if (riskUsd === null) return null;
+  const pct = (riskUsd / equity) * 100;
+  if (pct <= MARGIN_GUARD_PCT) return null;
+  return (
+    `Risiko terencana $${riskUsd.toFixed(2)} = ${pct.toFixed(1)}% equity ` +
+    `($${equity.toFixed(2)}) > ${MARGIN_GUARD_PCT}%. Kecilkan lot atau rapatkan SL.`
+  );
+}
+
+/**
+ * Rasio reward:risk dari jarak harga (mata uang saling meniadakan).
+ * Null bila input invalid atau risiko nol.
+ */
+export function rewardRiskRatio(
+  entryPrice: number,
+  sl: number,
+  tp: number,
+): number | null {
+  if (
+    !Number.isFinite(entryPrice) ||
+    entryPrice <= 0 ||
+    !Number.isFinite(sl) ||
+    sl <= 0 ||
+    !Number.isFinite(tp) ||
+    tp <= 0
+  ) {
+    return null;
+  }
+  const risk = Math.abs(entryPrice - sl);
+  if (risk <= 0) return null;
+  return Math.abs(tp - entryPrice) / risk;
+}
+
+/**
+ * Peringatan R:R suboptimal Phase 2: reward < MIN_REWARD_RISK × risiko.
+ * Non-blokir (form tetap bisa submit; dashboard tampilkan badge).
+ */
+export function checkRewardRisk(
+  entryPrice: number,
+  sl: number,
+  tp: number,
+): string | null {
+  const ratio = rewardRiskRatio(entryPrice, sl, tp);
+  if (ratio === null) return null;
+  if (ratio >= MIN_REWARD_RISK) return null;
+  return (
+    `Reward/risk 1:${ratio.toFixed(2)} < 1:${MIN_REWARD_RISK} ` +
+    `(TP terlalu dekat atau SL terlalu jauh).`
+  );
+}
+
+/**
  * Validasi input form holding. [] = valid. Sisi SL/TP dicek per arah
  * (BELI: SL<entry<TP; JUAL: TP<entry<SL}).
  */
@@ -308,6 +422,8 @@ export function validateHoldingInput(input: {
   readonly entryPrice: number;
   readonly sl: number;
   readonly tp: number;
+  /** Equity USD opsional (untuk margin guard; invalid bila diisi sembarang). */
+  readonly accountEquity?: number;
 }): string[] {
   const errors: string[] = [];
   if (input.symbol.trim() === "") errors.push("Simbol wajib diisi.");
@@ -322,6 +438,13 @@ export function validateHoldingInput(input: {
     if (!Number.isFinite(value) || value <= 0) {
       errors.push(`${name} harus angka > 0.`);
     }
+  }
+  if (
+    input.accountEquity !== undefined &&
+    input.accountEquity !== null &&
+    (!Number.isFinite(input.accountEquity) || input.accountEquity <= 0)
+  ) {
+    errors.push("Equity harus angka > 0 bila diisi.");
   }
   if (errors.length > 0) return errors;
   if (input.direction === "BELI") {

@@ -1,5 +1,14 @@
 # CHANGELOG MDBKA
 
+## v1.2.0-fase2 — Guard Margin, R:R, Drift Harga (5 Okt 2026)
+
+Phase 2 monitor posisi: margin guard pasif (risiko >10% equity, dari
+input equity per posisi), R:R minimal 1:2 (hint live di form + badge
+suboptimal; trade contoh user 1:1.96), drift harga merugikan ≥0,5%
+(−2% mustahil: SL tipikal 0,6–1,2%). Urutan sinyal:
+TP → SL → near → drift harga → drift risiko → HOLD.
+**436/436 tests lolos** (432 + 436/437/438/439).
+
 ## v1.1.0-fase1 — Monitor Posisi + Sinyal Exit (5 Okt 2026)
 
 Fase 1 (scope 5 simbol live Finex): form entry manual (localStorage,

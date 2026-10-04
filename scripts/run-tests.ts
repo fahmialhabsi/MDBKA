@@ -105,9 +105,15 @@ import {
 } from "../server/routes/fxRoutes";
 import {
   ADVERSE_DRIFT_PCT,
+  MARGIN_GUARD_PCT,
+  MIN_REWARD_RISK,
   NEAR_LEVEL_PCT,
+  PRICE_DRIFT_PCT,
   calculateHoldingPnL,
+  checkMarginGuard,
+  checkRewardRisk,
   evaluateExitSignal,
+  rewardRiskRatio,
   validateHoldingInput,
   type Holding,
 } from "../src/lib/exitMonitor";
@@ -6666,6 +6672,94 @@ test("435. wiring holdings: komponen + mount App (readSrc)", () => {
   const app = readSrc("src/App.tsx");
   assert(app.includes("HoldingsMonitor"), "monitor tak terpasang di App");
   assert(app.includes("Monitor posisi"), "panel monitor hilang");
+});
+
+/* ---------------- Guard margin + R:R + drift harga Phase 2: TEST 436-439 ---------------- */
+
+test("436. checkMarginGuard: >10% warning, ≤10% null", () => {
+  assert(MARGIN_GUARD_PCT === 10, "ambang berubah");
+  // Risiko USDCHF 0.01 lot = 5.07 CHF ≈ $6.09 (testToUsd).
+  const risky = makeHolding({ accountEquity: 50 });
+  const warn = checkMarginGuard(risky, testToUsd);
+  assert(warn !== null, "risiko 12% lolos tanpa warning");
+  if (warn !== null) {
+    assert(warn.includes("12."), `persen hilang: ${warn}`);
+    assert(warn.includes("10%"), "ambang tak disebut");
+  }
+  const safe = makeHolding({ accountEquity: 100 });
+  assert(checkMarginGuard(safe, testToUsd) === null, "risiko 6% ikut warning");
+  assert(
+    checkMarginGuard(makeHolding(), testToUsd) === null,
+    "tanpa equity ikut warning",
+  );
+  assert(
+    checkMarginGuard(makeHolding({ accountEquity: 50 })) === null,
+    "tanpa converter AUD? (USDCHF perlu konversi CHF→USD)",
+  );
+  const usdPair = makeHolding({
+    symbol: "GBPUSD",
+    entryPrice: 1.32483,
+    sl: 1.31977,
+    tp: 1.33477,
+    accountEquity: 10,
+  });
+  // Risiko = 0.00506×100000×0.01 = $5.06 = 50.6% equity → warning (tanpa converter).
+  const warnUsd = checkMarginGuard(usdPair);
+  assert(warnUsd !== null, "risiko 50% USD lolos");
+});
+
+test("437. rewardRiskRatio + checkRewardRisk 1:2", () => {
+  assert(MIN_REWARD_RISK === 2, "ambang berubah");
+  // Trade contoh user: risk 0.00507, reward 0.00993 → 1:1.96 < 1:2.
+  const ratio = rewardRiskRatio(0.83231, 0.82724, 0.84224);
+  assert(ratio !== null && Math.abs(ratio - 1.959) < 0.01, `ratio=${ratio}`);
+  const warn = checkRewardRisk(0.83231, 0.82724, 0.84224);
+  assert(warn !== null && warn.includes("1:1.96"), `warning=${warn}`);
+  assert(checkRewardRisk(1, 0.9, 1.3) === null, "1:3 ikut warning");
+  assert(checkRewardRisk(1, 1, 1.1) === null, "risiko nol harus null");
+  assert(checkRewardRisk(NaN, 0.9, 1.1) === null, "NaN harus null");
+});
+
+test("438. WARN_PRICE_DRIFT 0,5%: BELI/JUAL + batas zona", () => {
+  assert(PRICE_DRIFT_PCT === 0.5, "ambang berubah");
+  // SL lebar agar zona near (15%) tak menutupi zona drift.
+  const wide = makeHolding({ sl: 0.82, tp: 0.85 });
+  // Bid 0.8281 = −0.51% dari 0.83231 → drift (di luar band near 0.0045).
+  const drifted = evaluateExitSignal(wide, 0.8281, 0.8282, testToUsd);
+  assert(drifted.signal === "WARN_PRICE_DRIFT", `sinyal=${drifted.signal}`);
+  // Merugikan 0,3% (< 0,5%) → bukan price drift (jatuh ke risk drift).
+  const mild = evaluateExitSignal(wide, 0.8298, 0.8299, testToUsd);
+  assert(mild.signal !== "WARN_PRICE_DRIFT", `ikut drift: ${mild.signal}`);
+  // Sisi menguntungkan → tak pernah drift harga.
+  const gain = evaluateExitSignal(wide, 0.838, 0.8381, testToUsd);
+  assert(gain.signal !== "WARN_PRICE_DRIFT", `gain ikut drift: ${gain.signal}`);
+  // JUAL cermin: ask +0,51% di atas entry → drift.
+  const short = makeHolding({
+    direction: "JUAL",
+    entryPrice: 0.83523,
+    sl: 0.84523,
+    tp: 0.82523,
+  });
+  const shortDrift = evaluateExitSignal(short, 0.8394, 0.8395, testToUsd);
+  assert(shortDrift.signal === "WARN_PRICE_DRIFT", `short=${shortDrift.signal}`);
+  // TP/SL tetap menang atas drift.
+  const slHit = evaluateExitSignal(wide, 0.8199, 0.82, testToUsd);
+  assert(slHit.signal === "EXIT_STOP_LOSS", `SL kalah: ${slHit.signal}`);
+});
+
+test("439. wiring Phase 2: form equity + badge margin/RR/drift (readSrc)", () => {
+  const form = readSrc("src/components/holdings/HoldingsForm.tsx");
+  assert(form.includes("accountEquity"), "field equity hilang di form");
+  assert(form.includes("rewardRiskRatio"), "hint R:R hilang di form");
+  assert(form.includes("1:2"), "ambang 1:2 hilang di form");
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes("checkMarginGuard"), "margin guard tak di-wire");
+  assert(dash.includes("checkRewardRisk"), "cek R:R tak di-wire");
+  assert(dash.includes("WARN_PRICE_DRIFT"), "badge drift harga hilang");
+  const lib = readSrc("src/lib/exitMonitor.ts");
+  assert(lib.includes("PRICE_DRIFT_PCT"), "konstanta drift hilang");
+  assert(lib.includes("MARGIN_GUARD_PCT"), "konstanta margin hilang");
+  assert(lib.includes("MIN_REWARD_RISK"), "konstanta R:R hilang");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

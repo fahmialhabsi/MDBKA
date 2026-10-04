@@ -2,6 +2,8 @@ import type { JSX } from "react";
 import { useHoldingsQuotes } from "../../hooks/useHoldingsQuotes";
 import { convertToUSD, type ExchangeRates } from "../../services/fxRateService";
 import {
+  checkMarginGuard,
+  checkRewardRisk,
   evaluateExitSignal,
   type ExitSignal,
   type Holding,
@@ -28,6 +30,11 @@ const SIGNAL_STYLE: Record<ExitSignal, { label: string; className: string }> = {
     label: "Dekat SL",
     className:
       "rounded-lg bg-amber-400/15 px-2 py-1 text-xs font-bold text-amber-200",
+  },
+  WARN_PRICE_DRIFT: {
+    label: "Drift harga",
+    className:
+      "rounded-lg bg-orange-400/15 px-2 py-1 text-xs font-bold text-orange-200",
   },
   WARN_ADVERSE_DRIFT: {
     label: "Drift merugikan",
@@ -92,6 +99,12 @@ export function HoldingsDashboard({
           live === undefined
             ? null
             : evaluateExitSignal(holding, live.bid, live.ask, convert);
+        const marginWarning = checkMarginGuard(holding, convert);
+        const rrWarning = checkRewardRisk(
+          holding.entryPrice,
+          holding.sl,
+          holding.tp,
+        );
         const badge =
           evaluation !== null
             ? SIGNAL_STYLE[evaluation.signal].label
@@ -166,6 +179,12 @@ export function HoldingsDashboard({
                   • {reason}
                 </p>
               ))}
+            {marginWarning !== null && (
+              <p className="mt-1 text-xs text-red-300">• {marginWarning}</p>
+            )}
+            {rrWarning !== null && (
+              <p className="mt-1 text-xs text-amber-200">• {rrWarning}</p>
+            )}
           </div>
         );
       })}

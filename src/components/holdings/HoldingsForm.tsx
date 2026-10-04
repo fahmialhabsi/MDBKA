@@ -1,6 +1,8 @@
 import { useState, type JSX } from "react";
 import { FINEX_SPECS_32 } from "../../lib/instrumentSpecs32";
 import {
+  checkRewardRisk,
+  rewardRiskRatio,
   validateHoldingInput,
   type HoldingDirection,
 } from "../../lib/exitMonitor";
@@ -15,6 +17,7 @@ export interface NewHolding {
   readonly sl: number;
   readonly tp: number;
   readonly entryTime: string;
+  readonly accountEquity?: number;
 }
 
 /**
@@ -34,9 +37,11 @@ export function HoldingsForm({
   const [entryPrice, setEntryPrice] = useState("");
   const [sl, setSl] = useState("");
   const [tp, setTp] = useState("");
+  const [equity, setEquity] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
 
   const submit = (): void => {
+    const equityValue = equity.trim() === "" ? undefined : Number(equity);
     const input = {
       symbol: symbol.trim(),
       direction,
@@ -44,6 +49,7 @@ export function HoldingsForm({
       entryPrice: Number(entryPrice),
       sl: Number(sl),
       tp: Number(tp),
+      accountEquity: equityValue,
     };
     const problems = validateHoldingInput(input);
     setErrors(problems);
@@ -57,6 +63,12 @@ export function HoldingsForm({
     setSl("");
     setTp("");
   };
+
+  const liveRatio = rewardRiskRatio(Number(entryPrice), Number(sl), Number(tp));
+  const rrHint =
+    entryPrice.trim() !== "" && sl.trim() !== "" && tp.trim() !== ""
+      ? checkRewardRisk(Number(entryPrice), Number(sl), Number(tp))
+      : null;
 
   const field =
     "mt-1 w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-white";
@@ -126,7 +138,27 @@ export function HoldingsForm({
             className={field}
           />
         </label>
+        <label className="text-sm text-slate-300">
+          Equity USD (opsional, guard 10%)
+          <input
+            value={equity}
+            onChange={(e) => setEquity(e.target.value)}
+            inputMode="decimal"
+            placeholder="mis. 500"
+            className={field}
+          />
+        </label>
       </div>
+      {liveRatio !== null && (
+        <p className="text-xs text-slate-400">
+          R:R 1:{liveRatio.toFixed(2)}
+          {rrHint !== null ? (
+            <span className="text-amber-200"> — {rrHint}</span>
+          ) : (
+            <span className="text-emerald-300"> — layak (≥1:2)</span>
+          )}
+        </p>
+      )}
       <button
         type="button"
         onClick={submit}
