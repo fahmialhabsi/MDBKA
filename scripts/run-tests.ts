@@ -74,6 +74,12 @@ import {
   getOtbMarginRequirements,
 } from "../src/lib/otbInstrumentConfig";
 import {
+  API_BASE_URL,
+  DEFAULT_API_BASE_URL,
+  resolveApiBaseUrl,
+} from "../src/lib/apiBaseUrl";
+import { FRONTEND_ORIGIN } from "../server/app";
+import {
   OTB_ALL_SYMBOLS,
   VERIFIED_OTB_SYMBOLS,
   canonicalSymbolForBroker,
@@ -6208,6 +6214,41 @@ test("415. matriks komisi broker 6G: OTB 33 / Finex 1 / fallback 0", () => {
   );
   const finex = applyBrokerPreset(makeEmptyBroker(), "EURUSD", "finex");
   assert(finex.commission === FINEX_DEFAULT_COMMISSION, "Finex default bukan 1");
+});
+
+/* ---------------- Base URL backend via env (PROD): TEST 419-421 ---------------- */
+
+test("419. resolveApiBaseUrl: default, trim, slash, eksplisit", () => {
+  assert(
+    resolveApiBaseUrl() === DEFAULT_API_BASE_URL ||
+      resolveApiBaseUrl().startsWith("http"),
+    "default rusak",
+  );
+  assert(
+    resolveApiBaseUrl("http://192.168.1.63:3000") === "http://192.168.1.63:3000",
+    "eksplisit berubah",
+  );
+  assert(
+    resolveApiBaseUrl("  http://192.168.1.63:3000/  ") === "http://192.168.1.63:3000",
+    "trim/slash gagal",
+  );
+  assert(resolveApiBaseUrl("") === resolveApiBaseUrl(), "empty inkonsisten");
+  assert(typeof API_BASE_URL === "string" && API_BASE_URL !== "", "konstanta kosong");
+});
+
+test("420. hooks live memakai base URL terpusat (tanpa hardcode)", () => {
+  for (const f of ["src/hooks/useEquityStream.ts", "src/hooks/useQuotesStream.ts"]) {
+    const src = readSrc(f);
+    assert(src.includes("lib/apiBaseUrl"), `${f} tidak impor apiBaseUrl`);
+    assert(!src.includes("http://localhost:3000"), `${f} masih hardcode localhost`);
+  }
+});
+
+test("421. CORS origin backend dari env + default lokal", () => {
+  assert(FRONTEND_ORIGIN === "http://localhost:5173", `default=${FRONTEND_ORIGIN}`);
+  const src = readSrc("server/app.ts");
+  assert(src.includes("FRONTEND_ORIGIN"), "env FRONTEND_ORIGIN hilang");
+  assert(src.includes('process.env?.["FRONTEND_ORIGIN"]'), "baca env hilang");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

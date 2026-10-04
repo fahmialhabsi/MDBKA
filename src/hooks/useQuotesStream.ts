@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { API_BASE_URL as QUOTES_BASE_URL } from "../lib/apiBaseUrl";
 import {
   extractQuoteFromEnvelope,
   extractQuoteFromRestPayload,
@@ -6,8 +7,6 @@ import {
   type QuoteSnapshot,
 } from "../../server/types/quotes";
 import type { BrokerId } from "../types/broker";
-
-const QUOTES_BASE_URL = "http://localhost:3000";
 
 export interface QuotesStreamState {
   readonly quote: QuoteSnapshot | null;

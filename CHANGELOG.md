@@ -1,5 +1,15 @@
 # CHANGELOG MDBKA
 
+## v1.0.10-prod — Jalur Produksi + URL via Env (4 Okt 2026)
+
+P0: base URL backend frontend via `VITE_API_BASE_URL`
+(`src/lib/apiBaseUrl.ts`, CJS-safe tanpa import.meta; fallback localhost)
++ CORS backend via `FRONTEND_ORIGIN` (fallback localhost:5173).
+P1: script `start`/`start:frontend`/`start:backend`
+(`node dist-server/index.js` terverifikasi serve /health),
+`.env.example` + README produksi/LAN.
+**418/418 tests lolos** (415 + 419/420/421), lint clean, build OK.
+
 ## v1.0.9-tahap6h — 3 Preset Baru, 16/16 OTB (4 Okt 2026)
 
 Tahap 6H: preset baru NZDJPY_ORB, USDCHF_ORB, USDJPY_ORB dari ekspor CSV

@@ -9,13 +9,12 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { API_BASE_URL as EQUITY_BASE_URL } from "../lib/apiBaseUrl";
 import {
   isEquitySnapshot,
   type EquitySnapshot,
 } from "../../server/types/equity";
 import type { BrokerId } from "../types/broker";
-
-const EQUITY_BASE_URL = "http://localhost:3000";
 
 export interface EquityStreamState {
   readonly equity: EquitySnapshot | null;

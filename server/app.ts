@@ -11,8 +11,17 @@ import type { MT5LogReader } from "./services/mt5LogReader";
 import { createEquityRoutes } from "./routes/equityRoutes";
 import { createQuotesRoutes } from "./routes/quotesRoutes";
 
-/** Origin frontend Vite yang diizinkan (B2: browser → backend). */
-export const FRONTEND_ORIGIN = "http://localhost:5173";
+/**
+ * Origin frontend yang diizinkan CORS (B2: browser → backend).
+ * Dari env FRONTEND_ORIGIN (wajib untuk deploy LAN/prod, mis.
+ * http://192.168.1.63:5173); fallback localhost untuk dev lokal.
+ */
+export const FRONTEND_ORIGIN: string =
+  typeof process !== "undefined" &&
+  typeof process.env?.["FRONTEND_ORIGIN"] === "string" &&
+  (process.env["FRONTEND_ORIGIN"] as string).trim() !== ""
+    ? (process.env["FRONTEND_ORIGIN"] as string).trim().replace(/\/+$/, "")
+    : "http://localhost:5173";
 
 import type { QuotesLogReader } from "./services/quotesLogReader";
 

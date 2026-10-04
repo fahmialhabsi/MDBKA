@@ -25,6 +25,16 @@ npm run dev
 # Buka http://localhost:5173
 ```
 
+### Produksi / LAN
+```bash
+npm run build            # frontend → dist/
+npm run build:backend    # backend → dist-server/
+npm start                # preview 5173 + backend 3000 (butuh dist ter-build)
+```
+Akses non-localhost: isi `.env` (lihat `.env.example`) —
+`FRONTEND_ORIGIN` untuk CORS backend, `VITE_API_BASE_URL` untuk frontend
+lalu `npm run build` ulang (URL frontend dibake saat build).
+
 ### Workflow Analisis
 1. **Screenshot** → Terminal trading (Market Watch + Data Window region)
 2. **Upload CSV** → Export 50+ candle dari MT5
