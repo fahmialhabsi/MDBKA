@@ -19,7 +19,6 @@ import {
 import ScreenshotDropzone from "./components/screenshot/ScreenshotDropzone";
 import OcrExtractor from "./components/extraction/OcrExtractor";
 import ExtractedDataForm from "./components/extraction/ExtractedDataForm";
-import BrokerSelector from "./components/analysis/BrokerSelector";
 import BrokerSettingsForm from "./components/analysis/BrokerSettingsForm";
 import ValidationSummaryCard from "./components/analysis/ValidationSummaryCard";
 import SwingLevelsForm from "./components/analysis/SwingLevelsForm";
@@ -669,10 +668,44 @@ export default function App() {
       <main className={`${dashboard.page} space-y-4 py-4 sm:space-y-6 sm:py-6`}>
         <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-950 p-5 lg:p-7">
           <div className="max-w-3xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
               <Sparkles size={14} />
               Analisa trading lebih terstruktur
+            </span>
+            <div
+              role="group"
+              aria-label="Pilih broker"
+              className="inline-flex overflow-hidden rounded-full border border-white/15"
+            >
+              <button
+                type="button"
+                data-testid="broker-tab-finex"
+                aria-pressed={activeBrokerId === "finex"}
+                onClick={() => handleBrokerChange("finex")}
+                className={`px-4 py-1.5 text-xs font-bold ${
+                  activeBrokerId === "finex"
+                    ? "bg-emerald-400 text-slate-950"
+                    : "bg-transparent text-slate-300 hover:bg-white/10"
+                }`}
+              >
+                Finex
+              </button>
+              <button
+                type="button"
+                data-testid="broker-tab-otb"
+                aria-pressed={activeBrokerId === "orbitraderberjangka"}
+                onClick={() => handleBrokerChange("orbitraderberjangka")}
+                className={`px-4 py-1.5 text-xs font-bold ${
+                  activeBrokerId === "orbitraderberjangka"
+                    ? "bg-emerald-400 text-slate-950"
+                    : "bg-transparent text-slate-300 hover:bg-white/10"
+                }`}
+              >
+                OTB
+              </button>
             </div>
+          </div>
 
             <h2 className="text-3xl font-black leading-tight md:text-5xl">
               Mulai dari screenshot,
@@ -688,11 +721,6 @@ export default function App() {
         </section>
 
         <section className="rounded-3xl border border-white/10 bg-white/[0.035] p-5 shadow-2xl shadow-black/10 lg:p-6">
-          <BrokerSelector
-            value={activeBrokerId}
-            onChange={handleBrokerChange}
-          />
-
           {activeBrokerId === "orbitraderberjangka" && (
             <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
               Data Finex tidak otomatis valid untuk OrbiTraderBerjangka.

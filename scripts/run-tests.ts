@@ -2365,7 +2365,12 @@ test("181. label broker aktif berasal dari state", () => {
     "label badge bukan dari profil state",
   );
   const app = readSrc("src/App.tsx");
-  assert(app.includes("value={activeBrokerId}"), "selector tidak dari state");
+  assert(app.includes('data-testid="broker-tab-finex"'), "tombol Finex hilang");
+  assert(app.includes('data-testid="broker-tab-otb"'), "tombol OTB hilang");
+  assert(
+    app.includes("aria-pressed={activeBrokerId"),
+    "status tombol tak terikat state",
+  );
   assert(
     app.includes("getBrokerProfile(activeBrokerId).label"),
     "label App bukan dari state",
@@ -2383,8 +2388,12 @@ test("182. handleBrokerChange tersedia dan terhubung", () => {
     "handler tidak stabil (useCallback hilang)",
   );
   assert(
-    src.includes("onChange={handleBrokerChange}"),
-    "selector tidak terhubung ke handler",
+    src.includes('handleBrokerChange("finex")'),
+    "tombol Finex tak terhubung ke handler",
+  );
+  assert(
+    src.includes('handleBrokerChange("orbitraderberjangka")'),
+    "tombol OTB tak terhubung ke handler",
   );
   const body = readAppBrokerHandler();
   assert(body.includes("setActiveBrokerId"), "handler tidak mengubah state");
