@@ -53,14 +53,15 @@ agregator candle masa depan.
   Endpoint: `GET /api/positions?broker=` (Finex/OTB, 404 jujur bila EA
   belum dipasang). Posisi MT5 tampil read-only di tab monitor.
 
-### Workflow Analisis
+### Workflow Analisis (dua jalur)
 1. **Screenshot** → Terminal trading (Market Watch + Data Window region)
-2. **Upload CSV** → Export 50+ candle dari MT5
+2. **Upload CSV** → Export 50+ candle dari MT5 (indikator MA50/RSI/CCI/ATR/MACD dihitung otomatis — tanpa screenshot bisa analisa)
 3. **Extract Data** → OCR auto-parse + CSV swing level
 4. **Pilih Broker** → Finex (default) atau OrbiTraderBerjangka
 5. **Input Equity** → Dari akun trading (manual)
 6. **Analisa** → Risk calculator → BELI/JUAL/TUNGGU score
 7. **Holding Days** → Spinner 0-10 hari (untuk swing traders)
+8. **Salin Order** → Blok hasil (Arah, Volume, SL, TP) → tempel manual di MT5
 
 ### Contoh: AUDCAD_ORB H1
 - Bid/Ask: 0.98554 / 0.98573
@@ -91,7 +92,7 @@ agregator candle masa depan.
 - OCR: regex + region-based text extraction
 - CSV: Papa Parse (50+ candle validation)
 - FX Rate: ECB free API (fallback hardcoded)
-- Test: 453/453 lolos (zero regression)
+- Test: 457/457 lolos (zero regression)
 
 ## 🔌 Tahap 5E-STEP2: Live Equity (Node.js Backend)
 

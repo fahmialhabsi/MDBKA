@@ -38,6 +38,7 @@ import { detectScaleMismatch } from "./calculations/scaleValidator";
 import { validateAnalysisInputs } from "./calculations/inputValidator";
 import { getInstrumentProfile, normalizeSymbol } from "./lib/instrumentConfig";
 import { parseCsvCandles } from "./lib/csvCandleParser";
+import { computeIndicators } from "./calculations/indicators";
 import { traceOcrStage } from "./lib/debugTrace";
 import {
   DEFAULT_BROKER_ID, ORBITRADER_BROKER_ID,
@@ -472,6 +473,10 @@ export default function App() {
     // lolos guard ask > bid — WAJIB diverifikasi via Live Quotes/MT5,
     // karena spread asli hanya diketahui dari quote berjalan).
     const parsed = parseCsvCandles(text);
+    // Tahap NS: hitung indikator dari candle (MA50/RSI/CCI/ATR/MACD)
+    // agar alur TANPA screenshot tetap bisa dianalisa. Butuh 50+ candle;
+    // bila kurang, field indikator dibiarkan (validator yang menolak).
+    const indicators = computeIndicators(parsed.candles);
     if (parsed.candles.length > 0) {
       const last = parsed.candles[parsed.candles.length - 1];
       const tfMatch =
@@ -492,6 +497,16 @@ export default function App() {
           bid: last.close,
           ask: last.close + tick,
           ...(detectedTimeframe ? { timeframe: detectedTimeframe } : {}),
+          ...(indicators !== null
+            ? {
+                ma50: indicators.ma50,
+                rsi: indicators.rsi,
+                cci: indicators.cci,
+                atr: indicators.atr,
+                macd: indicators.macd,
+                macdSignal: indicators.macdSignal,
+              }
+            : {}),
         };
       });
     }

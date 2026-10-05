@@ -57,6 +57,8 @@ export default function AnalysisResult({
   // (untuk display USD). Hooks di atas semua early return.
   // Tanpa hasil/lot → null.
   const [holdingDays, setHoldingDays] = useState(0);
+  // Tahap NS: status salin order (hook di atas semua early return).
+  const [copied, setCopied] = useState(false);
 
   const currentPrice = market.bid > 0 ? market.bid : market.close;
 
@@ -247,6 +249,49 @@ export default function AnalysisResult({
         ? TrendingDown
         : Clock3;
 
+  // Tahap NS: teks order siap-tempel ke MT5 (tanpa eksekusi; user paste
+  // manual di terminal). Lot = suggestedLot, SL/TP dari hasil analisa.
+  const orderText =
+    result !== null &&
+    result.decision !== "TUNGGU" &&
+    result.suggestedLot !== null &&
+    result.stopLoss !== null &&
+    result.takeProfit !== null
+      ? `${market.symbol} ${result.decision} ${result.suggestedLot} @ ${result.entry}\nSL ${result.stopLoss} TP ${result.takeProfit}`
+      : null;
+
+  const copyOrder = (): void => {
+    if (orderText === null) return;
+    const done = (): void => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    };
+    try {
+      const clipboard = (
+        window.navigator as unknown as {
+          clipboard?: { writeText(text: string): Promise<void> };
+        }
+      ).clipboard;
+      if (clipboard !== undefined) {
+        clipboard.writeText(orderText).then(done, () => setCopied(false));
+        return;
+      }
+    } catch {
+      // Fallback di bawah.
+    }
+    const area = window.document.createElement("textarea");
+    area.value = orderText;
+    window.document.body.appendChild(area);
+    area.select();
+    try {
+      window.document.execCommand("copy");
+      done();
+    } catch {
+      setCopied(false);
+    }
+    window.document.body.removeChild(area);
+  };
+
   return (
     <div className="space-y-5">
       <div className={["rounded-3xl border p-6", decisionStyle].join(" ")}>
@@ -308,6 +353,27 @@ export default function AnalysisResult({
               :1
             </p>
           </div>
+        </div>
+      )}
+
+      {orderText !== null && (
+        <div
+          data-testid="order-copy-block"
+          className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Salin order ke MT5 (tempel manual di terminal)
+          </p>
+          <pre className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-950/70 p-3 font-mono text-sm text-emerald-200">
+            {orderText}
+          </pre>
+          <button
+            type="button"
+            onClick={copyOrder}
+            className="mt-3 rounded-xl bg-emerald-400/15 px-4 py-2 text-sm font-bold text-emerald-200 hover:bg-emerald-400/25"
+          >
+            {copied ? "Disalin ✓" : "Salin order"}
+          </button>
         </div>
       )}
 

@@ -16,6 +16,16 @@ import {
   checkPriceDeviation,
 } from "../src/lib/instrumentMismatch";
 import {
+  INDICATOR_MIN_CANDLES,
+  atrWilder,
+  cci,
+  computeIndicators,
+  ema,
+  macd,
+  rsiWilder,
+  sma,
+} from "../src/calculations/indicators";
+import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
   getInstrumentProfile,
@@ -7286,6 +7296,98 @@ test("456. wiring anti-trunkasi: PSM region + upscale + guard (readSrc)", () => 
   assert(parser.includes("hasDecimalSeparator"), "guard tak di-wire");
   const helper = readSrc("src/lib/marketWatchParser.ts");
   assert(helper.includes("artefak OCR"), "dokumentasi guard hilang");
+});
+
+/* ---------------- Indikator CSV tanpa screenshot (NS): TEST 457-460 ---------------- */
+
+function risingCandles(count: number, start: number, step: number): Candle[] {
+  const out: Candle[] = [];
+  for (let i = 0; i < count; i++) {
+    const close = start + i * step;
+    out.push(
+      makeCandle(`t${i}`, close - step, close + step, close - step * 2, close),
+    );
+  }
+  return out;
+}
+
+test("457. sma/ema/rsi Wilder kanonis/MACD", () => {
+  assert(sma([1, 2, 3, 4, 5], 5) === 3, "sma salah");
+  assert(sma([1, 2], 5) === null, "sma kurang data lolos");
+  assert(sma([1, NaN, 3], 3) === null, "sma NaN lolos");
+  assert(ema([7, 7, 7, 7, 7], 3) === 7, "ema konstan salah");
+  assert(ema([1, 2], 5) === null, "ema kurang data lolos");
+  // Vektor kanonis Wilder: RSI(14) pertama = 70.46.
+  const closes = [44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.1, 45.42, 45.84, 46.08, 45.89, 46.03, 45.61, 46.28, 46.28];
+  const rsi = rsiWilder(closes, 14);
+  assert(rsi !== null && Math.abs(rsi - 70.46) < 0.05, `rsi=${rsi}`);
+  assert(rsiWilder([1, 2, 3], 14) === null, "rsi kurang data lolos");
+  const flat = ema(new Array(40).fill(100), 12);
+  assert(flat !== null && Math.abs(flat - 100) < 1e-9, `ema datar=${flat}`);
+  const macdFlat = macd(new Array(60).fill(100));
+  assert(
+    macdFlat !== null && Math.abs(macdFlat.line) < 1e-9 && Math.abs(macdFlat.signal) < 1e-9,
+    `macd datar=${JSON.stringify(macdFlat)}`,
+  );
+  const rising = Array.from({ length: 60 }, (_, i) => 100 + i);
+  const macdUp = macd(rising);
+  assert(macdUp !== null && macdUp.line > 0, "macd tren naik tak positif");
+  assert(macd([]) === null, "macd kosong lolos");
+});
+
+test("458. cci datar + atr hitungan tangan", () => {
+  const flat = risingCandles(0, 0, 0).concat(
+    Array.from({ length: 14 }, (_, i) =>
+      makeCandle(`f${i}`, 10, 10, 10, 10),
+    ),
+  );
+  assert(cci(flat, 14) === 0, "cci datar harus 0 (MD=0)");
+  assert(cci(flat.slice(0, 5), 14) === null, "cci kurang data lolos");
+  // TR: [2, 4] → ATR(2) = 3.
+  const candles = [
+    makeCandle("a", 9, 10, 8, 9),
+    makeCandle("b", 10, 11, 9, 10),
+    makeCandle("c", 10, 12, 8, 11),
+  ];
+  assert(atrWilder(candles, 2) === 3, "atr hitungan tangan salah");
+  assert(atrWilder(candles.slice(0, 2), 2) === null, "atr kurang data lolos");
+  const bad = [...candles, makeCandle("x", NaN, 1, 0, 0.5)];
+  assert(atrWilder(bad, 2) === null, "atr NaN lolos");
+  assert(cci(bad, 14) === null, "cci NaN lolos");
+});
+
+test("459. computeIndicators: ambang 50 + konsistensi MA50", () => {
+  assert(INDICATOR_MIN_CANDLES === 50, "ambang berubah");
+  assert(computeIndicators(risingCandles(49, 100, 0.5)) === null, "49 lolos");
+  const candles = risingCandles(60, 100, 0.5);
+  const result = computeIndicators(candles);
+  if (result === null) throw new Error("60 candle valid ditolak");
+  const closes = candles.map((candle) => candle.close);
+  const expectedMa = closes.slice(-50).reduce((s, v) => s + v, 0) / 50;
+  assert(Math.abs(result.ma50 - expectedMa) < 1e-9, "ma50 bukan mean 50");
+  for (const [name, value] of Object.entries(result)) {
+    assert(Number.isFinite(value), `${name} tak finite`);
+  }
+  assert(result.rsi >= 0 && result.rsi <= 100, "rsi liar");
+  assert(result.atr > 0, "atr tak positif di tren");
+  const broken = [...candles];
+  broken[10] = makeCandle("x", NaN, 1, 0, 0.5);
+  assert(computeIndicators(broken) === null, "candle rusak lolos");
+});
+
+test("460. wiring tanpa-screenshot: isi CSV + blok salin (readSrc)", () => {
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("computeIndicators"), "hitung indikator tak di-wire");
+  assert(app.includes("indicators.ma50"), "ma50 CSV tak diisi");
+  assert(app.includes("indicators.macdSignal"), "signal CSV tak diisi");
+  const result = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(result.includes("order-copy-block"), "testid blok salin hilang");
+  assert(result.includes("Salin order"), "tombol salin hilang");
+  assert(result.includes("Disalin"), "umpan balik salin hilang");
+  assert(result.includes("orderText"), "teks order hilang");
+  const lib = readSrc("src/calculations/indicators.ts");
+  assert(lib.includes("INDICATOR_MIN_CANDLES"), "ambang hilang");
+  assert(!lib.includes("import.meta."), "lib tak CJS-safe");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

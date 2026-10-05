@@ -34,6 +34,7 @@
     "src/lib/dataFreshness.ts",
     "src/lib/brokerWorkspace.ts",
     "src/lib/exitMonitor.ts",
+    "src/calculations/indicators.ts",
     "server/types/positions.ts",
     "server/services/positionsLogReader.ts",
     "server/routes/positionsRoutes.ts",

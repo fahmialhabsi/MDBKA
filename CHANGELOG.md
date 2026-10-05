@@ -1,5 +1,12 @@
 # CHANGELOG MDBKA
 
+## v1.5.0-no-screenshot — Indikator CSV + Salin Order (5 Okt 2026)
+
+Upload CSV 50+ candle kini mengisi MA50/RSI/CCI/ATR/MACD otomatis
+(Wilder standar) — analisa jalan tanpa screenshot/OCR.
+Blok "Salin Order MT5" di hasil (Arah, Volume, SL, TP + tombol copy);
+order tetap manual di terminal. **457/457 tests lolos.**
+
 ## Unreleased — P&L Bersih setelah Komisi (5 Okt 2026)
 
 Kartu posisi menampilkan P&L bersih (harga − komisi broker: OTB 33/lot,
