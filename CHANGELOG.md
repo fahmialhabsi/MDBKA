@@ -1,5 +1,13 @@
 # CHANGELOG MDBKA
 
+## v1.2.1-workspace — Workspace per Broker (5 Okt 2026)
+
+Ganti broker tak lagi me-wipe analisa: tiap broker punya slice
+(market, setting, CSV, hasil, screenshot, OCR) — pindah = simpan +
+pulihkan, broker baru mulai segar. Badge "analisa tersimpan".
+Kontrak handler lama dikunci test 183–186 (tanpa tulis market/preset).
+**439/439 tests lolos** (436 + 440/441/442).
+
 ## v1.2.0-fase2 — Guard Margin, R:R, Drift Harga (5 Okt 2026)
 
 Phase 2 monitor posisi: margin guard pasif (risiko >10% equity, dari

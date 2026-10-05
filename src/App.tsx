@@ -26,6 +26,11 @@ import SwingLevelsForm from "./components/analysis/SwingLevelsForm";
 import AnalysisResult from "./components/result/AnalysisResult";
 import { LiveEquity } from "./components/result/LiveEquity";
 import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
+import {
+  createWorkspaceStore,
+  hasWorkspaceWork,
+  snapshotWorkspace,
+} from "./lib/brokerWorkspace";
 import { LiveQuotes } from "./components/analysis/LiveQuotes";
 import dashboard from "./styles/dashboard.module.css";
 
@@ -187,6 +192,13 @@ export default function App() {
 
   const lastSymbol = useRef(initialMarket.symbol);
   const lastBroker = useRef<BrokerId>(DEFAULT_BROKER_ID);
+  // Tahap WS: simpanan workspace per broker (ref: ditulis di handler/
+  // effect saja, dibaca untuk badge via state savedFlags di bawah).
+  const workspacesRef = useRef(createWorkspaceStore());
+  const [savedFlags, setSavedFlags] = useState<Record<BrokerId, boolean>>({
+    finex: false,
+    orbitraderberjangka: false,
+  });
 
   const scaleIssues = useMemo(() => detectScaleMismatch(market), [market]);
 
@@ -267,6 +279,33 @@ export default function App() {
     const brokerChanged = activeBrokerId !== lastBroker.current;
 
     if (!symbolChanged && !brokerChanged) return;
+
+    // Tahap WS: ganti broker → pulihkan workspace tersimpan bila ada
+    // (tanpa wipe). Broker baru tanpa simpanan → jalur lama di bawah
+    // (preset + reset; semuanya sudah kosong dari handler).
+    if (brokerChanged) {
+      const saved = workspacesRef.current[activeBrokerId];
+      if (saved !== null) {
+        lastSymbol.current = canonicalSymbolForBroker(
+          saved.market.symbol,
+          activeBrokerId,
+        );
+        lastBroker.current = activeBrokerId;
+        setMarket(saved.market);
+        setBroker(saved.broker);
+        setSwingCsv(saved.swingCsv);
+        setConnectedCsvName(saved.connectedCsvName);
+        setSwingSource(saved.swingSource);
+        setResult(saved.result);
+        setConfirmed(saved.confirmed);
+        setBlockedReasons(saved.blockedReasons);
+        setImage(saved.image);
+        setRawOcr(saved.rawOcr);
+        setOcrWarning("");
+        setSymbolNotice("");
+        return;
+      }
+    }
 
     setBroker((previous) =>
       applyBrokerPreset(previous, symbol, activeBrokerId),
@@ -482,11 +521,32 @@ export default function App() {
 
   // Tahap 3: ganti konteks broker saja. Tidak menyentuh data market,
   // pengaturan broker (equity/risiko/preset), parser, atau rumus analisis.
-  // Hanya membersihkan output lama dan koneksi CSV broker sebelumnya.
+  // Tahap WS: slice aktif DISIMPAN ke workspace broker (bukan dibuang);
+  // effect simbol/broker memulihkan simpanan (tanpa wipe) atau memulai
+  // segar untuk broker baru. Field yang dibersihkan di bawah hanya
+  // tampilan sementara sampai effect pulih/me-reset.
   // Tidak ada angka OTB yang diisi otomatis.
   const handleBrokerChange = useCallback(
     (nextBrokerId: BrokerId) => {
       if (nextBrokerId === activeBrokerId) return;
+
+      workspacesRef.current[activeBrokerId] = snapshotWorkspace({
+        market,
+        broker,
+        swingCsv,
+        connectedCsvName,
+        swingSource,
+        result,
+        confirmed,
+        blockedReasons,
+        image,
+        rawOcr,
+      });
+      const store = workspacesRef.current;
+      setSavedFlags({
+        finex: hasWorkspaceWork(store.finex),
+        orbitraderberjangka: hasWorkspaceWork(store.orbitraderberjangka),
+      });
 
       setActiveBrokerId(nextBrokerId);
       setSwingCsv("");
@@ -500,7 +560,20 @@ export default function App() {
       );
       clearAnalysisOutput();
     },
-    [activeBrokerId, clearAnalysisOutput],
+    [
+      activeBrokerId,
+      market,
+      broker,
+      swingCsv,
+      connectedCsvName,
+      swingSource,
+      result,
+      confirmed,
+      blockedReasons,
+      image,
+      rawOcr,
+      clearAnalysisOutput,
+    ],
   );
 
   function runAnalysis() {
@@ -534,6 +607,8 @@ export default function App() {
   }
 
   function clearAll() {
+    workspacesRef.current = createWorkspaceStore();
+    setSavedFlags({ finex: false, orbitraderberjangka: false });
     setImage(null);
     setMarket(emptyMarket);
     setBroker(emptyBroker);
@@ -552,6 +627,8 @@ export default function App() {
   }
 
   function resetToDefault() {
+    workspacesRef.current = createWorkspaceStore();
+    setSavedFlags({ finex: false, orbitraderberjangka: false });
     setImage(null);
     setMarket(initialMarket);
     setBroker(initialBroker);
@@ -627,6 +704,23 @@ export default function App() {
           {brokerNotice && (
             <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/50 p-3 text-sm text-slate-300">
               {brokerNotice}
+            </p>
+          )}
+
+          {((activeBrokerId === "finex" && savedFlags.orbitraderberjangka) ||
+            (activeBrokerId === "orbitraderberjangka" && savedFlags.finex)) && (
+            <p
+              data-testid="workspace-saved-notice"
+              className="mt-4 rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-3 text-sm text-emerald-100"
+            >
+              Analisa{" "}
+              {getBrokerProfile(
+                activeBrokerId === "finex"
+                  ? "orbitraderberjangka"
+                  : "finex",
+              ).label}{" "}
+              tersimpan — pilih broker tersebut untuk kembali tanpa
+              mengulang input.
             </p>
           )}
 

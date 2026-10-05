@@ -117,6 +117,13 @@ import {
   validateHoldingInput,
   type Holding,
 } from "../src/lib/exitMonitor";
+import {
+  createFreshWorkspace,
+  createWorkspaceStore,
+  hasWorkspaceWork,
+  snapshotWorkspace,
+  type BrokerWorkspace,
+} from "../src/lib/brokerWorkspace";
 import { FRONTEND_ORIGIN } from "../server/app";
 import {
   OTB_ALL_SYMBOLS,
@@ -6760,6 +6767,107 @@ test("439. wiring Phase 2: form equity + badge margin/RR/drift (readSrc)", () =>
   assert(lib.includes("PRICE_DRIFT_PCT"), "konstanta drift hilang");
   assert(lib.includes("MARGIN_GUARD_PCT"), "konstanta margin hilang");
   assert(lib.includes("MIN_REWARD_RISK"), "konstanta R:R hilang");
+});
+
+/* ---------------- Workspace per broker WS: TEST 440-442 ---------------- */
+
+function makeWorkspaceMarket(symbol: string, bid: number): MarketData {
+  return {
+    ...makeEmptyMarket(symbol),
+    bid,
+    close: bid,
+  };
+}
+
+function makeWorkspaceState(symbol: string, bid: number): BrokerWorkspace {
+  return snapshotWorkspace({
+    market: makeWorkspaceMarket(symbol, bid),
+    broker: makeEmptyBroker(),
+    swingCsv: "time,open,high,low,close\n2026-10-01,1,2,0.5,1.5",
+    connectedCsvName: "GBPUSD_H1.csv",
+    swingSource: "strength-2",
+    result: null,
+    confirmed: false,
+    blockedReasons: null,
+    image: null,
+    rawOcr: "ocr",
+  });
+}
+
+test("440. snapshotWorkspace: salinan lepas + fresh + store", () => {
+  const store = createWorkspaceStore();
+  assert(store.finex === null && store.orbitraderberjangka === null, "store tak kosong");
+  const snap = makeWorkspaceState("GBPUSD", 1.32);
+  assert(snap.market.symbol === "GBPUSD", "simbol hilang");
+  assert(snap.market.bid === 1.32, "bid hilang");
+  // Mutasi sumber tak menular ke snapshot (copy, bukan referensi).
+  const market = makeWorkspaceMarket("GBPUSD", 9.99);
+  const snap2 = snapshotWorkspace({
+    market,
+    broker: makeEmptyBroker(),
+    swingCsv: "",
+    connectedCsvName: "",
+    swingSource: null,
+    result: null,
+    confirmed: false,
+    blockedReasons: ["x"],
+    image: null,
+    rawOcr: "",
+  });
+  market.bid = 0;
+  assert(snap2.market.bid === 9.99, "snapshot menunjuk objek asli");
+  const fresh = createFreshWorkspace(makeEmptyMarket("EURUSD"), makeEmptyBroker());
+  assert(fresh.market.symbol === "EURUSD", "fresh salah");
+  assert(fresh.result === null && fresh.swingCsv === "", "fresh tak kosong");
+  assert(fresh.confirmed === false, "fresh terkonfirmasi");
+});
+
+test("441. hasWorkspaceWork: hasil/parsial vs kosong", () => {
+  assert(hasWorkspaceWork(null) === false, "null dianggap berisi");
+  const withResult = { ...makeWorkspaceState("GBPUSD", 1.32), result: {} as never };
+  assert(hasWorkspaceWork(withResult) === true, "hasil tak terdeteksi");
+  const confirmedOnly = {
+    ...makeWorkspaceState("GBPUSD", 0),
+    market: makeEmptyMarket(""),
+    swingCsv: "",
+    confirmed: true,
+  };
+  assert(hasWorkspaceWork(confirmedOnly) === true, "konfirmasi tak terdeteksi");
+  const csvOnly = {
+    ...makeWorkspaceState("GBPUSD", 0),
+    market: makeEmptyMarket(""),
+    swingCsv: "time,open\n2026-10-01,1",
+  };
+  assert(hasWorkspaceWork(csvOnly) === true, "csv tak terdeteksi");
+  const priced = makeWorkspaceState("GBPUSD", 1.32);
+  assert(hasWorkspaceWork(priced) === true, "market terisi tak terdeteksi");
+  const empty = {
+    ...makeWorkspaceState("", 0),
+    market: makeEmptyMarket(""),
+    swingCsv: "",
+    connectedCsvName: "",
+    rawOcr: "",
+  };
+  assert(hasWorkspaceWork(empty) === false, "kosong dianggap berisi");
+});
+
+test("442. App wiring workspace: simpan-pulihkan + badge (readSrc)", () => {
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("brokerWorkspace"), "impor workspace hilang");
+  assert(app.includes("snapshotWorkspace"), "save snapshot hilang");
+  assert(app.includes("hasWorkspaceWork"), "badge guard hilang");
+  assert(app.includes("createWorkspaceStore"), "store awal hilang");
+  assert(app.includes("workspacesRef"), "ref store hilang");
+  assert(app.includes("savedFlags"), "state badge hilang");
+  assert(app.includes("setResult(saved.result)"), "restore hasil hilang");
+  assert(app.includes("workspace-saved-notice"), "testid badge hilang");
+  assert(app.includes("tersimpan — pilih broker"), "teks badge hilang");
+  // Batasan lama tetap: handler bersih tampilan, tak tulis market/preset.
+  const body = readAppBrokerHandler();
+  assert(body.includes("clearAnalysisOutput()"), "pembersih tampilan hilang");
+  assert(body.includes('setSwingCsv("")'), "putus CSV hilang");
+  assert(!body.includes("setMarket("), "handler menulis market (regresi 184)");
+  assert(!body.includes("analyzeMarket"), "handler menyentuh engine");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +
