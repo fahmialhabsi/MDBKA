@@ -33,6 +33,7 @@
     "src/lib/apiBaseUrl.ts",
     "src/lib/dataFreshness.ts",
     "src/lib/brokerWorkspace.ts",
+    "src/lib/orderTicket.ts",
     "src/lib/exitMonitor.ts",
     "src/calculations/indicators.ts",
     "server/types/positions.ts",

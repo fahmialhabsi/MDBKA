@@ -15,6 +15,8 @@ import type { ValidationViewState } from "../../lib/validationView";
 import { attachSwapToResult } from "../../calculations/attachSwapToResult";
 import { getTripleSwapLabel } from "../../services/dateService";
 import { isOtbSymbolVerified } from "../../lib/brokerSymbols";
+import { checkStopsDistance } from "../../lib/orderTicket";
+import { useHoldingsQuotes } from "../../hooks/useHoldingsQuotes";
 import type { ExchangeRates } from "../../services/fxRateService";
 
 interface Props {
@@ -59,6 +61,11 @@ export default function AnalysisResult({
   const [holdingDays, setHoldingDays] = useState(0);
   // Tahap NS: status salin order (hook di atas semua early return).
   const [copied, setCopied] = useState(false);
+  // Tahap STP: harga live untuk guard jarak SL/TP (hook pula).
+  const { quotes } = useHoldingsQuotes(
+    market.symbol !== "" ? [market.symbol] : [],
+    brokerId,
+  );
 
   const currentPrice = market.bid > 0 ? market.bid : market.close;
 
@@ -251,6 +258,27 @@ export default function AnalysisResult({
 
   // Tahap NS: teks order siap-tempel ke MT5 (tanpa eksekusi; user paste
   // manual di terminal). Lot = suggestedLot, SL/TP dari hasil analisa.
+  // Tahap STP: guard jarak SL/TP vs harga LIVE (kasus tombol MT5
+  // terkunci karena market bergerak setelah analisa). Tanpa harga live
+  // → null (diam, bukan lampu hijau).
+  const liveQuote = quotes[market.symbol];
+  const stopsWarning =
+    result !== null &&
+    result.decision !== "TUNGGU" &&
+    result.stopLoss !== null &&
+    result.takeProfit !== null &&
+    liveQuote !== undefined
+      ? checkStopsDistance({
+          symbol: market.symbol,
+          brokerId: brokerId ?? "finex",
+          direction: result.decision,
+          sl: result.stopLoss,
+          tp: result.takeProfit,
+          bid: liveQuote.bid,
+          ask: liveQuote.ask,
+        })
+      : null;
+
   const orderText =
     result !== null &&
     result.decision !== "TUNGGU" &&
@@ -367,6 +395,17 @@ export default function AnalysisResult({
           <pre className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-950/70 p-3 font-mono text-sm text-emerald-200">
             {orderText}
           </pre>
+          {stopsWarning !== null && (
+            <p className="mt-2 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
+              ⚠ {stopsWarning}
+            </p>
+          )}
+          {liveQuote === undefined && (
+            <p className="mt-2 text-xs text-slate-500">
+              Tanpa harga live: pastikan SL/TP berjarak aman dari harga
+              berjalan sebelum order (analisa ulang bila market bergerak).
+            </p>
+          )}
           <button
             type="button"
             onClick={copyOrder}

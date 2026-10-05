@@ -1,5 +1,11 @@
 # CHANGELOG MDBKA
 
+## Unreleased — Guard Jarak SL/TP Live (5 Okt 2026)
+
+Blok salin memperingatkan bila SL/TP dalam stops-level OTB (20 point)
+dari harga live (kasus tombol MT5 terkunci). Finex dilewati jujur
+(tanpa data stops). **460/460 tests lolos.**
+
 ## v1.5.0-no-screenshot — Indikator CSV + Salin Order (5 Okt 2026)
 
 Upload CSV 50+ candle kini mengisi MA50/RSI/CCI/ATR/MACD otomatis

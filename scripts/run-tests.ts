@@ -16,6 +16,10 @@ import {
   checkPriceDeviation,
 } from "../src/lib/instrumentMismatch";
 import {
+  checkStopsDistance,
+  getStopsDistance,
+} from "../src/lib/orderTicket";
+import {
   INDICATOR_MIN_CANDLES,
   atrWilder,
   cci,
@@ -7387,6 +7391,92 @@ test("460. wiring tanpa-screenshot: isi CSV + blok salin (readSrc)", () => {
   assert(result.includes("orderText"), "teks order hilang");
   const lib = readSrc("src/calculations/indicators.ts");
   assert(lib.includes("INDICATOR_MIN_CANDLES"), "ambang hilang");
+  assert(!lib.includes("import.meta."), "lib tak CJS-safe");
+});
+
+/* ---------------- Guard jarak SL/TP live (STP): TEST 461-463 ---------------- */
+
+test("461. getStopsDistance: OTB 20 point, Finex null", () => {
+  const d = getStopsDistance("GBPUSD_ORB", "orbitraderberjangka");
+  assert(d !== null && Math.abs(d - 0.0002) < 1e-12, `jarak=${d}`);
+  const jpy = getStopsDistance("AUDJPY_ORB", "orbitraderberjangka");
+  assert(jpy !== null && Math.abs(jpy - 0.02) < 1e-12, `jpy=${jpy}`);
+  assert(getStopsDistance("GBPUSD", "finex") === null, "Finex harus null (tanpa data)");
+  assert(getStopsDistance("XYZ", "orbitraderberjangka") === null, "unknown harus null");
+});
+
+test("462. checkStopsDistance: kasus user + batas + invalid", () => {
+  // Kasus nyata user: JUAL SL 1.32317 vs ask live 1.32318 → 1 point < 20.
+  const userCase = checkStopsDistance({
+    symbol: "GBPUSD_ORB",
+    brokerId: "orbitraderberjangka",
+    direction: "JUAL",
+    sl: 1.32317,
+    tp: 1.31147,
+    bid: 1.32306,
+    ask: 1.32318,
+  });
+  assert(userCase !== null && userCase.includes("SL"), `lolos: ${userCase}`);
+  // BELI valid: kedua sisi ≥ 0.0002.
+  assert(
+    checkStopsDistance({
+      symbol: "GBPUSD_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "BELI",
+      sl: 1.3197,
+      tp: 1.3212,
+      bid: 1.32,
+      ask: 1.3201,
+    }) === null,
+    "valid ikut warning",
+  );
+  // Jarak wajar (> 2x ambang) juga lolos.
+  assert(
+    checkStopsDistance({
+      symbol: "GBPUSD_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "BELI",
+      sl: 1.3195,
+      tp: 1.3206,
+      bid: 1.32,
+      ask: 1.3201,
+    }) === null,
+    "jarak wajar ikut warning",
+  );
+  // JUAL valid cermin.
+  assert(
+    checkStopsDistance({
+      symbol: "GBPUSD_ORB",
+      brokerId: "orbitraderberjangka",
+      direction: "JUAL",
+      sl: 1.324,
+      tp: 1.3228,
+      bid: 1.32306,
+      ask: 1.32318,
+    }) === null,
+    "JUAL valid ikut warning",
+  );
+  // Finex / invalid → null jujur.
+  assert(
+    checkStopsDistance({ symbol: "GBPUSD", brokerId: "finex", direction: "BELI", sl: 1.31, tp: 1.33, bid: 1.32, ask: 1.3201 }) === null,
+    "Finex harus dilewati",
+  );
+  assert(
+    checkStopsDistance({ symbol: "GBPUSD_ORB", brokerId: "orbitraderberjangka", direction: "BELI", sl: 0, tp: 1.33, bid: 1.32, ask: 1.3201 }) === null,
+    "SL 0 harus null",
+  );
+});
+
+test("463. wiring guard stops: live + warning di blok salin (readSrc)", () => {
+  const result = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(result.includes("checkStopsDistance"), "guard tak di-wire");
+  assert(result.includes("stopsWarning"), "variabel warning hilang");
+  assert(result.includes("Tanpa harga live"), "note tanpa-live hilang");
+  assert(result.includes("Tanpa harga live"), "note tanpa-live hilang");
+  assert(result.includes("useHoldingsQuotes"), "quotes live tak dipakai");
+  const lib = readSrc("src/lib/orderTicket.ts");
+  assert(lib.includes("getStopsDistance"), "helper hilang");
+  assert(lib.includes("mengunci tombol order"), "teks warning hilang di lib");
   assert(!lib.includes("import.meta."), "lib tak CJS-safe");
 });
 
