@@ -123,6 +123,7 @@ import {
   filterHoldingsByBroker,
   markHoldingExited,
   rewardRiskRatio,
+  toAutoHolding,
   validateHoldingInput,
   type Holding,
 } from "../src/lib/exitMonitor";
@@ -6872,6 +6873,46 @@ test("445. wiring v1.3.0: tab, kartu expand, form exit, log (readSrc)", () => {
   assert(lib.includes("calculateExitPnL"), "exit pnl hilang");
   assert(lib.includes("markHoldingExited"), "mark exit hilang");
   assert(lib.includes("BUKAN eksekusi order"), "disclaimer order hilang");
+});
+
+/* ---------------- Counter + auto per tab: TEST 446 ---------------- */
+
+test("446. toAutoHolding + counter tab termasuk MT5", () => {
+  const pos = {
+    ticket: "2107687",
+    symbol: "AUDCAD_ORB",
+    side: "BUY",
+    volume: 0.1,
+    priceOpen: 0.99132,
+    sl: 0.98895,
+    tp: 0.99523,
+    timeOpen: "2026.10.02 17:42:46",
+  } as const;
+  const holding = toAutoHolding(pos, "orbitraderberjangka");
+  assert(holding.id === "mt5-2107687", `id=${holding.id}`);
+  assert(holding.direction === "BELI", "BUY tak jadi BELI");
+  assert(holding.brokerId === "orbitraderberjangka", "broker hilang");
+  assert(holding.entryPrice === 0.99132 && holding.lot === 0.1, "field hilang");
+  assert(
+    (holding.status ?? "OPEN") === "OPEN",
+    "auto harus OPEN (dipantau)",
+  );
+  const sell = toAutoHolding({ ...pos, side: "SELL" }, "finex");
+  assert(sell.direction === "JUAL", "SELL tak jadi JUAL");
+  // Counter tab: manual open + auto.
+  const manual: Holding[] = [
+    { ...makeHolding(), id: "m1", brokerId: "finex" },
+    { ...makeHolding(), id: "m2", brokerId: "finex", status: "EXITED" },
+  ];
+  const auto: Holding[] = [holding];
+  const open =
+    countHoldings(filterHoldingsByBroker(manual, "finex")).open + auto.length;
+  const total =
+    countHoldings(filterHoldingsByBroker(manual, "finex")).total + auto.length;
+  assert(open === 2 && total === 3, `counter=${open}/${total} (harap 2/3)`);
+  const monitor = readSrc("src/components/holdings/HoldingsMonitor.tsx");
+  assert(monitor.includes("toAutoHolding"), "helper tak dipakai monitor");
+  assert(monitor.includes("autoByBroker"), "counter per tab hilang");
 });
 
 /* ---------------- Workspace per broker WS: TEST 440-442 ---------------- */

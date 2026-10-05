@@ -2,6 +2,7 @@ import {
   getInstrumentSpec32,
 } from "./instrumentSpecs32";
 import type { BrokerId } from "../types/broker";
+import type { BrokerPosition } from "../../server/types/positions";
 
 /**
  * Tahap F1 — monitor posisi manual + sinyal exit (MODUL MURNI, CJS-safe:
@@ -486,6 +487,28 @@ export function calculateExitPnL(
     }
   }
   return { value: quoteAmount, currency: profitCcy };
+}
+
+/**
+ * Petakan posisi broker MT5 → Holding read-only (murni, untuk test).
+ * Status absen = OPEN (dipantau seperti manual).
+ */
+export function toAutoHolding(
+  position: BrokerPosition,
+  brokerId: BrokerId,
+): Holding {
+  return {
+    id: `mt5-${position.ticket}`,
+    symbol: position.symbol,
+    brokerId,
+    direction: position.side === "BUY" ? "BELI" : "JUAL",
+    lot: position.volume,
+    entryPrice: position.priceOpen,
+    sl: position.sl,
+    tp: position.tp,
+    entryTime: position.timeOpen,
+    createdAt: position.timeOpen,
+  };
 }
 
 /**

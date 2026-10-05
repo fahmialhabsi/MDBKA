@@ -333,10 +333,15 @@ export function HoldingsDashboard({
 
   if (holdings.length === 0) {
     return (
-      <p className="text-sm text-slate-400">
-        {emptyText ??
-          "Belum ada posisi. Tambahkan via form di atas (entry manual sesuai posisi MT5 Anda)."}
-      </p>
+      <div className="space-y-2">
+        {heading !== undefined && (
+          <h4 className="text-sm font-bold text-slate-200">{heading}</h4>
+        )}
+        <p className="text-sm text-slate-400">
+          {emptyText ??
+            "Belum ada posisi. Tambahkan via form di atas (entry manual sesuai posisi MT5 Anda)."}
+        </p>
+      </div>
     );
   }
 

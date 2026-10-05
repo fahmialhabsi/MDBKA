@@ -7,13 +7,13 @@ import {
   countHoldings,
   filterHoldingsByBroker,
   markHoldingExited,
+  toAutoHolding,
   type Holding,
 } from "../../lib/exitMonitor";
 import {
   buildUsdConverter,
   type ExchangeRates,
 } from "../../services/fxRateService";
-import type { BrokerPosition } from "../../../server/types/positions";
 import type { BrokerId } from "../../types/broker";
 
 const STORAGE_KEY = "mdbka-holdings-v1";
@@ -72,21 +72,19 @@ export function HoldingsMonitor({
   const [tab, setTab] = useState<BrokerId>(brokerId ?? DEFAULT_BROKER_ID);
 
   // Tahap AP: posisi terbuka MT5 (read-only, via EA ExportPositions).
-  const brokerPositions = useBrokerPositions(tab);
-  const autoHoldings: Holding[] = brokerPositions.positions.map(
-    (position: BrokerPosition) => ({
-      id: `mt5-${position.ticket}`,
-      symbol: position.symbol,
-      brokerId: tab,
-      direction: position.side === "BUY" ? "BELI" : "JUAL",
-      lot: position.volume,
-      entryPrice: position.priceOpen,
-      sl: position.sl,
-      tp: position.tp,
-      entryTime: position.timeOpen,
-      createdAt: position.timeOpen,
-    }),
-  );
+  // Dua hook (satu per broker) agar counter KEDUA tab hidup walau
+  // tab tak aktif — hooks tak kondisional (aturan React aman).
+  const autoFinex = useBrokerPositions("finex");
+  const autoOtb = useBrokerPositions("orbitraderberjangka");
+  const autoByBroker: Record<BrokerId, Holding[]> = {
+    finex: autoFinex.positions.map((position) =>
+      toAutoHolding(position, "finex"),
+    ),
+    orbitraderberjangka: autoOtb.positions.map((position) =>
+      toAutoHolding(position, "orbitraderberjangka"),
+    ),
+  };
+  const autoHoldings = autoByBroker[tab];
 
   const add = (input: NewHolding): void => {
     const next: Holding[] = [
@@ -133,6 +131,9 @@ export function HoldingsMonitor({
         {TABS.map((broker) => {
           const inTab = filterHoldingsByBroker(holdings, broker);
           const counts = countHoldings(inTab);
+          const autoCount = autoByBroker[broker].length;
+          const open = counts.open + autoCount;
+          const total = counts.total + autoCount;
           const active = tab === broker;
           return (
             <button
@@ -149,7 +150,7 @@ export function HoldingsMonitor({
               }`}
             >
               {broker === "finex" ? "Finex" : "OTB"} · POSISI OPEN (
-              {counts.open}/{counts.total})
+              {open}/{total})
             </button>
           );
         })}
@@ -162,7 +163,7 @@ export function HoldingsMonitor({
         readOnly
         heading={`Posisi MT5 otomatis (${autoHoldings.length})`}
         emptyText={
-          brokerPositions.sourceMissing
+          (tab === "finex" ? autoFinex.sourceMissing : autoOtb.sourceMissing)
             ? "EA ExportPositions belum dipasang di terminal ini — lihat ea/ExportPositions.mq5."
             : "Tidak ada posisi terbuka di MT5."
         }
