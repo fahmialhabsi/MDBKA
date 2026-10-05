@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { ScanText, LoaderCircle } from "lucide-react";
-import { createWorker } from "tesseract.js";
+import { createWorker, PSM } from "tesseract.js";
 import type { MarketData } from "../../types/analysis";
 import { normalizeSymbol } from "../../lib/instrumentConfig";
 import {
@@ -243,11 +243,15 @@ export default function OcrExtractor({
       { width: img.naturalWidth, height: img.naturalHeight }
     );
     if (natural.width < 1 || natural.height < 1) return null;
+    // Upscale 2x: teks kecil terminal MT5 jauh lebih akurat dikenali
+    // tesseract bila diinterpolasi lebih dulu (desimal tidak terpenggal).
+    const SCALE = 2;
     const crop = document.createElement("canvas");
-    crop.width = natural.width;
-    crop.height = natural.height;
+    crop.width = natural.width * SCALE;
+    crop.height = natural.height * SCALE;
     const context = crop.getContext("2d");
     if (!context) return null;
+    context.imageSmoothingEnabled = true;
     context.drawImage(
       img,
       natural.x,
@@ -256,15 +260,27 @@ export default function OcrExtractor({
       natural.height,
       0,
       0,
-      natural.width,
-      natural.height
+      natural.width * SCALE,
+      natural.height * SCALE
     );
     return crop.toDataURL("image/png");
   }
 
-  async function recognizeDataUrl(dataUrl: string): Promise<string> {
+  /**
+   * OCR satu crop region (Market Watch / Data Window = tabel teks rapat).
+   * PSM SINGLE_BLOCK: region adalah satu blok teks seragam sehingga
+   * segmentasi halaman penuh (default PSM 3) tidak memecah baris dan
+   * memenggal desimal. OCR penuh (full-image) sengaja tetap default.
+   */
+  async function recognizeDataUrl(
+    dataUrl: string,
+    psm: (typeof PSM)[keyof typeof PSM] = PSM.SINGLE_BLOCK
+  ): Promise<string> {
     const worker = await createWorker("eng");
     try {
+      await worker.setParameters({
+        tessedit_pageseg_mode: psm,
+      });
       const result = await worker.recognize(dataUrl);
       return result.data.text;
     } finally {

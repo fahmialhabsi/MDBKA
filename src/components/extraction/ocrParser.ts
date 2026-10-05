@@ -6,6 +6,7 @@ import {
 } from "../../lib/brokerSymbols";
 import { parseInstrumentPrice } from "../../lib/priceParser";
 import {
+  hasDecimalSeparator,
   normalizeOcrPriceToken,
   parseMarketWatchBidAsk,
 } from "../../lib/marketWatchParser";
@@ -276,6 +277,7 @@ export function parseSignedIndicatorLine(
 
         if ((token === "-" || token === "+") && i + 1 < tokens.length) {
           const next = tokens[i + 1].replace(/[,;:%]$/, "");
+          if (!hasDecimalSeparator(next)) continue;
           const signed = normalizeOcrPriceToken(`${token === "+" ? "+" : "-"}${next}`);
           if (signed !== null && inRange(signed)) {
             return { value: signed, signExplicit: true };
@@ -283,6 +285,8 @@ export function parseSignedIndicatorLine(
           continue;
         }
 
+        // Tolak integer polos (artefak OCR, lihat hasDecimalSeparator).
+        if (!hasDecimalSeparator(token)) continue;
         const value = normalizeOcrPriceToken(token);
         if (value === null || !inRange(value)) continue;
         return { value, signExplicit: /^[-+]/.test(token) };
@@ -303,6 +307,7 @@ function secondNumberOnMacdLine(rawText: string): number | null {
       .slice(match.index + match[0].length)
       .split(" ")
       .filter(Boolean)
+      .filter((token) => hasDecimalSeparator(token.replace(/[,;:%]$/, "")))
       .map((token) => normalizeOcrPriceToken(token.replace(/[,;:%]$/, "")))
       .filter((value): value is number => value !== null);
     if (numbers.length >= 2) return numbers[1];
@@ -443,7 +448,10 @@ export function parseMaValue(
     candidateTokens.push(...tokens);
 
     for (const token of tokens) {
-      const value = normalizeOcrPriceToken(token.replace(/[,;:%]$/, ""));
+      const stripped = token.replace(/[,;:%]$/, "");
+      // Tolak integer polos (artefak OCR, lihat hasDecimalSeparator).
+      if (!hasDecimalSeparator(stripped)) continue;
+      const value = normalizeOcrPriceToken(stripped);
       if (value === null) continue;
       if (value >= profile.minPrice && value <= profile.maxPrice) {
         found = value;
@@ -464,7 +472,9 @@ export function parseMaValue(
       lookaheadLines.push(near);
       for (const token of near.split(" ").filter(Boolean)) {
         candidateTokens.push(token);
-        const value = normalizeOcrPriceToken(token.replace(/[,;:%]$/, ""));
+        const stripped = token.replace(/[,;:%]$/, "");
+        if (!hasDecimalSeparator(stripped)) continue;
+        const value = normalizeOcrPriceToken(stripped);
         if (value === null) continue;
         if (value >= profile.minPrice && value <= profile.maxPrice) {
           found = value;

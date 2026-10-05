@@ -81,6 +81,20 @@ export function normalizeOcrPriceToken(token: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/**
+ * True bila token memuat pemisah desimal (titik/koma).
+ * Jendela Data MT5 SELALU mencetak nilai indikator dengan desimal
+ * (MA 1.321636, RSI 46.46, ATR 0.00134); token integer polos ("1")
+ * hampir pasti artefak OCR (mis. buntut "Indicator window 1" atau
+ * desimal terpangkas) sehingga DITOLAK di parser Data Window agar
+ * salah-baca menjadi kosong + warning, bukan angka sesat.
+ * JANGAN dipakai untuk Bid/Ask Market Watch (jalur terpisah).
+ */
+export function hasDecimalSeparator(token: string): boolean {
+  const cleaned = token.trim();
+  return cleaned.includes(".") || cleaned.includes(",");
+}
+
 function maxWarnSpread(symbol: string): number {
   const profile = getInstrumentProfile(symbol);
   return profile.category === "forex" ? 50 * profile.pipSize : 200 * profile.pipSize;

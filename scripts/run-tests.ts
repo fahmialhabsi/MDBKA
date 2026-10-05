@@ -51,11 +51,13 @@ import {
 } from "../src/lib/regionSelection";
 import {
   parseMarketWatchBidAsk,
+  hasDecimalSeparator,
   normalizeBigOcrNumber,
 } from "../src/lib/marketWatchParser";
 import {
   parseMaValue,
   parseOcrTextRich,
+  parseSignedIndicatorLine,
   combineRegionTexts,
 } from "../src/components/extraction/ocrParser";
 import type { BrokerSettings, MarketData } from "../src/types/analysis";
@@ -7231,6 +7233,59 @@ test("453. swap di evaluasi + exit + tampil kartu (readSrc)", () => {
   const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
   assert(dash.includes("Swap est."), "baris swap hilang di kartu");
   assert(dash.includes("menginap"), "label hari hilang");
+});
+
+/* ---------------- Anti-trunkasi desimal OCR (kasus GBPUSD 6 Okt): TEST 454-456 ---------------- */
+
+test("454. MA50 terpenggal '1' ditolak; '1.321636' diterima", () => {
+  // Reproduksi kasus real: OCR Data Window memenggal MA(50) 1.321636
+  // menjadi token "1" (atau buntut "Indicator window 1") → dulu lolos
+  // sebagai MA50=1 dan membalik skor +2 vs −4.
+  const truncated = parseMaValue("MA(50) 1", "GBPUSD");
+  assert(truncated.value === null, `trunkasi lolos: ${truncated.value}`);
+  assert(truncated.warnings.length > 0, "tanpa warning padahal kosong");
+  const windowArtefact = parseMaValue("MA(50)\n1\nIndicator window", "GBPUSD");
+  assert(windowArtefact.value === null, "artefak 'window 1' lolos");
+  const full = parseMaValue("MA(50) 1.321636", "GBPUSD");
+  assert(full.value === 1.321636, `penuh gagal: ${full.value}`);
+  const comma = parseMaValue("MA(50) 1,321636", "GBPUSD");
+  assert(comma.value === 1.321636, `koma gagal: ${comma.value}`);
+  assert(hasDecimalSeparator("1.32"), "titik tak terdeteksi");
+  assert(hasDecimalSeparator("46,46"), "koma tak terdeteksi");
+  assert(!hasDecimalSeparator("1"), "integer lolos");
+  assert(!hasDecimalSeparator(" -52 "), "spasi menipu");
+});
+
+test("455. indikator terpenggal ditolak; nilai penuh + tanda eksplisit lolos", () => {
+  // CCI "-52.20" terpenggal jadi "3" → tolak (dulu: CCI=3, skor salah).
+  const truncated = parseSignedIndicatorLine("CCI(14) 3", /\bCCI\b/i);
+  assert(truncated.value === null, `trunkasi CCI lolos: ${truncated.value}`);
+  const full = parseSignedIndicatorLine("CCI(14) -52.20", /\bCCI\b/i);
+  assert(full.value === -52.2, `CCI penuh gagal: ${full.value}`);
+  assert(full.signExplicit === true, "tanda eksplisit hilang");
+  // RSI koma Indonesia tetap lolos.
+  const rsi = parseSignedIndicatorLine("RSI(14) 46,46", /\bRSI\b/i, { min: 0, max: 100 });
+  assert(rsi.value === 46.46, `RSI gagal: ${rsi.value}`);
+  // MACD terpenggal "4" ditolak; pasangan penuh lolos.
+  const macdCut = parseSignedIndicatorLine("MACD(12,26,9) 4", /\bMACD\b/i);
+  assert(macdCut.value === null, `trunkasi MACD lolos: ${macdCut.value}`);
+  const macdFull = parseSignedIndicatorLine("MACD(12,26,9) -0.000220 0.000215", /\bMACD\b/i);
+  assert(macdFull.value === -0.00022, `MACD gagal: ${macdFull.value}`);
+  // Tanda terpisah "- 52.20" tetap dikenali.
+  const split = parseSignedIndicatorLine("CCI(14) - 52.20", /\bCCI\b/i);
+  assert(split.value === -52.2 && split.signExplicit === true, "tanda pisah gagal");
+});
+
+test("456. wiring anti-trunkasi: PSM region + upscale + guard (readSrc)", () => {
+  const extractor = readSrc("src/components/extraction/OcrExtractor.tsx");
+  assert(extractor.includes("SINGLE_BLOCK"), "PSM region hilang");
+  assert(extractor.includes("setParameters"), "setParameters hilang");
+  assert(extractor.includes("tessedit_pageseg_mode"), "psm param hilang");
+  assert(extractor.includes("* SCALE") || extractor.includes("* 2"), "upscale crop hilang");
+  const parser = readSrc("src/components/extraction/ocrParser.ts");
+  assert(parser.includes("hasDecimalSeparator"), "guard tak di-wire");
+  const helper = readSrc("src/lib/marketWatchParser.ts");
+  assert(helper.includes("artefak OCR"), "dokumentasi guard hilang");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +
