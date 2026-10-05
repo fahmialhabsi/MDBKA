@@ -13,6 +13,7 @@ input string OutFileName           = "positions.csv";
 
 void OnInit()
   {
+   Print("=== ExportPositions START: menulis ", OutFileName, " tiap ", ExportIntervalSeconds, " dtk ===");
    EventSetTimer(ExportIntervalSeconds);
    Export();
   }
