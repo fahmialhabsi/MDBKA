@@ -64,12 +64,33 @@ export interface ExitEvaluation {
   readonly pnl: number | null;
   /** Mata uang pnl ("USD" bila terkonversi, else profit currency). */
   readonly pnlCurrency: string;
+  /** Komisi broker USD (null bila simbol tak dikenal). */
+  readonly commission: number | null;
+  /** P&L bersih = pnl − komisi (null bila salah satu null). */
+  readonly pnlNet: number | null;
   /** Risiko terencana (null bila tak terhitung). */
   readonly risk: number | null;
   /** Reward terencana (null bila tak terhitung). */
   readonly reward: number | null;
   /** Mata uang risk/reward (sama konvensi dengan pnlCurrency). */
   readonly planCurrency: string;
+}
+
+/**
+ * Komisi broker USD untuk holding (Tahap NET): OTB 33/lot, Finex
+ * 1.00/lot (kolom Commission CSV, sudah di spec32 sejak 6G).
+ * Round-trip penuh dibebankan di muka secara jujur-konservatif
+ * (label jelas di UI); null bila simbol tak punya spec.
+ */
+export function commissionForHolding(
+  symbol: string,
+  lot: number,
+): number | null {
+  if (!Number.isFinite(lot) || lot <= 0) return null;
+  const spec = getInstrumentSpec32(symbol.trim());
+  if (spec === null) return null;
+  if (!Number.isFinite(spec.commission) || spec.commission < 0) return null;
+  return round2(spec.commission * lot);
 }
 
 /** Ambang dekat TP/SL: 15% dari rentang TP−SL. */
@@ -195,6 +216,8 @@ export function evaluateExitSignal(
     reasons: ["Harga berjalan invalid; tak dapat dievaluasi."],
     pnl: null,
     pnlCurrency: "USD",
+    commission: commissionForHolding(holding.symbol, holding.lot),
+    pnlNet: null,
     risk: null,
     reward: null,
     planCurrency: "USD",
@@ -234,6 +257,11 @@ export function evaluateExitSignal(
   const pnlCcy = pnl?.currency ?? "USD";
   const riskValue = risk?.value ?? null;
   const planCcy = risk?.currency ?? reward?.currency ?? "USD";
+  const commission = commissionForHolding(holding.symbol, holding.lot);
+  const pnlNet =
+    pnlValue !== null && commission !== null
+      ? round2(pnlValue - commission)
+      : null;
 
   const tpHit =
     holding.direction === "BELI" ? ref >= holding.tp : ref <= holding.tp;
@@ -245,6 +273,8 @@ export function evaluateExitSignal(
       ],
       pnl: pnlValue,
       pnlCurrency: pnlCcy,
+      commission,
+      pnlNet,
       risk: riskValue,
       reward: reward?.value ?? null,
       planCurrency: planCcy,
@@ -261,6 +291,8 @@ export function evaluateExitSignal(
       ],
       pnl: pnlValue,
       pnlCurrency: pnlCcy,
+      commission,
+      pnlNet,
       risk: riskValue,
       reward: reward?.value ?? null,
       planCurrency: planCcy,
@@ -270,6 +302,8 @@ export function evaluateExitSignal(
   const base = {
     pnl: pnlValue,
     pnlCurrency: pnlCcy,
+    commission,
+    pnlNet,
     risk: riskValue,
     reward: reward?.value ?? null,
     planCurrency: planCcy,
@@ -425,7 +459,8 @@ export function checkRewardRisk(
 
 /**
  * Tandai holding keluar MANUAL (Tahap v1.3.0): BUKAN eksekusi order.
- * Mengunci realized P&L pada harga exit + waktu + catatan. Murni.
+ * Mengunci realized P&L BERSIH (harga − komisi) pada harga exit + waktu
+ * + catatan. Murni.
  */
 export function markHoldingExited(
   holding: Holding,
@@ -440,12 +475,14 @@ export function markHoldingExited(
   if (holding.status === "EXITED") return null;
   const pnl = calculateExitPnL(holding, exit.exitPrice, convertToUsd);
   if (pnl === null) return null;
+  const commission = commissionForHolding(holding.symbol, holding.lot);
+  const net = commission !== null ? round2(pnl.value - commission) : pnl.value;
   return {
     ...holding,
     status: "EXITED",
     exitPrice: exit.exitPrice,
     exitTime: exit.exitTime,
-    realizedPnl: pnl.value,
+    realizedPnl: net,
     realizedCurrency: pnl.currency,
     exitNote: exit.note,
   };

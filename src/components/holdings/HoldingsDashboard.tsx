@@ -150,7 +150,7 @@ function HoldingCard({
           </span>
         </div>
         <div>
-          <span className="text-slate-500">P&amp;L </span>
+          <span className="text-slate-500">P&amp;L bersih </span>
           <span className="font-bold text-white">
             {exited
               ? money(
@@ -158,10 +158,18 @@ function HoldingCard({
                   holding.realizedCurrency ?? "USD",
                 )
               : money(
-                  evaluation?.pnl ?? null,
+                  evaluation?.pnlNet ?? null,
                   evaluation?.pnlCurrency ?? "USD",
                 )}
           </span>
+          {!exited &&
+            evaluation?.commission !== null &&
+            evaluation?.commission !== undefined &&
+            evaluation.commission > 0 && (
+              <span className="block text-[11px] text-slate-500">
+                incl. komisi ${evaluation.commission.toFixed(2)}
+              </span>
+            )}
         </div>
         <div>
           <span className="text-slate-500">Risiko/Rwd </span>

@@ -118,6 +118,7 @@ import {
   calculateHoldingPnL,
   checkMarginGuard,
   checkRewardRisk,
+  commissionForHolding,
   countHoldings,
   evaluateExitSignal,
   filterHoldingsByBroker,
@@ -7018,7 +7019,7 @@ test("442. App wiring workspace: simpan-pulihkan + badge (readSrc)", () => {
 
 /* ---------------- Posisi MT5 otomatis AP: TEST 446-448 ---------------- */
 
-test("446. parsePositionRow + isBrokerPosition (format EA)", () => {
+test("447. parsePositionRow + isBrokerPosition (format EA)", () => {
   const row = "108571917,GBPUSD,buy,0.01,1.32483,1.31977,1.33477,2026.09.29 04:08:06";
   const parsed = parsePositionRow(row);
   if (parsed === null) throw new Error("baris EA valid ditolak");
@@ -7044,7 +7045,7 @@ test("446. parsePositionRow + isBrokerPosition (format EA)", () => {
   assert(isBrokerPosition({ ...parsed, side: "HOLD" }) === false, "side liar lolos guard");
 });
 
-test("447. PositionsLogReader: baca file + status jujur (temp dir)", () => {
+test("448. PositionsLogReader: baca file + status jujur (temp dir)", () => {
   const os = require("node:os") as unknown as { tmpdir(): string };
   const fs = require("node:fs") as unknown as typeof import("node:fs");
   const path = require("node:path") as unknown as typeof import("node:path");
@@ -7074,7 +7075,7 @@ test("447. PositionsLogReader: baca file + status jujur (temp dir)", () => {
   }
 });
 
-test("448. wiring AP: route + hook + seksi otomatis + env (readSrc)", () => {
+test("449. wiring AP: route + hook + seksi otomatis + env (readSrc)", () => {
   const routes = readSrc("server/routes/positionsRoutes.ts");
   assert(routes.includes('"/"'), "endpoint list hilang");
   assert(routes.includes("resolveLiveBroker"), "broker query hilang");
@@ -7099,6 +7100,59 @@ test("448. wiring AP: route + hook + seksi otomatis + env (readSrc)", () => {
   const ea = readSrc("ea/ExportPositions.mq5");
   assert(ea.includes("PositionGetTicket"), "baca posisi hilang di EA");
   assert(ea.includes("positions.csv"), "nama file EA hilang");
+});
+
+/* ---------------- Komisi dalam P&L bersih (NET): TEST 450-451 ---------------- */
+
+test("450. commissionForHolding: OTB 33, Finex 1.00, unknown null", () => {
+  assert(commissionForHolding("AUDCAD_ORB", 0.1) === 3.3, "OTB 0.1 harus 3.3");
+  assert(commissionForHolding("GBPUSD_ORB", 1) === 33, "OTB 1 lot harus 33");
+  assert(commissionForHolding("GBPUSD", 1) === 1, "Finex harus 1.00");
+  assert(commissionForHolding("US100", 2) === 2, "US100 2 lot harus 2");
+  assert(commissionForHolding("XYZ", 1) === null, "unknown harus null");
+  assert(commissionForHolding("GBPUSD", 0) === null, "lot 0 harus null");
+  assert(commissionForHolding("GBPUSD", -1) === null, "lot negatif harus null");
+});
+
+test("451. pnlNet = pnl − komisi di evaluasi + exit", () => {
+  // USDCHF buy 0.01: gross +1.42, komisi Finex $0.01 → net +1.41.
+  const evaluation = evaluateExitSignal(makeHolding(), 0.83349, 0.8336, testToUsd);
+  assert(evaluation.commission === 0.01, `komisi=${evaluation.commission}`);
+  assert(
+    evaluation.pnl !== null && Math.abs(evaluation.pnl - 1.42) < 0.03,
+    `gross=${evaluation.pnl}`,
+  );
+  assert(
+    evaluation.pnlNet !== null && Math.abs(evaluation.pnlNet - 1.41) < 0.03,
+    `net=${evaluation.pnlNet}`,
+  );
+  // OTB AUDCAD_ORB buy 0.1: komisi 3.30 ikut terpotong.
+  const otb = evaluateExitSignal(
+    makeHolding({ symbol: "AUDCAD_ORB", entryPrice: 0.99132, sl: 0.98895, tp: 0.99523, lot: 0.1 }),
+    0.99109,
+    0.99129,
+    testToUsd,
+  );
+  assert(otb.commission === 3.3, `komisi OTB=${otb.commission}`);
+  assert(otb.pnl !== null && otb.pnlNet !== null, "pnl null");
+  assert(
+    Math.abs((otb.pnl as number) - (otb.pnlNet as number) - 3.3) < 1e-9,
+    "net bukan gross−komisi",
+  );
+  // Exit realisasi juga bersih.
+  const exited = markHoldingExited(
+    makeHolding(),
+    { exitPrice: 0.83349, exitTime: "t", note: "" },
+    testToUsd,
+  );
+  if (exited === null) throw new Error("mark exit null");
+  assert(
+    exited.realizedPnl !== undefined && Math.abs(exited.realizedPnl - 1.41) < 0.03,
+    `realized=${exited.realizedPnl}`,
+  );
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes("pnlNet"), "dashboard tak tampil bersih");
+  assert(dash.includes("incl. komisi"), "label komisi hilang");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +
