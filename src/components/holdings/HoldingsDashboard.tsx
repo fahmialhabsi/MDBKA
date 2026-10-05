@@ -205,9 +205,17 @@ function HoldingCard({
           {marginWarning !== null && (
             <p className="text-xs text-red-300">• {marginWarning}</p>
           )}
-          {rrWarning !== null && (
-            <p className="text-xs text-amber-200">• {rrWarning}</p>
-          )}
+            {rrWarning !== null && (
+              <p className="text-xs text-amber-200">• {rrWarning}</p>
+            )}
+            {evaluation?.swap !== null &&
+              evaluation?.swap !== undefined &&
+              evaluation.swap.daysHeld > 0 && (
+                <p className="text-xs text-slate-400">
+                  Swap est. {money(evaluation.swap.value, evaluation.swap.currency)}{" "}
+                  ({evaluation.swap.daysHeld} hari menginap)
+                </p>
+              )}
           {exited ? (
             <div className="text-xs text-slate-400">
               <p>

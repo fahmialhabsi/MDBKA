@@ -4,7 +4,8 @@
 
 Kartu posisi menampilkan P&L bersih (harga − komisi broker: OTB 33/lot,
 Finex 1.00/lot) + label "incl. komisi". Realisasi exit ikut bersih.
-Swap menginap belum termasuk (terpisah). **448/448 tests lolos.**
+Swap menginap kini estimasi via spec32 (dilabel "est.", tak dilipat diam-diam).
+**450/450 tests lolos.**
 
 ## v1.4.0-auto-positions — Posisi MT5 Otomatis (5 Okt 2026)
 

@@ -116,6 +116,7 @@ import {
   PRICE_DRIFT_PCT,
   calculateExitPnL,
   calculateHoldingPnL,
+  calculateHoldingSwap,
   checkMarginGuard,
   checkRewardRisk,
   commissionForHolding,
@@ -6834,11 +6835,17 @@ test("444. markHoldingExited + filter + counter", () => {
   assert(exited.exitPrice === 0.83349, "harga exit hilang");
   assert(exited.exitTime === "2026-10-05T01:00:00.000Z", "waktu hilang");
   assert(exited.exitNote === "TP", "note hilang");
+  // Realisasi kini termasuk swap 5 hari (LONG +1.01, triple Rabu 30 Sep):
+  // +1.42 − 0.01 komisi + ~0.09 swap ≈ +1.50.
   assert(
-    exited.realizedPnl !== undefined && Math.abs(exited.realizedPnl - 1.42) < 0.03,
+    exited.realizedPnl !== undefined && Math.abs(exited.realizedPnl - 1.5) < 0.03,
     `realized=${exited.realizedPnl}`,
   );
   assert(exited.realizedCurrency === "USD", "ccy realized salah");
+  assert(
+    exited.swapAtExit !== undefined && Math.abs(exited.swapAtExit - 0.09) < 0.03,
+    `swapAtExit=${exited.swapAtExit}`,
+  );
   // Asli tak termutasi (murni).
   assert(holding.status === undefined, "objek asli termutasi");
   // Sudah EXITED / harga invalid → null.
@@ -7153,6 +7160,77 @@ test("451. pnlNet = pnl − komisi di evaluasi + exit", () => {
   const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
   assert(dash.includes("pnlNet"), "dashboard tak tampil bersih");
   assert(dash.includes("incl. komisi"), "label komisi hilang");
+});
+
+/* ---------------- Swap menginap di kartu (SWP): TEST 452-453 ---------------- */
+
+test("452. calculateHoldingSwap: intraday 0, multi-hari via spec32", () => {
+  // Intraday (entry hari ini) → 0 jujur, bukan null.
+  const now = Date.parse("2026-10-05T10:00:00.000Z");
+  const intraday = calculateHoldingSwap(
+    makeHolding({ entryTime: "2026-10-05T01:00:00.000Z" }),
+    now,
+  );
+  assert(intraday !== null, "intraday harus 0, bukan null");
+  if (intraday === null) throw new Error("intraday null");
+  assert(intraday.value === 0 && intraday.daysHeld === 0, "intraday bukan 0");
+  assert(intraday.currency === "USD", "ccy salah");
+  // AUDCAD_ORB buy 0.1, entry 2 Okt 17:42 → 5 Okt 10:00 = 2 hari penuh.
+  // LONG −0.75 × 2 hari × 0.70 × 0.1 lot = −0.105 → −0.1 (Jum+Sab, tanpa triple).
+  const multi = calculateHoldingSwap(
+    makeHolding({
+      symbol: "AUDCAD_ORB",
+      entryPrice: 0.99132,
+      sl: 0.98895,
+      tp: 0.99523,
+      lot: 0.1,
+      entryTime: "2026.10.02 17:42:46",
+    }),
+    now,
+  );
+  assert(multi !== null, "multi-hari null");
+  if (multi === null) throw new Error("multi-hari null");
+  assert(multi.daysHeld === 2, `days=${multi.daysHeld}`);
+  assert(
+    Math.abs(multi.value - -0.1) < 0.02,
+    `swap=${multi.value}`,
+  );
+  // Entry invalid / simbol unknown / lot 0 → null.
+  assert(
+    calculateHoldingSwap(makeHolding({ entryTime: "kapan" }), now) === null,
+    "entry rusak lolos",
+  );
+  assert(
+    calculateHoldingSwap(makeHolding({ symbol: "XYZ" }), now) === null,
+    "unknown lolos",
+  );
+  assert(
+    calculateHoldingSwap(makeHolding({ lot: 0 }), now) === null,
+    "lot 0 lolos",
+  );
+});
+
+test("453. swap di evaluasi + exit + tampil kartu (readSrc)", () => {
+  const evaluation = evaluateExitSignal(makeHolding(), 0.83349, 0.8336, testToUsd);
+  assert(evaluation.swap !== undefined, "field swap hilang di evaluasi");
+  assert(
+    evaluation.swap === null || typeof evaluation.swap.value === "number",
+    "bentuk swap salah",
+  );
+  // Exit mengunci swap (entry 29 Sep → exit 5 Okt = 6 hari).
+  const exited = markHoldingExited(
+    makeHolding(),
+    { exitPrice: 0.83349, exitTime: "2026-10-05T01:00:00.000Z", note: "" },
+    testToUsd,
+  );
+  if (exited === null) throw new Error("mark exit null");
+  assert(
+    exited.swapAtExit !== undefined && Number.isFinite(exited.swapAtExit as number),
+    "swapAtExit tak terkunci",
+  );
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes("Swap est."), "baris swap hilang di kartu");
+  assert(dash.includes("menginap"), "label hari hilang");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

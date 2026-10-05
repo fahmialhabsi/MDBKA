@@ -1,6 +1,8 @@
 import {
   getInstrumentSpec32,
 } from "./instrumentSpecs32";
+import { getSpec32SwapPreview } from "./spec32Wiring";
+import { parseSnapshotTime } from "./dataFreshness";
 import type { BrokerId } from "../types/broker";
 import type { BrokerPosition } from "../../server/types/positions";
 
@@ -44,6 +46,7 @@ export interface Holding {
   readonly exitTime?: string;
   readonly realizedPnl?: number;
   readonly realizedCurrency?: string;
+  readonly swapAtExit?: number;
   readonly exitNote?: string;
 }
 
@@ -68,6 +71,8 @@ export interface ExitEvaluation {
   readonly commission: number | null;
   /** P&L bersih = pnl − komisi (null bila salah satu null). */
   readonly pnlNet: number | null;
+  /** Estimasi swap menginap (null bila intraday/unknown; lihat HoldingSwap). */
+  readonly swap: HoldingSwap | null;
   /** Risiko terencana (null bila tak terhitung). */
   readonly risk: number | null;
   /** Reward terencana (null bila tak terhitung). */
@@ -210,6 +215,7 @@ export function evaluateExitSignal(
   bid: number,
   ask: number,
   convertToUsd?: (amount: number, currency: string) => number | null,
+  nowMs: number = Date.now(),
 ): ExitEvaluation {
   const fallback: ExitEvaluation = {
     signal: "HOLD",
@@ -218,6 +224,7 @@ export function evaluateExitSignal(
     pnlCurrency: "USD",
     commission: commissionForHolding(holding.symbol, holding.lot),
     pnlNet: null,
+    swap: null,
     risk: null,
     reward: null,
     planCurrency: "USD",
@@ -262,6 +269,7 @@ export function evaluateExitSignal(
     pnlValue !== null && commission !== null
       ? round2(pnlValue - commission)
       : null;
+  const swap = calculateHoldingSwap(holding, nowMs);
 
   const tpHit =
     holding.direction === "BELI" ? ref >= holding.tp : ref <= holding.tp;
@@ -275,6 +283,7 @@ export function evaluateExitSignal(
       pnlCurrency: pnlCcy,
       commission,
       pnlNet,
+      swap,
       risk: riskValue,
       reward: reward?.value ?? null,
       planCurrency: planCcy,
@@ -293,6 +302,7 @@ export function evaluateExitSignal(
       pnlCurrency: pnlCcy,
       commission,
       pnlNet,
+      swap,
       risk: riskValue,
       reward: reward?.value ?? null,
       planCurrency: planCcy,
@@ -304,6 +314,7 @@ export function evaluateExitSignal(
     pnlCurrency: pnlCcy,
     commission,
     pnlNet,
+    swap,
     risk: riskValue,
     reward: reward?.value ?? null,
     planCurrency: planCcy,
@@ -476,7 +487,13 @@ export function markHoldingExited(
   const pnl = calculateExitPnL(holding, exit.exitPrice, convertToUsd);
   if (pnl === null) return null;
   const commission = commissionForHolding(holding.symbol, holding.lot);
-  const net = commission !== null ? round2(pnl.value - commission) : pnl.value;
+  const endMs = Date.parse(exit.exitTime);
+  const swapAtExit = Number.isFinite(endMs)
+    ? (calculateHoldingSwap(holding, endMs)?.value ?? 0)
+    : 0;
+  const net = round2(
+    pnl.value - (commission ?? 0) + swapAtExit,
+  );
   return {
     ...holding,
     status: "EXITED",
@@ -484,6 +501,7 @@ export function markHoldingExited(
     exitTime: exit.exitTime,
     realizedPnl: net,
     realizedCurrency: pnl.currency,
+    swapAtExit: round2(swapAtExit),
     exitNote: exit.note,
   };
 }
@@ -524,6 +542,50 @@ export function calculateExitPnL(
     }
   }
   return { value: quoteAmount, currency: profitCcy };
+}
+
+/**
+ * Estimasi swap menginap posisi (Tahap SWP, display-only).
+ * Via preview spec32 (USD/lot, triple-day aware) × lot; hari =
+ * floor((now − entry)/24 jam), format entry ISO maupun MT5
+ * ("YYYY.MM.DD HH:MM:SS", via parseSnapshotTime).
+ * Intraday (0 hari) → 0 jujur; entry invalid/simbol unknown → null.
+ * Nilai ESTIMASI (konvensi rollover broker bisa beda) — selalu
+ * dilabel "est." di UI, tak pernah dilipat diam-diam ke P&L.
+ */
+export interface HoldingSwap {
+  readonly value: number;
+  readonly currency: string;
+  readonly daysHeld: number;
+}
+
+export function calculateHoldingSwap(
+  holding: Pick<Holding, "symbol" | "direction" | "lot" | "entryTime">,
+  nowMs: number = Date.now(),
+): HoldingSwap | null {
+  if (
+    !Number.isFinite(holding.lot) ||
+    holding.lot <= 0 ||
+    !Number.isFinite(nowMs)
+  ) {
+    return null;
+  }
+  const entryMs = parseSnapshotTime(holding.entryTime);
+  if (entryMs === null) return null;
+  const daysHeld = Math.floor((nowMs - entryMs) / 86400000);
+  if (daysHeld <= 0) return { value: 0, currency: "USD", daysHeld: 0 };
+  const preview = getSpec32SwapPreview({
+    symbol: holding.symbol,
+    daysHeld,
+    direction: holding.direction === "BELI" ? "LONG" : "SHORT",
+    tradeDatetime: new Date(entryMs),
+  });
+  if (preview === null) return null;
+  return {
+    value: round2(preview.swapUSD * holding.lot),
+    currency: "USD",
+    daysHeld,
+  };
 }
 
 /**
