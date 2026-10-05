@@ -1,5 +1,13 @@
 # CHANGELOG MDBKA
 
+## v1.4.0-auto-positions — Posisi MT5 Otomatis (5 Okt 2026)
+
+EA `ExportPositions.mq5` (timer 5 dtk, FileClose tiap tulis) →
+`positions.csv` → reader fail-closed + `GET /api/positions?broker=`
+(400/404 jujur). Monitor per tab: seksi posisi MT5 read-only (kartu +
+sinyal exit engine, tanpa tombol exit/hapus) di atas entry manual.
+**445/445 tests lolos** (442 + 446/447/448). Verifikasi live: Senin.
+
 ## v1.3.0-quick-exit — Tab Monitor + Form Keluar (5 Okt 2026)
 
 Monitor posisi per tab broker (Finex|OTB, counter OPEN n/m) + kartu

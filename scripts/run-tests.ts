@@ -104,6 +104,11 @@ import {
   isFxCacheFresh,
 } from "../server/routes/fxRoutes";
 import {
+  isBrokerPosition,
+  parsePositionRow,
+} from "../server/types/positions";
+import { PositionsLogReader } from "../server/services/positionsLogReader";
+import {
   ADVERSE_DRIFT_PCT,
   MARGIN_GUARD_PCT,
   MIN_REWARD_RISK,
@@ -6968,6 +6973,91 @@ test("442. App wiring workspace: simpan-pulihkan + badge (readSrc)", () => {
   assert(body.includes('setSwingCsv("")'), "putus CSV hilang");
   assert(!body.includes("setMarket("), "handler menulis market (regresi 184)");
   assert(!body.includes("analyzeMarket"), "handler menyentuh engine");
+});
+
+/* ---------------- Posisi MT5 otomatis AP: TEST 446-448 ---------------- */
+
+test("446. parsePositionRow + isBrokerPosition (format EA)", () => {
+  const row = "108571917,GBPUSD,buy,0.01,1.32483,1.31977,1.33477,2026.09.29 04:08:06";
+  const parsed = parsePositionRow(row);
+  if (parsed === null) throw new Error("baris EA valid ditolak");
+  assert(parsed.ticket === "108571917", "ticket hilang");
+  assert(parsed.symbol === "GBPUSD", "simbol hilang");
+  assert(parsed.side === "BUY", "case buy tak dinormalisasi");
+  assert(parsed.volume === 0.01, "volume salah");
+  assert(parsed.priceOpen === 1.32483, "open salah");
+  assert(parsed.sl === 1.31977 && parsed.tp === 1.33477, "SL/TP salah");
+  assert(parsed.timeOpen === "2026.09.29 04:08:06", "waktu hilang");
+  assert(isBrokerPosition(parsed), "guard menolak valid");
+  // Tanpa SL/TP (0) tetap valid — sinyal terkait dinonaktifkan downstream.
+  const noSlTp = parsePositionRow("1,EURUSD,SELL,0.02,1.08,0,0,2026.10.05 01:00:00");
+  assert(noSlTp !== null && noSlTp.sl === 0 && noSlTp.tp === 0, "SL/TP 0 ditolak");
+  assert(isBrokerPosition(noSlTp), "guard menolak SL/TP 0");
+  // Invalid.
+  assert(parsePositionRow("a,b") === null, "baris pendek lolos");
+  assert(parsePositionRow("1,GBPUSD,HOLD,0.01,1.3,1.2,1.4,t") === null, "side HOLD lolos");
+  assert(parsePositionRow("1,GBPUSD,BUY,0,1.3,1.2,1.4,t") === null, "volume 0 lolos");
+  assert(parsePositionRow("1,GBPUSD,BUY,0.01,-1,1.2,1.4,t") === null, "harga negatif lolos");
+  assert(parsePositionRow("1,,BUY,0.01,1.3,1.2,1.4,t") === null, "simbol kosong lolos");
+  assert(isBrokerPosition(null) === false, "null lolos guard");
+  assert(isBrokerPosition({ ...parsed, side: "HOLD" }) === false, "side liar lolos guard");
+});
+
+test("447. PositionsLogReader: baca file + status jujur (temp dir)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mdbka-pos-"));
+  const file = path.join(dir, "positions.csv");
+  fs.writeFileSync(
+    file,
+    "Ticket,Symbol,Type,Volume,PriceOpen,SL,TP,TimeOpen\n" +
+      "108571917,GBPUSD,buy,0.01,1.32483,1.31977,1.33477,2026.09.29 04:08:06\n" +
+      "baris-rusak\n" +
+      "108616105,USDCHF,SELL,0.02,0.83231,0.82724,0.84224,2026.09.29 06:04:06\n",
+  );
+  const reader = new PositionsLogReader(file);
+  try {
+    // init() async tetapi jalur sukses sinkron penuh (tanpa timer);
+    // aman dibaca langsung (pola yang sama dipakai suite quotes).
+    void reader.init();
+    assert(reader.getLastStatus() === "valid_snapshot", `status=${reader.getLastStatus()}`);
+    const all = reader.getAll();
+    assert(all.length === 2, `count=${all.length}`);
+    assert(all[0].symbol === "GBPUSD" && all[0].side === "BUY", "baris 1 salah");
+    assert(all[1].symbol === "USDCHF" && all[1].side === "SELL", "baris 2 salah");
+    assert(all[1].volume === 0.02, "volume salah");
+  } finally {
+    reader.destroy();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("448. wiring AP: route + hook + seksi otomatis + env (readSrc)", () => {
+  const routes = readSrc("server/routes/positionsRoutes.ts");
+  assert(routes.includes('"/"'), "endpoint list hilang");
+  assert(routes.includes("resolveLiveBroker"), "broker query hilang");
+  assert(routes.includes("pickLiveSource"), "dual-source hilang");
+  assert(routes.includes("404"), "404 jujur hilang");
+  const app = readSrc("server/app.ts");
+  assert(app.includes("/api/positions"), "mount hilang");
+  const index = readSrc("server/index.ts");
+  assert(index.includes("PositionsLogReader"), "reader tak di-wire");
+  assert(index.includes("POSITIONS_LOG_PATH"), "env path hilang");
+  const hook = readSrc("src/hooks/useBrokerPositions.ts");
+  assert(hook.includes("/api/positions"), "URL hook hilang");
+  assert(hook.includes("sourceMissing"), "flag EA-belum-pasang hilang");
+  const monitor = readSrc("src/components/holdings/HoldingsMonitor.tsx");
+  assert(monitor.includes("useBrokerPositions"), "hook tak dipakai monitor");
+  assert(monitor.includes("Posisi MT5 otomatis"), "seksi otomatis hilang");
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes("readOnly"), "mode read-only hilang");
+  assert(dash.includes("tutup/ubah di terminal"), "label read-only hilang");
+  const envExample = readSrc(".env.example");
+  assert(envExample.includes("POSITIONS_LOG_PATH_FINEX"), "env Finex hilang");
+  const ea = readSrc("ea/ExportPositions.mq5");
+  assert(ea.includes("PositionGetTicket"), "baca posisi hilang di EA");
+  assert(ea.includes("positions.csv"), "nama file EA hilang");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

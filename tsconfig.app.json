@@ -17,5 +17,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "server/types/equity.ts"]
+  "include": ["src", "server/types/equity.ts", "server/types/positions.ts"]
 }

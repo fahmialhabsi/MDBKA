@@ -14,6 +14,7 @@ import * as path from "node:path";
 import { createApp } from "./app";
 import { MT5LogReader } from "./services/mt5LogReader";
 import { QuotesLogReader } from "./services/quotesLogReader";
+import { PositionsLogReader } from "./services/positionsLogReader";
 import {
   DEFAULT_RETENTION_DAYS,
   TickHistoryLogger,
@@ -59,6 +60,15 @@ const readerFinex =
   finexLogPath.trim() !== "" ? new MT5LogReader(finexLogPath) : null;
 const quotesReaderFinex =
   finexQuotesLogPath.trim() !== "" ? new QuotesLogReader(finexQuotesLogPath) : null;
+
+// Tahap AP: posisi terbuka dari EA ExportPositions (opsional per broker).
+// Kosong → reader null → GET /api/positions menjawab 404 jujur.
+const positionsLogPath = process.env.POSITIONS_LOG_PATH ?? "";
+const positionsLogPathFinex = process.env.POSITIONS_LOG_PATH_FINEX ?? "";
+const positionsReader =
+  positionsLogPath.trim() !== "" ? new PositionsLogReader(positionsLogPath) : null;
+const positionsReaderFinex =
+  positionsLogPathFinex.trim() !== "" ? new PositionsLogReader(positionsLogPathFinex) : null;
 
 const stopWatching = reader.startWatching();
 if (readerFinex !== null) readerFinex.startWatching();
@@ -121,7 +131,7 @@ if (quotesReaderFinex !== null && historyFinex !== null) {
 const app = createApp(reader, quotesReader, readerFinex, quotesReaderFinex, {
   otb: historyOtb,
   finex: historyFinex,
-});
+}, positionsReader, positionsReaderFinex);
 
 // Polling startup: tunggu data pertama kali tersedia
 async function startServer() {
@@ -162,6 +172,18 @@ async function startServer() {
     });
   }
 
+  // Tahap AP: baca awal positions.csv (boleh absen/EA belum dipasang).
+  if (positionsReader !== null) {
+    await positionsReader.init().catch(() => {
+      console.log(`⚠ Positions OTB init ditunda (file terkunci/hilang)`);
+    });
+  }
+  if (positionsReaderFinex !== null) {
+    await positionsReaderFinex.init().catch(() => {
+      console.log(`⚠ Positions Finex init ditunda (file terkunci/hilang)`);
+    });
+  }
+
   const server = app.listen(PORT, () => {
     const latest = reader.getLatest();
     console.log(`✓ Backend running on http://localhost:${PORT}`);
@@ -197,6 +219,8 @@ function shutdown(): void {
   quotesReader.destroy();
   if (readerFinex !== null) readerFinex.stopWatching();
   if (quotesReaderFinex !== null) quotesReaderFinex.destroy();
+  if (positionsReader !== null) positionsReader.destroy();
+  if (positionsReaderFinex !== null) positionsReaderFinex.destroy();
   serverPromise
     .then((server) => {
       server.close(() => {

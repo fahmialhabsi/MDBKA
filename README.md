@@ -47,6 +47,12 @@ Cakupan arsip: `GET /api/history/coverage` (per broker/simbol/rentang).
 Biarkan backend jalan saat market buka agar histori terkumpul untuk
 agregator candle masa depan.
 
+### EA Pendukung (`ea/`)
+- `ExportPositions.mq5` — tulis posisi open ke `positions.csv` tiap 5 dtk
+  (compile di MetaEditor → drag ke chart → izinkan Algo Trading).
+  Endpoint: `GET /api/positions?broker=` (Finex/OTB, 404 jujur bila EA
+  belum dipasang). Posisi MT5 tampil read-only di tab monitor.
+
 ### Workflow Analisis
 1. **Screenshot** → Terminal trading (Market Watch + Data Window region)
 2. **Upload CSV** → Export 50+ candle dari MT5
@@ -85,7 +91,7 @@ agregator candle masa depan.
 - OCR: regex + region-based text extraction
 - CSV: Papa Parse (50+ candle validation)
 - FX Rate: ECB free API (fallback hardcoded)
-- Test: 442/442 lolos (zero regression)
+- Test: 445/445 lolos (zero regression)
 
 ## 🔌 Tahap 5E-STEP2: Live Equity (Node.js Backend)
 

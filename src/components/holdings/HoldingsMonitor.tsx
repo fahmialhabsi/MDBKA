@@ -1,6 +1,7 @@
 import { useState, type JSX } from "react";
 import { HoldingsForm, type NewHolding } from "./HoldingsForm";
 import { HoldingsDashboard, type ExitRequest } from "./HoldingsDashboard";
+import { useBrokerPositions } from "../../hooks/useBrokerPositions";
 import { DEFAULT_BROKER_ID } from "../../lib/brokerRegistry";
 import {
   countHoldings,
@@ -12,6 +13,7 @@ import {
   buildUsdConverter,
   type ExchangeRates,
 } from "../../services/fxRateService";
+import type { BrokerPosition } from "../../../server/types/positions";
 import type { BrokerId } from "../../types/broker";
 
 const STORAGE_KEY = "mdbka-holdings-v1";
@@ -68,6 +70,23 @@ export function HoldingsMonitor({
 }): JSX.Element {
   const [holdings, setHoldings] = useState<Holding[]>(() => loadHoldings());
   const [tab, setTab] = useState<BrokerId>(brokerId ?? DEFAULT_BROKER_ID);
+
+  // Tahap AP: posisi terbuka MT5 (read-only, via EA ExportPositions).
+  const brokerPositions = useBrokerPositions(tab);
+  const autoHoldings: Holding[] = brokerPositions.positions.map(
+    (position: BrokerPosition) => ({
+      id: `mt5-${position.ticket}`,
+      symbol: position.symbol,
+      brokerId: tab,
+      direction: position.side === "BUY" ? "BELI" : "JUAL",
+      lot: position.volume,
+      entryPrice: position.priceOpen,
+      sl: position.sl,
+      tp: position.tp,
+      entryTime: position.timeOpen,
+      createdAt: position.timeOpen,
+    }),
+  );
 
   const add = (input: NewHolding): void => {
     const next: Holding[] = [
@@ -137,11 +156,24 @@ export function HoldingsMonitor({
       </div>
       <HoldingsForm brokerId={tab} onAdd={add} />
       <HoldingsDashboard
+        holdings={autoHoldings}
+        brokerId={tab}
+        fxRates={fxRates}
+        readOnly
+        heading={`Posisi MT5 otomatis (${autoHoldings.length})`}
+        emptyText={
+          brokerPositions.sourceMissing
+            ? "EA ExportPositions belum dipasang di terminal ini — lihat ea/ExportPositions.mq5."
+            : "Tidak ada posisi terbuka di MT5."
+        }
+      />
+      <HoldingsDashboard
         holdings={filterHoldingsByBroker(holdings, tab)}
         brokerId={tab}
         fxRates={fxRates}
         onExit={exit}
         onRemove={remove}
+        heading="Posisi manual"
       />
       <p className="text-xs text-slate-500">
         Entri manual sesuai posisi MT5 Anda — app tidak membaca posisi

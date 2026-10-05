@@ -75,12 +75,14 @@ function HoldingCard({
   convert,
   onExit,
   onRemove,
+  readOnly,
 }: {
   readonly holding: Holding;
   readonly live: HoldingsQuote | undefined;
   readonly convert: (amount: number, currency: string) => number | null;
   readonly onExit: (id: string, exit: ExitRequest) => void;
   readonly onRemove: (id: string) => void;
+  readonly readOnly?: boolean;
 }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
@@ -207,14 +209,20 @@ function HoldingCard({
                   ? ` · “${holding.exitNote}”`
                   : ""}
               </p>
-              <button
-                type="button"
-                onClick={() => onRemove(holding.id)}
-                className="mt-1 text-xs text-slate-500 hover:text-red-300"
-              >
-                Hapus permanen
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(holding.id)}
+                  className="mt-1 text-xs text-slate-500 hover:text-red-300"
+                >
+                  Hapus permanen
+                </button>
+              )}
             </div>
+          ) : readOnly ? (
+            <p className="mt-1 text-xs text-slate-500">
+              Posisi MT5 (otomatis, read-only) — tutup/ubah di terminal.
+            </p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {!exitOpen ? (
@@ -304,28 +312,39 @@ export function HoldingsDashboard({
   fxRates,
   onExit,
   onRemove,
+  readOnly = false,
+  heading,
+  emptyText,
 }: {
   readonly holdings: readonly Holding[];
   readonly brokerId: BrokerId | undefined;
   readonly fxRates: ExchangeRates | null;
-  readonly onExit: (id: string, exit: ExitRequest) => void;
-  readonly onRemove: (id: string) => void;
+  readonly onExit?: (id: string, exit: ExitRequest) => void;
+  readonly onRemove?: (id: string) => void;
+  readonly readOnly?: boolean;
+  readonly heading?: string;
+  readonly emptyText?: string;
 }): JSX.Element {
   const symbols = [...new Set(holdings.map((h) => h.symbol))];
   const { quotes, isConnected } = useHoldingsQuotes(symbols, brokerId);
   const convert = buildUsdConverter(fxRates);
+  const noopExit = (): void => {};
+  const noopRemove = (): void => {};
 
   if (holdings.length === 0) {
     return (
       <p className="text-sm text-slate-400">
-        Belum ada posisi. Tambahkan via form di atas (entry manual sesuai
-        posisi MT5 Anda).
+        {emptyText ??
+          "Belum ada posisi. Tambahkan via form di atas (entry manual sesuai posisi MT5 Anda)."}
       </p>
     );
   }
 
   return (
     <div className="space-y-3" data-testid="holdings-dashboard">
+      {heading !== undefined && (
+        <h4 className="text-sm font-bold text-slate-200">{heading}</h4>
+      )}
       {!isConnected && (
         <p className="text-xs text-slate-500">
           Menghubungkan harga live… (butuh backend + EA menulis tick simbol ini)
@@ -337,8 +356,9 @@ export function HoldingsDashboard({
           holding={holding}
           live={quotes[holding.symbol]}
           convert={convert}
-          onExit={onExit}
-          onRemove={onRemove}
+          onExit={onExit ?? noopExit}
+          onRemove={onRemove ?? noopRemove}
+          readOnly={readOnly}
         />
       ))}
     </div>
