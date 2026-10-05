@@ -1,5 +1,14 @@
 # CHANGELOG MDBKA
 
+## v1.3.0-quick-exit — Tab Monitor + Form Keluar (5 Okt 2026)
+
+Monitor posisi per tab broker (Finex|OTB, counter OPEN n/m) + kartu
+expand per simbol + form "Tandai Keluar" (volume auto, harga live bisa
+ubah, catatan; BUKAN eksekusi order — konfirmasi MT5 tetap wajib).
+Posisi keluar tampil dimmed sebagai log (harga/waktu/P&L/note).
+Polling tetap 5 dtk; engine P&L + ambang badge tak berubah.
+**442/442 tests lolos** (439 + 443/444/445).
+
 ## v1.2.1-workspace — Workspace per Broker (5 Okt 2026)
 
 Ganti broker tak lagi me-wipe analisa: tiap broker punya slice

@@ -109,10 +109,14 @@ import {
   MIN_REWARD_RISK,
   NEAR_LEVEL_PCT,
   PRICE_DRIFT_PCT,
+  calculateExitPnL,
   calculateHoldingPnL,
   checkMarginGuard,
   checkRewardRisk,
+  countHoldings,
   evaluateExitSignal,
+  filterHoldingsByBroker,
+  markHoldingExited,
   rewardRiskRatio,
   validateHoldingInput,
   type Holding,
@@ -6767,6 +6771,93 @@ test("439. wiring Phase 2: form equity + badge margin/RR/drift (readSrc)", () =>
   assert(lib.includes("PRICE_DRIFT_PCT"), "konstanta drift hilang");
   assert(lib.includes("MARGIN_GUARD_PCT"), "konstanta margin hilang");
   assert(lib.includes("MIN_REWARD_RISK"), "konstanta R:R hilang");
+});
+
+/* ---------------- Quick exit v1.3.0: TEST 443-445 ---------------- */
+
+test("443. calculateExitPnL cocok laporan broker (exit manual)", () => {
+  // USDCHF buy 0.01 @0.83231 exit 0.83349 ≈ +1.42 USD.
+  const exit = calculateExitPnL(makeHolding(), 0.83349, testToUsd);
+  if (exit === null) throw new Error("exit pnl null");
+  assert(exit.currency === "USD", `ccy=${exit.currency}`);
+  assert(Math.abs(exit.value - 1.42) < 0.03, `pnl=${exit.value}`);
+  // JUAL: profit saat exit di bawah entry.
+  const shortExit = calculateExitPnL(
+    makeHolding({ direction: "JUAL", entryPrice: 0.83523, sl: 0.83802, tp: 0.83202 }),
+    0.832,
+    testToUsd,
+  );
+  assert(shortExit !== null && shortExit.value > 0, "short profit salah arah");
+  // Rugi saat exit melawan arah.
+  const loss = calculateExitPnL(makeHolding(), 0.83, testToUsd);
+  assert(loss !== null && loss.value < 0, "loss tak negatif");
+  // Tanpa converter: label profit-ccy jujur.
+  const raw = calculateExitPnL(
+    makeHolding({ symbol: "AUDCAD", entryPrice: 0.99345, sl: 0.98975, tp: 1.00475 }),
+    0.99154,
+  );
+  assert(raw?.currency === "CAD", "tanpa converter harus CAD");
+  // Invalid → null.
+  assert(calculateExitPnL(makeHolding(), 0, testToUsd) === null, "exit 0 lolos");
+  assert(calculateExitPnL(makeHolding(), -1, testToUsd) === null, "exit negatif lolos");
+  assert(
+    calculateExitPnL(makeHolding({ symbol: "XYZ" }), 1, testToUsd) === null,
+    "unknown lolos",
+  );
+});
+
+test("444. markHoldingExited + filter + counter", () => {
+  const holding = makeHolding();
+  const exited = markHoldingExited(
+    holding,
+    { exitPrice: 0.83349, exitTime: "2026-10-05T01:00:00.000Z", note: "TP" },
+    testToUsd,
+  );
+  if (exited === null) throw new Error("mark exit null");
+  assert(exited.status === "EXITED", "status salah");
+  assert(exited.exitPrice === 0.83349, "harga exit hilang");
+  assert(exited.exitTime === "2026-10-05T01:00:00.000Z", "waktu hilang");
+  assert(exited.exitNote === "TP", "note hilang");
+  assert(
+    exited.realizedPnl !== undefined && Math.abs(exited.realizedPnl - 1.42) < 0.03,
+    `realized=${exited.realizedPnl}`,
+  );
+  assert(exited.realizedCurrency === "USD", "ccy realized salah");
+  // Asli tak termutasi (murni).
+  assert(holding.status === undefined, "objek asli termutasi");
+  // Sudah EXITED / harga invalid → null.
+  assert(markHoldingExited(exited, { exitPrice: 0.84, exitTime: "t", note: "" }, testToUsd) === null, "double exit lolos");
+  assert(markHoldingExited(holding, { exitPrice: 0, exitTime: "t", note: "" }, testToUsd) === null, "exit 0 lolos");
+  // Filter + counter per broker.
+  const mixed: Holding[] = [
+    { ...makeHolding(), id: "a", brokerId: "finex" },
+    { ...makeHolding(), id: "b", brokerId: "finex", status: "EXITED" },
+    { ...makeHolding(), id: "c", brokerId: "orbitraderberjangka" },
+  ];
+  assert(filterHoldingsByBroker(mixed, "finex").length === 2, "filter finex salah");
+  assert(filterHoldingsByBroker(mixed, "orbitraderberjangka").length === 1, "filter OTB salah");
+  assert(filterHoldingsByBroker([], "finex").length === 0, "kosong salah");
+  const counts = countHoldings(mixed);
+  assert(counts.open === 2 && counts.total === 3, `counts=${JSON.stringify(counts)}`);
+});
+
+test("445. wiring v1.3.0: tab, kartu expand, form exit, log (readSrc)", () => {
+  const monitor = readSrc("src/components/holdings/HoldingsMonitor.tsx");
+  assert(monitor.includes("holdings-tab-"), "tab broker hilang");
+  assert(monitor.includes("role=\"tablist\""), "tablist hilang");
+  assert(monitor.includes("POSISI OPEN"), "counter hilang");
+  assert(monitor.includes("filterHoldingsByBroker"), "filter tak dipakai");
+  assert(monitor.includes("markHoldingExited"), "exit tak di-wire");
+  assert(monitor.includes("Tandai Keluar") || monitor.includes("tandai keluar") || readSrc("src/components/holdings/HoldingsDashboard.tsx").includes("Tandai Keluar"), "label keluar hilang");
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes("HoldingCard"), "kartu hilang");
+  assert(dash.includes("KELUAR"), "badge KELUAR hilang");
+  assert(dash.includes("Hapus permanen"), "hapus permanen hilang");
+  assert(dash.includes("buildUsdConverter"), "converter tak dipakai");
+  const lib = readSrc("src/lib/exitMonitor.ts");
+  assert(lib.includes("calculateExitPnL"), "exit pnl hilang");
+  assert(lib.includes("markHoldingExited"), "mark exit hilang");
+  assert(lib.includes("BUKAN eksekusi order"), "disclaimer order hilang");
 });
 
 /* ---------------- Workspace per broker WS: TEST 440-442 ---------------- */

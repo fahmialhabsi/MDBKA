@@ -14,6 +14,7 @@ Trading Education & Risk Calculator untuk MetaTrader 5 (OTB + Finex)
 ✅ **Triple-Swap Wednesday** — auto-deteksi hari Rabu × 3
 ✅ **Live Equity + Live Quotes** — SSE real-time dual-source (OTB + Finex), display-only
 ✅ **Monitor Posisi Manual** — catat posisi MT5, P&L live + sinyal exit (TP/SL/near/drift), tanpa order
+✅ **Monitor Tab per Broker + Quick Exit** — tab Finex|OTB dengan counter, kartu expand per simbol, form "Tandai Keluar" (log lokal, bukan order)
 ✅ **Workspace per Broker** — analisa Finex & OTB tersimpan terpisah; pindah broker tak menghapus hasil
 ✅ **Responsive Dashboard** — sidebar live sticky desktop, stack mobile
 
@@ -84,7 +85,7 @@ agregator candle masa depan.
 - OCR: regex + region-based text extraction
 - CSV: Papa Parse (50+ candle validation)
 - FX Rate: ECB free API (fallback hardcoded)
-- Test: 439/439 lolos (zero regression)
+- Test: 442/442 lolos (zero regression)
 
 ## 🔌 Tahap 5E-STEP2: Live Equity (Node.js Backend)
 

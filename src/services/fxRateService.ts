@@ -170,3 +170,17 @@ export function convertToUSD(
 
   return (amount / rate) * rates.USD;
 }
+
+/**
+ * Tahap v1.3.0 — bangun converter USD untuk modul kalkulasi (murni).
+ * Tanpa fxRates (atau USD) → passthrough USD / null jujur.
+ */
+export function buildUsdConverter(
+  fxRates: ExchangeRates | null,
+): (amount: number, currency: string) => number | null {
+  return (amount: number, currency: string): number | null => {
+    if (currency === "USD") return amount;
+    if (fxRates === null) return null;
+    return convertToUSD(amount, currency, fxRates);
+  };
+}

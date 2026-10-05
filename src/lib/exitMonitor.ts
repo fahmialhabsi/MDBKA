@@ -33,6 +33,17 @@ export interface Holding {
   readonly createdAt: string;
   /** Equity akun USD saat entry (opsional, untuk margin guard 10%). */
   readonly accountEquity?: number;
+  /**
+   * Status posisi (Tahap v1.3.0): OPEN aktif dipantau; EXITED sudah
+   * ditandai keluar MANUAL oleh pengguna (BUKAN eksekusi order —
+   * konfirmasi di MT5 tetap wajib). Absen = OPEN (migrasi data lama).
+   */
+  readonly status?: "OPEN" | "EXITED";
+  readonly exitPrice?: number;
+  readonly exitTime?: string;
+  readonly realizedPnl?: number;
+  readonly realizedCurrency?: string;
+  readonly exitNote?: string;
 }
 
 export type ExitSignal =
@@ -409,6 +420,93 @@ export function checkRewardRisk(
     `Reward/risk 1:${ratio.toFixed(2)} < 1:${MIN_REWARD_RISK} ` +
     `(TP terlalu dekat atau SL terlalu jauh).`
   );
+}
+
+/**
+ * Tandai holding keluar MANUAL (Tahap v1.3.0): BUKAN eksekusi order.
+ * Mengunci realized P&L pada harga exit + waktu + catatan. Murni.
+ */
+export function markHoldingExited(
+  holding: Holding,
+  exit: {
+    readonly exitPrice: number;
+    readonly exitTime: string;
+    readonly note: string;
+  },
+  convertToUsd?: (amount: number, currency: string) => number | null,
+): Holding | null {
+  if (!Number.isFinite(exit.exitPrice) || exit.exitPrice <= 0) return null;
+  if (holding.status === "EXITED") return null;
+  const pnl = calculateExitPnL(holding, exit.exitPrice, convertToUsd);
+  if (pnl === null) return null;
+  return {
+    ...holding,
+    status: "EXITED",
+    exitPrice: exit.exitPrice,
+    exitTime: exit.exitTime,
+    realizedPnl: pnl.value,
+    realizedCurrency: pnl.currency,
+    exitNote: exit.note,
+  };
+}
+
+/**
+ * P&L realisasi pada harga exit manual (first-principles, sama seperti
+ * calculateHoldingPnL tetapi memakai harga exit, bukan bid/ask live).
+ * Tervalidasi: USDCHF buy 0.01 @0.83231 exit 0.83349 ≈ +1.42 USD.
+ */
+export function calculateExitPnL(
+  holding: Pick<Holding, "symbol" | "direction" | "lot" | "entryPrice">,
+  exitPrice: number,
+  convertToUsd?: (amount: number, currency: string) => number | null,
+): HoldingPnL | null {
+  if (!Number.isFinite(exitPrice) || exitPrice <= 0) return null;
+  if (
+    !Number.isFinite(holding.lot) ||
+    holding.lot <= 0 ||
+    !Number.isFinite(holding.entryPrice) ||
+    holding.entryPrice <= 0
+  ) {
+    return null;
+  }
+  const spec = getInstrumentSpec32(holding.symbol);
+  if (spec === null) return null;
+  if (!Number.isFinite(spec.leverage) || spec.leverage <= 0) return null;
+  const signed =
+    holding.direction === "BELI"
+      ? exitPrice - holding.entryPrice
+      : holding.entryPrice - exitPrice;
+  const quoteAmount = round2(signed * spec.leverage * holding.lot);
+  const profitCcy = spec.quoteCurrency;
+  if (profitCcy === "USD") return { value: quoteAmount, currency: "USD" };
+  if (convertToUsd !== undefined) {
+    const usd = convertToUsd(quoteAmount, profitCcy);
+    if (usd !== null && Number.isFinite(usd)) {
+      return { value: round2(usd), currency: "USD" };
+    }
+  }
+  return { value: quoteAmount, currency: profitCcy };
+}
+
+/**
+ * Filter holdings per broker untuk tab monitor (murni).
+ * Status apa pun ikut (OPEN dipantau, EXITED jadi log).
+ */
+export function filterHoldingsByBroker(
+  holdings: readonly Holding[],
+  brokerId: BrokerId,
+): Holding[] {
+  return holdings.filter((holding) => holding.brokerId === brokerId);
+}
+
+/** Hitung ringkasan tab: {open, total}. */
+export function countHoldings(
+  holdings: readonly Holding[],
+): { readonly open: number; readonly total: number } {
+  const open = holdings.filter(
+    (holding) => (holding.status ?? "OPEN") === "OPEN",
+  ).length;
+  return { open, total: holdings.length };
 }
 
 /**
