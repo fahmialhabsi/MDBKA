@@ -4,7 +4,8 @@
 //| Pasang: copy ke MQL5/Experts, compile (F7), drag ke SATU chart    |
 //| mana pun, izinkan Algo Trading. Hapus EA logger lama agar tidak   |
 //| adu tulis file yang sama. Menulis ulang tiap 2 detik:             |
-//|   equity.csv : Timestamp,Balance,Equity,Profit                     |
+//|   equity.csv : Timestamp,Balance,Equity,Profit,Leverage,Margin,    |
+//|                FreeMargin,MarginLevel (AccountInfo asli, 8 kolom)  |
 //|   quotes.csv : Timestamp,Symbol,Bid,Ask (semua Market Watch)        |
 //| Backend MDBKA membaca keduanya (shared-read, tanpa lock).         |
 //+------------------------------------------------------------------+
@@ -50,7 +51,11 @@ void ExportEquity()
              ts,
              DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2),
              DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2),
-             DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2));
+             DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2),
+             IntegerToString(AccountInfoInteger(ACCOUNT_LEVERAGE)),
+             DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN), 2),
+             DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2),
+             DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_LEVEL), 2));
    FileClose(handle);
   }
 
