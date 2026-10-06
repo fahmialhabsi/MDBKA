@@ -31,7 +31,7 @@ void OnTimer()
 void Export()
   {
    int total = PositionsTotal();
-   int handle = FileOpen(OutFileName, FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
+   int handle = FileOpen(OutFileName, FILE_WRITE | FILE_CSV | FILE_ANSI | FILE_SHARE_READ, ',');
    if(handle == INVALID_HANDLE)
      {
       Print("ExportPositions: FileOpen gagal: ", GetLastError());
