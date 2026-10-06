@@ -28,6 +28,7 @@ import {
   snapshotWorkspace,
 } from "./lib/brokerWorkspace";
 import { LiveQuotes } from "./components/analysis/LiveQuotes";
+import { useQuotesStream } from "./hooks/useQuotesStream";
 import dashboard from "./styles/dashboard.module.css";
 
 import { analyzeMarket } from "./calculations/decisionEngine";
@@ -224,6 +225,13 @@ export default function App() {
     finex: initialBroker.equity,
     orbitraderberjangka: initialBroker.equity,
   });
+
+  // Quote live simbol aktif: sumber spread asli untuk ask dari CSV.
+  const { quote: liveQuote } = useQuotesStream(
+    market.symbol,
+    5000,
+    activeBrokerId,
+  );
 
   // Inti analisa yang bisa dipanggil dengan nilai eksplisit (bukan state
   // yang belum ter-commit) — dipakai alur otomatis setelah CSV masuk.
@@ -604,8 +612,18 @@ export default function App() {
           low: last.low,
           close: last.close,
           bid: last.close,
-          // Bulatkan sisa float (111.06 + 0.01 = 111.07000000000001).
-          ask: Number((last.close + tick).toPrecision(12)),
+          // Spread asli dari quote live simbol sama (fallback 1 tick); bid tetap
+          // = close CSV. Dibulatkan agar tanpa sisa float (#488).
+          ask: Number(
+            (
+              last.close +
+              (liveQuote !== null &&
+              liveQuote.symbol === baseSymbol &&
+              liveQuote.ask > liveQuote.bid
+                ? liveQuote.ask - liveQuote.bid
+                : tick)
+            ).toPrecision(12),
+          ),
           ...(detectedTimeframe ? { timeframe: detectedTimeframe } : {}),
           ...(indicators !== null
             ? {
@@ -653,7 +671,14 @@ export default function App() {
       setSwingSource(null);
       executeAnalysis(nextMarket, nextBroker);
     },
-    [market, broker, activeBrokerId, liveEquityValue, executeAnalysis],
+    [
+      market,
+      broker,
+      activeBrokerId,
+      liveEquityValue,
+      executeAnalysis,
+      liveQuote,
+    ],
   );
 
   const handleConnectionChange = useCallback(

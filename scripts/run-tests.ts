@@ -1904,9 +1904,14 @@ test("489. handleCsvLoaded isi S/R sinkron sebelum analisa (readSrc)", () => {
 
 test("488. ask CSV dibulatkan: tanpa sisa float (readSrc)", () => {
   const app = readSrc("src/App.tsx");
+  assert(app.includes(").toPrecision(12),"), "ask belum dibulatkan");
   assert(
-    app.includes("ask: Number((last.close + tick).toPrecision(12))"),
-    "ask belum dibulatkan",
+    app.includes("liveQuote.symbol === baseSymbol"),
+    "spread live tidak dicek simbolnya",
+  );
+  assert(
+    app.includes("? liveQuote.ask - liveQuote.bid"),
+    "spread live tidak dipakai",
   );
   assert(!app.includes("ask: last.close + tick,"), "ask mentah masih ada");
   assert(
