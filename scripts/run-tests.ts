@@ -119,6 +119,7 @@ import { isBrokerPosition, parsePositionRow } from "../server/types/positions";
 import { PositionsLogReader } from "../server/services/positionsLogReader";
 import { marginFileTag, parseMarginCsv } from "../server/types/marginCsv";
 import { parseSwapLogCsv, swapLogLogin } from "../server/types/swapLogCsv";
+import { extractIdrAmount, parseHistoryCsv } from "../server/types/historyCsv";
 import { predictDailySwap } from "../src/lib/swapPrediction";
 import {
   ADVERSE_DRIFT_PCT,
@@ -1886,6 +1887,36 @@ test("503. saham .US OTB: swap persentase ÷360 (META.US data nyata, BABA.US)", 
     Math.abs(baba.swapCost - (100 * 110.89 * -0.032) / 360) < 1e-9,
     `baba=${baba.swapCost}`,
   );
+});
+
+test("504. parseHistoryCsv: setoran BALANCE (IDR di komentar) + deal BUY/SELL Finex", () => {
+  const header =
+    "DealTicket,PositionId,OrderTicket,ServerTime,Symbol,Type,Entry,Volume,Price,Commission,Swap,Profit,Fee,Magic,Comment,Login,Company,AccountCurrency";
+  const dep =
+    "106597010,0,0,2026.09.29 03:47:04,External,BALANCE,IN,0.00,0,0.00,0.00,11.11,0.00,0,D-DUIQR-2860357: IDR 200000.00,91811209,PT. Finex Bisnis Solusi Futures,USD";
+  const buy =
+    "106606849,108571917,108571917,2026.09.29 04:08:06,GBPUSD,BUY,IN,0.01,1.32483,-0.01,0.00,0.00,0.00,0,,91811209,PT. Finex Bisnis Solusi Futures,USD";
+  const out =
+    "106765702,108571917,108732639,2026.09.29 10:48:00,GBPUSD,SELL,OUT,0.01,1.32339,0.00,0.00,-1.44,0.00,0,[sl 1.32339],91811209,PT. Finex Bisnis Solusi Futures,USD";
+  const deals = parseHistoryCsv([header, dep, buy, out, ""].join("\r\n"));
+  assert(deals.length === 3, `deals=${deals.length}`);
+  assert(
+    deals[0].type === "BALANCE" &&
+      deals[0].profit === 11.11 &&
+      deals[0].idrAmount === 200000,
+    "setoran/IDR salah",
+  );
+  assert(
+    deals[1].commission === -0.01 && deals[1].idrAmount === null,
+    "komisi salah",
+  );
+  assert(
+    deals[2].entry === "OUT" &&
+      deals[2].profit === -1.44 &&
+      deals[2].positionId === "108571917",
+    "deal OUT salah",
+  );
+  assert(extractIdrAmount("tanpa nominal") === null, "IDR harus null");
 });
 
 test("502. predictDailySwap: INTEREST_CURRENT tahunan ÷360, DISABLED 0, mode lain null", () => {
