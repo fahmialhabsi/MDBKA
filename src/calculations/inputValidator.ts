@@ -39,7 +39,7 @@ function item(
 export function validateAnalysisInputs(
   market: MarketData,
   broker: BrokerSettings,
-  brokerId?: BrokerId
+  brokerId?: BrokerId,
 ): ValidationSummary {
   const errors: ValidationItem[] = [];
   const warnings: ValidationItem[] = [];
@@ -49,14 +49,14 @@ export function validateAnalysisInputs(
 
   // Satuan spread mengikuti profil instrumen:
   // forex dalam pip, indeks dalam index points.
-  const spreadPips =
-    profile.pipSize > 0 ? spread / profile.pipSize : spread;
+  const spreadPips = profile.pipSize > 0 ? spread / profile.pipSize : spread;
 
-  const maxRiskUsd =
-    broker.equity * (broker.riskPercent / 100);
+  const maxRiskUsd = broker.equity * (broker.riskPercent / 100);
 
   if (!market.symbol.trim()) {
-    errors.push(item("symbol", "Pilih simbol sebelum melakukan analisa.", "error"));
+    errors.push(
+      item("symbol", "Pilih simbol sebelum melakukan analisa.", "error"),
+    );
   } else if (profile.category === "unknown") {
     // Tahap 4C: simbol OTB terverifikasi diterima bila broker aktif OTB
     // (exact match, tanpa normalisasi). Jalur lain tidak berubah.
@@ -69,8 +69,8 @@ export function validateAnalysisInputs(
         item(
           "symbol",
           "Simbol belum dikenali. Pilih simbol dari daftar.",
-          "error"
-        )
+          "error",
+        ),
       );
     }
   }
@@ -90,33 +90,21 @@ export function validateAnalysisInputs(
   if (Number.isFinite(market.bid) && Number.isFinite(market.ask)) {
     if (market.ask <= market.bid) {
       errors.push(
-        item(
-          "spread",
-          "Ask harus lebih besar daripada Bid.",
-          "error"
-        )
+        item("spread", "Ask harus lebih besar daripada Bid.", "error"),
       );
     }
 
     if (spreadPips < 0) {
-      errors.push(
-        item(
-          "spread",
-          "Spread tidak boleh negatif.",
-          "error"
-        )
-      );
+      errors.push(item("spread", "Spread tidak boleh negatif.", "error"));
     } else if (
-      profile.category === "forex"
-        ? spreadPips > 5
-        : spreadPips > 50
+      profile.category === "forex" ? spreadPips > 5 : spreadPips > 50
     ) {
       warnings.push(
         item(
           "spread",
           `Spread cukup besar: ${spreadPips.toFixed(1)} ${profile.spreadLabel}.`,
-          "warning"
-        )
+          "warning",
+        ),
       );
     }
   }
@@ -140,7 +128,7 @@ export function validateAnalysisInputs(
     market.high < market.low
   ) {
     errors.push(
-      item("high-low", "High tidak boleh lebih rendah daripada Low.", "error")
+      item("high-low", "High tidak boleh lebih rendah daripada Low.", "error"),
     );
   }
 
@@ -154,8 +142,8 @@ export function validateAnalysisInputs(
       item(
         "high",
         "High tidak boleh lebih rendah daripada Open atau Close.",
-        "error"
-      )
+        "error",
+      ),
     );
   }
 
@@ -169,50 +157,32 @@ export function validateAnalysisInputs(
       item(
         "low",
         "Low tidak boleh lebih tinggi daripada Open atau Close.",
-        "error"
-      )
+        "error",
+      ),
     );
   }
 
   if (!Number.isFinite(market.rsi) || market.rsi < 0 || market.rsi > 100) {
-    errors.push(
-      item(
-        "rsi",
-        "RSI harus berada antara 0 sampai 100.",
-        "error"
-      )
-    );
+    errors.push(item("rsi", "RSI harus berada antara 0 sampai 100.", "error"));
   }
 
   if (!Number.isFinite(market.ma50) || market.ma50 <= 0) {
-    errors.push(
-      item("ma50", "MA50 wajib diisi dengan angka valid.", "error")
-    );
+    errors.push(item("ma50", "MA50 wajib diisi dengan angka valid.", "error"));
   }
 
   if (!Number.isFinite(market.atr) || market.atr <= 0) {
-    errors.push(
-      item("atr", "ATR harus lebih besar dari 0.", "error")
-    );
+    errors.push(item("atr", "ATR harus lebih besar dari 0.", "error"));
   }
 
   if (!Number.isFinite(market.support) || market.support <= 0) {
     errors.push(
-      item(
-        "support",
-        "Support wajib diisi dengan angka valid.",
-        "error"
-      )
+      item("support", "Support wajib diisi dengan angka valid.", "error"),
     );
   }
 
   if (!Number.isFinite(market.resistance) || market.resistance <= 0) {
     errors.push(
-      item(
-        "resistance",
-        "Resistance wajib diisi dengan angka valid.",
-        "error"
-      )
+      item("resistance", "Resistance wajib diisi dengan angka valid.", "error"),
     );
   }
 
@@ -225,8 +195,8 @@ export function validateAnalysisInputs(
       item(
         "support-resistance",
         "Support harus lebih rendah daripada resistance.",
-        "error"
-      )
+        "error",
+      ),
     );
   }
 
@@ -239,8 +209,8 @@ export function validateAnalysisInputs(
       item(
         "support",
         "Close berada di bawah support yang dimasukkan. Periksa kembali level support.",
-        "warning"
-      )
+        "warning",
+      ),
     );
   }
 
@@ -253,19 +223,13 @@ export function validateAnalysisInputs(
       item(
         "resistance",
         "Close berada di atas resistance yang dimasukkan. Periksa kembali level resistance.",
-        "warning"
-      )
+        "warning",
+      ),
     );
   }
 
   if (!Number.isFinite(broker.equity) || broker.equity <= 0) {
-    errors.push(
-      item(
-        "equity",
-        "Equity harus lebih besar dari 0.",
-        "error"
-      )
-    );
+    errors.push(item("equity", "Equity harus lebih besar dari 0.", "error"));
   }
 
   if (
@@ -277,8 +241,8 @@ export function validateAnalysisInputs(
       item(
         "riskPercent",
         "Risiko maksimum harus lebih besar dari 0 dan tidak lebih dari 100%.",
-        "error"
-      )
+        "error",
+      ),
     );
   }
 
@@ -287,18 +251,14 @@ export function validateAnalysisInputs(
       item(
         "pointValue",
         "Nilai point broker harus lebih besar dari 0.",
-        "error"
-      )
+        "error",
+      ),
     );
   }
 
   if (!Number.isFinite(broker.minLot) || broker.minLot <= 0) {
     errors.push(
-      item(
-        "minLot",
-        "Minimum lot broker harus lebih besar dari 0.",
-        "error"
-      )
+      item("minLot", "Minimum lot broker harus lebih besar dari 0.", "error"),
     );
   }
 
@@ -320,19 +280,15 @@ export function validateAnalysisInputs(
           "minLot",
           `Minimum lot ${broker.minLot} di bawah minimum ` +
             `OrbiTraderBerjangka (${otbMinimum} lot). Sesuaikan sebelum order.`,
-          "warning"
-        )
+          "warning",
+        ),
       );
     }
   }
 
   if (!Number.isFinite(broker.lotStep) || broker.lotStep <= 0) {
     errors.push(
-      item(
-        "lotStep",
-        "Lot step broker harus lebih besar dari 0.",
-        "error"
-      )
+      item("lotStep", "Lot step broker harus lebih besar dari 0.", "error"),
     );
   }
 
@@ -345,8 +301,8 @@ export function validateAnalysisInputs(
       item(
         "lotStep",
         "Lot step lebih besar daripada minimum lot. Pastikan sesuai spesifikasi broker.",
-        "warning"
-      )
+        "warning",
+      ),
     );
   }
 
@@ -355,19 +311,13 @@ export function validateAnalysisInputs(
       item(
         "contractSize",
         "Contract size broker harus lebih besar dari 0. Verifikasi dari broker.",
-        "error"
-      )
+        "error",
+      ),
     );
   }
 
   if (!Number.isFinite(broker.commission) || broker.commission < 0) {
-    errors.push(
-      item(
-        "commission",
-        "Komisi tidak boleh negatif.",
-        "error"
-      )
-    );
+    errors.push(item("commission", "Komisi tidak boleh negatif.", "error"));
   }
 
   // Tahap 5B: info non-blokir bila komisi menyimpang dari spesifikasi
@@ -380,67 +330,52 @@ export function validateAnalysisInputs(
     broker.commission >= 0 &&
     isOtbSymbolVerified(market.symbol)
   ) {
-    const otbCommission =
-      getOtbInstrumentProfile(market.symbol)?.commission?.pricePerLot;
+    const otbCommission = getOtbInstrumentProfile(market.symbol)?.commission
+      ?.pricePerLot;
 
-    if (
-      otbCommission !== undefined &&
-      broker.commission !== otbCommission
-    ) {
+    if (otbCommission !== undefined && broker.commission !== otbCommission) {
       warnings.push(
         item(
           "commission",
           `Komisi ${broker.commission} berbeda dari spesifikasi ` +
             `OrbiTraderBerjangka (${otbCommission} USD/lot). ` +
             `Pastikan sesuai akun sebelum order.`,
-          "warning"
-        )
+          "warning",
+        ),
       );
     }
   }
 
   if (!Number.isFinite(broker.slippage) || broker.slippage < 0) {
-    errors.push(
-      item(
-        "slippage",
-        "Slippage tidak boleh negatif.",
-        "error"
-      )
-    );
+    errors.push(item("slippage", "Slippage tidak boleh negatif.", "error"));
   }
 
   if (!Number.isFinite(broker.buffer) || broker.buffer < 0) {
-    errors.push(
-      item(
-        "buffer",
-        "Buffer tidak boleh negatif.",
-        "error"
-      )
-    );
+    errors.push(item("buffer", "Buffer tidak boleh negatif.", "error"));
   }
 
   if (!Number.isFinite(broker.atrMultiplier) || broker.atrMultiplier <= 0) {
     errors.push(
-      item(
-        "atrMultiplier",
-        "Pengali ATR harus lebih besar dari 0.",
-        "error"
-      )
+      item("atrMultiplier", "Pengali ATR harus lebih besar dari 0.", "error"),
     );
   }
 
   if (!Number.isFinite(broker.targetRR) || broker.targetRR <= 0) {
     errors.push(
-      item(
-        "targetRR",
-        "Target RR harus lebih besar dari 0.",
-        "error"
-      )
+      item("targetRR", "Target RR harus lebih besar dari 0.", "error"),
     );
   }
 
-  const riskDistance =
-    market.atr * broker.atrMultiplier;
+  // Jarak SL terburuk agar selaras engine (arah belum diketahui):
+  // ATR vs SL struktur BELI (ask→support−buffer) / JUAL (resistance+buffer→bid).
+  const structureDistances = [
+    market.support > 0 ? market.ask - (market.support - broker.buffer) : 0,
+    market.resistance > 0 ? market.resistance + broker.buffer - market.bid : 0,
+  ].filter((value) => Number.isFinite(value) && value > 0);
+  const riskDistance = Math.max(
+    market.atr * broker.atrMultiplier,
+    ...structureDistances,
+  );
 
   const minimumLotRiskUsd =
     Number.isFinite(riskDistance) &&
@@ -456,8 +391,7 @@ export function validateAnalysisInputs(
   // Equity hanya dapat dipakai sebagai pembanding bila finite dan > 0.
   // NaN/0/negatif/Infinity membuat persen null agar pesan "belum dapat
   // dibandingkan" yang tampil, bukan undefined%/NaN%/Infinity%.
-  const equityUsable =
-    Number.isFinite(broker.equity) && broker.equity > 0;
+  const equityUsable = Number.isFinite(broker.equity) && broker.equity > 0;
 
   const minimumLotRiskPercent =
     minimumLotRiskUsd !== null && equityUsable
@@ -486,7 +420,7 @@ export function validateAnalysisInputs(
     spreadPips,
     maxRiskUsd,
     minimumLotRiskUsd,
-    minimumLotRiskPercent
+    minimumLotRiskPercent,
   };
 
   traceOcrStage("validate", {

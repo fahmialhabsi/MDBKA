@@ -1856,6 +1856,20 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
 });
 
+test("491. validator risiko min. lot pakai jarak terburuk ATR vs SL struktur (readSrc)", () => {
+  const src = readSrc("src/calculations/inputValidator.ts");
+  assert(src.includes("const structureDistances = ["), "jarak struktur hilang");
+  assert(
+    src.includes("market.ask - (market.support - broker.buffer)"),
+    "sisi BELI hilang",
+  );
+  assert(
+    src.includes("market.resistance + broker.buffer - market.bid"),
+    "sisi JUAL hilang",
+  );
+  assert(src.includes("...structureDistances,"), "max tidak memakai struktur");
+});
+
 test("490. pointValue OTB = contractSize: BABA.US 100 (cocok MT5 0,1 lot SL 5,97 ≈ $58)", () => {
   const baba = applyBrokerPreset(
     makeEmptyBroker(),
