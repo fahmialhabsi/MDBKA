@@ -117,6 +117,7 @@ import {
 import { FX_CACHE_TTL_MS, isFxCacheFresh } from "../server/routes/fxRoutes";
 import { isBrokerPosition, parsePositionRow } from "../server/types/positions";
 import { PositionsLogReader } from "../server/services/positionsLogReader";
+import { marginFileTag, parseMarginCsv } from "../server/types/marginCsv";
 import {
   ADVERSE_DRIFT_PCT,
   MARGIN_GUARD_PCT,
@@ -1793,6 +1794,24 @@ test("481. checkMarginCap: BABA dipangkas, #AAPL diblokir, data kosong jujur", (
   // Data margin kosong: lot tidak diubah, warning jujur.
   const none = checkMarginCap({ suggestedLot: 0.5, minLot: 0.1, lotStep: 0.1, marginPerLot: null, freeMargin: 100 });
   assert(none.cappedLot === 0.5 && !none.blocked && none.warning !== null, "fallback salah");
+});
+
+test("482. parseMarginCsv: format ExportMarginMDBKA + nilai -1 jadi null", () => {
+  const csv =
+    "Symbol,Ask,Bid,Margin_Buy_1Lot,Margin_Sell_1Lot,Account_Leverage,Account_Currency,Exported\r\n" +
+    "BABA.US,110.89,110.70,2217.80,2214.00,100,USD,2026.10.06 09:40:04\r\n" +
+    "#AAPL,332.91,332.69,13.32,13.31,500,USD,2026.10.06 10:41:00\r\n" +
+    "MATI,0,0,-1.00,-1.00,100,USD,2026.10.06 10:41:00\r\n";
+  const m = parseMarginCsv(csv);
+  assert(m.size === 3, `size=${m.size}`);
+  assert(m.get("BABA.US")?.marginBuy === 2217.8, "BABA buy salah");
+  assert(m.get("#AAPL")?.leverage === 500, "leverage #AAPL salah");
+  assert(m.get("MATI")?.marginBuy === null, "-1 harus null");
+  assert(marginFileTag("finex") === "Finex", "tag Finex salah");
+  assert(marginFileTag("orbitraderberjangka") === "OTB", "tag OTB salah");
+  assert(marginFileTag("xyz") === null, "broker asing lolos");
+  const route = readSrc("server/routes/marginRoutes.ts");
+  assert(route.includes("parseMarginCsv") && route.includes("404"), "route tak pakai parser/404");
 });
 
 /* ---------------- Diagnosis end-to-end: TEST 121-138 ---------------- */
