@@ -235,3 +235,59 @@ export function applyKursRules(
   });
   return { entries: out, updated };
 }
+
+function csvCell(value: string | number | null): string {
+  const text = value === null ? "" : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+/** CSV jurnal untuk diunduh/dibuka di Excel (BOM UTF-8 + CRLF). */
+export function entriesToCsv(entries: readonly JurnalEntry[]): string {
+  const header = [
+    "DealTicket",
+    "Waktu",
+    "Simbol",
+    "Tipe",
+    "Entry",
+    "Lot",
+    "Harga",
+    "Profit USD",
+    "Swap USD",
+    "Komisi USD",
+    "Fee USD",
+    "Netto USD",
+    "Kurs IDR",
+    "Sumber Kurs",
+    "Netto IDR",
+    "Nominal IDR (setoran)",
+    "Catatan",
+  ];
+  const lines = [header.map(csvCell).join(",")];
+  for (const e of entries) {
+    const net = isTradeDeal(e) ? r2(dealNettoUsd(e)) : null;
+    lines.push(
+      [
+        e.dealTicket,
+        e.serverTime,
+        e.symbol,
+        e.type,
+        e.entry,
+        e.volume,
+        e.price,
+        e.profit,
+        e.swap,
+        e.commission,
+        e.fee,
+        net,
+        e.kursIdr,
+        e.kursSumber,
+        net !== null && e.kursIdr !== null ? Math.round(net * e.kursIdr) : null,
+        e.idrAmount,
+        e.catatan,
+      ]
+        .map(csvCell)
+        .join(","),
+    );
+  }
+  return "\uFEFF" + lines.join("\r\n") + "\r\n";
+}

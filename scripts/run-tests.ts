@@ -122,11 +122,13 @@ import { parseSwapLogCsv, swapLogLogin } from "../server/types/swapLogCsv";
 import { extractIdrAmount, parseHistoryCsv } from "../server/types/historyCsv";
 import {
   applyKursRules,
+  entriesToCsv,
   mergeDeals,
   parseKursText,
   summarizeByYear,
   updateEntry,
 } from "../server/types/jurnalPajak";
+import { createJurnalPajakStore } from "../server/services/jurnalPajakStore";
 import { predictDailySwap } from "../src/lib/swapPrediction";
 import {
   ADVERSE_DRIFT_PCT,
@@ -2014,6 +2016,45 @@ test("506. kurs pajak tempel: tanggal/rentang menimpa kurs per transaksi, baris 
   );
   assert(byId("3")?.kursIdr === 16700, "kurs rentang salah");
   assert(byId("4")?.kursIdr === null, "di luar rentang harus tetap null");
+});
+
+test("507. jurnalPajakStore: sinkron otomatis idempoten, kurs tempel & catatan tersimpan, CSV ekspor", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jurnal-"));
+  const header =
+    "DealTicket,PositionId,OrderTicket,ServerTime,Symbol,Type,Entry,Volume,Price,Commission,Swap,Profit,Fee,Magic,Comment,Login,Company,AccountCurrency";
+  const body = [
+    "1,0,0,2026.09.29 03:47:04,External,BALANCE,IN,0.00,0,0.00,0.00,11.11,0.00,0,D-1: IDR 200000.00,91811209,PT,USD",
+    "2,10,10,2026.09.29 04:08:06,GBPUSD,BUY,IN,0.01,1.32483,-0.01,0.00,0.00,0.00,0,,91811209,PT,USD",
+    "3,10,11,2026.09.29 10:48:00,GBPUSD,SELL,OUT,0.01,1.32339,0.00,0.00,-1.44,0.00,0,[sl 1.32339],91811209,PT,USD",
+  ];
+  const csvPath = path.join(dir, "MDBKA_History_91811209.csv");
+  const file = path.join(dir, "data", "jurnal.json");
+  const store = createJurnalPajakStore({ commonDir: dir, file, login: "91811209" });
+  assert(store.sync() === null, "tanpa CSV harus null");
+  fs.writeFileSync(csvPath, [header, ...body, ""].join("\r\n"), "utf8");
+  const s1 = store.sync();
+  assert(s1 !== null && s1.added === 3 && s1.total === 3, "sinkron pertama salah");
+  const s2 = store.sync();
+  assert(s2 !== null && s2.added === 0 && s2.total === 3, "sinkron kedua harus 0 baru");
+  const k = store.applyKursText("29/09/2026 16650\nngawur");
+  assert(k.updated === 3 && k.rejected.length === 1, `kurs updated=${k.updated}`);
+  assert(store.patch("3", { catatan: "tes" }) === true, "patch gagal");
+  assert(store.patch("999", { catatan: "x" }) === false, "tiket asing harus false");
+  fs.appendFileSync(
+    csvPath,
+    "4,11,11,2026.09.30 10:00:00,GBPUSD,BUY,IN,0.01,1.3,-0.01,0.00,0.00,0.00,0,,91811209,PT,USD\r\n",
+  );
+  const s3 = store.sync();
+  assert(s3 !== null && s3.added === 1 && s3.total === 4, "deal baru harus masuk");
+  const e3 = store.load().find((e) => e.dealTicket === "3");
+  assert(e3?.kursIdr === 16650 && e3.catatan === "tes", "kurs/catatan hilang setelah sinkron");
+  const csv = entriesToCsv(store.load());
+  assert(csv.charCodeAt(0) === 0xfeff && csv.slice(1).startsWith("DealTicket,"), "BOM/header CSV salah");
+  assert(csv.includes("-1.44") && csv.includes("tes"), "isi CSV salah");
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("502. predictDailySwap: INTEREST_CURRENT tahunan ÷360, DISABLED 0, mode lain null", () => {
