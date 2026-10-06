@@ -1856,6 +1856,17 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
 });
 
+test("495. spec32 + commissionForHolding: saham # Finex 0.1/lot, forex/indeks 1.0", () => {
+  assert(
+    getInstrumentSpec32("#AAPL")?.commission === 0.1,
+    "spec32 #AAPL harus 0.1",
+  );
+  assert(commissionForHolding("#AAPL", 2) === 0.2, "#AAPL 2 lot harus 0.2");
+  assert(commissionForHolding("#NVDA", 10) === 1, "#NVDA 10 lot harus 1.00");
+  assert(commissionForHolding("GBPUSD", 1) === 1, "forex Finex tetap 1.00");
+  assert(commissionForHolding("US100", 1) === 1, "indeks Finex tetap 1.00");
+});
+
 test("494. komisi Finex per kelas: saham # 0.1, forex/indeks 1.0 (Specification)", () => {
   for (const sym of ["#AAPL", "#NVDA", "#MMM"]) {
     const b = applyBrokerPreset(makeEmptyBroker(), sym);
@@ -5956,7 +5967,12 @@ test("359. semua specs32 VERIFIED + commission per broker (6G)", () => {
     assert(spec.symbol === symbol, `key/symbol beda: ${symbol}`);
     assert(spec.status === "VERIFIED", `${symbol} bukan VERIFIED`);
     assert(isSpec32Verified(symbol), `${symbol} helper verified gagal`);
-    const expected = spec.broker === "orbitraderberjangka" ? 33 : 1;
+    const expected =
+      spec.broker === "orbitraderberjangka"
+        ? 33
+        : symbol.startsWith("#")
+          ? 0.1
+          : 1;
     assert(
       spec.commission === expected,
       `${symbol} commission=${spec.commission} (expect ${expected})`,
@@ -6427,7 +6443,8 @@ test("389. wiring semua 150 simbol verified available (komisi per broker)", () =
     // Aturan komisi mengikuti field broker (bukan suffiks: OTB punya
     // simbol tanpa _ORB seperti CLU dan *.US sejak 6I).
     const spec = requireSpec32(s);
-    const expected = spec.broker === "orbitraderberjangka" ? 33 : 1;
+    const expected =
+      spec.broker === "orbitraderberjangka" ? 33 : s.startsWith("#") ? 0.1 : 1;
     assert(d.commission === expected, `${s} commission bukan ${expected}`);
     assert(isSpec32Available(s) === true, `${s} tidak available`);
   }
