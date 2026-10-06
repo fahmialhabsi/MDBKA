@@ -5,10 +5,7 @@ import {
   getInstrumentProfile,
   normalizeSymbol,
 } from "./instrumentConfig";
-import {
-  DEFAULT_BROKER_ID,
-  ORBITRADER_BROKER_ID,
-} from "./brokerRegistry";
+import { DEFAULT_BROKER_ID, ORBITRADER_BROKER_ID } from "./brokerRegistry";
 import { exactOtbSymbol } from "./brokerSymbols";
 import {
   calculateOtbTickValue,
@@ -59,7 +56,7 @@ const PRICE_SCALE_FIELDS: readonly ResetMarketField[] = [
  */
 export function createEmptyMarketForSymbol(
   symbol: string,
-  previous: MarketData
+  previous: MarketData,
 ): MarketData {
   if (previous.symbol === symbol) return previous;
 
@@ -86,7 +83,7 @@ export function createEmptyMarketForSymbol(
 /** True jika semua field harga/indikator sudah 0 untuk simbol tersebut. */
 export function isMarketEmptyForSymbol(
   market: MarketData,
-  symbol: string
+  symbol: string,
 ): boolean {
   if (market.symbol !== symbol) return false;
 
@@ -101,7 +98,7 @@ export function isMarketEmptyForSymbol(
  */
 export function filterOcrPricesForSymbol(
   data: Partial<MarketData>,
-  symbol: string
+  symbol: string,
 ): { kept: Partial<MarketData>; droppedCount: number } {
   const profile = getInstrumentProfile(symbol);
 
@@ -147,7 +144,7 @@ function isFiniteNumber(value: unknown): value is number {
  */
 export function mergeValidOcrMarketData(
   previous: MarketData,
-  ocrData: Partial<MarketData>
+  ocrData: Partial<MarketData>,
 ): MarketData {
   const incomingSym =
     ocrData.symbol !== undefined ? normalizeSymbol(ocrData.symbol) : "";
@@ -164,11 +161,7 @@ export function mergeValidOcrMarketData(
     // Hanya angka finite non-nol yang disalin. null/NaN/undefined/0
     // tidak boleh menghapus nilai valid (mis. S/R dari CSV), termasuk
     // pada jalur simbol unknown yang mem-bypass filter skala.
-    if (
-      typeof value !== "number" ||
-      !Number.isFinite(value) ||
-      value === 0
-    ) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value === 0) {
       continue;
     }
 
@@ -177,11 +170,7 @@ export function mergeValidOcrMarketData(
 
   if (isFiniteNumber(kept.cci)) merged.cci = kept.cci;
 
-  if (
-    isFiniteNumber(kept.rsi) &&
-    kept.rsi >= 0 &&
-    kept.rsi <= 100
-  ) {
+  if (isFiniteNumber(kept.rsi) && kept.rsi >= 0 && kept.rsi <= 100) {
     merged.rsi = kept.rsi;
   }
 
@@ -225,11 +214,7 @@ export function mergeValidOcrMarketData(
  * sudah ada (selaras dengan validator: S/R wajib finite dan > 0).
  */
 function isUsableLevel(value: unknown): value is number {
-  return (
-    typeof value === "number" &&
-    Number.isFinite(value) &&
-    value > 0
-  );
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 /**
@@ -241,11 +226,9 @@ function isUsableLevel(value: unknown): value is number {
 export function applySwingLevels(
   previous: MarketData,
   support: number | null,
-  resistance: number | null
+  resistance: number | null,
 ): MarketData {
-  const nextSupport = isUsableLevel(support)
-    ? support
-    : previous.support;
+  const nextSupport = isUsableLevel(support) ? support : previous.support;
   const nextResistance = isUsableLevel(resistance)
     ? resistance
     : previous.resistance;
@@ -303,12 +286,19 @@ export interface SwingApplyResult {
 export function applyCsvSwingLevels(
   previous: MarketData,
   input: CsvSwingLevelInput,
-  context: SwingApplyContext
+  context: SwingApplyContext,
 ): SwingApplyResult {
   const csvSymbol = normalizeSymbol(input.csvSymbol);
   const activeSymbol = normalizeSymbol(context.activeSymbol);
+  // Tahap 6I: nama persis dulu (#AAPL, BABA.US). normalizeSymbol("#AAPL")
+  // menghasilkan "" karena "#" di depan, jadi tidak boleh dipakai sendiri.
+  const rawCsv = input.csvSymbol.trim().toUpperCase();
+  const rawActive = context.activeSymbol.trim().toUpperCase();
+  const sameSymbol =
+    (rawCsv !== "" && rawCsv === rawActive) ||
+    (csvSymbol !== "" && csvSymbol === activeSymbol);
 
-  if (!csvSymbol || csvSymbol !== activeSymbol) {
+  if (!sameSymbol) {
     return {
       market: previous,
       applied: false,
@@ -348,7 +338,7 @@ export function applyCsvSwingLevels(
     };
   }
 
-  const profile = getInstrumentProfile(activeSymbol);
+  const profile = getInstrumentProfile(rawActive || activeSymbol);
 
   if (
     profile.category !== "unknown" &&
@@ -368,11 +358,7 @@ export function applyCsvSwingLevels(
     };
   }
 
-  const market = applySwingLevels(
-    previous,
-    input.support,
-    input.resistance
-  );
+  const market = applySwingLevels(previous, input.support, input.resistance);
 
   return {
     market,
@@ -424,7 +410,17 @@ function needsFill(value: number): boolean {
 export function applyBrokerPreset(
   previous: BrokerSettings,
   symbol: string,
-  brokerId: BrokerId = DEFAULT_BROKER_ID
+  brokerId: BrokerId = DEFAULT_BROKER_ID,
+  /**
+   * force=true (tombol "Gunakan preset"): field milik broker
+   * (pointValue/contractSize/commission/minLot/lotStep) SELALU ditulis
+   * dari spec terverifikasi, menimpa nilai basi lintas broker
+   * (mis. minLot 0.01 Finex nyangkut di OTB yang wajib 0.10).
+   * Field akun/strategi (equity/slippage/riskPercent/atrMultiplier/
+   * targetRR/buffer) tetap needsFill agar override manual aman.
+   * Default false: perilaku lama byte-identik (auto saat ganti simbol).
+   */
+  force: boolean = false,
 ): BrokerSettings {
   if (brokerId === ORBITRADER_BROKER_ID) {
     // Tahap 6D: 16 simbol OTB aktif via spec32 (data CSV MT5 real).
@@ -449,16 +445,19 @@ export function applyBrokerPreset(
       ...previous,
       pointValue: calculateOtbTickValue(otb),
       contractSize: otb.contractSize,
-      commission: needsFill(previous.commission)
-        ? spec32Defaults.commission
-        : previous.commission,
+      commission:
+        force || needsFill(previous.commission)
+          ? spec32Defaults.commission
+          : previous.commission,
       riskPercent: needsFill(previous.riskPercent)
         ? STRATEGY_DEFAULTS.riskPercent
         : previous.riskPercent,
-      minLot: needsFill(previous.minLot) ? otb.minVolume : previous.minLot,
-      lotStep: needsFill(previous.lotStep)
-        ? otb.volumeStep
-        : previous.lotStep,
+      minLot:
+        force || needsFill(previous.minLot) ? otb.minVolume : previous.minLot,
+      lotStep:
+        force || needsFill(previous.lotStep)
+          ? otb.volumeStep
+          : previous.lotStep,
       atrMultiplier: needsFill(previous.atrMultiplier)
         ? STRATEGY_DEFAULTS.atrMultiplier
         : previous.atrMultiplier,
@@ -476,19 +475,23 @@ export function applyBrokerPreset(
     contractSize: preset.contractSize,
     buffer: preset.defaultBuffer,
     // Tahap 6G: komisi Finex 1.00 USD/lot (CSV terminal); override manual
-    // dipertahankan (needsFill hanya mengisi nilai kosong/invalid).
-    commission: needsFill(previous.commission)
-      ? FINEX_DEFAULT_COMMISSION
-      : previous.commission,
+    // dipertahankan (needsFill hanya mengisi nilai kosong/invalid),
+    // kecuali force via tombol preset.
+    commission:
+      force || needsFill(previous.commission)
+        ? FINEX_DEFAULT_COMMISSION
+        : previous.commission,
     riskPercent: needsFill(previous.riskPercent)
       ? STRATEGY_DEFAULTS.riskPercent
       : previous.riskPercent,
-    minLot: needsFill(previous.minLot)
-      ? STRATEGY_DEFAULTS.minLot
-      : previous.minLot,
-    lotStep: needsFill(previous.lotStep)
-      ? STRATEGY_DEFAULTS.lotStep
-      : previous.lotStep,
+    minLot:
+      force || needsFill(previous.minLot)
+        ? STRATEGY_DEFAULTS.minLot
+        : previous.minLot,
+    lotStep:
+      force || needsFill(previous.lotStep)
+        ? STRATEGY_DEFAULTS.lotStep
+        : previous.lotStep,
     atrMultiplier: needsFill(previous.atrMultiplier)
       ? STRATEGY_DEFAULTS.atrMultiplier
       : previous.atrMultiplier,
@@ -513,7 +516,12 @@ export function parseMarketInput(value: string): number | null {
   const trimmed = value.trim().replace(",", ".");
 
   if (trimmed === "") return 0;
-  if (trimmed === "-" || trimmed === "+" || trimmed === "." || trimmed === "-.") {
+  if (
+    trimmed === "-" ||
+    trimmed === "+" ||
+    trimmed === "." ||
+    trimmed === "-."
+  ) {
     return null;
   }
 

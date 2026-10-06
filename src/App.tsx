@@ -10,20 +10,17 @@ import {
   Activity,
   BarChart3,
   Briefcase,
-  Calculator,
-  FileCheck2,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 
-import ScreenshotDropzone from "./components/screenshot/ScreenshotDropzone";
-import OcrExtractor from "./components/extraction/OcrExtractor";
-import ExtractedDataForm from "./components/extraction/ExtractedDataForm";
 import BrokerSettingsForm from "./components/analysis/BrokerSettingsForm";
+import ExtractedDataForm from "./components/extraction/ExtractedDataForm";
 import ValidationSummaryCard from "./components/analysis/ValidationSummaryCard";
 import SwingLevelsForm from "./components/analysis/SwingLevelsForm";
 import AnalysisResult from "./components/result/AnalysisResult";
-import { LiveEquity } from "./components/result/LiveEquity";
+import { LiveEquityView } from "./components/result/LiveEquity";
+import { useEquityStream } from "./hooks/useEquityStream";
 import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
 import {
   createWorkspaceStore,
@@ -36,18 +33,23 @@ import dashboard from "./styles/dashboard.module.css";
 import { analyzeMarket } from "./calculations/decisionEngine";
 import { detectScaleMismatch } from "./calculations/scaleValidator";
 import { validateAnalysisInputs } from "./calculations/inputValidator";
-import { getInstrumentProfile, normalizeSymbol } from "./lib/instrumentConfig";
+import {
+  getInstrumentProfile,
+  SUPPORTED_SYMBOLS,
+} from "./lib/instrumentConfig";
 import { parseCsvCandles } from "./lib/csvCandleParser";
 import { computeIndicators } from "./calculations/indicators";
 import { traceOcrStage } from "./lib/debugTrace";
 import {
-  DEFAULT_BROKER_ID, ORBITRADER_BROKER_ID,
+  DEFAULT_BROKER_ID,
+  ORBITRADER_BROKER_ID,
   getBrokerProfile,
 } from "./lib/brokerRegistry";
 import {
   canonicalSymbolForBroker,
   getOtbDetectedNotice,
   hasOtbPresetForSymbol,
+  OTB_ALL_SYMBOLS,
 } from "./lib/brokerSymbols";
 
 import { getOtbInstrumentProfile } from "./lib/otbInstrumentConfig";
@@ -58,8 +60,6 @@ import {
   applyBrokerPreset,
   applyCsvSwingLevels,
   createEmptyMarketForSymbol,
-  filterOcrPricesForSymbol,
-  mergeValidOcrMarketData,
   RESET_MARKET_FIELDS,
   type CsvSwingLevelMeta,
 } from "./lib/marketReset";
@@ -69,7 +69,8 @@ import {
 } from "./lib/validationView";
 import {
   fetchBackendRates,
-  fetchECBRates, convertToUSD,
+  fetchECBRates,
+  convertToUSD,
   type ExchangeRates,
 } from "./services/fxRateService";
 import { API_BASE_URL } from "./lib/apiBaseUrl";
@@ -160,16 +161,13 @@ export default function App() {
   const [swingCsv, setSwingCsv] = useState("");
   const [connectedCsvName, setConnectedCsvName] = useState("");
   const [csvResetKey, setCsvResetKey] = useState(0);
-  const [image, setImage] = useState<string | null>(null);
   const [market, setMarket] = useState<MarketData>(initialMarket);
   const [broker, setBroker] = useState<BrokerSettings>(initialBroker);
   // Tahap 3: satu-satunya sumber kebenaran broker aktif. Default Finex.
   const [activeBrokerId, setActiveBrokerId] =
     useState<BrokerId>(DEFAULT_BROKER_ID);
   const [brokerNotice, setBrokerNotice] = useState("");
-  const [rawOcr, setRawOcr] = useState("");
   const [symbolNotice, setSymbolNotice] = useState("");
-  const [ocrWarning, setOcrWarning] = useState("");
   const [swingSource, setSwingSource] = useState<string | null>(null);
   const [blockedReasons, setBlockedReasons] = useState<string[] | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -207,17 +205,92 @@ export default function App() {
     [market, broker, activeBrokerId],
   );
 
-  const analysis = useMemo(() => {
-    let effectiveBroker = broker;
-    if (activeBrokerId === ORBITRADER_BROKER_ID && fxRates !== null) {
-      const otb = getOtbInstrumentProfile(market.symbol);
-      if (otb !== null && otb.currencyProfit !== "USD") {
-        const usdPointValue = convertToUSD(broker.pointValue, otb.currencyProfit, fxRates);
-        effectiveBroker = { ...broker, pointValue: usdPointValue };
+  // Satu-satunya langganan equity live di App: dipakai panel sidebar
+  // SEKALIGUS auto-analisa (tanpa langganan ganda di LiveEquityView).
+  const equityStream = useEquityStream(5000, activeBrokerId);
+  const liveEquityValue =
+    equityStream.equity !== null &&
+    Number.isFinite(equityStream.equity.equity) &&
+    equityStream.equity.equity > 0
+      ? equityStream.equity.equity
+      : null;
+  // Nilai live terakhir yang diterapkan otomatis. Melindungi edit manual:
+  // live hanya menimpa bila field kosong ATAU masih sama dengan nilai
+  // live yang diterapkan sebelumnya (bukan ketikan pengguna).
+  const appliedLiveEquityRef = useRef<number | null>(null);
+
+  // Inti analisa yang bisa dipanggil dengan nilai eksplisit (bukan state
+  // yang belum ter-commit) — dipakai alur otomatis setelah CSV masuk.
+  const executeAnalysis = useCallback(
+    (marketData: MarketData, brokerData: BrokerSettings) => {
+      traceOcrStage("analyze-input", {
+        bid: marketData.bid,
+        ask: marketData.ask,
+        ma50: marketData.ma50,
+        cci: marketData.cci,
+        support: marketData.support,
+        resistance: marketData.resistance,
+        equity: brokerData.equity,
+      });
+
+      const nextValidation = validateAnalysisInputs(
+        marketData,
+        brokerData,
+        activeBrokerId,
+      );
+      const nextScale = detectScaleMismatch(marketData);
+      const reasons = buildBlockedReasons({
+        market: marketData,
+        broker: brokerData,
+        validation: nextValidation,
+        scaleIssues: nextScale,
+      });
+
+      if (reasons) {
+        setBlockedReasons(reasons);
+        setConfirmed(false);
+        setResult(null);
+        return;
       }
-    }
-    return analyzeMarket(market, effectiveBroker);
-  }, [market, broker, activeBrokerId, fxRates]);
+
+      let effectiveBroker = brokerData;
+      if (activeBrokerId === ORBITRADER_BROKER_ID && fxRates !== null) {
+        const otb = getOtbInstrumentProfile(marketData.symbol);
+        if (otb !== null && otb.currencyProfit !== "USD") {
+          const usdPointValue = convertToUSD(
+            brokerData.pointValue,
+            otb.currencyProfit,
+            fxRates,
+          );
+          effectiveBroker = { ...brokerData, pointValue: usdPointValue };
+        }
+      }
+
+      setBlockedReasons(null);
+      setConfirmed(true);
+      setResult(analyzeMarket(marketData, effectiveBroker));
+    },
+    [activeBrokerId, fxRates],
+  );
+
+  // Auto susulan: CSV sudah masuk tapi equity live belum tiba saat itu
+  // (hasil masih kosong) → terapkan otomatis begitu live tersedia.
+  // Hanya saat belum ada hasil sukses; ketikan manual dilindungi via
+  // appliedLiveEquityRef; guard key mencegah loop.
+  const autoEquityKeyRef = useRef("");
+  useEffect(() => {
+    if (liveEquityValue === null || result !== null) return;
+    const empty = !Number.isFinite(broker.equity) || broker.equity <= 0;
+    const followsLive = broker.equity === appliedLiveEquityRef.current;
+    if (!empty && !followsLive) return;
+    const key = `${liveEquityValue}|${market.symbol}|${market.close}`;
+    if (autoEquityKeyRef.current === key) return;
+    autoEquityKeyRef.current = key;
+    appliedLiveEquityRef.current = liveEquityValue;
+    const nextBroker = { ...broker, equity: liveEquityValue };
+    setBroker(nextBroker);
+    executeAnalysis(market, nextBroker);
+  }, [liveEquityValue, result, market, broker, executeAnalysis]);
 
   const isMarketEmpty = useMemo(
     () => RESET_MARKET_FIELDS.every((field) => market[field] === 0),
@@ -248,10 +321,7 @@ export default function App() {
 
   // Tahap 5A Step 1: saran pindah broker (display only). Tombol memakai
   // handleBrokerChange agar cleanup (CSV/hasil/notice) tetap jalan.
-  const otbDetectedNotice = getOtbDetectedNotice(
-    activeBrokerId,
-    market.symbol,
-  );
+  const otbDetectedNotice = getOtbDetectedNotice(activeBrokerId, market.symbol);
 
   // Status preset OTB via satu helper (suffiks _ORB terjaga).
   const otbPresetMissingNotice =
@@ -262,6 +332,35 @@ export default function App() {
         `Verifikasi simbol dan parameter broker dari Specification ` +
         `OrbiTraderBerjangka terlebih dahulu.`
       : null;
+
+  // Guard salah file: nama CSV mengandung simbol lain (mis. upload
+  // MDBKA_EURAUD_ORB_H1.csv saat simbol aktif EURCAD_ORB). Harga CSV
+  // akan mengisi market simbol aktif → analisa memakai data simbol
+  // lain. Display-only, tidak memblokir.
+  const csvSymbolMismatchNotice = useMemo(() => {
+    if (connectedCsvName.trim() === "") return null;
+    const upper = connectedCsvName.toUpperCase();
+    // Kecocokan terpanjang dulu (sama dengan handleCsvLoaded).
+    const longestFirst = (list: readonly string[]) =>
+      [...list].sort((a, b) => b.length - a.length);
+    const token =
+      longestFirst(OTB_ALL_SYMBOLS).find((candidate) =>
+        upper.includes(candidate),
+      ) ??
+      longestFirst(SUPPORTED_SYMBOLS).find((candidate) =>
+        upper.includes(candidate),
+      );
+    if (token === undefined) return null;
+    const active = canonicalSymbolForBroker(market.symbol, activeBrokerId);
+    if (token !== active) {
+      return (
+        `File CSV ${connectedCsvName} berisi data ${token}, tapi simbol ` +
+        `aktif ${active}. Upload file ${active} agar analisa tidak memakai ` +
+        `data simbol lain.`
+      );
+    }
+    return null;
+  }, [connectedCsvName, market.symbol, activeBrokerId]);
 
   // Menyesuaikan parameter broker ketika simbol atau broker aktif diganti.
   // CSV instrumen lama tidak boleh dipakai untuk simbol baru.
@@ -299,9 +398,6 @@ export default function App() {
         setResult(saved.result);
         setConfirmed(saved.confirmed);
         setBlockedReasons(saved.blockedReasons);
-        setImage(saved.image);
-        setRawOcr(saved.rawOcr);
-        setOcrWarning("");
         setSymbolNotice("");
         return;
       }
@@ -314,7 +410,6 @@ export default function App() {
     setSwingCsv("");
     setConnectedCsvName("");
     setCsvResetKey((previous) => previous + 1);
-    setOcrWarning("");
     setSwingSource(null);
     clearAnalysisOutput();
 
@@ -327,23 +422,17 @@ export default function App() {
   // Tahap 4C: kanonikalisasi per broker agar simbol OTB exact tersimpan.
   const handleSymbolChange = useCallback(
     (nextSymbol: string) => {
-      const normalized = canonicalSymbolForBroker(
-        nextSymbol,
-        activeBrokerId,
-      );
+      const normalized = canonicalSymbolForBroker(nextSymbol, activeBrokerId);
 
       if (!normalized) return;
 
       if (
-        canonicalSymbolForBroker(market.symbol, activeBrokerId) ===
-        normalized
+        canonicalSymbolForBroker(market.symbol, activeBrokerId) === normalized
       ) {
         return;
       }
 
-      setMarket((previous) =>
-        createEmptyMarketForSymbol(normalized, previous),
-      );
+      setMarket((previous) => createEmptyMarketForSymbol(normalized, previous));
       setSymbolNotice(
         `Simbol berubah menjadi ${normalized}. Masukkan atau impor data ${normalized} dari chart MT5.`,
       );
@@ -351,67 +440,12 @@ export default function App() {
     [market.symbol, activeBrokerId],
   );
 
-  const handleExtracted = useCallback(
-    (data: Partial<MarketData>, rawText: string) => {
-      const currentSym = normalizeSymbol(market.symbol);
-      const requestedSym =
-        data.symbol !== undefined ? normalizeSymbol(data.symbol) : "";
-
-      // Pilihan manual pengguna menang; usulan OCR dipakai hanya bila
-      // belum ada pilihan simbol.
-      const finalSym = currentSym || requestedSym || "";
-
-      const { kept, droppedCount } = filterOcrPricesForSymbol(data, finalSym);
-
-      // Merge aman: OCR parsial tidak boleh menghapus nilai valid
-      // (mis. S/R dari CSV) dengan field kosong.
-      setMarket((previous) => {
-        const nextMarket = mergeValidOcrMarketData(previous, data);
-
-        traceOcrStage("handle-extracted", {
-          activeSymbol: finalSym,
-          receivedFields: Object.keys(data),
-          droppedCount,
-          previousMarket: previous,
-          nextMarket,
-        });
-
-        return nextMarket;
-      });
-
-      if (droppedCount > 0 && finalSym) {
-        setOcrWarning(
-          `Data OCR tidak sesuai dengan simbol ${finalSym}. ` +
-            `${droppedCount} harga di luar skala diabaikan; periksa manual.`,
-        );
-      } else {
-        setOcrWarning("");
-      }
-
-      // OCR yang cocok dengan simbol aktif menutup notice pergantian simbol.
-      const hasNewData =
-        RESET_MARKET_FIELDS.some((field) => kept[field] !== undefined) ||
-        kept.timeframe !== undefined;
-
-      if (
-        finalSym &&
-        requestedSym === finalSym &&
-        currentSym === finalSym &&
-        hasNewData
-      ) {
-        setSymbolNotice("");
-      }
-
-      setRawOcr(rawText);
-      clearAnalysisOutput();
-    },
-    [market.symbol, clearAnalysisOutput],
-  );
-
-  // Propagasi S/R CSV memakai state terbaru (functional update) agar tidak
-  // tertimpa OCR, efek simbol, reset CSV, atau render ulang. Level
-  // divalidasi terhadap simbol + broker aktif; penolakan tercatat di
-  // diagnostik DEV tanpa mengubah state.
+  // Propagasi S/R CSV + analisa ulang otomatis (bukan clear): S/R adalah
+  // input analisa, sehingga level baru = hasil baru. Equity mengikuti live
+  // bila kosong (ketikan manual dilindungi via appliedLiveEquityRef).
+  // applyCsvSwingLevels mengembalikan referensi market yang SAMA bila tak
+  // ada perubahan → bail out dini tanpa setState, sehingga tidak ada loop
+  // deteksi berulang walau identitas callback berubah.
   const handleDetectedLevels = useCallback(
     (
       support: number,
@@ -419,6 +453,8 @@ export default function App() {
       source?: string,
       meta?: CsvSwingLevelMeta,
     ) => {
+      const currentMarket = market;
+      const currentBroker = broker;
       traceOcrStage("detected-levels", {
         support,
         resistance,
@@ -426,70 +462,117 @@ export default function App() {
         csvSymbol: meta?.csvSymbol ?? null,
       });
 
-      setMarket((previous) => {
-        const activeSymbol = normalizeSymbol(previous.symbol);
-        const result = applyCsvSwingLevels(
-          previous,
-          {
-            support,
-            resistance,
-            csvSymbol: meta?.csvSymbol ?? "",
-            brokerId: meta?.brokerId,
-          },
-          { activeSymbol, activeBrokerId },
-        );
-
-        traceOcrStage("sr-propagation", {
-          activeSymbol,
+      // Nama mentah: normalizeSymbol("#AAPL") = "" (lihat applyCsvSwingLevels).
+      const activeSymbol = currentMarket.symbol.trim();
+      const applied = applyCsvSwingLevels(
+        currentMarket,
+        {
+          support,
+          resistance,
           csvSymbol: meta?.csvSymbol ?? "",
-          brokerId: activeBrokerId,
-          detectedSupport: support,
-          detectedResistance: resistance,
-          appliedSupport: result.appliedSupport,
-          appliedResistance: result.appliedResistance,
-          previousSupport: previous.support,
-          previousResistance: previous.resistance,
-          rejectionReason: result.rejectionReason,
-          source: source ?? null,
-        });
+          brokerId: meta?.brokerId,
+        },
+        { activeSymbol, activeBrokerId },
+      );
 
-        return result.market;
+      traceOcrStage("sr-propagation", {
+        activeSymbol,
+        csvSymbol: meta?.csvSymbol ?? "",
+        brokerId: activeBrokerId,
+        detectedSupport: support,
+        detectedResistance: resistance,
+        appliedSupport: applied.appliedSupport,
+        appliedResistance: applied.appliedResistance,
+        previousSupport: currentMarket.support,
+        previousResistance: currentMarket.resistance,
+        rejectionReason: applied.rejectionReason,
+        source: source ?? null,
       });
+
+      setMarket(applied.market);
       setSwingSource(source ?? null);
 
-      clearAnalysisOutput();
+      // Level sudah ada (termasuk penolakan): tidak ada yang berubah,
+      // hentikan di sini agar tidak memicu render/analisa berulang.
+      if (applied.market === currentMarket) return;
+
+      let nextBroker = currentBroker;
+      if (
+        liveEquityValue !== null &&
+        (!Number.isFinite(nextBroker.equity) ||
+          nextBroker.equity <= 0 ||
+          nextBroker.equity === appliedLiveEquityRef.current)
+      ) {
+        if (nextBroker.equity !== liveEquityValue) {
+          nextBroker = { ...nextBroker, equity: liveEquityValue };
+        }
+        appliedLiveEquityRef.current = liveEquityValue;
+      }
+      setBroker(nextBroker);
+      executeAnalysis(applied.market, nextBroker);
     },
-    [activeBrokerId, clearAnalysisOutput],
+    [market, broker, activeBrokerId, liveEquityValue, executeAnalysis],
   );
 
-  const handleCsvLoaded = useCallback((text: string, fileName: string) => {
-    setSwingCsv(text);
-    setConnectedCsvName(fileName);
-    // Isi OHLC + Bid/Ask dari candle terakhir CSV (data nyata pengguna,
-    // bukan angka fiktif). S/R tetap via deteksi swing; indikator
-    // (MA50/CCI/RSI/MACD/ATR) via screenshot OCR atau input manual.
-    // Timeframe diambil dari nama file (mis. *_H1.csv) bila ada.
-    // Bid = close terakhir; Ask = close + 1 tick (spread minimal agar
-    // lolos guard ask > bid — WAJIB diverifikasi via Live Quotes/MT5,
-    // karena spread asli hanya diketahui dari quote berjalan).
-    const parsed = parseCsvCandles(text);
-    // Tahap NS: hitung indikator dari candle (MA50/RSI/CCI/ATR/MACD)
-    // agar alur TANPA screenshot tetap bisa dianalisa. Butuh 50+ candle;
-    // bila kurang, field indikator dibiarkan (validator yang menolak).
-    const indicators = computeIndicators(parsed.candles);
-    if (parsed.candles.length > 0) {
-      const last = parsed.candles[parsed.candles.length - 1];
-      const tfMatch =
-        /[_\-\s.](M1|M5|M15|M30|H1|H4|D1|W1|MN1)(?![A-Z0-9])/i.exec(
-          fileName,
+  // Alur utama (otomatis): CSV masuk → simbol mengikuti nama file →
+  // preset broker → equity live → analisa langsung jalan. Pengguna hanya
+  // mengunggah file; tanpa tombol Analisa Sekarang.
+  const handleCsvLoaded = useCallback(
+    (text: string, fileName: string) => {
+      // Simbol dari nama file (mis. MDBKA_EURCAD_ORB_H1.csv → EURCAD_ORB).
+      // OTB dicek dulu agar suffiks _ORB tidak terpangkas.
+      const upperName = fileName.toUpperCase();
+      // Kecocokan terpanjang dulu: cegah BA.US menangkap BABA.US,
+      // T.US menangkap WMT.US, #AA menangkap #AAPL, #MA menangkap #MAR.
+      const longestFirst = (list: readonly string[]) =>
+        [...list].sort((a, b) => b.length - a.length);
+      const fileToken =
+        longestFirst(OTB_ALL_SYMBOLS).find((candidate) =>
+          upperName.includes(candidate),
+        ) ??
+        longestFirst(SUPPORTED_SYMBOLS).find((candidate) =>
+          upperName.includes(candidate),
+        ) ??
+        null;
+      const currentCanonical = canonicalSymbolForBroker(
+        market.symbol,
+        activeBrokerId,
+      );
+      let baseSymbol = currentCanonical;
+      if (fileToken !== null) {
+        const canonicalToken = canonicalSymbolForBroker(
+          fileToken,
+          activeBrokerId,
         );
-      const detectedTimeframe = tfMatch
-        ? tfMatch[1].toUpperCase()
-        : null;
-      setMarket((previous) => {
-        const tick = tickSizeForSymbol(previous.symbol);
-        return {
-          ...previous,
+        const validForBroker =
+          activeBrokerId === ORBITRADER_BROKER_ID
+            ? (OTB_ALL_SYMBOLS as readonly string[]).includes(canonicalToken)
+            : canonicalToken !== "";
+        if (validForBroker) baseSymbol = canonicalToken;
+      }
+
+      const parsed = parseCsvCandles(text);
+      // Indikator (MA50/RSI/CCI/ATR/MACD) dihitung dari candle — butuh 50+
+      // candle; bila kurang, validator yang menolak (bukan angka fiktif).
+      const indicators = computeIndicators(parsed.candles);
+
+      // Bangun market berikutnya secara sinkron (bukan dari state yang
+      // belum ter-commit) agar auto-analisa memakai nilai yang sama
+      // persis dengan yang ditampilkan.
+      const emptyBase = createEmptyMarketForSymbol(baseSymbol, market);
+      const base: MarketData = { ...emptyBase, symbol: baseSymbol };
+      let nextMarket: MarketData = base;
+      if (parsed.candles.length > 0) {
+        const last = parsed.candles[parsed.candles.length - 1];
+        const tfMatch =
+          /[_\-\s.](M1|M5|M15|M30|H1|H4|D1|W1|MN1)(?![A-Z0-9])/i.exec(fileName);
+        const detectedTimeframe = tfMatch ? tfMatch[1].toUpperCase() : null;
+        // Bid = close terakhir; Ask = close + 1 tick (spread minimal agar
+        // lolos guard ask > bid — WAJIB diverifikasi via Live Quotes/MT5,
+        // karena spread asli hanya diketahui dari quote berjalan).
+        const tick = tickSizeForSymbol(baseSymbol);
+        nextMarket = {
+          ...base,
           open: last.open,
           high: last.high,
           low: last.low,
@@ -508,12 +591,39 @@ export default function App() {
               }
             : {}),
         };
-      });
-    }
-    setSymbolNotice("");
-    setSwingSource(null);
-    clearAnalysisOutput();
-  }, [clearAnalysisOutput]);
+      }
+
+      // Preset broker untuk simbol (non-force: override manual aman).
+      let nextBroker = applyBrokerPreset(broker, baseSymbol, activeBrokerId);
+      // Equity otomatis dari live: isi bila kosong, ikuti bila masih sama
+      // dengan nilai live sebelumnya (ketikan manual pengguna dilindungi).
+      if (
+        liveEquityValue !== null &&
+        (!Number.isFinite(nextBroker.equity) ||
+          nextBroker.equity <= 0 ||
+          nextBroker.equity === appliedLiveEquityRef.current)
+      ) {
+        if (nextBroker.equity !== liveEquityValue) {
+          nextBroker = { ...nextBroker, equity: liveEquityValue };
+        }
+        appliedLiveEquityRef.current = liveEquityValue;
+      }
+
+      setSwingCsv(text);
+      setConnectedCsvName(fileName);
+      setMarket(nextMarket);
+      setBroker(nextBroker);
+      lastSymbol.current = baseSymbol;
+      setSymbolNotice(
+        baseSymbol !== currentCanonical
+          ? `Simbol mengikuti file CSV: ${baseSymbol}. Hasil analisa berjalan otomatis.`
+          : "",
+      );
+      setSwingSource(null);
+      executeAnalysis(nextMarket, nextBroker);
+    },
+    [market, broker, activeBrokerId, liveEquityValue, executeAnalysis],
+  );
 
   const handleConnectionChange = useCallback(
     (fileName: string, connected: boolean) => {
@@ -528,6 +638,7 @@ export default function App() {
         previous,
         canonicalSymbolForBroker(market.symbol, activeBrokerId),
         activeBrokerId,
+        true,
       ),
     );
     clearAnalysisOutput();
@@ -553,8 +664,8 @@ export default function App() {
         result,
         confirmed,
         blockedReasons,
-        image,
-        rawOcr,
+        image: null,
+        rawOcr: "",
       });
       const store = workspacesRef.current;
       setSavedFlags({
@@ -566,11 +677,10 @@ export default function App() {
       setSwingCsv("");
       setConnectedCsvName("");
       setCsvResetKey((previous) => previous + 1);
-      setOcrWarning("");
       setBrokerNotice(
         nextBrokerId === "orbitraderberjangka"
           ? "Broker aktif: OrbiTraderBerjangka. Preset instrumen belum diaktifkan. Verifikasi simbol dan parameter broker dari Specification OrbiTraderBerjangka terlebih dahulu."
-          : "Broker aktif: Finex. Gunakan screenshot, CSV, dan parameter dari terminal Finex.",
+          : "Broker aktif: Finex. Gunakan CSV dan parameter dari terminal Finex.",
       );
       clearAnalysisOutput();
     },
@@ -584,53 +694,19 @@ export default function App() {
       result,
       confirmed,
       blockedReasons,
-      image,
-      rawOcr,
       clearAnalysisOutput,
     ],
   );
 
-  function runAnalysis() {
-    traceOcrStage("analyze-input", {
-      bid: market.bid,
-      ask: market.ask,
-      ma50: market.ma50,
-      cci: market.cci,
-      support: market.support,
-      resistance: market.resistance,
-      equity: broker.equity,
-    });
-
-    const reasons = buildBlockedReasons({
-      market,
-      broker,
-      validation,
-      scaleIssues,
-    });
-
-    if (reasons) {
-      setBlockedReasons(reasons);
-      setConfirmed(false);
-      setResult(null);
-      return;
-    }
-
-    setBlockedReasons(null);
-    setConfirmed(true);
-    setResult(analysis);
-  }
-
   function clearAll() {
     workspacesRef.current = createWorkspaceStore();
     setSavedFlags({ finex: false, orbitraderberjangka: false });
-    setImage(null);
     setMarket(emptyMarket);
     setBroker(emptyBroker);
+    appliedLiveEquityRef.current = null;
     setActiveBrokerId(DEFAULT_BROKER_ID);
     setBrokerNotice("");
-    setRawOcr("");
     setSymbolNotice("");
-    setOcrWarning("");
     setSwingSource(null);
     setSwingCsv("");
     setConnectedCsvName("");
@@ -643,14 +719,12 @@ export default function App() {
   function resetToDefault() {
     workspacesRef.current = createWorkspaceStore();
     setSavedFlags({ finex: false, orbitraderberjangka: false });
-    setImage(null);
     setMarket(initialMarket);
     setBroker(initialBroker);
+    appliedLiveEquityRef.current = null;
     setActiveBrokerId(DEFAULT_BROKER_ID);
     setBrokerNotice("");
-    setRawOcr("");
     setSymbolNotice("");
-    setOcrWarning("");
     setSwingSource(null);
     setSwingCsv("");
     setConnectedCsvName("");
@@ -675,7 +749,7 @@ export default function App() {
 
           <div className="hidden items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300 sm:flex">
             <Activity size={16} />
-            Analisa Manual
+            Analisa Otomatis
           </div>
         </div>
       </header>
@@ -683,54 +757,54 @@ export default function App() {
       <main className={`${dashboard.page} space-y-4 py-4 sm:space-y-6 sm:py-6`}>
         <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-950 p-5 lg:p-7">
           <div className="max-w-3xl">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
-              <Sparkles size={14} />
-              Analisa trading lebih terstruktur
-            </span>
-            <div
-              role="group"
-              aria-label="Pilih broker"
-              className="inline-flex overflow-hidden rounded-full border border-white/15"
-            >
-              <button
-                type="button"
-                data-testid="broker-tab-finex"
-                aria-pressed={activeBrokerId === "finex"}
-                onClick={() => handleBrokerChange("finex")}
-                className={`px-4 py-1.5 text-xs font-bold ${
-                  activeBrokerId === "finex"
-                    ? "bg-emerald-400 text-slate-950"
-                    : "bg-transparent text-slate-300 hover:bg-white/10"
-                }`}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+                <Sparkles size={14} />
+                Analisa trading lebih terstruktur
+              </span>
+              <div
+                role="group"
+                aria-label="Pilih broker"
+                className="inline-flex overflow-hidden rounded-full border border-white/15"
               >
-                Finex
-              </button>
-              <button
-                type="button"
-                data-testid="broker-tab-otb"
-                aria-pressed={activeBrokerId === "orbitraderberjangka"}
-                onClick={() => handleBrokerChange("orbitraderberjangka")}
-                className={`px-4 py-1.5 text-xs font-bold ${
-                  activeBrokerId === "orbitraderberjangka"
-                    ? "bg-emerald-400 text-slate-950"
-                    : "bg-transparent text-slate-300 hover:bg-white/10"
-                }`}
-              >
-                OTB
-              </button>
+                <button
+                  type="button"
+                  data-testid="broker-tab-finex"
+                  aria-pressed={activeBrokerId === "finex"}
+                  onClick={() => handleBrokerChange("finex")}
+                  className={`px-4 py-1.5 text-xs font-bold ${
+                    activeBrokerId === "finex"
+                      ? "bg-emerald-400 text-slate-950"
+                      : "bg-transparent text-slate-300 hover:bg-white/10"
+                  }`}
+                >
+                  Finex
+                </button>
+                <button
+                  type="button"
+                  data-testid="broker-tab-otb"
+                  aria-pressed={activeBrokerId === "orbitraderberjangka"}
+                  onClick={() => handleBrokerChange("orbitraderberjangka")}
+                  className={`px-4 py-1.5 text-xs font-bold ${
+                    activeBrokerId === "orbitraderberjangka"
+                      ? "bg-emerald-400 text-slate-950"
+                      : "bg-transparent text-slate-300 hover:bg-white/10"
+                  }`}
+                >
+                  OTB
+                </button>
+              </div>
             </div>
-          </div>
 
             <h2 className="text-3xl font-black leading-tight md:text-5xl">
-              Mulai dari screenshot,
-              <span className="text-emerald-400"> pahami keputusannya.</span>
+              Upload CSV,
+              <span className="text-emerald-400"> analisa otomatis jalan.</span>
             </h2>
 
             <p className="mt-3 text-sm leading-6 text-slate-300 md:text-base">
-              Tempel screenshot terminal trading, periksa data yang terbaca,
-              lalu hitung Beli, Jual, atau Tunggu dengan parameter risiko yang
-              dapat Anda ubah.
+              Pilih simbol, hubungkan file CSV candle dari terminal trading, dan
+              biarkan MDBKA menghitung Beli, Jual, atau Tunggu dengan parameter
+              risiko Anda.
             </p>
           </div>
         </section>
@@ -738,9 +812,9 @@ export default function App() {
         <section className="rounded-3xl border border-white/10 bg-white/[0.035] p-5 shadow-2xl shadow-black/10 lg:p-6">
           {activeBrokerId === "orbitraderberjangka" && (
             <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
-              Data Finex tidak otomatis valid untuk OrbiTraderBerjangka.
-              Ambil ulang data market dari terminal OrbiTraderBerjangka dan
-              konfirmasi ulang sebelum analisa.
+              {"Data Finex tidak otomatis valid untuk OrbiTraderBerjangka. " +
+                "Ambil ulang data market dari terminal OrbiTraderBerjangka dan " +
+                "konfirmasi ulang sebelum analisa."}
             </p>
           )}
 
@@ -757,13 +831,13 @@ export default function App() {
               className="mt-4 rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-3 text-sm text-emerald-100"
             >
               Analisa{" "}
-              {getBrokerProfile(
-                activeBrokerId === "finex"
-                  ? "orbitraderberjangka"
-                  : "finex",
-              ).label}{" "}
-              tersimpan — pilih broker tersebut untuk kembali tanpa
-              mengulang input.
+              {
+                getBrokerProfile(
+                  activeBrokerId === "finex" ? "orbitraderberjangka" : "finex",
+                ).label
+              }{" "}
+              tersimpan — pilih broker tersebut untuk kembali tanpa mengulang
+              input.
             </p>
           )}
 
@@ -776,9 +850,7 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={() =>
-                  handleBrokerChange("orbitraderberjangka")
-                }
+                onClick={() => handleBrokerChange("orbitraderberjangka")}
                 className="mt-3 rounded-xl bg-emerald-400 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-emerald-300"
               >
                 Pindah ke OTB
@@ -796,183 +868,118 @@ export default function App() {
         <div className={dashboard.workGrid}>
           <div className={dashboard.mainCol}>
             <div className="space-y-6">
-            <Panel
-              icon={<FileCheck2 size={20} />}
-              title="1. Tempel atau upload screenshot"
-              description="Gunakan Ctrl + V, drag-and-drop, atau upload file."
-            >
-              <ScreenshotDropzone
-                image={image}
-                onImageChange={(nextImage) => {
-                  setImage(nextImage);
-                  setResult(null);
-                  setConfirmed(false);
-                  setBlockedReasons(null);
-                }}
+              <Panel
+                icon={<BarChart3 size={20} />}
+                title="1. Periksa dan koreksi data pasar"
+                description="Data terisi otomatis dari CSV. Koreksi bila perlu."
+              >
+                <ExtractedDataForm
+                  market={market}
+                  brokerId={activeBrokerId}
+                  result={result}
+                  setResult={setResult}
+                  onChange={(nextMarket) => {
+                    setMarket(nextMarket);
+                    setSymbolNotice("");
+                    setConfirmed(false);
+                    setResult(null);
+                    setBlockedReasons(null);
+                  }}
+                  onSymbolChange={handleSymbolChange}
+                />
+
+                {symbolNotice && (
+                  <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
+                    {symbolNotice}
+                  </div>
+                )}
+              </Panel>
+
+              <Panel
+                icon={<ShieldCheck size={20} />}
+                title={`2. Atur parameter broker dan risiko — ${activeBrokerLabel}`}
+                description="Nilai point dan contract size wajib diverifikasi dari broker."
+              >
+                <BrokerSettingsForm
+                  broker={broker}
+                  symbol={market.symbol}
+                  brokerId={activeBrokerId}
+                  onChange={(nextBroker) => {
+                    setBroker(nextBroker);
+                    setResult(null);
+                    setConfirmed(false);
+                    setBlockedReasons(null);
+                  }}
+                  onApplyPreset={handleApplyBrokerPreset}
+                />
+              </Panel>
+
+              <CsvFileConnector
+                onCsvLoaded={handleCsvLoaded}
+                onConnectionChange={handleConnectionChange}
+                resetKey={csvResetKey}
               />
 
-              {image && (
-                <div className="mt-5">
-                    <OcrExtractor
-                      key={image}
-                      image={image}
-                      market={market}
-                      swingSource={swingSource}
-                      onExtracted={handleExtracted}
-                    />
-                </div>
-              )}
-
-              {rawOcr && (
-                <details className="mt-4 rounded-xl border border-white/10 bg-slate-950/50 p-4">
-                  <summary className="cursor-pointer text-sm font-semibold text-slate-300">
-                    Lihat teks OCR mentah
-                  </summary>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (navigator.clipboard) {
-                        void navigator.clipboard.writeText(rawOcr);
-                      }
-                    }}
-                    className="mt-3 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-white/5"
-                  >
-                    Salin teks OCR
-                  </button>
-
-                  <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-slate-400">
-                    {rawOcr}
-                  </pre>
-                </details>
-              )}
-
-              {ocrWarning && (
-                <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
-                  {ocrWarning}
+              {connectedCsvName && (
+                <p className="text-sm text-cyan-300">
+                  File CSV aktif: {connectedCsvName}
                 </p>
               )}
-            </Panel>
 
-            <Panel
-              icon={<BarChart3 size={20} />}
-              title="2. Periksa dan koreksi data pasar"
-              description="Hasil OCR dapat keliru. Koreksi sebelum analisa."
-            >
-              <ExtractedDataForm
-                market={market}
-                brokerId={activeBrokerId}
-                result={result}
-                setResult={setResult}
-                onChange={(nextMarket) => {
-                  setMarket(nextMarket);
-                  setSymbolNotice("");
-                  setConfirmed(false);
-                  setResult(null);
-                  setBlockedReasons(null);
-                }}
-                onSymbolChange={handleSymbolChange}
-              />
-
-              {symbolNotice && (
-                <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
-                  {symbolNotice}
-                </div>
+              {csvSymbolMismatchNotice && (
+                <p className="rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
+                  {csvSymbolMismatchNotice}
+                </p>
               )}
-            </Panel>
 
-            <Panel
-              icon={<ShieldCheck size={20} />}
-              title={`3. Atur parameter broker dan risiko — ${activeBrokerLabel}`}
-              description="Nilai point dan contract size wajib diverifikasi dari broker."
-            >
-              <BrokerSettingsForm
-                broker={broker}
-                symbol={market.symbol}
-                brokerId={activeBrokerId}
-                onChange={(nextBroker) => {
-                  setBroker(nextBroker);
-                  setResult(null);
-                  setConfirmed(false);
-                  setBlockedReasons(null);
-                }}
-                onApplyPreset={handleApplyBrokerPreset}
-              />
-            </Panel>
-
-            <CsvFileConnector
-              onCsvLoaded={handleCsvLoaded}
-              onConnectionChange={handleConnectionChange}
-              resetKey={csvResetKey}
-            />
-
-            {connectedCsvName && (
-              <p className="text-sm text-cyan-300">
-                File CSV aktif: {connectedCsvName}
+              <p className="text-xs text-slate-500">
+                Sumber broker: {activeBrokerLabel}
               </p>
-            )}
 
-            <p className="text-xs text-slate-500">
-              Sumber broker: {activeBrokerLabel}
-            </p>
-
-            <SwingLevelsForm
-              symbol={market.symbol}
-              currentPrice={market.bid > 0 ? market.bid : market.close}
-              csvText={swingCsv}
-              brokerId={activeBrokerId}
+              <SwingLevelsForm
+                symbol={market.symbol}
+                currentPrice={market.bid > 0 ? market.bid : market.close}
+                csvText={swingCsv}
+                brokerId={activeBrokerId}
                 onCsvTextChange={(text) => {
                   setSwingCsv(text);
                   setResult(null);
                   setConfirmed(false);
                   setBlockedReasons(null);
                 }}
-              onDetected={handleDetectedLevels}
-            />
+                onDetected={handleDetectedLevels}
+              />
 
-            <ValidationSummaryCard
-              validation={validation}
-              symbol={market.symbol}
-              viewState={viewState}
-            />
+              <ValidationSummaryCard
+                validation={validation}
+                symbol={market.symbol}
+                viewState={viewState}
+              />
 
-            <p className="text-sm font-semibold text-slate-300">
-              7. Jalankan analisa
-            </p>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="w-full rounded-xl border border-red-400/30 px-4 py-3 font-semibold text-red-200 transition hover:bg-red-400/10"
+              >
+                CLEAR SEMUA DATA
+              </button>
 
-            <button
-              type="button"
-              onClick={runAnalysis}
-              className="flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-400 px-6 py-4 text-lg font-black text-slate-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-300"
-            >
-              <Calculator size={22} />
-              ANALISA SEKARANG
-            </button>
-
-            <button
-              type="button"
-              onClick={clearAll}
-              className="w-full rounded-xl border border-red-400/30 px-4 py-3 font-semibold text-red-200 transition hover:bg-red-400/10"
-            >
-              CLEAR SEMUA DATA
-            </button>
-
-            <button
-              type="button"
-              onClick={resetToDefault}
-              className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-white/5"
-            >
-              Kembalikan data contoh GBPUSD
-            </button>
+              <button
+                type="button"
+                onClick={resetToDefault}
+                className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-white/5"
+              >
+                Kembalikan data contoh GBPUSD
+              </button>
             </div>
 
             <Panel
               icon={<Activity size={20} />}
-              title="8. Hasil analisa"
+              title="6. Hasil analisa"
               description={
                 confirmed
-                  ? "Hasil dihitung dari data yang Anda konfirmasi."
-                  : "Hasil akan tampil setelah tombol Analisa Sekarang ditekan."
+                  ? "Hasil dihitung otomatis dari CSV yang dihubungkan."
+                  : "Hasil tampil otomatis setelah file CSV dihubungkan."
               }
             >
               <AnalysisResult
@@ -987,16 +994,30 @@ export default function App() {
 
             <Panel
               icon={<Briefcase size={20} />}
-              title="9. Monitor posisi (manual)"
+              title="7. Monitor posisi (manual)"
               description="Catat posisi MT5 manual; pantau P&L live + sinyal exit. Tanpa order."
             >
-              <HoldingsMonitor brokerId={activeBrokerId} fxRates={fxRates} />
+              <HoldingsMonitor
+                brokerId={activeBrokerId}
+                fxRates={fxRates}
+                activeSymbol={market.symbol}
+              />
             </Panel>
           </div>
 
           <aside className={dashboard.sideCol} aria-label="Data live MT5">
             <LiveQuotes symbol={market.symbol} brokerId={activeBrokerId} />
-            <LiveEquity brokerId={activeBrokerId} />
+            <LiveEquityView
+              {...equityStream}
+              brokerId={activeBrokerId}
+              onApplyEquity={(liveEquity) => {
+                if (!Number.isFinite(liveEquity) || liveEquity <= 0) return;
+                appliedLiveEquityRef.current = liveEquity;
+                const nextBroker = { ...broker, equity: liveEquity };
+                setBroker(nextBroker);
+                executeAnalysis(market, nextBroker);
+              }}
+            />
           </aside>
         </div>
 

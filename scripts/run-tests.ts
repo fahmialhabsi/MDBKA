@@ -144,6 +144,8 @@ import {
   toAutoHolding,
   validateHoldingInput,
   type Holding,
+  BREAKEVEN_R_MULTIPLE,
+  checkBreakeven,
 } from "../src/lib/exitMonitor";
 import {
   createFreshWorkspace,
@@ -674,7 +676,7 @@ function makeValidBroker(): BrokerSettings {
 }
 
 test("36. dropdown memakai satu daftar berisi US100 dan GBPUSD", () => {
-  assert(SUPPORTED_SYMBOLS.length === 10, `jumlah=${SUPPORTED_SYMBOLS.length}`);
+  assert(SUPPORTED_SYMBOLS.length === 82, `jumlah=${SUPPORTED_SYMBOLS.length}`);
   assert(isSupportedSymbol("US100"), "US100 hilang dari daftar");
   assert(isSupportedSymbol("GBPUSD"), "GBPUSD hilang dari daftar");
   assert(
@@ -903,14 +905,14 @@ test("54. form: select memakai callback dan adapter", () => {
   assert(src.includes("parseMarketInput"), "adapter input hilang");
 });
 
-test("55. App: peringatan OCR lintas simbol ditampilkan", () => {
+test("55. App: peringatan CSV lintas simbol ditampilkan", () => {
   const src = readSrc("src/App.tsx");
-  assert(src.includes("filterOcrPricesForSymbol"), "filter OCR tidak dipakai");
+  assert(src.includes("csvSymbolMismatchNotice"), "guard mismatch hilang");
+  assert(src.includes("berisi data"), "pesan mismatch hilang");
   assert(
-    src.includes("Data OCR tidak sesuai dengan simbol"),
-    "pesan OCR hilang",
+    src.includes("agar analisa tidak memakai"),
+    "arahan file benar hilang",
   );
-  assert(src.includes("ocrWarning"), "state peringatan hilang");
 });
 
 /* ---------------- Tampilan kosong + adapter: TEST 56-64 ---------------- */
@@ -1393,7 +1395,7 @@ test("99. field broker berlabel verifikasi", () => {
 test("100. pergantian simbol membersihkan market dan CSV via App", () => {
   const src = readSrc("src/App.tsx");
   assert(src.includes("applyBrokerPreset"), "preset terpusat hilang");
-  assert(src.includes("mergeValidOcrMarketData"), "merge aman hilang");
+  assert(src.includes("executeAnalysis"), "auto-analisa hilang");
   assert(src.includes("handleSymbolChange"), "handler simbol hilang");
   assert(src.includes('setSwingCsv("")'), "reset CSV hilang");
 });
@@ -1648,6 +1650,92 @@ test("120. mismatch CSV tetap memblokir pengisian S/R", () => {
   const before = makeUs100Market();
   const after = mismatch ? before : applySwingLevels(before, 1.32443, 1.32507);
   assert(after === before, "S/R mismatch tidak boleh masuk");
+});
+
+test("473. #AAPL Finex: level CSV diterapkan dengan cocok nama persis", () => {
+  const previous = { ...makeValidMarket("#AAPL"), support: 0, resistance: 0 };
+  const result = applyCsvSwingLevels(
+    previous,
+    { support: 331.5, resistance: 334.51, csvSymbol: "#AAPL" },
+    { activeSymbol: "#AAPL" },
+  );
+  assert(result.applied, `ditolak: ${result.rejectionReason}`);
+  assert(result.rejectionReason === null, "alasan penolakan harus null");
+  assert(result.market.support === 331.5, `support=${result.market.support}`);
+  assert(result.appliedSupport === 331.5, "diagnostik support salah");
+  assert(result.market.resistance === 334.51, `resistance=${result.market.resistance}`);
+  assert(result.appliedResistance === 334.51, "diagnostik resistance salah");
+});
+
+test("474. BABA.US OTB: level CSV diterapkan dengan cocok nama persis", () => {
+  const previous = { ...makeValidMarket("BABA.US"), support: 0, resistance: 0 };
+  const result = applyCsvSwingLevels(
+    previous,
+    { support: 105.15, resistance: 111.40, csvSymbol: "BABA.US" },
+    { activeSymbol: "BABA.US" },
+  );
+  assert(result.applied, `ditolak: ${result.rejectionReason}`);
+  assert(result.rejectionReason === null, "alasan penolakan harus null");
+  assert(result.market.support === 105.15, `support=${result.market.support}`);
+  assert(result.appliedSupport === 105.15, "diagnostik support salah");
+  assert(result.market.resistance === 111.40, `resistance=${result.market.resistance}`);
+  assert(result.appliedResistance === 111.40, "diagnostik resistance salah");
+});
+
+test("475. #AA vs #AAPL: level CSV ditolak (simbol berbeda)", () => {
+  const previous = { ...makeValidMarket("#AAPL"), support: 0, resistance: 0 };
+  const result = applyCsvSwingLevels(
+    previous,
+    { support: 331.5, resistance: 334.51, csvSymbol: "#AA" },
+    { activeSymbol: "#AAPL" },
+  );
+  assert(!result.applied, "level harus ditolak simbol berbeda");
+  assert(result.market === previous, "market tidak boleh berubah");
+  assert(
+    result.rejectionReason !== null && result.rejectionReason.includes("simbol"),
+    `alasan=${result.rejectionReason}`,
+  );
+});
+
+test("476. BA.US vs BABA.US: level CSV ditolak (simbol berbeda)", () => {
+  const previous = { ...makeValidMarket("BABA.US"), support: 0, resistance: 0 };
+  const result = applyCsvSwingLevels(
+    previous,
+    { support: 105.15, resistance: 111.40, csvSymbol: "BA.US" },
+    { activeSymbol: "BABA.US" },
+  );
+  assert(!result.applied, "level harus ditolak simbol berbeda");
+  assert(result.market === previous, "market tidak boleh berubah");
+  assert(
+    result.rejectionReason !== null && result.rejectionReason.includes("simbol"),
+    `alasan=${result.rejectionReason}`,
+  );
+});
+
+test("477. GBPUSD vs GBPUSD: non-regression tetap applied", () => {
+  const previous = makeEmptySrMarket();
+  const result = applyCsvSwingLevels(
+    previous,
+    { support: 1.3211, resistance: 1.3299, csvSymbol: "GBPUSD" },
+    { activeSymbol: "GBPUSD" },
+  );
+  assert(result.applied, `ditolak: ${result.rejectionReason}`);
+  assert(result.rejectionReason === null, "alasan penolakan harus null");
+  assert(result.market.support === 1.3211, `support=${result.market.support}`);
+  assert(result.market.resistance === 1.3299, `resistance=${result.market.resistance}`);
+});
+
+test("478. GBPUSD.pro vs GBPUSD: jalur normalisasi lama tetap applied", () => {
+  const previous = makeEmptySrMarket();
+  const result = applyCsvSwingLevels(
+    previous,
+    { support: 1.3211, resistance: 1.3299, csvSymbol: "GBPUSD.pro" },
+    { activeSymbol: "GBPUSD" },
+  );
+  assert(result.applied, `ditolak: ${result.rejectionReason}`);
+  assert(result.rejectionReason === null, "alasan penolakan harus null");
+  assert(result.market.support === 1.3211, `support=${result.market.support}`);
+  assert(result.market.resistance === 1.3299, `resistance=${result.market.resistance}`);
 });
 
 /* ---------------- Diagnosis end-to-end: TEST 121-138 ---------------- */
@@ -1920,16 +2008,16 @@ test("142. kontrak: extractor teruskan activeSymbol form", () => {
   assert(!src.includes("detectedSymbols[0]"), "simbol OCR pertama dipakai");
 });
 
-test("143. kontrak: handleExtracted tanpa reset saat simbol beda", () => {
+test("143. kontrak: handleCsvLoaded otomatis tanpa reset manual", () => {
   const src = readSrc("src/App.tsx");
-  const start = src.indexOf("const handleExtracted");
-  const end = src.indexOf("const handleDetectedLevels");
-  assert(start >= 0 && end > start, "handleExtracted hilang");
+  const start = src.indexOf("const handleCsvLoaded");
+  const end = src.indexOf("const handleConnectionChange");
+  assert(start >= 0 && end > start, "handleCsvLoaded hilang");
   const body = src.slice(start, end);
-  assert(!body.includes("handleSymbolChange"), "reset terpanggil");
-  assert(!body.includes("createEmptyMarketForSymbol"), "reset terpanggil");
-  assert(!body.includes("setSwingCsv"), "CSV ikut direset");
-  assert(body.includes("mergeValidOcrMarketData"), "merge aman hilang");
+  assert(body.includes("executeAnalysis"), "auto-analisa hilang");
+  assert(body.includes("fileToken"), "simbol dari nama file hilang");
+  assert(body.includes("setConnectedCsvName"), "nama CSV tidak disimpan");
+  assert(!body.includes("mergeValidOcrMarketData"), "jalur OCR tersisa");
 });
 
 test("144. kontrak: onDetected membawa sumber level", () => {
@@ -2325,7 +2413,7 @@ function readAppBrokerHandler(): string {
   const src = readSrc("src/App.tsx");
   const start = src.indexOf("const handleBrokerChange");
   assert(start >= 0, "handleBrokerChange hilang dari App");
-  const end = src.indexOf("\n  function runAnalysis", start);
+  const end = src.indexOf("\n  function clearAll", start);
   assert(end > start, "batas handler tidak ditemukan");
   return src.slice(start, end);
 }
@@ -2437,7 +2525,7 @@ test("183. pergantian broker membersihkan hasil analisis lama", () => {
   assert(body.includes('setConnectedCsvName("")'), "nama CSV lama tersisa");
   assert(body.includes("setCsvResetKey"), "reset koneksi CSV hilang");
   assert(body.includes("setBrokerNotice("), "notifikasi broker hilang");
-  assert(body.includes("setOcrWarning"), "warning lama tidak dibersihkan");
+  assert(body.includes("setActiveBrokerId"), "pindah broker tak terjadi");
 });
 
 test("184. pergantian broker tidak memodifikasi decision engine", () => {
@@ -2515,7 +2603,7 @@ test("188. Finex tetap menjadi jalur default", () => {
   assert(isSupportedBrokerId("finex"), "finex tidak didukung");
   const body = readAppBrokerHandler();
   assert(
-    body.includes("Gunakan screenshot, CSV, dan parameter dari terminal Finex"),
+    body.includes("Gunakan CSV dan parameter dari terminal Finex"),
     "notifikasi kembali ke Finex hilang",
   );
   const app = readSrc("src/App.tsx");
@@ -2544,25 +2632,23 @@ test("189. tidak ada duplicate activeBrokerId state", () => {
   assert(form.includes("brokerId?:"), "prop broker form hilang");
 });
 
-test("190. CSV/OCR lama tetap terhubung seperti sebelumnya", () => {
+test("190. CSV tetap terhubung + auto-analisa", () => {
   const app = readSrc("src/App.tsx");
   assert(app.includes("onCsvLoaded={handleCsvLoaded}"), "CSV loader lepas");
   assert(
     app.includes("onConnectionChange={handleConnectionChange}"),
     "status koneksi CSV lepas",
   );
-  assert(app.includes("onExtracted={handleExtracted}"), "OCR lepas");
-  assert(app.includes("mergeValidOcrMarketData"), "merge aman OCR hilang");
-  assert(app.includes("filterOcrPricesForSymbol"), "filter OCR hilang");
+  assert(!app.includes("onExtracted={handleExtracted}"), "jalur OCR tersisa");
   assert(
     app.includes("Atur parameter broker dan risiko — "),
     "judul dinamis form hilang",
   );
   assert(app.includes("brokerId={activeBrokerId}"), "prop broker form hilang");
+  assert(app.includes("executeAnalysis"), "auto-analisa hilang dari App");
   const csv = readSrc("src/components/analysis/CsvFileConnector.tsx");
   assert(csv.includes("Hubungkan CSV MT5"), "tombol CSV hilang");
-  const ocr = readSrc("src/components/extraction/OcrExtractor.tsx");
-  assert(ocr.includes("parseOcrTextRich"), "jalur OCR berubah");
+  assert(csv.includes("hasil analisa berjalan otomatis"), "penjelasan auto hilang");
 });
 
 /* ---------------- Guard persen equity 3.1: TEST 191-197 ---------------- */
@@ -2944,9 +3030,10 @@ test("208. diagnostik propagasi S/R lengkap dan terstruktur", () => {
     assert(body.includes(field), `field diagnostik hilang: ${field}`);
   }
   assert(
-    body.includes("setMarket((previous) =>"),
-    "apply tidak memakai state terbaru",
+    body.includes("setMarket(applied.market)"),
+    "apply tidak memakai hasil sinkron",
   );
+  assert(body.includes("executeAnalysis"), "S/R baru tak menjalankan analisa");
   const form = readSrc("src/components/analysis/SwingLevelsForm.tsx");
   assert(form.includes("csvSymbol"), "konteks simbol tidak diteruskan");
   assert(
@@ -3037,7 +3124,7 @@ test("212. OTB minVolume 0.1 dengan batas volume utuh", () => {
 
 test("213. simbol OTB tak terverifikasi mengembalikan null", () => {
   assert(
-    getOtbInstrumentProfile("EURUSD_ORB") === null,
+    getOtbInstrumentProfile("FAKE_ORB") === null,
     "simbol tak terverifikasi mengembalikan preset",
   );
   assert(
@@ -3049,8 +3136,8 @@ test("213. simbol OTB tak terverifikasi mengembalikan null", () => {
     getOtbInstrumentProfile("gbpusd_orb") === null,
     "lookup harus exact (case-sensitive)",
   );
-  // 5D-EXT1: 3 flat + 10 percentage = 13 preset; 6H: +3 percentage = 16.
-  assert(Object.keys(OTB_PRESETS).length === 16, "preset fiktif terdaftar");
+  // 6I: 68 preset (16 lama + 52 bulk export 06 Okt 2026).
+  assert(Object.keys(OTB_PRESETS).length === 68, "preset fiktif terdaftar");
   assert(
     getOtbInstrumentProfile("AUDCAD_ORB") !== null,
     "preset AUDCAD_ORB hilang",
@@ -3089,7 +3176,7 @@ test("215. preset Finex byte-identik setelah modul OTB", () => {
     getInstrumentProfile("US100").defaultBuffer === 10,
     "preset US100 berubah",
   );
-  assert(SUPPORTED_SYMBOLS.length === 10, "daftar simbol Finex berubah");
+  assert(SUPPORTED_SYMBOLS.length === 82, "daftar simbol Finex berubah (6I: 82)");
 });
 
 /* ---------------- Wiring preset OTB 4B: TEST 216-225 ---------------- */
@@ -3190,7 +3277,7 @@ test("221. OTB tanpa preset tidak apply partial", () => {
   const previous = makeEmptyBroker();
   const result = applyBrokerPreset(
     previous,
-    "EURUSD_ORB",
+    "FAKE_ORB",
     "orbitraderberjangka",
   );
   assert(result === previous, "partial apply terjadi saat preset hilang");
@@ -3322,9 +3409,9 @@ test("226. dropdown Finex menampilkan US100 dan GBPUSD", () => {
   assert(form.includes("symbolOptions.map"), "render opsi hilang");
 });
 
-test("227. dropdown OTB menampilkan 16 simbol broker", () => {
+test("227. dropdown OTB menampilkan 68 simbol broker", () => {
   const otb = getAvailableSymbols("orbitraderberjangka");
-  assert(otb.length === 16, `daftar OTB=${JSON.stringify(otb)}`);
+  assert(otb.length === 68, `daftar OTB=${otb.length}`);
   assert(otb[0] === "AUDCAD_ORB", "urutan dropdown berubah");
   assert(otb.includes("GBPUSD_ORB"), "GBPUSD_ORB hilang");
   assert(otb.includes("AUDCAD_ORB"), "AUDCAD_ORB hilang");
@@ -3334,11 +3421,17 @@ test("227. dropdown OTB menampilkan 16 simbol broker", () => {
   assert(otb.includes("NZDJPY_ORB"), "NZDJPY_ORB hilang dari daftar");
   assert(otb.includes("USDCHF_ORB"), "USDCHF_ORB hilang dari daftar");
   assert(otb.includes("USDJPY_ORB"), "USDJPY_ORB hilang dari daftar");
+  // Tahap 6I: forex/metals/indeks/saham baru dari bulk export.
+  assert(otb.includes("EURUSD_ORB"), "EURUSD_ORB 6I hilang");
+  assert(otb.includes("XAUUSD_ORB"), "XAUUSD_ORB 6I hilang");
+  assert(otb.includes("US100.DEC"), "US100.DEC 6I hilang");
+  assert(otb.includes("AAPL.US"), "AAPL.US 6I hilang");
 });
 
-test("228. 16/16 simbol verified tanpa warning (6H)", () => {
-  // Kebijakan verifikasi (6H): 16/16 verified; tidak ada simbol
-  // pending tersisa. Simbol invented di luar dropdown tetap null.
+test("228. 68/68 simbol verified tanpa warning (6I)", () => {
+  // Kebijakan verifikasi (6I): 68/68 verified (16 lama + 52 bulk export
+  // 06 Okt 2026); tidak ada simbol pending tersisa. Simbol invented di
+  // luar dropdown tetap null.
   const otb = getAvailableSymbols("orbitraderberjangka");
   assert(otb.includes("AUDCHF_ORB"), "AUDCHF_ORB tidak terdaftar di dropdown");
   assert(
@@ -3402,16 +3495,32 @@ test("228. 16/16 simbol verified tanpa warning (6H)", () => {
     "USDJPY_ORB verified 6H harus tanpa warning",
   );
   assert(
-    !hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka"),
-    "TBD invented dianggap terverifikasi",
+    hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka") === true,
+    "EURUSD_ORB verified 6I harus tanpa warning",
+  );
+  assert(
+    getOtbInstrumentProfile("EURUSD_ORB") !== null,
+    "preset EURUSD_ORB 6I hilang",
+  );
+  assert(
+    hasOtbPresetForSymbol("XAUUSD_ORB", "orbitraderberjangka") === true,
+    "XAUUSD_ORB verified 6I harus tanpa warning",
+  );
+  assert(
+    hasOtbPresetForSymbol("AAPL.US", "orbitraderberjangka") === true,
+    "AAPL.US verified 6I harus tanpa warning",
+  );
+  assert(
+    !hasOtbPresetForSymbol("FAKE_ORB", "orbitraderberjangka"),
+    "invented dianggap terverifikasi",
   );
   assert(
     !hasOtbPresetForSymbol("GBPUSD", "orbitraderberjangka"),
     "simbol Finex dianggap preset OTB",
   );
   assert(
-    getOtbInstrumentProfile("EURUSD_ORB") === null,
-    "preset fiktif untuk TBD",
+    getOtbInstrumentProfile("FAKE_ORB") === null,
+    "preset fiktif untuk invented",
   );
 });
 
@@ -3438,8 +3547,9 @@ test("229. pindah Finex ke OTB mengubah daftar dropdown", () => {
 test("230. kembali OTB ke Finex memulihkan dropdown Finex", () => {
   const finex = getAvailableSymbols("finex");
   assert(!finex.includes("GBPUSD_ORB"), "simbol OTB bocor ke Finex");
-  assert(finex.length === 10, `daftar Finex=${finex.length}`);
+  assert(finex.length === 82, `daftar Finex=${finex.length}`);
   assert(finex.includes("US100") && finex.includes("GBPUSD"), "daftar rusak");
+  assert(finex.includes("#AAPL"), "#saham 6I hilang dari Finex");
 });
 
 test("231. dropdown tidak mencampur simbol Finex dan OTB", () => {
@@ -3498,13 +3608,13 @@ test("233. warning hilang untuk GBPUSD_ORB dan validator menerima", () => {
 
 test("234. warning tampil untuk simbol OTB tanpa preset", () => {
   assert(
-    hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka") === false,
+    hasOtbPresetForSymbol("FAKE_ORB", "orbitraderberjangka") === false,
     "simbol invented lolos guard",
   );
   // Preset tidak ter-apply (penolakan yang berlaku, tanpa partial):
   const previous = makeValidBroker();
   assert(
-    applyBrokerPreset(previous, "EURUSD_ORB", "orbitraderberjangka") ===
+    applyBrokerPreset(previous, "FAKE_ORB", "orbitraderberjangka") ===
       previous,
     "preset unverified ter-apply",
   );
@@ -3512,13 +3622,13 @@ test("234. warning tampil untuk simbol OTB tanpa preset", () => {
   // normalizeSymbol) — bukan error simbol; pembeda unverified adalah
   // notice UI + tanpa preset fill.
   const summary = validateAnalysisInputs(
-    { ...makeValidMarket("GBPUSD"), symbol: "EURUSD_ORB" },
+    { ...makeValidMarket("GBPUSD"), symbol: "FAKE_ORB" },
     makeValidBroker(),
     "orbitraderberjangka",
   );
   assert(
-    !summary.errors.some((error) => error.field === "symbol"),
-    "keluarga skala EURUSD ikut ditolak",
+    summary.errors.some((error) => error.field === "symbol"),
+    "simbol invented lolos validator",
   );
   const app = readSrc("src/App.tsx");
   assert(
@@ -3572,7 +3682,7 @@ test("235. memilih simbol dropdown mengubah simbol state secara exact", () => {
     "form simbol lepas dari handler",
   );
   const start = app.indexOf("const handleSymbolChange");
-  const end = app.indexOf("const handleExtracted", start);
+  const end = app.indexOf("const handleDetectedLevels", start);
   assert(start >= 0 && end > start, "handler simbol hilang");
   const body = app.slice(start, end);
   assert(
@@ -3661,13 +3771,15 @@ test("238. OCR mengenali EURCHF_ORB dan merge menjaga simbol OTB", () => {
   );
 });
 
-test("239. dropdown OTB 16 simbol, 16/16 terverifikasi", () => {
+test("239. dropdown OTB 68 simbol, 68/68 terverifikasi", () => {
   const symbols = getAvailableSymbols("orbitraderberjangka");
-  assert(symbols.length === 16, `expected 16, got ${symbols.length}`);
+  assert(symbols.length === 68, `expected 68, got ${symbols.length}`);
   assert(symbols.includes("GBPUSD_ORB"), "GBPUSD_ORB missing");
   assert(symbols.includes("AUDCAD_ORB"), "AUDCAD_ORB missing");
   assert(symbols.includes("EURCHF_ORB"), "EURCHF_ORB missing");
-  // Kebijakan verifikasi (6H): 16/16 verified, tanpa pending.
+  assert(symbols.includes("XAUUSD_ORB"), "XAUUSD_ORB 6I missing");
+  assert(symbols.includes("AAPL.US"), "AAPL.US 6I missing");
+  // Kebijakan verifikasi (6I): 68/68 verified, tanpa pending.
   assert(
     hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
     "GBPUSD_ORB harus terverifikasi",
@@ -3859,19 +3971,18 @@ test("243. hasOtbPresetForSymbol true untuk 16/16 simbol verified", () => {
     hasOtbPresetForSymbol("USDJPY_ORB", "orbitraderberjangka") === true,
     "USDJPY_ORB harus terverifikasi (6H)",
   );
-  // Kebijakan verifikasi (6H): tidak ada pending tersisa;
-  // invented tetap false.
+  // Kebijakan verifikasi (6I): 68/68 verified; invented tetap false.
   assert(
-    hasOtbPresetForSymbol("EURUSD_ORB", "orbitraderberjangka") === false,
-    "EURUSD_ORB invented harus false (TBD)",
+    hasOtbPresetForSymbol("FAKE_ORB", "orbitraderberjangka") === false,
+    "FAKE_ORB invented harus false",
   );
 });
 
-test("244. OTB_PRESETS berisi 16 objek (16/16 verified)", () => {
+test("244. OTB_PRESETS berisi 68 objek (68/68 verified)", () => {
   const keys = Object.keys(OTB_PRESETS);
-  // 16/16 simbol terverifikasi via VERIFIED_OTB_SYMBOLS
-  // (GBPUSD + 6E-1..6E-12 + 6H: NZDJPY, USDCHF, USDJPY).
-  assert(keys.length === 16, `expected 16 presets, got ${keys.length}`);
+  // 68/68 simbol terverifikasi via VERIFIED_OTB_SYMBOLS
+  // (16 lama + 52 bulk export 06 Okt 2026).
+  assert(keys.length === 68, `expected 68 presets, got ${keys.length}`);
   assert(keys.includes("GBPUSD_ORB"), "GBPUSD_ORB hilang dari preset");
   assert(keys.includes("AUDCAD_ORB"), "AUDCAD_ORB hilang dari preset");
   assert(keys.includes("EURCHF_ORB"), "EURCHF_ORB hilang dari preset");
@@ -3964,12 +4075,12 @@ test("247. komisi EURCHF_ORB aktif via spec32 (commission=33)", () => {
   assert(applied.pointValue === 1, `pointValue=${applied.pointValue}`);
 });
 
-test("248. komisi simbol OTB TBD tetap kosong", () => {
+test("248. komisi simbol OTB invented tetap kosong", () => {
   const previous = makeEmptyBroker();
-  // 5D-EXT1: AUDCHF_ORB kini berpreset → TBD diuji via invented EURUSD_ORB.
+  // Simbol invented (di luar 68 verified) tidak mendapat preset.
   const result = applyBrokerPreset(
     previous,
-    "EURUSD_ORB",
+    "FAKE_ORB",
     "orbitraderberjangka",
   );
   assert(result === previous, "preset TBD ikut mengisi");
@@ -4156,13 +4267,13 @@ test("256. non-OTB/TBD/invalid mengembalikan null", () => {
   );
   assert(
     calculateSwapCost({
-      symbol: "NZDUSD_ORB",
+      symbol: "FAKE_ORB",
       brokerId: "orbitraderberjangka",
       direction: "long",
       lot: 0.1,
       holdingDays: 1,
     }) === null,
-    "simbol TBD ikut terhitung",
+    "invented ikut terhitung",
   );
   assert(
     calculateSwapCost({
@@ -4514,17 +4625,17 @@ test("272. broker Finex → null", () => {
   );
 });
 
-test("273. simbol TBD → null", () => {
+test("273. simbol invented → null", () => {
   assert(
     calculateSwapCost({
-      symbol: "NZDUSD_ORB",
+      symbol: "FAKE_ORB",
       brokerId: "orbitraderberjangka",
       direction: "BELI",
       lot: 1,
       holdingDays: 1,
       currentPrice: 0.6,
     }) === null,
-    "simbol TBD ikut terhitung",
+    "simbol invented ikut terhitung",
   );
 });
 
@@ -4661,9 +4772,9 @@ test("278. return format validation (semua field baru hadir)", () => {
 
 /* ---------------- Expand OTB_PRESETS 5D-STEP1: TEST 279-286 ---------------- */
 
-test("279. OTB_PRESETS size = 16 (16/16 verified)", () => {
+test("279. OTB_PRESETS size = 68 (68/68 verified)", () => {
   const keys = Object.keys(OTB_PRESETS);
-  assert(keys.length === 16, `expected 16 presets, got ${keys.length}`);
+  assert(keys.length === 68, `expected 68 presets, got ${keys.length}`);
   for (const s of ["GBPUSD_ORB", "AUDCAD_ORB", "EURCHF_ORB"]) {
     assert(keys.includes(s), `${s} hilang`);
   }
@@ -4685,7 +4796,7 @@ test("279. OTB_PRESETS size = 16 (16/16 verified)", () => {
     assert(keys.includes(s), `${s} hilang`);
   }
   const symbols = getAvailableSymbols("orbitraderberjangka");
-  assert(symbols.length === 16, `dropdown=${symbols.length}`);
+  assert(symbols.length === 68, `dropdown=${symbols.length}`);
 });
 
 test("280. AUDCHF_ORB preset exists + digits=5 [verified 6E-1]", () => {
@@ -5235,10 +5346,10 @@ test("309. CORS localhost:5173 + frontend SSE wiring + LiveEquity terpasang", ()
 });
 
 /* Kebijakan verifikasi OTB: TEST 330-332.
- * 16/16 verified (GBPUSD + 6E-1..6E-12 + 6H: NZDJPY, USDCHF, USDJPY).
+ * 68/68 verified (16 lama + 52 bulk export 06 Okt 2026 Tahap 6I).
  * Finex byte-identik; SSE 318-329 tidak tersentuh. */
 
-test("330. 16/16 simbol verified end-to-end (preset+warning+validator)", () => {
+test("330. 68/68 simbol verified end-to-end (preset+warning+validator)", () => {
   assert(isOtbSymbolVerified("GBPUSD_ORB") === true, "GBPUSD_ORB harus verified");
   assert(isOtbSymbolVerified("AUDCHF_ORB") === true, "AUDCHF_ORB harus verified (6E-1)");
   assert(isOtbSymbolVerified("AUDJPY_ORB") === true, "AUDJPY_ORB harus verified (6E-2)");
@@ -5256,7 +5367,7 @@ test("330. 16/16 simbol verified end-to-end (preset+warning+validator)", () => {
   assert(isOtbSymbolVerified("USDCHF_ORB") === true, "USDCHF_ORB harus verified (6H)");
   assert(isOtbSymbolVerified("USDJPY_ORB") === true, "USDJPY_ORB harus verified (6H)");
   assert(
-    VERIFIED_OTB_SYMBOLS.length === 16 &&
+    VERIFIED_OTB_SYMBOLS.length === 68 &&
       VERIFIED_OTB_SYMBOLS.includes("GBPUSD_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("AUDCHF_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("AUDJPY_ORB") &&
@@ -5272,8 +5383,11 @@ test("330. 16/16 simbol verified end-to-end (preset+warning+validator)", () => {
       VERIFIED_OTB_SYMBOLS.includes("EURCHF_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("NZDJPY_ORB") &&
       VERIFIED_OTB_SYMBOLS.includes("USDCHF_ORB") &&
-      VERIFIED_OTB_SYMBOLS.includes("USDJPY_ORB"),
-    "daftar verified berubah di luar 6H",
+      VERIFIED_OTB_SYMBOLS.includes("USDJPY_ORB") &&
+      VERIFIED_OTB_SYMBOLS.includes("XAUUSD_ORB") &&
+      VERIFIED_OTB_SYMBOLS.includes("US100.DEC") &&
+      VERIFIED_OTB_SYMBOLS.includes("AAPL.US"),
+    "daftar verified berubah di luar 6I",
   );
   assert(
     hasOtbPresetForSymbol("GBPUSD_ORB", "orbitraderberjangka") === true,
@@ -5292,9 +5406,9 @@ test("330. 16/16 simbol verified end-to-end (preset+warning+validator)", () => {
   );
 });
 
-test("331. 0 simbol pending; 16/16 ter-apply via spec32 (6H)", () => {
-  // Tahap 6E-1..6E-12 + 6H: seluruh 16 simbol OTB verified (gate lama).
-  // Tidak ada pending tersisa: VERIFIED_OTB_SYMBOLS = 16, semua simbol
+test("331. 0 simbol pending; 68/68 ter-apply via spec32 (6I)", () => {
+  // Tahap 6E-1..6E-12 + 6H + 6I: seluruh 68 simbol OTB verified.
+  // Tidak ada pending tersisa: VERIFIED_OTB_SYMBOLS = 68, semua simbol
   // tanpa warning verifikasi, banner pindah tampil, preset spec32
   // (commission 33) ter-apply. Blok validator anti-warning-fixture untuk
   // pending dihapus (jalur pending tidak ada lagi); perilaku validator
@@ -5325,12 +5439,12 @@ test("331. 0 simbol pending; 16/16 ter-apply via spec32 (6H)", () => {
   }
   // Dropdown tetap menampilkan semuanya (tidak ada simbol dihapus).
   const dropdown = getAvailableSymbols("orbitraderberjangka");
-  assert(dropdown.length === 16, "simbol hilang dari dropdown");
+  assert(dropdown.length === 68, "simbol hilang dari dropdown");
 });
 
 test("332. Finex tidak terpengaruh kebijakan verifikasi OTB", () => {
   const finex = getAvailableSymbols("finex");
-  assert(finex.length === 10, `daftar Finex=${finex.length}`);
+  assert(finex.length === 82, `daftar Finex=${finex.length}`);
   for (const symbol of finex) {
     assert(
       hasOtbPresetForSymbol(symbol, "finex") === true,
@@ -5407,9 +5521,9 @@ test("336. isEquitySnapshot menerima valid, menolak malformed", () => {
   );
 });
 
-test("337. VERIFIED_OTB_SYMBOLS = 16 simbol (6H)", () => {
+test("337. VERIFIED_OTB_SYMBOLS = 68 simbol (6I)", () => {
   assert(
-    VERIFIED_OTB_SYMBOLS.length === 16 &&
+    VERIFIED_OTB_SYMBOLS.length === 68 &&
       VERIFIED_OTB_SYMBOLS[0] === "GBPUSD_ORB" &&
       VERIFIED_OTB_SYMBOLS[1] === "AUDCHF_ORB" &&
       VERIFIED_OTB_SYMBOLS[2] === "AUDJPY_ORB" &&
@@ -5426,7 +5540,12 @@ test("337. VERIFIED_OTB_SYMBOLS = 16 simbol (6H)", () => {
       VERIFIED_OTB_SYMBOLS[13] === "NZDJPY_ORB" &&
       VERIFIED_OTB_SYMBOLS[14] === "USDCHF_ORB" &&
       VERIFIED_OTB_SYMBOLS[15] === "USDJPY_ORB",
-    "daftar verified berubah di luar 6H",
+    "daftar verified berubah di luar 6I",
+  );
+  assert(
+    VERIFIED_OTB_SYMBOLS.includes("XAUUSD_ORB") &&
+      VERIFIED_OTB_SYMBOLS.includes("AAPL.US"),
+    "simbol 6I hilang dari verified",
   );
 });
 
@@ -5469,7 +5588,7 @@ test("353. swap function-level tetap passthrough untuk simbol pending (gate di U
   assert(cost !== null, "kontrak function-level berubah (harus non-null)");
 });
 
-test("354. 16/16 OTB verified; invented tetap unverified", () => {
+test("354. 68/68 OTB verified; invented tetap unverified", () => {
   assert(isOtbSymbolVerified("GBPUSD_ORB"), "GBPUSD_ORB harus verified");
   assert(isOtbSymbolVerified("AUDCHF_ORB"), "AUDCHF_ORB harus verified (6E-1)");
   assert(isOtbSymbolVerified("AUDJPY_ORB"), "AUDJPY_ORB harus verified (6E-2)");
@@ -5486,7 +5605,10 @@ test("354. 16/16 OTB verified; invented tetap unverified", () => {
   assert(isOtbSymbolVerified("NZDJPY_ORB"), "NZDJPY_ORB harus verified (6H)");
   assert(isOtbSymbolVerified("USDCHF_ORB"), "USDCHF_ORB harus verified (6H)");
   assert(isOtbSymbolVerified("USDJPY_ORB"), "USDJPY_ORB harus verified (6H)");
-  assert(!isOtbSymbolVerified("EURUSD_ORB"), "invented dianggap verified");
+  assert(isOtbSymbolVerified("EURUSD_ORB"), "EURUSD_ORB harus verified (6I)");
+  assert(isOtbSymbolVerified("XAUUSD_ORB"), "XAUUSD_ORB harus verified (6I)");
+  assert(isOtbSymbolVerified("AAPL.US"), "AAPL.US harus verified (6I)");
+  assert(!isOtbSymbolVerified("FAKE_ORB"), "invented dianggap verified");
 });
 
 test("355. AnalysisResult: memo swap digate verifikasi + PENDING notice", () => {
@@ -5533,11 +5655,15 @@ function requireSpec32(symbol: string) {
   return spec;
 }
 
-test("358. specs32 berisi 32 simbol (16 OTB + 16 Finex)", () => {
-  assert(Object.keys(INSTRUMENT_SPECS_32).length === 32, "harus 32 specs");
-  assert(OTB_SPECS_32.length === 16, "OTB harus 16");
-  assert(FINEX_SPECS_32.length === 16, "Finex harus 16");
-  for (const s of OTB_SPECS_32) assert(s.endsWith("_ORB"), `${s} bukan OTB`);
+test("358. specs32 berisi 150 simbol (68 OTB + 82 Finex)", () => {
+  assert(Object.keys(INSTRUMENT_SPECS_32).length === 150, "harus 150 specs");
+  assert(OTB_SPECS_32.length === 68, "OTB harus 68");
+  assert(FINEX_SPECS_32.length === 82, "Finex harus 82");
+  for (const s of OTB_SPECS_32)
+    assert(
+      (OTB_ALL_SYMBOLS as readonly string[]).includes(s),
+      `${s} bukan OTB`,
+    );
   for (const s of FINEX_SPECS_32)
     assert(!s.endsWith("_ORB"), `${s} bocor _ORB ke Finex`);
 });
@@ -5623,20 +5749,24 @@ test("363. swap Long/Short Finex sesuai CSV 6B (termasuk positif)", () => {
   assert(requireSpec32("US100").swapShort === -117.17, "US100 short salah");
 });
 
-test("364. JPY pairs flagged + tick 0.63 (5 per broker, tanpa fabrikasi)", () => {
+test("364. JPY pairs flagged + tick 0.63 (7 per broker, tanpa fabrikasi)", () => {
   const jpy = getJPYPairSymbols32();
-  assert(jpy.length === 10, `JPY=${jpy.length}, harus 10 (5+5)`);
+  assert(jpy.length === 14, `JPY=${jpy.length}, harus 14 (7+7)`);
   for (const s of [
     "AUDJPY_ORB",
     "CADJPY_ORB",
     "CHFJPY_ORB",
     "NZDJPY_ORB",
     "USDJPY_ORB",
+    "EURJPY_ORB",
+    "GBPJPY_ORB",
     "AUDJPY",
     "CADJPY",
     "CHFJPY",
     "NZDJPY",
     "USDJPY",
+    "EURJPY",
+    "GBPJPY",
   ]) {
     const spec = requireSpec32(s);
     assert(spec.isJPYPair === true, `${s} bukan JPY`);
@@ -5848,11 +5978,11 @@ test("378. legacy swapCost tidak berubah (flat GBPUSD_ORB -2.25)", () => {
   assert(Math.abs(cost.swapCost - -2.25) < 1e-9, `legacy=${cost.swapCost}`);
 });
 
-test("379. legacy registry/dropdown 16-OTB + 10-Finex utuh", () => {
-  assert(getAvailableSymbols("orbitraderberjangka").length === 16, "OTB berubah");
-  assert(getAvailableSymbols("finex").length === 10, "Finex berubah");
-  assert(Object.keys(OTB_PRESETS).length === 16, "preset berubah");
-  assert(VERIFIED_OTB_SYMBOLS.length === 16, "verified berubah di luar 6H");
+test("379. legacy registry/dropdown 68-OTB + 82-Finex utuh (6I)", () => {
+  assert(getAvailableSymbols("orbitraderberjangka").length === 68, "OTB berubah");
+  assert(getAvailableSymbols("finex").length === 82, "Finex berubah");
+  assert(Object.keys(OTB_PRESETS).length === 68, "preset berubah");
+  assert(VERIFIED_OTB_SYMBOLS.length === 68, "verified berubah di luar 6I");
 });
 
 test("380. AUDNZD 0.00 long dihitung jujur (tanpa fabrikasi)", () => {
@@ -5965,11 +6095,14 @@ test("388. wiring fallback unknown/empty (tanpa fabrikasi)", () => {
   assert(isSpec32Available("") === false, "empty available");
 });
 
-test("389. wiring semua 32 simbol verified available (komisi per broker)", () => {
+test("389. wiring semua 150 simbol verified available (komisi per broker)", () => {
   for (const s of Object.keys(INSTRUMENT_SPECS_32)) {
     const d = getSpec32FormDefaults(s);
     assert(d.verified === true, `${s} tidak verified`);
-    const expected = s.endsWith("_ORB") ? 33 : 1;
+    // Aturan komisi mengikuti field broker (bukan suffiks: OTB punya
+    // simbol tanpa _ORB seperti CLU dan *.US sejak 6I).
+    const spec = requireSpec32(s);
+    const expected = spec.broker === "orbitraderberjangka" ? 33 : 1;
     assert(d.commission === expected, `${s} commission bukan ${expected}`);
     assert(isSpec32Available(s) === true, `${s} tidak available`);
   }
@@ -6155,15 +6288,15 @@ test("405. applyBrokerPreset: AUDJPY_ORB → commission=33 + pointValue OTB", ()
   assert(applied.minLot === 0.1, `minLot=${applied.minLot}`);
 });
 
-test("406. applyBrokerPreset: 16 OTB spec32 semua commission=33", () => {
-  assert(OTB_SPECS_32.length === 16, "spec32 OTB harus 16");
+test("406. applyBrokerPreset: 68 OTB spec32 semua commission=33", () => {
+  assert(OTB_SPECS_32.length === 68, "spec32 OTB harus 68");
   for (const symbol of OTB_SPECS_32) {
     const applied = applyBrokerPreset(
       makeEmptyBroker(),
       symbol,
       "orbitraderberjangka",
     );
-    // 6H: 16/16 simbol berprofile OTB ter-apply (commission 33).
+    // 6I: 68/68 simbol berprofile OTB ter-apply (commission 33).
     const expected = getOtbInstrumentProfile(symbol) === null ? 0 : 33;
     assert(applied.commission === expected, `${symbol} commission=${applied.commission}`);
   }
@@ -6197,9 +6330,9 @@ test("409. spec32 fallback: unknown symbol → previous (no change)", () => {
 });
 
 test("410. spec32 modul murni: legacy registry Finex tidak rusak", () => {
-  assert(SUPPORTED_SYMBOLS.length === 10, "daftar Finex berubah");
+  assert(SUPPORTED_SYMBOLS.length === 82, "daftar Finex berubah");
   const finex = getBrokerProfile("finex");
-  assert(finex.instruments.length === 10, "instrumen Finex berubah");
+  assert(finex.instruments.length === 82, "instrumen Finex berubah");
   assert(
     getOtbInstrumentProfile("GBPUSD") === null,
     "nama Finex bocor ke preset OTB",
@@ -6291,7 +6424,7 @@ test("414. getOtbMarginRequirements: statis CSV + null invented (6G)", () => {
     assert(m.hedgedMargin === 50000, `${s} hedged=${m.hedgedMargin}`);
     assert(Object.isFrozen(m), `${s} tidak frozen`);
   }
-  assert(getOtbMarginRequirements("EURUSD_ORB") === null, "invented harus null");
+  assert(getOtbMarginRequirements("FAKE_ORB") === null, "invented harus null");
   assert(getOtbMarginRequirements("GBPUSD") === null, "Finex harus null");
 });
 
@@ -7478,6 +7611,138 @@ test("463. wiring guard stops: live + warning di blok salin (readSrc)", () => {
   assert(lib.includes("getStopsDistance"), "helper hilang");
   assert(lib.includes("mengunci tombol order"), "teks warning hilang di lib");
   assert(!lib.includes("import.meta."), "lib tak CJS-safe");
+});
+
+/* ---------------- Sinyal breakeven 1R (BE): TEST 464-468 ---------------- */
+
+test("464. checkBreakeven: BELI 1R terpicu, target = entry", () => {
+  assert(BREAKEVEN_R_MULTIPLE === 1, "ambang bukan 1R");
+  // Entry 1.32246, SL 1.32317? bukan — BELI: entry 1.32000, SL 1.31900
+  // (risiko 100 point), bid 1.32100 → profit 100 point = 1R.
+  const hit = checkBreakeven(
+    { direction: "BELI", entryPrice: 1.32, sl: 1.319 },
+    1.321,
+    1.3212,
+  );
+  if (hit === null) throw new Error("1R tidak terpicu");
+  assert(hit.slTarget === 1.32, `target=${hit.slTarget}`);
+  assert(hit.multiple >= 1, `multiple=${hit.multiple}`);
+  assert(hit.message.includes("1.32"), "pesan tanpa harga SL");
+});
+
+test("465. checkBreakeven: JUAL user terpicu di 1R", () => {
+  // Kasus nyata user: JUAL @1.32246 SL 1.32317 (risiko 71 point);
+  // ask turun ke 1.32175 → profit 71 point = 1R.
+  const hit = checkBreakeven(
+    { direction: "JUAL", entryPrice: 1.32246, sl: 1.32317 },
+    1.32173,
+    1.32175,
+  );
+  if (hit === null) throw new Error("1R JUAL tidak terpicu");
+  assert(hit.slTarget === 1.32246, `target=${hit.slTarget}`);
+});
+
+test("466. checkBreakeven: belum 1R dan rugi → null", () => {
+  assert(
+    checkBreakeven({ direction: "BELI", entryPrice: 1.32, sl: 1.319 }, 1.3205, 1.3207) === null,
+    "0.5R ikut terpicu",
+  );
+  assert(
+    checkBreakeven({ direction: "BELI", entryPrice: 1.32, sl: 1.319 }, 1.3195, 1.3197) === null,
+    "rugi ikut terpicu",
+  );
+  assert(
+    checkBreakeven({ direction: "JUAL", entryPrice: 1.32246, sl: 1.32317 }, 1.3226, 1.32262) === null,
+    "JUAL rugi ikut terpicu",
+  );
+});
+
+test("467. checkBreakeven: SL sisi salah dan input invalid → null", () => {
+  // BELI dengan SL di atas entry = risiko tak terdefinisi.
+  assert(
+    checkBreakeven({ direction: "BELI", entryPrice: 1.32, sl: 1.321 }, 1.322, 1.3222) === null,
+    "SL salah sisi lolos",
+  );
+  // JUAL dengan SL di bawah entry = risiko tak terdefinisi.
+  assert(
+    checkBreakeven({ direction: "JUAL", entryPrice: 1.32246, sl: 1.321 }, 1.32, 1.3202) === null,
+    "SL JUAL salah sisi lolos",
+  );
+  assert(checkBreakeven({ direction: "BELI", entryPrice: 0, sl: 1.319 }, 1.321, 1.3212) === null, "entry 0 lolos");
+  assert(checkBreakeven({ direction: "BELI", entryPrice: 1.32, sl: 1.319 }, 0, 0) === null, "bid/ask 0 lolos");
+});
+
+test("468. wiring breakeven: banner di dashboard monitor (readSrc)", () => {
+  const lib = readSrc("src/lib/exitMonitor.ts");
+  assert(lib.includes("checkBreakeven"), "helper hilang");
+  assert(lib.includes("BREAKEVEN_R_MULTIPLE"), "konstanta ambang hilang");
+  assert(lib.includes("Modify"), "langkah MT5 hilang di pesan");
+  assert(!lib.includes("import.meta."), "lib tak CJS-safe");
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes("checkBreakeven"), "sinyal tak di-wire");
+  assert(dash.includes("BREAKEVEN SEKARANG"), "banner hilang");
+});
+
+/* ---------------- Cakupan simbol 6I (68 OTB + 82 Finex): TEST 469-472 ---------------- */
+
+test("469. setiap simbol dropdown OTB punya preset+spec32+profil", () => {
+  for (const s of OTB_ALL_SYMBOLS as readonly string[]) {
+    assert(
+      getOtbInstrumentProfile(s) !== null,
+      `${s} tanpa preset OTB`,
+    );
+    assert(
+      hasOtbPresetForSymbol(s, "orbitraderberjangka") === true,
+      `${s} tanpa warning-free preset`,
+    );
+    const spec = getInstrumentSpec32(s);
+    assert(spec !== null && spec.status === "VERIFIED", `${s} spec32 invalid`);
+  }
+});
+
+test("470. setiap simbol dropdown Finex punya profil+spec32", () => {
+  for (const s of SUPPORTED_SYMBOLS) {
+    const profile = getInstrumentProfile(s);
+    assert(profile.category !== "unknown", `${s} tanpa profil`);
+    assert(profile.minPrice < profile.maxPrice, `${s} rentang invalid`);
+    const spec = getInstrumentSpec32(s);
+    assert(spec !== null && spec.status === "VERIFIED", `${s} spec32 invalid`);
+    if (spec === null) throw new Error(`spec32 hilang untuk ${s}`);
+    assert(spec.broker === "finex", `${s} broker salah`);
+  }
+});
+
+test("471. spot-check nilai 6I dari CSV broker", () => {
+  const eurjpy = getOtbInstrumentProfile("EURJPY_ORB");
+  if (eurjpy === null) throw new Error("preset EURJPY_ORB hilang");
+  assert(calculateOtbTickValue(eurjpy) === 100, "tick JPY baru bukan 100");
+  const xau = getOtbInstrumentProfile("XAUUSD_ORB");
+  if (xau === null) throw new Error("preset XAUUSD_ORB hilang");
+  assert(xau.contractSize === 100, "kontrak XAU bukan 100");
+  assert(xau.initialMargin === 200000, "margin XAU bukan 200000");
+  const dec = getOtbInstrumentProfile("US100.DEC");
+  if (dec === null) throw new Error("preset US100.DEC hilang");
+  assert(calculateOtbTickValue(dec) === 5, "tick US100.DEC bukan 5");
+  assert(requireSpec32("GBXUSD").quoteCurrency === "GBX", "GBXUSD bukan pence");
+  assert(requireSpec32("#AAPL").leverage === 1, "kontrak #AAPL bukan 1");
+  assert(getInstrumentProfile("USDEUR").decimals === 8, "USDEUR bukan 8 desimal");
+  assert(getInstrumentProfile("GOOG.US").decimals === 2, "GOOG.US tak terpetakan");
+  assert(getInstrumentProfile("#AAPL").decimals === 2, "#AAPL tak terpetakan");
+});
+
+test("472. kanonis + profil preservasi nama bertitik/bertanda", () => {
+  assert(
+    canonicalSymbolForBroker("#AAPL", "finex") === "#AAPL",
+    "#AAPL terpangkas",
+  );
+  assert(
+    canonicalSymbolForBroker("GOOG.US", "orbitraderberjangka") === "GOOG.US",
+    "GOOG.US berubah",
+  );
+  assert(
+    canonicalSymbolForBroker("gbpusd", "finex") === "GBPUSD",
+    "alias Finex rusak",
+  );
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +
