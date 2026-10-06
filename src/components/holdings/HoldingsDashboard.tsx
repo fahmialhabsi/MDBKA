@@ -8,6 +8,7 @@ import {
   type ExchangeRates,
 } from "../../services/fxRateService";
 import {
+  checkBreakeven,
   checkMarginGuard,
   checkRewardRisk,
   evaluateExitSignal,
@@ -94,6 +95,10 @@ function HoldingCard({
     exited || live === undefined
       ? null
       : evaluateExitSignal(holding, live.bid, live.ask, convert);
+  const breakeven =
+    exited || live === undefined
+      ? null
+      : checkBreakeven(holding, live.bid, live.ask);
   const marginWarning = exited ? null : checkMarginGuard(holding, convert);
   const rrWarning = checkRewardRisk(
     holding.entryPrice,
@@ -192,6 +197,17 @@ function HoldingCard({
           </span>
         </div>
       </div>
+
+      {breakeven !== null && (
+        <div className="mt-2 rounded-xl border border-emerald-400/40 bg-emerald-400/10 p-3">
+          <p className="text-sm font-bold text-emerald-200">
+            BREAKEVEN SEKARANG — profit {breakeven.multiple.toFixed(2)}R
+          </p>
+          <p className="mt-1 text-sm leading-6 text-emerald-100">
+            {breakeven.message}
+          </p>
+        </div>
+      )}
 
       {expanded && (
         <div className="mt-2 space-y-2 border-t border-white/10 pt-2">

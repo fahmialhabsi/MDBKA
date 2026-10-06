@@ -1,5 +1,5 @@
 import { useState, type JSX } from "react";
-import { FINEX_SPECS_32 } from "../../lib/instrumentSpecs32";
+import { getAvailableSymbols } from "../../lib/brokerSymbols";
 import {
   checkRewardRisk,
   rewardRiskRatio,
@@ -22,16 +22,30 @@ export interface NewHolding {
 
 /**
  * Tahap F1 — form entry posisi manual (display + input; tanpa order).
- * Simbol dari spec32 Finex (16); live mengalir bila EA menulis tick-nya.
+ * Daftar simbol mengikuti broker aktif (OTB: *_ORB; Finex: tanpa suffix).
+ * Pilihan simbol mengikuti instrumen aktif Section 2 bila valid.
  */
 export function HoldingsForm({
   brokerId,
+  activeSymbol,
   onAdd,
 }: {
   readonly brokerId: BrokerId;
+  /** Simbol aktif dari Section 2 (mis. GBPUSD_ORB). */
+  readonly activeSymbol?: string;
   readonly onAdd: (holding: NewHolding) => void;
 }): JSX.Element {
-  const [symbol, setSymbol] = useState("USDCHF");
+  const symbols: readonly string[] = getAvailableSymbols(brokerId);
+  const defaultSymbol =
+    brokerId === "orbitraderberjangka" ? "GBPUSD_ORB" : "USDCHF";
+  const resolveInitialSymbol = (): string => {
+    const cleaned = (activeSymbol ?? "").trim().toUpperCase();
+    if (cleaned !== "" && (symbols as readonly string[]).includes(cleaned)) {
+      return cleaned;
+    }
+    return defaultSymbol;
+  };
+  const [symbol, setSymbol] = useState(resolveInitialSymbol);
   const [direction, setDirection] = useState<HoldingDirection>("BELI");
   const [lot, setLot] = useState("0.01");
   const [entryPrice, setEntryPrice] = useState("");
@@ -39,6 +53,33 @@ export function HoldingsForm({
   const [tp, setTp] = useState("");
   const [equity, setEquity] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
+
+  // Sinkron simbol yang aman (render-phase berpagar, pola resmi React):
+  // ganti broker → pindah daftar + simbol default bila simbol lama tak
+  // valid; ganti simbol Section 2 → ikuti bila valid untuk broker ini.
+  // Pilihan manual pengguna di luar itu tidak dioverride (key tak berubah).
+  const cleanedActive = (activeSymbol ?? "").trim().toUpperCase();
+  const validActive =
+    cleanedActive !== "" &&
+    (symbols as readonly string[]).includes(cleanedActive)
+      ? cleanedActive
+      : null;
+  const [syncKey, setSyncKey] = useState(
+    `${brokerId}|${validActive ?? ""}`,
+  );
+  const currentKey = `${brokerId}|${validActive ?? ""}`;
+  if (syncKey !== currentKey) {
+    setSyncKey(currentKey);
+    if (validActive !== null) {
+      setSymbol(validActive);
+    } else {
+      setSymbol((previous) =>
+        (symbols as readonly string[]).includes(previous)
+          ? previous
+          : defaultSymbol,
+      );
+    }
+  }
 
   const submit = (): void => {
     const equityValue = equity.trim() === "" ? undefined : Number(equity);
@@ -83,7 +124,7 @@ export function HoldingsForm({
             onChange={(e) => setSymbol(e.target.value)}
             className={field}
           >
-            {FINEX_SPECS_32.map((s) => (
+            {symbols.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>

@@ -64,12 +64,28 @@ function saveHoldings(holdings: readonly Holding[]): void {
 export function HoldingsMonitor({
   brokerId,
   fxRates,
+  activeSymbol,
 }: {
   readonly brokerId: BrokerId | undefined;
   readonly fxRates: ExchangeRates | null;
+  /**
+   * Simbol aktif dari Section 2. Diteruskan ke form manual agar pilihan
+   * Simbol selalu mengikuti instrumen yang dianalisa (mis. GBPUSD_ORB
+   * di OTB, bukan GBPUSD ala Finex).
+   */
+  readonly activeSymbol?: string;
 }): JSX.Element {
   const [holdings, setHoldings] = useState<Holding[]>(() => loadHoldings());
   const [tab, setTab] = useState<BrokerId>(brokerId ?? DEFAULT_BROKER_ID);
+
+  // Ikuti broker aktif dari App: ganti tab Finex|OTB otomatis.
+  // Sinkron render-phase berpagar (pola resmi React, tanpa cascade):
+  // hanya saat brokerId benar-benar berganti.
+  const [tabBrokerKey, setTabBrokerKey] = useState(brokerId);
+  if (tabBrokerKey !== brokerId) {
+    setTabBrokerKey(brokerId);
+    if (brokerId !== undefined) setTab(brokerId);
+  }
 
   // Tahap AP: posisi terbuka MT5 (read-only, via EA ExportPositions).
   // Dua hook (satu per broker) agar counter KEDUA tab hidup walau
@@ -155,7 +171,7 @@ export function HoldingsMonitor({
           );
         })}
       </div>
-      <HoldingsForm brokerId={tab} onAdd={add} />
+      <HoldingsForm brokerId={tab} activeSymbol={activeSymbol} onAdd={add} />
       <HoldingsDashboard
         holdings={autoHoldings}
         brokerId={tab}

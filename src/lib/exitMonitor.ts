@@ -469,6 +469,67 @@ export function checkRewardRisk(
 }
 
 /**
+ * Ambang breakeven: profit (jarak harga) ≥ 1× risiko terencana.
+ */
+export const BREAKEVEN_R_MULTIPLE = 1;
+
+export interface BreakevenSignal {
+  /** Kelipatan-R posisi saat ini (profit harga / risiko harga). */
+  readonly multiple: number;
+  /** Target SL baru = harga entry (breakeven, sebelum spread/komisi). */
+  readonly slTarget: number;
+  readonly message: string;
+}
+
+/**
+ * Sinyal pindahkan SL ke breakeven (MODUL MURNI, CJS-safe).
+ * Terpicu bila profit berjalan (jarak HARGA dari entry, bukan USD)
+ * ≥ 1× risiko terencana DAN SL masih di sisi rugi (ada risiko yang
+ * layak diamankan). Mengembalikan null bila: input invalid, SL tidak
+ * di sisi rugi yang benar (risiko tak terdefinisi), atau profit belum
+ * 1R. Murni teks display — modify order tetap manual di MT5 (app
+ * tidak menempatkan order).
+ */
+export function checkBreakeven(
+  holding: Pick<Holding, "direction" | "entryPrice" | "sl">,
+  bid: number,
+  ask: number,
+): BreakevenSignal | null {
+  if (!Number.isFinite(bid) || bid <= 0) return null;
+  if (!Number.isFinite(ask) || ask <= 0) return null;
+  if (!Number.isFinite(holding.entryPrice) || holding.entryPrice <= 0) {
+    return null;
+  }
+  if (!Number.isFinite(holding.sl) || holding.sl <= 0) return null;
+  const riskDist =
+    holding.direction === "BELI"
+      ? holding.entryPrice - holding.sl
+      : holding.sl - holding.entryPrice;
+  if (!(riskDist > 0)) return null;
+  const ref = exitReferencePrice(holding.direction, bid, ask);
+  const profitDist =
+    holding.direction === "BELI"
+      ? ref - holding.entryPrice
+      : holding.entryPrice - ref;
+  if (!(profitDist > 0)) return null;
+  const multiple = profitDist / riskDist;
+  // Toleransi float: 1.321-1.32 tidak tepat 0.001 dalam biner.
+  // Epsilon dipakai di pemicu DAN pembulatan agar tampilan konsisten
+  // (tidak pernah "0.99R (≥1R)").
+  const multipleAdj = multiple + 1e-9;
+  if (!(multipleAdj >= BREAKEVEN_R_MULTIPLE)) return null;
+  const rounded = Math.floor(multipleAdj * 100) / 100;
+  return {
+    multiple: rounded,
+    slTarget: holding.entryPrice,
+    message:
+      `Profit ${rounded.toFixed(2)}R (≥1R). Amankan di MT5: klik kanan ` +
+      `posisi → Modify → isi Stop Loss = ${holding.entryPrice} → OK. ` +
+      `TP jangan diubah.`,
+  };
+}
+
+/**
  * Tandai holding keluar MANUAL (Tahap v1.3.0): BUKAN eksekusi order.
  * Mengunci realized P&L BERSIH (harga − komisi) pada harga exit + waktu
  * + catatan. Murni.
