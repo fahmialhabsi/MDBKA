@@ -1860,6 +1860,34 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
 });
 
+test("503. saham .US OTB: swap persentase ÷360 (META.US data nyata, BABA.US)", () => {
+  const meta = requireSwapCost({
+    symbol: "META.US",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 0.1,
+    holdingDays: 1,
+    currentPrice: 739.54,
+  });
+  assert(meta.swapType === "percentage", `swapType=${meta.swapType}`);
+  assert(
+    Math.abs(meta.swapCost - ((739.54 * -0.1) / 360) * 0.1) < 1e-9,
+    `meta=${meta.swapCost}`,
+  );
+  const baba = requireSwapCost({
+    symbol: "BABA.US",
+    brokerId: "orbitraderberjangka",
+    direction: "BELI",
+    lot: 1,
+    holdingDays: 1,
+    currentPrice: 110.89,
+  });
+  assert(
+    Math.abs(baba.swapCost - (100 * 110.89 * -0.032) / 360) < 1e-9,
+    `baba=${baba.swapCost}`,
+  );
+});
+
 test("502. predictDailySwap: INTEREST_CURRENT tahunan ÷360, DISABLED 0, mode lain null", () => {
   const base = {
     type: "BUY",
