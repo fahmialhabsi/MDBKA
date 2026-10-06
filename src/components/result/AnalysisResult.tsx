@@ -17,6 +17,9 @@ import { getTripleSwapLabel } from "../../services/dateService";
 import { isOtbSymbolVerified } from "../../lib/brokerSymbols";
 import { checkStopsDistance } from "../../lib/orderTicket";
 import { useHoldingsQuotes } from "../../hooks/useHoldingsQuotes";
+import { useEquityStream } from "../../hooks/useEquityStream";
+import { useSymbolMargin } from "../../hooks/useSymbolMargin";
+import { checkMarginCap } from "../../lib/marginGuard";
 import type { ExchangeRates } from "../../services/fxRateService";
 
 interface Props {
@@ -28,6 +31,9 @@ interface Props {
   brokerId?: BrokerId;
   /** Tahap 5D-STEP2: ECB rate cache dari App (display USD info-only). */
   fxRates?: ExchangeRates | null;
+  /** Item (e): aturan volume broker untuk guard margin. */
+  minLot?: number;
+  lotStep?: number;
 }
 
 function money(value: number | null) {
@@ -53,6 +59,8 @@ export default function AnalysisResult({
   blockedReasons,
   brokerId,
   fxRates,
+  minLot,
+  lotStep,
 }: Props) {
   // Tahap 5C Step 2: holding + memo swap (info-only, post-decision).
   // Tahap 5D-STEP2: teruskan currentPrice (untuk % calc) + fxRates
@@ -66,6 +74,9 @@ export default function AnalysisResult({
     market.symbol !== "" ? [market.symbol] : [],
     brokerId,
   );
+  // Item (e): guard margin — free margin live + margin/lot MT5 (hook).
+  const { equity: liveEquity } = useEquityStream(5000, brokerId);
+  const symbolMargin = useSymbolMargin(brokerId, market.symbol);
 
   const currentPrice = market.bid > 0 ? market.bid : market.close;
 
@@ -279,13 +290,33 @@ export default function AnalysisResult({
         })
       : null;
 
+  // Item (e): lot order dibatasi margin (OrderCalcMargin MT5 vs free
+  // margin live). Blocked → orderText null + blok merah JANGAN entry.
+  const marginCap =
+    result !== null &&
+    result.decision !== "TUNGGU" &&
+    result.suggestedLot !== null
+      ? checkMarginCap({
+          suggestedLot: result.suggestedLot,
+          minLot: minLot ?? 0.01,
+          lotStep: lotStep ?? 0.01,
+          marginPerLot:
+            result.decision === "JUAL"
+              ? symbolMargin.marginSell
+              : symbolMargin.marginBuy,
+          freeMargin: liveEquity?.freeMargin ?? null,
+        })
+      : null;
+  const orderLot =
+    marginCap === null ? (result?.suggestedLot ?? null) : marginCap.cappedLot;
+
   const orderText =
     result !== null &&
     result.decision !== "TUNGGU" &&
-    result.suggestedLot !== null &&
+    orderLot !== null &&
     result.stopLoss !== null &&
     result.takeProfit !== null
-      ? `${market.symbol} ${result.decision} ${result.suggestedLot} @ ${result.entry}\nSL ${result.stopLoss} TP ${result.takeProfit}`
+      ? `${market.symbol} ${result.decision} ${orderLot} @ ${result.entry}\nSL ${result.stopLoss} TP ${result.takeProfit}`
       : null;
 
   const copyOrder = (): void => {
@@ -384,6 +415,15 @@ export default function AnalysisResult({
         </div>
       )}
 
+      {marginCap !== null && marginCap.blocked && (
+        <div
+          data-testid="margin-blocked"
+          className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-5 text-sm font-semibold text-rose-100"
+        >
+          ⛔ {marginCap.warning}
+        </div>
+      )}
+
       {orderText !== null && (
         <div
           data-testid="order-copy-block"
@@ -400,10 +440,20 @@ export default function AnalysisResult({
               ⚠ {stopsWarning}
             </p>
           )}
+          {marginCap !== null &&
+            !marginCap.blocked &&
+            marginCap.warning !== null && (
+              <p
+                data-testid="margin-warning"
+                className="mt-2 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100"
+              >
+                ⚠ {marginCap.warning}
+              </p>
+            )}
           {liveQuote === undefined && (
             <p className="mt-2 text-xs text-slate-500">
-              Tanpa harga live: pastikan SL/TP berjarak aman dari harga
-              berjalan sebelum order (analisa ulang bila market bergerak).
+              Tanpa harga live: pastikan SL/TP berjarak aman dari harga berjalan
+              sebelum order (analisa ulang bila market bergerak).
             </p>
           )}
           <button
@@ -494,8 +544,8 @@ export default function AnalysisResult({
                 data-testid="swap-pending"
                 className="mt-3 text-sm text-amber-200"
               >
-                Swap {market.symbol} belum terverifikasi dari Specification
-                — angka swap disembunyikan hingga terverifikasi (tanpa angka
+                Swap {market.symbol} belum terverifikasi dari Specification —
+                angka swap disembunyikan hingga terverifikasi (tanpa angka
                 fiktif).
               </p>
             ))}

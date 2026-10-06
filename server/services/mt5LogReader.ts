@@ -23,6 +23,11 @@ export interface ParsedEquity {
   readonly equity: number;
   readonly profit: number;
   readonly tradeCount?: number;
+  /** Format 8 kolom MDBKAMultiLive: AccountInfo MT5 asli. */
+  readonly leverage?: number;
+  readonly margin?: number;
+  readonly freeMargin?: number;
+  readonly marginLevel?: number;
 }
 
 const BALANCE_RE = /balance\s*:\s*(-?[\d.,]+)/gi;
@@ -81,8 +86,25 @@ export function parseEquityCsvLine(line: string): ParsedEquity | null {
       if (!Number.isFinite(profit)) return null;
     }
   }
+  // Format baru MDBKAMultiLive (8 kolom): ...,Profit,Leverage,Margin,
+  // FreeMargin,MarginLevel (AccountInfo MT5 asli). Kolom ke-5 = Leverage,
+  // BUKAN TradeCount.
+  const isMarginFormat = cells.length >= 8;
+  const optNum = (i: number): number | undefined => {
+    const raw = (cells[i] ?? "").trim();
+    if (!numeric.test(raw)) return undefined;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const leverage = isMarginFormat ? optNum(4) : undefined;
+  const margin = isMarginFormat ? optNum(5) : undefined;
+  const freeMargin = isMarginFormat ? optNum(6) : undefined;
+  const levelRaw = isMarginFormat ? optNum(7) : undefined;
+  // MT5 menulis 0 bila tanpa posisi → tak terdefinisi, bukan 0%.
+  const marginLevel =
+    levelRaw !== undefined && levelRaw > 0 ? levelRaw : undefined;
   let tradeCount: number | undefined;
-  if (cells.length >= 5) {
+  if (!isMarginFormat && cells.length >= 5) {
     const tradesRaw = (cells[4] ?? "").trim();
     if (tradesRaw.length > 0) {
       if (!/^\d+$/.test(tradesRaw)) return null;
@@ -94,6 +116,10 @@ export function parseEquityCsvLine(line: string): ParsedEquity | null {
     equity,
     profit: profit ?? equity - balance,
     ...(tradeCount !== undefined ? { tradeCount } : {}),
+    ...(leverage !== undefined && leverage > 0 ? { leverage } : {}),
+    ...(margin !== undefined ? { margin } : {}),
+    ...(freeMargin !== undefined ? { freeMargin } : {}),
+    ...(marginLevel !== undefined ? { marginLevel } : {}),
   };
 }
 
@@ -188,6 +214,14 @@ function readSnapshot(logFile: string, parsed: ParsedEquity): EquitySnapshot {
     profit: parsed.profit,
     ...(parsed.tradeCount !== undefined
       ? { tradeCount: parsed.tradeCount }
+      : {}),
+    ...(parsed.leverage !== undefined ? { leverage: parsed.leverage } : {}),
+    ...(parsed.margin !== undefined ? { margin: parsed.margin } : {}),
+    ...(parsed.freeMargin !== undefined
+      ? { freeMargin: parsed.freeMargin }
+      : {}),
+    ...(parsed.marginLevel !== undefined
+      ? { marginLevel: parsed.marginLevel }
       : {}),
     lastModified,
   };

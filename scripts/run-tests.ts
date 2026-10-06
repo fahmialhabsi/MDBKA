@@ -175,6 +175,7 @@ import {
 } from "../src/services/dateService";
 import {
   MT5LogReader,
+  parseEquityCsvLine,
   parseEquityFromText,
 } from "../server/services/mt5LogReader";
 import { isEquitySnapshot } from "../server/types/equity";
@@ -1812,6 +1813,43 @@ test("482. parseMarginCsv: format ExportMarginMDBKA + nilai -1 jadi null", () =>
   assert(marginFileTag("xyz") === null, "broker asing lolos");
   const route = readSrc("server/routes/marginRoutes.ts");
   assert(route.includes("parseMarginCsv") && route.includes("404"), "route tak pakai parser/404");
+});
+
+test("483. useSymbolMargin: encode simbol #, 404 jujur, anti data basi (readSrc)", () => {
+  const src = readSrc("src/hooks/useSymbolMargin.ts");
+  assert(src.includes("/api/margin"), "endpoint margin hilang");
+  assert(src.includes("encodeURIComponent(sym)"), "simbol # tak di-encode");
+  assert(src.includes("sourceMissing: true"), "404 jujur hilang");
+  assert(src.includes("state.key === key"), "guard data basi hilang");
+  assert(src.includes("API_BASE_URL"), "base URL tak terpusat");
+});
+
+test("485. parseEquityCsvLine format 8 kolom: margin asli, leverage bukan tradeCount", () => {
+  const otb = parseEquityCsvLine("2026.10.06 10:39:46,4811.82,4879.82,68.00,100,250.00,4629.82,1951.93");
+  if (otb === null) throw new Error("baris OTB ditolak");
+  assert(otb.freeMargin === 4629.82, `free=${otb.freeMargin}`);
+  assert(otb.margin === 250 && otb.leverage === 100, "margin/leverage salah");
+  assert(otb.marginLevel === 1951.93, "margin level salah");
+  assert(otb.tradeCount === undefined, "leverage terbaca sebagai tradeCount");
+  const fx = parseEquityCsvLine("2026.10.06 11:39:49,8.50,8.50,0.00,500,0.00,8.50,0.00");
+  if (fx === null) throw new Error("baris Finex ditolak");
+  assert(fx.freeMargin === 8.5 && fx.leverage === 500, "Finex salah");
+  assert(fx.marginLevel === undefined, "margin level 0 harus undefined");
+  const old = parseEquityCsvLine("2026.10.03 09:00,1000.50,1060.00,59.50,3");
+  assert(old !== null && old.tradeCount === 3 && old.freeMargin === undefined, "format lama rusak");
+});
+
+/* ---------------- Diagnosis end-to-end: TEST 121-138 ---------------- */
+test("484. wiring guard margin di hasil analisa (readSrc)", () => {
+  const src = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(src.includes("checkMarginCap"), "guard tak di-wire");
+  assert(src.includes("useSymbolMargin"), "hook margin tak dipakai");
+  assert(src.includes("liveEquity?.freeMargin"), "free margin live hilang");
+  assert(src.includes('data-testid="margin-blocked"'), "blok merah hilang");
+  assert(src.includes('data-testid="margin-warning"'), "warning pangkas hilang");
+  assert(src.includes("${orderLot}"), "order tak pakai lot terbatas");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("minLot={broker.minLot}"), "minLot tak diteruskan");
 });
 
 /* ---------------- Diagnosis end-to-end: TEST 121-138 ---------------- */

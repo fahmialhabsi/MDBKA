@@ -1009,6 +1009,8 @@ export default function App() {
                 market={market}
                 viewState={viewState}
                 blockedReasons={blockedReasons}
+                minLot={broker.minLot}
+                lotStep={broker.lotStep}
                 brokerId={activeBrokerId}
                 fxRates={fxRates}
               />
