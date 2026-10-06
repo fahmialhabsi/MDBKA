@@ -42,6 +42,7 @@ import {
   createEmptyMarketForSymbol,
   displayMarketNumber,
   filterOcrPricesForSymbol,
+  getFinexVolumeSpec,
   isMarketEmptyForSymbol,
   mergeValidOcrMarketData,
   parseMarketInput,
@@ -1758,6 +1759,21 @@ test("479. OTB minLot 0.01 nyangkut naik ke spec; lotStep ikut spec", () => {
   );
   assert(higher.minLot === 0.5, "minLot pengguna >= spec tertimpa");
   assert(higher.lotStep === 0.1, "lotStep tidak ikut spec");
+});
+
+test("480. Finex volume spec: saham # 1.00, GBXUSD 0.10, forex 0.01", () => {
+  const aapl = applyBrokerPreset(
+    { ...makeValidBroker(), minLot: 0.01, lotStep: 0.01 },
+    "#AAPL",
+    "finex",
+  );
+  assert(aapl.minLot === 1, `#AAPL minLot=${aapl.minLot}`);
+  assert(aapl.lotStep === 1, `#AAPL lotStep=${aapl.lotStep}`);
+  const gbx = applyBrokerPreset(makeEmptyBroker(), "GBXUSD", "finex");
+  assert(gbx.minLot === 0.1 && gbx.lotStep === 0.1, "GBXUSD bukan 0.1");
+  const gbp = applyBrokerPreset(makeEmptyBroker(), "GBPUSD", "finex");
+  assert(gbp.minLot === 0.01 && gbp.lotStep === 0.01, "GBPUSD bukan 0.01");
+  assert(getFinexVolumeSpec("#NVDA").minVolume === 1, "#NVDA bukan 1");
 });
 
 /* ---------------- Diagnosis end-to-end: TEST 121-138 ---------------- */

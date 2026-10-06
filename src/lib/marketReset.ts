@@ -375,6 +375,22 @@ export function applyCsvSwingLevels(
  */
 export const FINEX_DEFAULT_COMMISSION = 1.0;
 
+/**
+ * Volume Finex dari CSV terminal 06 Okt 2026 (SymbolSpecs_Finex_1791247268):
+ * 41/41 saham "#" min/step 1.00; GBXUSD/USDEUR/USDGBP 0.10; sisanya 0.01.
+ */
+const FINEX_VOLUME_010 = new Set(["GBXUSD", "USDEUR", "USDGBP"]);
+
+export function getFinexVolumeSpec(symbol: string): {
+  minVolume: number;
+  volumeStep: number;
+} {
+  const raw = symbol.trim().toUpperCase();
+  if (raw.startsWith("#")) return { minVolume: 1, volumeStep: 1 };
+  if (FINEX_VOLUME_010.has(raw)) return { minVolume: 0.1, volumeStep: 0.1 };
+  return { minVolume: 0.01, volumeStep: 0.01 };
+}
+
 /** Default strategi (bukan data broker): aman diisi saat belum ada nilai. */
 const STRATEGY_DEFAULTS = {
   riskPercent: 10,
@@ -486,14 +502,14 @@ export function applyBrokerPreset(
     riskPercent: needsFill(previous.riskPercent)
       ? STRATEGY_DEFAULTS.riskPercent
       : previous.riskPercent,
+    // minLot tidak boleh di bawah minimum broker (saham "#" 1.00);
+    // lotStep = aturan broker, selalu dari spec Finex.
     minLot:
-      force || needsFill(previous.minLot)
-        ? STRATEGY_DEFAULTS.minLot
+      needsFill(previous.minLot) ||
+      previous.minLot < getFinexVolumeSpec(symbol).minVolume
+        ? getFinexVolumeSpec(symbol).minVolume
         : previous.minLot,
-    lotStep:
-      force || needsFill(previous.lotStep)
-        ? STRATEGY_DEFAULTS.lotStep
-        : previous.lotStep,
+    lotStep: getFinexVolumeSpec(symbol).volumeStep,
     atrMultiplier: needsFill(previous.atrMultiplier)
       ? STRATEGY_DEFAULTS.atrMultiplier
       : previous.atrMultiplier,
