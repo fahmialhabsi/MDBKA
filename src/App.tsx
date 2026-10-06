@@ -217,7 +217,12 @@ export default function App() {
   // Nilai live terakhir yang diterapkan otomatis. Melindungi edit manual:
   // live hanya menimpa bila field kosong ATAU masih sama dengan nilai
   // live yang diterapkan sebelumnya (bukan ketikan pengguna).
-  const appliedLiveEquityRef = useRef<number | null>(null);
+  // Equity contoh bawaan (initialBroker) bukan ketikan pengguna: anggap
+  // nilai otomatis agar equity live boleh menggantikannya.
+  const appliedLiveEquityRef = useRef<Record<BrokerId, number | null>>({
+    finex: initialBroker.equity,
+    orbitraderberjangka: initialBroker.equity,
+  });
 
   // Inti analisa yang bisa dipanggil dengan nilai eksplisit (bukan state
   // yang belum ter-commit) — dipakai alur otomatis setelah CSV masuk.
@@ -280,17 +285,29 @@ export default function App() {
   const autoEquityKeyRef = useRef("");
   useEffect(() => {
     if (liveEquityValue === null || result !== null) return;
+    // Hanya alur CSV: tanpa CSV terhubung (mis. data contoh saat start),
+    // jangan jalankan analisa otomatis.
+    if (connectedCsvName.trim() === "") return;
     const empty = !Number.isFinite(broker.equity) || broker.equity <= 0;
-    const followsLive = broker.equity === appliedLiveEquityRef.current;
+    const followsLive =
+      broker.equity === appliedLiveEquityRef.current[activeBrokerId];
     if (!empty && !followsLive) return;
     const key = `${liveEquityValue}|${market.symbol}|${market.close}`;
     if (autoEquityKeyRef.current === key) return;
     autoEquityKeyRef.current = key;
-    appliedLiveEquityRef.current = liveEquityValue;
+    appliedLiveEquityRef.current[activeBrokerId] = liveEquityValue;
     const nextBroker = { ...broker, equity: liveEquityValue };
     setBroker(nextBroker);
     executeAnalysis(market, nextBroker);
-  }, [liveEquityValue, result, market, broker, executeAnalysis]);
+  }, [
+    liveEquityValue,
+    result,
+    market,
+    broker,
+    executeAnalysis,
+    connectedCsvName,
+    activeBrokerId,
+  ]);
 
   const isMarketEmpty = useMemo(
     () => RESET_MARKET_FIELDS.every((field) => market[field] === 0),
@@ -403,9 +420,14 @@ export default function App() {
       }
     }
 
-    setBroker((previous) =>
-      applyBrokerPreset(previous, symbol, activeBrokerId),
-    );
+    setBroker((previous) => {
+      // Workspace baru untuk broker ini: equity yang terbawa dari broker
+      // lain bukan milik akun ini → tandai otomatis agar live menggantinya.
+      if (brokerChanged) {
+        appliedLiveEquityRef.current[activeBrokerId] = previous.equity;
+      }
+      return applyBrokerPreset(previous, symbol, activeBrokerId);
+    });
 
     setSwingCsv("");
     setConnectedCsvName("");
@@ -501,12 +523,12 @@ export default function App() {
         liveEquityValue !== null &&
         (!Number.isFinite(nextBroker.equity) ||
           nextBroker.equity <= 0 ||
-          nextBroker.equity === appliedLiveEquityRef.current)
+          nextBroker.equity === appliedLiveEquityRef.current[activeBrokerId])
       ) {
         if (nextBroker.equity !== liveEquityValue) {
           nextBroker = { ...nextBroker, equity: liveEquityValue };
         }
-        appliedLiveEquityRef.current = liveEquityValue;
+        appliedLiveEquityRef.current[activeBrokerId] = liveEquityValue;
       }
       setBroker(nextBroker);
       executeAnalysis(applied.market, nextBroker);
@@ -601,12 +623,12 @@ export default function App() {
         liveEquityValue !== null &&
         (!Number.isFinite(nextBroker.equity) ||
           nextBroker.equity <= 0 ||
-          nextBroker.equity === appliedLiveEquityRef.current)
+          nextBroker.equity === appliedLiveEquityRef.current[activeBrokerId])
       ) {
         if (nextBroker.equity !== liveEquityValue) {
           nextBroker = { ...nextBroker, equity: liveEquityValue };
         }
-        appliedLiveEquityRef.current = liveEquityValue;
+        appliedLiveEquityRef.current[activeBrokerId] = liveEquityValue;
       }
 
       setSwingCsv(text);
@@ -703,7 +725,7 @@ export default function App() {
     setSavedFlags({ finex: false, orbitraderberjangka: false });
     setMarket(emptyMarket);
     setBroker(emptyBroker);
-    appliedLiveEquityRef.current = null;
+    appliedLiveEquityRef.current[activeBrokerId] = null;
     setActiveBrokerId(DEFAULT_BROKER_ID);
     setBrokerNotice("");
     setSymbolNotice("");
@@ -721,7 +743,7 @@ export default function App() {
     setSavedFlags({ finex: false, orbitraderberjangka: false });
     setMarket(initialMarket);
     setBroker(initialBroker);
-    appliedLiveEquityRef.current = null;
+    appliedLiveEquityRef.current[activeBrokerId] = initialBroker.equity;
     setActiveBrokerId(DEFAULT_BROKER_ID);
     setBrokerNotice("");
     setSymbolNotice("");
@@ -1012,7 +1034,7 @@ export default function App() {
               brokerId={activeBrokerId}
               onApplyEquity={(liveEquity) => {
                 if (!Number.isFinite(liveEquity) || liveEquity <= 0) return;
-                appliedLiveEquityRef.current = liveEquity;
+                appliedLiveEquityRef.current[activeBrokerId] = liveEquity;
                 const nextBroker = { ...broker, equity: liveEquity };
                 setBroker(nextBroker);
                 executeAnalysis(market, nextBroker);
