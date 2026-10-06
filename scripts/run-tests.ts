@@ -1856,6 +1856,17 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
 });
 
+test("493. komisi default tidak terbawa antar broker; ketikan manual tetap", () => {
+  const finex = applyBrokerPreset(makeEmptyBroker(), "#AAPL");
+  assert(finex.commission === 1, `Finex=${finex.commission}`);
+  const otb = applyBrokerPreset(finex, "BABA.US", "orbitraderberjangka");
+  assert(otb.commission === 33, `Finex→OTB=${otb.commission}`);
+  const back = applyBrokerPreset(otb, "#AAPL");
+  assert(back.commission === 1, `OTB→Finex=${back.commission}`);
+  const manual = applyBrokerPreset({ ...otb, commission: 50 }, "#AAPL");
+  assert(manual.commission === 50, "ketikan manual tertimpa");
+});
+
 test("492. kartu Spread non-forex pakai point MT5 (readSrc)", () => {
   const src = readSrc("src/components/analysis/ValidationSummaryCard.tsx");
   assert(

@@ -7,9 +7,7 @@ import {
 } from "./instrumentConfig";
 import { DEFAULT_BROKER_ID, ORBITRADER_BROKER_ID } from "./brokerRegistry";
 import { exactOtbSymbol } from "./brokerSymbols";
-import {
-  getOtbInstrumentProfile,
-} from "./otbInstrumentConfig";
+import { getOtbInstrumentProfile } from "./otbInstrumentConfig";
 import { getSpec32FormDefaults } from "./spec32Wiring";
 import { traceOcrStage } from "./debugTrace";
 
@@ -422,6 +420,18 @@ function needsFill(value: number): boolean {
  *   TIDAK disentuh (wajib input/konfirmasi manual). Komisi OTB diisi dari
  *   preset terverifikasi bila kosong (user override dipertahankan).
  */
+/**
+ * Komisi yang sama dengan default salah satu broker (Finex 1 / OTB spec32 33)
+ * dianggap isian otomatis, bukan ketikan pengguna, sehingga boleh ditimpa saat
+ * pindah simbol/broker. Dulu nilai Finex terbawa ke OTB dan sebaliknya.
+ */
+function isBrokerDefaultCommission(value: number): boolean {
+  return (
+    value === FINEX_DEFAULT_COMMISSION ||
+    value === getSpec32FormDefaults("GBPUSD_ORB").commission
+  );
+}
+
 export function applyBrokerPreset(
   previous: BrokerSettings,
   symbol: string,
@@ -463,7 +473,10 @@ export function applyBrokerPreset(
       pointValue: otb.contractSize,
       contractSize: otb.contractSize,
       commission:
-        force || needsFill(previous.commission)
+        force ||
+        needsFill(previous.commission) ||
+        isBrokerDefaultCommission(previous.commission) ||
+        isBrokerDefaultCommission(previous.commission)
           ? spec32Defaults.commission
           : previous.commission,
       riskPercent: needsFill(previous.riskPercent)
@@ -500,7 +513,10 @@ export function applyBrokerPreset(
     // dipertahankan (needsFill hanya mengisi nilai kosong/invalid),
     // kecuali force via tombol preset.
     commission:
-      force || needsFill(previous.commission)
+      force ||
+      needsFill(previous.commission) ||
+      isBrokerDefaultCommission(previous.commission) ||
+      isBrokerDefaultCommission(previous.commission)
         ? FINEX_DEFAULT_COMMISSION
         : previous.commission,
     riskPercent: needsFill(previous.riskPercent)
