@@ -1,9 +1,12 @@
 ﻿# MDBKA — Merangkak Dari Bawah Ke Atas
+
 Trading Education & Risk Calculator untuk MetaTrader 5 (OTB + Finex)
 
 ## 📋 Features
 
 ✅ **16 Simbol OTB** (16/16 terverifikasi ekspor CSV terminal Tahap 6E+6H)
+→ Tahap 6I (06 Okt 2026): **68/68 OTB + 82 Finex** dari bulk export
+(`SymbolSpecs_OTB_1791247136.csv`, `SymbolSpecs_Finex_1791247268.csv`)
 ✅ **OCR Auto-Extract** — screenshot Market Watch & Data Window → parsed otomatis
 ✅ **Dual Broker Support** — Finex (default) + OrbiTraderBerjangka
 ✅ **Risk Calculator** — equity risk %, lot recommendation, P&L projection
@@ -21,6 +24,7 @@ Trading Education & Risk Calculator untuk MetaTrader 5 (OTB + Finex)
 ## 🚀 Cara Pakai
 
 ### Setup
+
 ```bash
 npm install
 npm run dev
@@ -29,16 +33,19 @@ npm run dev
 ```
 
 ### Produksi / LAN
+
 ```bash
 npm run build            # frontend → dist/
 npm run build:backend    # backend → dist-server/
 npm start                # preview 5173 + backend 3000 (butuh dist ter-build)
 ```
+
 Akses non-localhost: isi `.env` (lihat `.env.example`) —
 `FRONTEND_ORIGIN` untuk CORS backend, `VITE_API_BASE_URL` untuk frontend
 lalu `npm run build` ulang (URL frontend dibake saat build).
 
 ### Arsip Tick Histori
+
 Backend mengarsipkan setiap tick valid ke JSONL harian
 (`data/history/{otb,finex}/ticks-YYYY-MM-DD.jsonl`, git-ignored) —
 dedup otomatis, retensi default 120 hari, timestamp dinormalisasi ke UTC
@@ -48,12 +55,14 @@ Biarkan backend jalan saat market buka agar histori terkumpul untuk
 agregator candle masa depan.
 
 ### EA Pendukung (`ea/`)
+
 - `ExportPositions.mq5` — tulis posisi open ke `positions.csv` tiap 5 dtk
   (compile di MetaEditor → drag ke chart → izinkan Algo Trading).
   Endpoint: `GET /api/positions?broker=` (Finex/OTB, 404 jujur bila EA
   belum dipasang). Posisi MT5 tampil read-only di tab monitor.
 
 ### Workflow Analisis (dua jalur)
+
 1. **Screenshot** → Terminal trading (Market Watch + Data Window region)
 2. **Upload CSV** → Export 50+ candle dari MT5 (indikator MA50/RSI/CCI/ATR/MACD dihitung otomatis — tanpa screenshot bisa analisa)
 3. **Extract Data** → OCR auto-parse + CSV swing level
@@ -64,6 +73,7 @@ agregator candle masa depan.
 8. **Salin Order** → Blok hasil (Arah, Volume, SL, TP) → tempel manual di MT5
 
 ### Contoh: AUDCAD_ORB H1
+
 - Bid/Ask: 0.98554 / 0.98573
 - Risiko Maksimum: 10% (Rp481rb dari Rp4.8jt equity)
 - Score: -2/5 TUNGGU (bearish tapi belum confirm)
@@ -72,18 +82,21 @@ agregator candle masa depan.
 ## 📊 Supported Symbols
 
 **Finex (Default)**
-- Forex: US100, GBPUSD
-- (Expandable)
+
+- Forex (27): AUDCAD–USDJPY lengkap + exotics USDHKD/GBXUSD/USDEUR/USDGBP
+- Metals: XAUUSD, XAGUSD · Energy: XTIUSD · Indeks: DE30/HK50/JP225/UK100/US100/US30/US500
+- Saham `#` (41): #AAPL–#VOW · semua dari bulk export 06 Okt 2026
 
 **OrbiTraderBerjangka (OTB)**
-- Verified (16/16): GBPUSD_ORB + 10 simbol Tahap 6E + AUDCAD_ORB, EURCHF_ORB (6E-11/12) + NZDJPY_ORB, USDCHF_ORB, USDJPY_ORB (6H, preset baru dari CSV 03 Okt 2026: stops 20, step 0.10, margin 100k/100k/50k, komisi 33)
+
+- Verified (68/68): 16 lama (GBPUSD_ORB + 6E + 6H) + 52 simbol Tahap 6I (8 forex, XAU/XAG, US100/US30/US500.DEC, CLU, 38 saham .US; stops/volumes/margin/komisi 33 verbatim CSV)
 - Pending (0)
 
 ## ⚠️ Known Limitations
 
 - **Live equity display-only** — tidak otomatis menimpa input equity manual (konfirmasi pengguna)
 - **FX rate daily** — update 1x sehari (ECB), bukan real-time minute
-- **Finex limited** — hanya 2 simbol untuk demo
+- **Finex full** — 82 simbol (dulu demo 2 simbol); #saham min lot 1.0, GBXUSD pence, USDEUR 8 desimal
 - **OTB spread-mode** — `floating` adalah default kelas (tidak ada di ekspor CSV MT5); komisi 33/lot sesuai kolom Commission CSV
 
 ## 🛠️ Tech Stack
@@ -92,11 +105,12 @@ agregator candle masa depan.
 - OCR: regex + region-based text extraction
 - CSV: Papa Parse (50+ candle validation)
 - FX Rate: ECB free API (fallback hardcoded)
-- Test: 460/460 lolos (zero regression)
+- Test: 475/475 lolos (zero regression)
 
 ## 🔌 Tahap 5E-STEP2: Live Equity (Node.js Backend)
 
 ### Running
+
 ```bash
 npm run dev
 # Frontend 5173 + backend 3000 sekaligus (satu perintah).
@@ -107,6 +121,7 @@ npm run dev:backend    # Backend 3000 saja (tsx watch server/index.ts)
 ```
 
 ### MT5 Integration
+
 - Backend memantau log MT5 di `process.env.MT5_LOG_PATH`
   (file `.log` atau direktori `logs/`; default
   `AppData\Roaming\MetaTrader 5`). Lihat `.env.example`.
@@ -116,6 +131,7 @@ npm run dev:backend    # Backend 3000 saja (tsx watch server/index.ts)
   mengubah keputusan BELI/JUAL/TUNGGU maupun lot).
 
 ### API
+
 - GET `/api/equity/latest` — snapshot terakhir (404 bila belum ada data)
 - GET `/api/equity/stream` — SSE stream + heartbeat 30 dtk
 - GET `/health` — liveness probe
