@@ -1857,6 +1857,34 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
 });
 
+test("497. minLot 1.00 saham # tidak nyangkut di OTB forex / Finex forex", () => {
+  const otb = applyBrokerPreset(
+    { ...makeValidBroker(), minLot: 1, lotStep: 1 },
+    "AUDJPY_ORB",
+    "orbitraderberjangka",
+  );
+  assert(otb.minLot === 0.1, `OTB AUDJPY_ORB minLot=${otb.minLot} (harus 0.1)`);
+  const finex = applyBrokerPreset(
+    { ...makeValidBroker(), minLot: 1 },
+    "GBPUSD",
+  );
+  assert(
+    finex.minLot === 0.01,
+    `Finex GBPUSD minLot=${finex.minLot} (harus 0.01)`,
+  );
+  const stock = applyBrokerPreset(
+    { ...makeValidBroker(), minLot: 0.01 },
+    "#AAPL",
+  );
+  assert(stock.minLot === 1, `#AAPL minLot=${stock.minLot} (harus 1)`);
+  const user = applyBrokerPreset(
+    { ...makeValidBroker(), minLot: 0.5 },
+    "AUDJPY_ORB",
+    "orbitraderberjangka",
+  );
+  assert(user.minLot === 0.5, "minLot pengguna 0.5 harus dipertahankan");
+});
+
 test("496. withUsdPointValue: OTB JPY dikonversi USD, USD/Finex/tanpa kurs tetap", () => {
   const otb = applyBrokerPreset(
     makeEmptyBroker(),

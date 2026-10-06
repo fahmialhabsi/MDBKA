@@ -442,6 +442,15 @@ function isBrokerDefaultCommission(value: number): boolean {
   );
 }
 
+/**
+ * minLot 1.00 = minimum saham "#" Finex (isian otomatis). Saat pindah ke
+ * simbol lain nilai ini boleh diturunkan ke spec; dulu nyangkut di OTB
+ * forex (min 0.10) sehingga risiko lot minimum 10× terlalu besar.
+ */
+function isStockDefaultMinLot(value: number): boolean {
+  return value === getFinexVolumeSpec("#").minVolume;
+}
+
 export function applyBrokerPreset(
   previous: BrokerSettings,
   symbol: string,
@@ -496,7 +505,9 @@ export function applyBrokerPreset(
       // nyangkut di OTB 0.10); nilai pengguna >= spec dipertahankan.
       // lotStep = aturan broker murni, selalu dari spec.
       minLot:
-        needsFill(previous.minLot) || previous.minLot < otb.minVolume
+        needsFill(previous.minLot) ||
+        previous.minLot < otb.minVolume ||
+        isStockDefaultMinLot(previous.minLot)
           ? otb.minVolume
           : previous.minLot,
       lotStep: otb.volumeStep,
@@ -536,7 +547,8 @@ export function applyBrokerPreset(
     // lotStep = aturan broker, selalu dari spec Finex.
     minLot:
       needsFill(previous.minLot) ||
-      previous.minLot < getFinexVolumeSpec(symbol).minVolume
+      previous.minLot < getFinexVolumeSpec(symbol).minVolume ||
+      isStockDefaultMinLot(previous.minLot)
         ? getFinexVolumeSpec(symbol).minVolume
         : previous.minLot,
     lotStep: getFinexVolumeSpec(symbol).volumeStep,
