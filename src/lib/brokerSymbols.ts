@@ -14,7 +14,9 @@ import type { BrokerId } from "../types/broker";
  *   seperti _ORB signifikan.
  */
 
-/** Daftar simbol OTB dari broker (16/16 verified sejak 6H). */
+/** Daftar simbol OTB dari broker (68/68 verified sejak 6I). */
+// Tahap 6I (06 Okt 2026): 68/68 simbol dari bulk export
+// SymbolSpecs_OTB_1791247136.csv (semua terverifikasi, pola 6E/6H).
 export const OTB_ALL_SYMBOLS = [
   "AUDCAD_ORB",
   "AUDCHF_ORB",
@@ -32,6 +34,58 @@ export const OTB_ALL_SYMBOLS = [
   "USDCAD_ORB",
   "USDCHF_ORB",
   "USDJPY_ORB",
+  "EURGBP_ORB",
+  "EURJPY_ORB",
+  "EURNZD_ORB",
+  "EURUSD_ORB",
+  "GBPCAD_ORB",
+  "GBPJPY_ORB",
+  "GBPNZD_ORB",
+  "NZDUSD_ORB",
+  "XAGUSD_ORB",
+  "XAUUSD_ORB",
+  "CLU",
+  "US100.DEC",
+  "US30.DEC",
+  "US500.DEC",
+  "AAPL.US",
+  "AIG.US",
+  "AMAZON.US",
+  "AMZN.US",
+  "APPLE.US",
+  "AXP.US",
+  "BA.US",
+  "BABA.US",
+  "BAC.US",
+  "BOA.US",
+  "CITI.US",
+  "CSCO.US",
+  "CVX.US",
+  "DISNEY.US",
+  "EBAY.US",
+  "FB.US",
+  "GE.US",
+  "GOOG.US",
+  "GS.US",
+  "HPQ.US",
+  "IBM.US",
+  "INTC.US",
+  "JNJ.US",
+  "JPM.US",
+  "KO.US",
+  "MA.US",
+  "MCD.US",
+  "META.US",
+  "MSFT.US",
+  "NVDA.US",
+  "ORCL.US",
+  "PFE.US",
+  "PG.US",
+  "SBUX.US",
+  "T.US",
+  "V.US",
+  "WMT.US",
+  "XOM.US",
 ] as const;
 
 /**
@@ -63,6 +117,58 @@ export const VERIFIED_OTB_SYMBOLS: readonly string[] = Object.freeze([
   "NZDJPY_ORB",
   "USDCHF_ORB",
   "USDJPY_ORB",
+  "EURGBP_ORB",
+  "EURJPY_ORB",
+  "EURNZD_ORB",
+  "EURUSD_ORB",
+  "GBPCAD_ORB",
+  "GBPJPY_ORB",
+  "GBPNZD_ORB",
+  "NZDUSD_ORB",
+  "XAGUSD_ORB",
+  "XAUUSD_ORB",
+  "CLU",
+  "US100.DEC",
+  "US30.DEC",
+  "US500.DEC",
+  "AAPL.US",
+  "AIG.US",
+  "AMAZON.US",
+  "AMZN.US",
+  "APPLE.US",
+  "AXP.US",
+  "BA.US",
+  "BABA.US",
+  "BAC.US",
+  "BOA.US",
+  "CITI.US",
+  "CSCO.US",
+  "CVX.US",
+  "DISNEY.US",
+  "EBAY.US",
+  "FB.US",
+  "GE.US",
+  "GOOG.US",
+  "GS.US",
+  "HPQ.US",
+  "IBM.US",
+  "INTC.US",
+  "JNJ.US",
+  "JPM.US",
+  "KO.US",
+  "MA.US",
+  "MCD.US",
+  "META.US",
+  "MSFT.US",
+  "NVDA.US",
+  "ORCL.US",
+  "PFE.US",
+  "PG.US",
+  "SBUX.US",
+  "T.US",
+  "V.US",
+  "WMT.US",
+  "XOM.US",
 ]);
 
 /** True bila simbol OTB terverifikasi (exact, case-sensitive). */
@@ -80,7 +186,9 @@ function isCompleteOtbPreset(symbol: string): boolean {
   const preset = getOtbInstrumentProfile(symbol);
   return (
     preset !== null &&
-    preset.digits > 0 &&
+    // digits 0 valid (indeks tanpa desimal seperti HK50/JP225).
+    Number.isFinite(preset.digits) &&
+    preset.digits >= 0 &&
     preset.contractSize > 0 &&
     isOtbSymbolVerified(symbol)
   );
@@ -116,7 +224,10 @@ export function hasOtbPresetForSymbol(
  * Kanonikalisasi simbol sesuai broker:
  * - OTB: trimmed + uppercase EXACT (tanpa normalizeSymbol agar _ORB
  *   tidak terpangkas menjadi nama Finex).
- * - Selain itu: normalizeSymbol lama (alias, suffix broker, label).
+ * - Finex: nama terdaftar dikembalikan persis (simbol bertitik seperti
+ *   "GOOG.US" dan bertanda seperti "#AAPL" tidak boleh dinormalisasi
+ *   menjadi kosong); selain itu: normalizeSymbol lama (alias, suffix
+ *   broker, label).
  */
 export function canonicalSymbolForBroker(
   symbol: string,
@@ -124,6 +235,11 @@ export function canonicalSymbolForBroker(
 ): string {
   if (brokerId === ORBITRADER_BROKER_ID) {
     return symbol.trim().toUpperCase();
+  }
+
+  const raw = symbol.trim().toUpperCase();
+  if ((SUPPORTED_SYMBOLS as readonly string[]).includes(raw)) {
+    return raw;
   }
 
   return normalizeSymbol(symbol);
