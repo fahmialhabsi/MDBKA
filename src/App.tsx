@@ -600,7 +600,8 @@ export default function App() {
           low: last.low,
           close: last.close,
           bid: last.close,
-          ask: last.close + tick,
+          // Bulatkan sisa float (111.06 + 0.01 = 111.07000000000001).
+          ask: Number((last.close + tick).toPrecision(12)),
           ...(detectedTimeframe ? { timeframe: detectedTimeframe } : {}),
           ...(indicators !== null
             ? {

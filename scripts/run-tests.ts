@@ -1856,14 +1856,29 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
 });
 
-/* ---------------- Diagnosis end-to-end: TEST 121-138 ---------------- */
+test("488. ask CSV dibulatkan: tanpa sisa float (readSrc)", () => {
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("ask: Number((last.close + tick).toPrecision(12))"),
+    "ask belum dibulatkan",
+  );
+  assert(!app.includes("ask: last.close + tick,"), "ask mentah masih ada");
+  assert(
+    Number((111.06 + 0.01).toPrecision(12)) === 111.07,
+    "pembulatan salah",
+  );
+});
+
 test("484. wiring guard margin di hasil analisa (readSrc)", () => {
   const src = readSrc("src/components/result/AnalysisResult.tsx");
   assert(src.includes("checkMarginCap"), "guard tak di-wire");
   assert(src.includes("useSymbolMargin"), "hook margin tak dipakai");
   assert(src.includes("liveEquity?.freeMargin"), "free margin live hilang");
   assert(src.includes('data-testid="margin-blocked"'), "blok merah hilang");
-  assert(src.includes('data-testid="margin-warning"'), "warning pangkas hilang");
+  assert(
+    src.includes('data-testid="margin-warning"'),
+    "warning pangkas hilang",
+  );
   assert(src.includes("${orderLot}"), "order tak pakai lot terbatas");
   const app = readSrc("src/App.tsx");
   assert(app.includes("minLot={broker.minLot}"), "minLot tak diteruskan");
