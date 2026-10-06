@@ -95,7 +95,7 @@ export default function ValidationSummaryCard({
         )}
 
         <h3 className="font-bold text-white">
-          6. Pemeriksaan kelengkapan dan risiko
+          5. Pemeriksaan kelengkapan dan risiko
         </h3>
       </div>
 

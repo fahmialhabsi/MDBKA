@@ -16,7 +16,10 @@
 
 import { Activity, Wallet } from "lucide-react";
 import { useRef, type JSX } from "react";
-import { useEquityStream } from "../../hooks/useEquityStream";
+import {
+  useEquityStream,
+  type EquityStreamState,
+} from "../../hooks/useEquityStream";
 import { useNow } from "../../hooks/useNow";
 import {
   formatAge,
@@ -83,13 +86,21 @@ function percent(value: number | null): string {
   return value === null ? "-" : `${value.toFixed(2)}%`;
 }
 
-export function LiveEquity({
+/**
+ * View murni (tanpa langganan): dipakai App yang memiliki stream sendiri
+ * agar satu SSE/polling dipakai bersama untuk panel + auto-analisa.
+ */
+export function LiveEquityView({
+  equity,
+  isConnected,
+  error,
   brokerId,
-}: {
-  /** Sumber live mengikuti broker aktif (default = sumber utama backend). */
+  onApplyEquity,
+}: EquityStreamState & {
+  /** Hanya untuk petunjuk sumber di pesan offline. */
   brokerId?: BrokerId;
+  onApplyEquity?: (equity: number) => void;
 }): JSX.Element {
-  const { equity, isConnected, error } = useEquityStream(5000, brokerId);
 
   // Tahap P2 — kesegaran data (anti-timezone, sama seperti LiveQuotes).
   // Lihat catatan disable terlingkup di LiveQuotes.tsx.
@@ -234,6 +245,36 @@ export function LiveEquity({
           {` · 1:${metrics.leverage}`}
         </p>
       )}
+
+      {equity !== null && onApplyEquity !== undefined && (
+        <button
+          type="button"
+          onClick={() => onApplyEquity(equity.equity)}
+          disabled={!Number.isFinite(equity.equity) || equity.equity <= 0}
+          className="mt-3 w-full rounded-xl bg-emerald-400/15 px-4 py-2 text-sm font-bold text-emerald-200 transition hover:bg-emerald-400/25 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Gunakan equity live (${equity.equity.toFixed(2)}) untuk analisa
+        </button>
+      )}
     </div>
+  );
+}
+
+/** Kompatibilitas: panel mandiri dengan langganan sendiri. */
+export function LiveEquity({
+  brokerId,
+  onApplyEquity,
+}: {
+  /** Sumber live mengikuti broker aktif (default = sumber utama backend). */
+  brokerId?: BrokerId;
+  onApplyEquity?: (equity: number) => void;
+}): JSX.Element {
+  const stream = useEquityStream(5000, brokerId);
+  return (
+    <LiveEquityView
+      {...stream}
+      brokerId={brokerId}
+      onApplyEquity={onApplyEquity}
+    />
   );
 }

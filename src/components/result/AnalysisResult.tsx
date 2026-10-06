@@ -118,7 +118,7 @@ export default function AnalysisResult({
             Analisa belum dapat dilakukan
           </h2>
           <p className="mt-2 text-sm text-amber-100/80">
-            Lengkapi hal berikut lalu klik Analisa Sekarang lagi.
+            Lengkapi hal berikut, hasil akan berjalan otomatis.
           </p>
         </div>
 
@@ -236,7 +236,7 @@ export default function AnalysisResult({
         <Clock3 className="mx-auto mb-3 text-slate-500" size={34} />
         <h3 className="font-semibold text-white">Belum ada hasil analisa</h3>
         <p className="mt-2 text-sm text-slate-400">
-          Lengkapi data lalu klik tombol Analisa Sekarang.
+          Lengkapi data, hasil analisa tampil otomatis.
         </p>
       </div>
     );
@@ -535,6 +535,8 @@ export default function AnalysisResult({
           </div>
         </div>
       </div>
+
+      <BeginnerGuide result={result} />
     </div>
   );
 }
@@ -544,6 +546,92 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
       <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-2 text-xl font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+/**
+ * Panduan bahasa awam di bawah hasil analisa (display only).
+ * Menjelaskan tanpa istilah trading: batas rugi = stop loss otomatis,
+ * target untung = take profit otomatis, lot = ukuran transaksi.
+ */
+function BeginnerGuide({ result }: { result: ResultType }) {
+  // TUNGGU = tidak ada perintah transaksi.
+  if (result.decision === "TUNGGU") {
+    return (
+      <div className="rounded-2xl border border-sky-400/25 bg-sky-400/5 p-5">
+        <p className="font-semibold text-sky-200">
+          Artinya gampang: JANGAN buka transaksi apa pun.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+          <li>
+            Tunggu sampai penunjuk arah kompak: skor minimal 3 untuk BELI
+            atau -3 untuk JUAL (sekarang {result.score}/5).
+          </li>
+          <li>
+            Untuk akun kecil, tunggu setup yang jarak entry ke batas
+            ruginya RAPAT (kecil) — makin rapat jaraknya, makin kecil modal
+            yang dibutuhkan untuk ikut.
+          </li>
+          <li>
+            Tidak entry = tidak rugi. Menunggu adalah keputusan yang benar
+            hari ini.
+          </li>
+        </ul>
+      </div>
+    );
+  }
+
+  // Sinyal ada tapi akun tak muat / lot tak memenuhi syarat broker.
+  if (result.riskStatus !== "MEMENUHI batas risiko") {
+    const over =
+      result.riskAtMinLot !== null && result.maxRiskUsd > 0
+        ? result.riskAtMinLot / result.maxRiskUsd
+        : null;
+    return (
+      <div className="rounded-2xl border border-amber-400/25 bg-amber-400/5 p-5">
+        <p className="font-semibold text-amber-200">
+          Artinya gampang: sinyalnya ada, tapi dompet belum muat. JANGAN
+          dipaksa entry.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+          <li>
+            Ukuran transaksi terkecil yang diizinkan broker risikonya $
+            {result.riskAtMinLot === null
+              ? "-"
+              : result.riskAtMinLot.toFixed(2)}
+            , sedangkan batas aman akun Anda hanya $
+            {result.maxRiskUsd.toFixed(2)}
+            {over !== null && over > 1
+              ? ` (kelebihan ${over.toFixed(1)}× lipat)`
+              : ""}
+            .
+          </li>
+          <li>
+            Solusi 1 (gratis): tunggu setup ber-SL rapat — jarak entry ke
+            batas rugi yang kecil membuat risiko lot minimum ikut kecil.
+          </li>
+          <li>
+            Solusi 2 (bayar): tambah modal hingga batas aman ≥ risiko lot
+            minimum.
+          </li>
+        </ul>
+      </div>
+    );
+  }
+
+  // Sinyal + risiko memenuhi syarat.
+  return (
+    <div className="rounded-2xl border border-emerald-400/25 bg-emerald-400/5 p-5">
+      <p className="font-semibold text-emerald-200">
+        Artinya gampang: setup ini BOLEH diikuti persis seperti blok
+        &quot;Salin order&quot; (simbol, arah, lot, batas rugi, target
+        untung — jangan diubah angkanya).
+      </p>
+      <p className="mt-2 text-sm leading-6 text-slate-300">
+        Setelah entry, pantau kartu posisi di bawah: begitu banner hijau
+        BREAKEVEN muncul, geser batas rugi ke harga entry sesuai perintahnya.
+      </p>
     </div>
   );
 }

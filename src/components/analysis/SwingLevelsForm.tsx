@@ -174,7 +174,7 @@ export default function SwingLevelsForm({
     <div className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.035] p-5">
       <div>
         <h2 className="font-bold text-white">
-          5. Support &amp; Resistance otomatis
+          4. Support &amp; Resistance otomatis
         </h2>
 
         <p className="mt-1 text-sm text-slate-400">

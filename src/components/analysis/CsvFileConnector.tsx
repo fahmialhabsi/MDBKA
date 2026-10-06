@@ -283,11 +283,12 @@ export default function CsvFileConnector({
     <div className="space-y-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4">
       <div>
         <h3 className="font-bold text-white">
-          4. Hubungkan CSV MetaTrader
+          3. Hubungkan CSV MetaTrader
         </h3>
         <p className="mt-1 text-sm text-slate-400">
           Pilih file CSV satu kali. MDBKA akan memeriksa perubahan file secara
-          otomatis setiap 5 detik. Koneksi file tidak bertahan setelah tab
+          otomatis setiap 5 detik dan hasil analisa berjalan otomatis.
+          Koneksi file tidak bertahan setelah tab
           ditutup — hubungkan ulang setelah membuka kembali.
         </p>
         {!isSupported && (
