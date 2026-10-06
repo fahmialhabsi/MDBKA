@@ -4980,7 +4980,7 @@ test("266. percentage AUDCHF_ORB BELI 0.5 lot price=0.5756 → -431.7 AUD [verif
   });
   assert(cost.swapType === "percentage", `swapType=${cost.swapType}`);
   assert(
-    Math.abs(cost.swapCost - -431.7) < 1e-6,
+    Math.abs(cost.swapCost - -431.7 / 360) < 1e-6,
     `swapCost=${cost.swapCost} (spec -863.4 lupa ×lot 0.5)`,
   );
   assert(cost.contractBaseCurrency === "AUD", "base bukan AUD");
@@ -4998,7 +4998,10 @@ test("267. percentage AUDCHF_ORB JUAL 0.5 lot → sama -431.7 AUD [verified 6E-1
     holdingDays: 1,
     currentPrice: 0.5756,
   });
-  assert(Math.abs(cost.swapCost - -431.7) < 1e-6, `swapCost=${cost.swapCost}`);
+  assert(
+    Math.abs(cost.swapCost - -431.7 / 360) < 1e-6,
+    `swapCost=${cost.swapCost}`,
+  );
   assert(cost.direction === "short", "JUAL tidak ke short");
   assert(cost.swapPercentage === -1.5, "long/short sama -1.5");
 });
@@ -5014,7 +5017,7 @@ test("268. percentage AUDJPY_ORB JUAL 1 lot price=0.009325 3 hari → -48.95625 
   });
   assert(cost.swapPercentage === -1.75, "rate short salah");
   assert(
-    Math.abs(cost.swapCost - -48.95625) < 1e-6,
+    Math.abs(cost.swapCost - -48.95625 / 360) < 1e-6,
     `swapCost=${cost.swapCost} (≈-49 spec)`,
   );
   assert(cost.contractBaseCurrency === "AUD", "base bukan AUD");
@@ -5030,7 +5033,7 @@ test("269. percentage AUDNZD_ORB BELI 2 lot price=0.4950 2 hari → -2475 [verif
     holdingDays: 2,
     currentPrice: 0.495,
   });
-  assert(Math.abs(cost.swapCost - -2475) < 1e-6, `swapCost=${cost.swapCost}`);
+  assert(Math.abs(cost.swapCost - -2475 / 360) < 1e-6, `swapCost=${cost.swapCost}`);
   assert(cost.profitCurrency === "NZD", "profit bukan NZD");
 });
 
@@ -5209,7 +5212,7 @@ test("278. return format validation (semua field baru hadir)", () => {
     throw new Error("attach percentage null");
   }
   assert(
-    Math.abs(attached.swapDetail.swapCost - -431.7) < 1e-6,
+    Math.abs(attached.swapDetail.swapCost - -431.7 / 360) < 1e-6,
     "attach tidak meneruskan field baru",
   );
   assert(
@@ -5472,7 +5475,7 @@ test("292. attachSwapToResult dengan fxRates → swapCostInUSD populated", () =>
     "swapCostInUSD tidak terisi",
   );
   assert(
-    Math.abs((attached.swapDetail.swapCostInUSD ?? 0) - -283.1724) < 0.01,
+    Math.abs((attached.swapDetail.swapCostInUSD ?? 0) - -283.1724 / 360) < 0.01,
     `usd=${attached.swapDetail.swapCostInUSD}`,
   );
   assert(
@@ -5495,7 +5498,7 @@ test("293. attachSwapToResult tanpa fxRates → swapCostInUSD null (fallback)", 
   }
   assert(attached.swapDetail.swapCostInUSD === null, "harus null tanpa rates");
   assert(
-    Math.abs(attached.swapDetail.swapCostInContractBaseCurrency - -431.7) <
+    Math.abs(attached.swapDetail.swapCostInContractBaseCurrency - -431.7 / 360) <
       1e-6,
     "satuan asli rusak",
   );
@@ -5545,8 +5548,8 @@ test("296. Display memo USD (dari AUD @1.6512)", () => {
     `(dari ${d.swapCostInContractBaseCurrency.toFixed(1)} ` +
     `${d.contractBaseCurrency} @${(d.fxRate ?? 0).toFixed(4)})`;
   // Koreksi pembulatan spec: -431.7/1.6512 = -261.4462 → toFixed(2) = -261.45.
-  assert(memo.includes("-283.17 USD"), `memo=${memo}`);
-  assert(memo.includes("-431.7 AUD"), `memo=${memo}`);
+  assert(memo.includes("-0.79 USD"), `memo=${memo}`);
+  assert(memo.includes("-1.2 AUD"), `memo=${memo}`);
   assert(memo.includes("@1.6512"), `memo=${memo}`);
   const src = readSrc("src/components/result/AnalysisResult.tsx");
   assert(src.includes('data-testid="swap-memo"'), "testid memo hilang");
@@ -6989,7 +6992,7 @@ test("413. non-JPY harga >1 tidak diinvers (USDCAD 1.42561, 6F-1)", () => {
     currentPrice: 1.42561,
   });
   assert(
-    Math.abs(cost.swapCost - -2138.415) < 1e-6,
+    Math.abs(cost.swapCost - -2138.415 / 360) < 1e-6,
     `swapCost=${cost.swapCost} (100000x1.42561x-1.5%)`,
   );
 });

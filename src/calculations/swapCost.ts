@@ -165,7 +165,7 @@ export function calculateSwapCost(args: {
 
     const notional = preset.contractSize * effectivePrice;
     // Tahap 5E-STEP1: % per hari → triple-swap bila startDate eksplisit.
-    const perLotPerDay = notional * (swapValue / 100);
+    const perLotPerDay = (notional * (swapValue / 100)) / 360;
     const totalPerLot =
       args.startDate !== undefined
         ? calculateSwapWithTriple({
