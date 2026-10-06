@@ -371,6 +371,15 @@ export function applyCsvSwingLevels(
  * 1.00 USD/lot flat untuk semua simbol (kolom Commission CSV).
  */
 export const FINEX_DEFAULT_COMMISSION = 1.0;
+/** Saham Finex (simbol "#..."): 0.1 USD/lot per deal masuk (Specification
+ * #AAPL/#NVDA/#MMM, 06 Okt 2026); forex/indeks tetap 1.0. */
+export const FINEX_STOCK_COMMISSION = 0.1;
+
+function finexCommissionFor(symbol: string): number {
+  return symbol.trim().startsWith("#")
+    ? FINEX_STOCK_COMMISSION
+    : FINEX_DEFAULT_COMMISSION;
+}
 
 /**
  * Volume Finex dari CSV terminal 06 Okt 2026 (SymbolSpecs_Finex_1791247268):
@@ -428,6 +437,7 @@ function needsFill(value: number): boolean {
 function isBrokerDefaultCommission(value: number): boolean {
   return (
     value === FINEX_DEFAULT_COMMISSION ||
+    value === FINEX_STOCK_COMMISSION ||
     value === getSpec32FormDefaults("GBPUSD_ORB").commission
   );
 }
@@ -517,7 +527,7 @@ export function applyBrokerPreset(
       needsFill(previous.commission) ||
       isBrokerDefaultCommission(previous.commission) ||
       isBrokerDefaultCommission(previous.commission)
-        ? FINEX_DEFAULT_COMMISSION
+        ? finexCommissionFor(symbol)
         : previous.commission,
     riskPercent: needsFill(previous.riskPercent)
       ? STRATEGY_DEFAULTS.riskPercent
