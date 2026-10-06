@@ -168,6 +168,7 @@ import {
   fetchECBRates,
   parseECBXml,
 } from "../src/services/fxRateService";
+import { withUsdPointValue } from "../src/lib/usdPointValue";
 import {
   calculateSwapWithTriple,
   getTripleSwapLabel,
@@ -1856,6 +1857,54 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
 });
 
+test("496. withUsdPointValue: OTB JPY dikonversi USD, USD/Finex/tanpa kurs tetap", () => {
+  const otb = applyBrokerPreset(
+    makeEmptyBroker(),
+    "AUDJPY_ORB",
+    "orbitraderberjangka",
+  );
+  const jpy = withUsdPointValue(
+    otb,
+    "AUDJPY_ORB",
+    "orbitraderberjangka",
+    FALLBACK_RATES,
+  );
+  const expected = (100000 / FALLBACK_RATES.JPY) * FALLBACK_RATES.USD;
+  assert(
+    Math.abs(jpy.pointValue - expected) < 1e-9,
+    `AUDJPY_ORB pointValue=${jpy.pointValue}`,
+  );
+  assert(otb.pointValue === 100000, "input broker tidak boleh termutasi");
+  const usd = applyBrokerPreset(
+    makeEmptyBroker(),
+    "GBPUSD_ORB",
+    "orbitraderberjangka",
+  );
+  assert(
+    withUsdPointValue(
+      usd,
+      "GBPUSD_ORB",
+      "orbitraderberjangka",
+      FALLBACK_RATES,
+    ) === usd,
+    "profit USD tetap",
+  );
+  assert(
+    withUsdPointValue(otb, "AUDJPY_ORB", "orbitraderberjangka", null) === otb,
+    "tanpa kurs tetap",
+  );
+  assert(
+    withUsdPointValue(otb, "CADJPY", "finex", FALLBACK_RATES) === otb,
+    "Finex tetap",
+  );
+  const app = readSrc("src/App.tsx");
+  assert(!app.includes("convertToUSD("), "App tidak lagi konversi manual");
+  assert(
+    (app.match(/withUsdPointValue\(/g) ?? []).length === 2,
+    "validator + engine pakai helper",
+  );
+});
+
 test("495. spec32 + commissionForHolding: saham # Finex 0.1/lot, forex/indeks 1.0", () => {
   assert(
     getInstrumentSpec32("#AAPL")?.commission === 0.1,
@@ -3113,7 +3162,7 @@ test("202. validator membaca nilai S/R yang sama", () => {
   );
   const app = readSrc("src/App.tsx");
   assert(
-    app.includes("validateAnalysisInputs(market, broker, activeBrokerId)"),
+    app.includes("withUsdPointValue(broker, market.symbol, activeBrokerId, fxRates)"),
     "validator tidak memakai market state yang sama + konteks broker (4B)",
   );
   assert(app.includes("market={market}"), "form tidak memakai market state");
@@ -3625,7 +3674,7 @@ test("225. signature applyBrokerPreset aman + call site meneruskan broker", () =
     "tombol preset tidak meneruskan broker aktif",
   );
   assert(
-    app.includes("validateAnalysisInputs(market, broker, activeBrokerId)"),
+    app.includes("withUsdPointValue(broker, market.symbol, activeBrokerId, fxRates)"),
     "validator tidak menerima konteks broker",
   );
   assert(

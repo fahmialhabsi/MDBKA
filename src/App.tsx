@@ -55,6 +55,7 @@ import {
 } from "./lib/brokerSymbols";
 
 import { getOtbInstrumentProfile } from "./lib/otbInstrumentConfig";
+import { withUsdPointValue } from "./lib/usdPointValue";
 import type { BrokerSettings, MarketData } from "./types/analysis";
 import type { BrokerId } from "./types/broker";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
@@ -72,7 +73,6 @@ import {
 import {
   fetchBackendRates,
   fetchECBRates,
-  convertToUSD,
   type ExchangeRates,
 } from "./services/fxRateService";
 import { API_BASE_URL } from "./lib/apiBaseUrl";
@@ -203,8 +203,13 @@ export default function App() {
   const scaleIssues = useMemo(() => detectScaleMismatch(market), [market]);
 
   const validation = useMemo(
-    () => validateAnalysisInputs(market, broker, activeBrokerId),
-    [market, broker, activeBrokerId],
+    () =>
+      validateAnalysisInputs(
+        market,
+        withUsdPointValue(broker, market.symbol, activeBrokerId, fxRates),
+        activeBrokerId,
+      ),
+    [market, broker, activeBrokerId, fxRates],
   );
 
   // Satu-satunya langganan equity live di App: dipakai panel sidebar
@@ -247,9 +252,15 @@ export default function App() {
         equity: brokerData.equity,
       });
 
+      const effectiveBroker = withUsdPointValue(
+        brokerData,
+        marketData.symbol,
+        activeBrokerId,
+        fxRates,
+      );
       const nextValidation = validateAnalysisInputs(
         marketData,
-        brokerData,
+        effectiveBroker,
         activeBrokerId,
       );
       const nextScale = detectScaleMismatch(marketData);
@@ -265,19 +276,6 @@ export default function App() {
         setConfirmed(false);
         setResult(null);
         return;
-      }
-
-      let effectiveBroker = brokerData;
-      if (activeBrokerId === ORBITRADER_BROKER_ID && fxRates !== null) {
-        const otb = getOtbInstrumentProfile(marketData.symbol);
-        if (otb !== null && otb.currencyProfit !== "USD") {
-          const usdPointValue = convertToUSD(
-            brokerData.pointValue,
-            otb.currencyProfit,
-            fxRates,
-          );
-          effectiveBroker = { ...brokerData, pointValue: usdPointValue };
-        }
       }
 
       setBlockedReasons(null);
