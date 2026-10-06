@@ -3,7 +3,10 @@
   CheckCircle2,
   CircleAlert
 } from "lucide-react";
-import { getSpreadLabel } from "../../lib/instrumentConfig";
+import {
+  getInstrumentProfile,
+  getSpreadLabel,
+} from "../../lib/instrumentConfig";
 
 import type { ValidationSummary } from "../../calculations/inputValidator";
 import type { ValidationViewState } from "../../lib/validationView";
@@ -20,6 +23,13 @@ export default function ValidationSummaryCard({
   viewState
 }: Props) {
   const spreadLabel = getSpreadLabel(symbol);
+  const profile = getInstrumentProfile(symbol);
+  // Saham/indeks/komoditas: satuan "point" MT5 = spread ÷ 10^-decimals
+  // (BABA 0,19 → 19 point, sama dengan kolom Spread terminal).
+  const spreadText =
+    profile.category === "index"
+      ? `${Math.round((validation.spreadPips * profile.pipSize) / 10 ** -profile.decimals)} point`
+      : `${validation.spreadPips.toFixed(1)} ${spreadLabel}`;
 
   // Saat pasar kosong atau sebagian terisi, validasi internal tetap
   // berjalan tetapi tampilan diringkas agar tidak membanjiri pengguna
@@ -100,10 +110,7 @@ export default function ValidationSummaryCard({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Metric
-          label="Spread"
-          value={`${validation.spreadPips.toFixed(1)} ${spreadLabel}`}
-        />
+        <Metric label="Spread" value={spreadText} />
 
         <Metric
           label="Batas risiko"
@@ -140,12 +147,11 @@ export default function ValidationSummaryCard({
         </div>
       ))}
 
-      {validation.valid &&
-        validation.warnings.length === 0 && (
-          <p className="text-sm text-emerald-300">
-            Data wajib sudah lengkap dan siap diperiksa oleh mesin analisa.
-          </p>
-        )}
+      {validation.valid && validation.warnings.length === 0 && (
+        <p className="text-sm text-emerald-300">
+          Data wajib sudah lengkap dan siap diperiksa oleh mesin analisa.
+        </p>
+      )}
     </div>
   );
 }

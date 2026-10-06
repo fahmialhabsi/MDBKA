@@ -1856,6 +1856,16 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
 });
 
+test("492. kartu Spread non-forex pakai point MT5 (readSrc)", () => {
+  const src = readSrc("src/components/analysis/ValidationSummaryCard.tsx");
+  assert(
+    src.includes('profile.category === "index"'),
+    "cabang non-forex hilang",
+  );
+  assert(src.includes("10 ** -profile.decimals"), "konversi point MT5 hilang");
+  assert(src.includes("value={spreadText}"), "kartu tidak pakai spreadText");
+});
+
 test("491. validator risiko min. lot pakai jarak terburuk ATR vs SL struktur (readSrc)", () => {
   const src = readSrc("src/calculations/inputValidator.ts");
   assert(src.includes("const structureDistances = ["), "jarak struktur hilang");
