@@ -56,6 +56,7 @@ import {
 
 import { getOtbInstrumentProfile } from "./lib/otbInstrumentConfig";
 import { withUsdPointValue } from "./lib/usdPointValue";
+import { resolveCsvBidAsk } from "./lib/csvQuote";
 import type { BrokerSettings, MarketData } from "./types/analysis";
 import type { BrokerId } from "./types/broker";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
@@ -602,26 +603,17 @@ export default function App() {
         const tick = tickSizeForSymbol(baseSymbol);
         // S/R dihitung sinkron agar analisa pertama tidak "ditahan" menunggu
         // SwingLevelsForm (race: market baru S/R=0 → blocked → baru terisi).
-        const levels = resolveSwingLevels(parsed.candles, last.close);
+        const quote = resolveCsvBidAsk(last.close, tick, baseSymbol, liveQuote);
+        // Referensi S/R = bid, sama dengan SwingLevelsForm (#499).
+        const levels = resolveSwingLevels(parsed.candles, quote.bid);
         nextMarket = {
           ...base,
           open: last.open,
           high: last.high,
           low: last.low,
           close: last.close,
-          bid: last.close,
-          // Spread asli dari quote live simbol sama (fallback 1 tick); bid tetap
-          // = close CSV. Dibulatkan agar tanpa sisa float (#488).
-          ask: Number(
-            (
-              last.close +
-              (liveQuote !== null &&
-              liveQuote.symbol === baseSymbol &&
-              liveQuote.ask > liveQuote.bid
-                ? liveQuote.ask - liveQuote.bid
-                : tick)
-            ).toPrecision(12),
-          ),
+          // Bid/Ask live bila quote segar; selain itu close CSV + spread (#498).
+          ...quote,
           ...(detectedTimeframe ? { timeframe: detectedTimeframe } : {}),
           ...(indicators !== null
             ? {

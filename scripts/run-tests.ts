@@ -169,6 +169,7 @@ import {
   parseECBXml,
 } from "../src/services/fxRateService";
 import { withUsdPointValue } from "../src/lib/usdPointValue";
+import { resolveCsvBidAsk } from "../src/lib/csvQuote";
 import {
   calculateSwapWithTriple,
   getTripleSwapLabel,
@@ -1857,6 +1858,50 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
 });
 
+test("499. S/R sinkron & SwingLevelsForm pakai referensi bid yang sama (readSrc)", () => {
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("resolveSwingLevels(parsed.candles, quote.bid)"),
+    "S/R sinkron masih pakai close CSV",
+  );
+  assert(app.includes("...quote,"), "bid/ask quote tidak masuk nextMarket");
+  assert(
+    app.includes("currentPrice={market.bid > 0 ? market.bid : market.close}"),
+    "referensi SwingLevelsForm berubah",
+  );
+});
+
+test("498. resolveCsvBidAsk: quote segar = bid/ask live, basi = close+spread, tanpa = close+tick", () => {
+  const now = Date.parse("2026-10-06T13:30:00Z");
+  const fresh = {
+    timestamp: "2026.10.06 16:29:55",
+    symbol: "AUDJPY_ORB",
+    bid: 110.368,
+    ask: 110.39,
+  };
+  const live = resolveCsvBidAsk(110.383, 0.001, "AUDJPY_ORB", fresh, now);
+  assert(
+    live.bid === 110.368 && live.ask === 110.39,
+    `live=${live.bid}/${live.ask}`,
+  );
+  const stale = { ...fresh, timestamp: "2026.10.03 23:59:00" };
+  const old = resolveCsvBidAsk(110.383, 0.001, "AUDJPY_ORB", stale, now);
+  assert(
+    old.bid === 110.383 && old.ask === 110.405,
+    `basi=${old.bid}/${old.ask}`,
+  );
+  const other = resolveCsvBidAsk(111.06, 0.01, "BABA.US", fresh, now);
+  assert(
+    other.bid === 111.06 && other.ask === 111.07,
+    `beda simbol=${other.bid}/${other.ask}`,
+  );
+  const none = resolveCsvBidAsk(111.06, 0.01, "BABA.US", null, now);
+  assert(
+    none.bid === 111.06 && none.ask === 111.07,
+    `tanpa quote=${none.bid}/${none.ask}`,
+  );
+});
+
 test("497. minLot 1.00 saham # tidak nyangkut di OTB forex / Finex forex", () => {
   const otb = applyBrokerPreset(
     { ...makeValidBroker(), minLot: 1, lotStep: 1 },
@@ -2006,7 +2051,7 @@ test("490. pointValue OTB = contractSize: BABA.US 100 (cocok MT5 0,1 lot SL 5,97
 
 test("489. handleCsvLoaded isi S/R sinkron sebelum analisa (readSrc)", () => {
   const app = readSrc("src/App.tsx");
-  const i = app.indexOf("resolveSwingLevels(parsed.candles, last.close)");
+  const i = app.indexOf("resolveSwingLevels(parsed.candles, quote.bid)");
   assert(i > 0, "S/R tidak dihitung sinkron di handleCsvLoaded");
   assert(
     app.includes("{ support: levels.support }"),
@@ -2024,14 +2069,9 @@ test("489. handleCsvLoaded isi S/R sinkron sebelum analisa (readSrc)", () => {
 
 test("488. ask CSV dibulatkan: tanpa sisa float (readSrc)", () => {
   const app = readSrc("src/App.tsx");
-  assert(app.includes(").toPrecision(12),"), "ask belum dibulatkan");
   assert(
-    app.includes("liveQuote.symbol === baseSymbol"),
-    "spread live tidak dicek simbolnya",
-  );
-  assert(
-    app.includes("? liveQuote.ask - liveQuote.bid"),
-    "spread live tidak dipakai",
+    app.includes("resolveCsvBidAsk(last.close, tick, baseSymbol, liveQuote)"),
+    "bid/ask CSV tidak lewat helper",
   );
   assert(!app.includes("ask: last.close + tick,"), "ask mentah masih ada");
   assert(
