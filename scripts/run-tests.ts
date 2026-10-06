@@ -118,6 +118,7 @@ import { FX_CACHE_TTL_MS, isFxCacheFresh } from "../server/routes/fxRoutes";
 import { isBrokerPosition, parsePositionRow } from "../server/types/positions";
 import { PositionsLogReader } from "../server/services/positionsLogReader";
 import { marginFileTag, parseMarginCsv } from "../server/types/marginCsv";
+import { parseSwapLogCsv, swapLogLogin } from "../server/types/swapLogCsv";
 import {
   ADVERSE_DRIFT_PCT,
   MARGIN_GUARD_PCT,
@@ -1856,6 +1857,40 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(baba.buffer === 0.05, `buffer BABA.US=${baba.buffer}`);
   const back = applyBrokerPreset(baba, "GBPUSD_ORB", "orbitraderberjangka");
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
+});
+
+test("501. parseSwapLogCsv: format MDBKASwapLogger 28 kolom + baris NO_POSITIONS", () => {
+  const header =
+    "ServerTime,GmtTime,LocalTime,Reason,Login,Company,AccountCurrency,Balance,Equity,Ticket,Symbol,Type,Volume,PriceOpen,PriceCurrent,Bid,Ask,Swap,Profit,SwapMode,SwapLong,SwapShort,Swap3Day,ContractSize,CalcMode,BaseCurrency,ProfitCurrency,TimeOpen";
+  const row =
+    "2026.10.06 16:13:51,2026.10.06 14:13:51,2026.10.06 23:13:51,START,70930952,PT. Orbi Trade Berjangka,USD,4805.22,5228.20,2108869,AUDUSD_ORB,BUY,0.10,0.69811,0.69819,0.69819,0.69829,0.00,0.80,SYMBOL_SWAP_MODE_INTEREST_CURRENT,-1.5000,-1.5000,WEDNESDAY,100000.00,SYMBOL_CALC_MODE_FOREX,AUD,USD,2026.10.06 14:41:45";
+  const empty =
+    "2026.10.07 00:00:51,2026.10.06 22:00:51,2026.10.07 07:00:51,HOURLY_NO_POSITIONS,91811209,PT. Finex,USD,8.50,8.50,,,,,,,,,,,,,,,,,,,";
+  const rows = parseSwapLogCsv([header, row, empty, ""].join("\r\n"));
+  assert(rows.length === 2, `rows=${rows.length}`);
+  const r = rows[0];
+  assert(
+    r.ticket === "2108869" && r.symbol === "AUDUSD_ORB",
+    "ticket/simbol salah",
+  );
+  assert(r.swapMode === "SYMBOL_SWAP_MODE_INTEREST_CURRENT", "swapMode salah");
+  assert(
+    r.swapLong === -1.5 && r.contractSize === 100000,
+    "swapLong/contract salah",
+  );
+  assert(r.swap === 0 && r.profit === 0.8, "swap/profit salah");
+  assert(
+    rows[1].ticket === null && rows[1].swap === null,
+    "NO_POSITIONS harus ticket/swap null",
+  );
+  assert(swapLogLogin("orbitraderberjangka") === "70930952", "login OTB salah");
+  assert(swapLogLogin("finex") === "91811209", "login Finex salah");
+  assert(swapLogLogin("xyz") === null, "broker asing lolos");
+  const app = readSrc("server/app.ts");
+  assert(
+    app.includes('app.use("/api/swaplog", createSwapLogRoutes())'),
+    "route tak terpasang",
+  );
 });
 
 test("499. S/R sinkron & SwingLevelsForm pakai referensi bid yang sama (readSrc)", () => {

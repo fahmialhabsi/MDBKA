@@ -13,6 +13,7 @@ import { createQuotesRoutes } from "./routes/quotesRoutes";
 import { createFxRoutes } from "./routes/fxRoutes";
 import { createPositionsRoutes } from "./routes/positionsRoutes";
 import { createMarginRoutes } from "./routes/marginRoutes";
+import { createSwapLogRoutes } from "./routes/swapLogRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
 import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
 
@@ -55,6 +56,8 @@ export function createApp(
   app.use("/api/fx", createFxRoutes());
   // Item (e): margin per lot dari OrderCalcMargin MT5 (Common\Files).
   app.use("/api/margin", createMarginRoutes());
+  // #501: log posisi + swap per jam (EA MDBKASwapLogger, Common\Files).
+  app.use("/api/swaplog", createSwapLogRoutes());
   app.use(
     "/api/positions",
     createPositionsRoutes(positionsReader, positionsReaderFinex),
