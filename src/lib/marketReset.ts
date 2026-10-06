@@ -476,6 +476,9 @@ export function applyBrokerPreset(
           ? otb.minVolume
           : previous.minLot,
       lotStep: otb.volumeStep,
+      // Buffer struktur = 5 tick spec broker (forex 5 digit 0.00005,
+      // JPY 0.005, saham 2 digit 0.05); dulu terbawa dari simbol sebelumnya.
+      buffer: Number((otb.tickSize * 5).toPrecision(10)),
       atrMultiplier: needsFill(previous.atrMultiplier)
         ? STRATEGY_DEFAULTS.atrMultiplier
         : previous.atrMultiplier,

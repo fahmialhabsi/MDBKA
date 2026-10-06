@@ -1839,6 +1839,23 @@ test("485. parseEquityCsvLine format 8 kolom: margin asli, leverage bukan tradeC
   assert(old !== null && old.tradeCount === 3 && old.freeMargin === undefined, "format lama rusak");
 });
 
+test("486. kartu Lot disarankan memakai orderLot + DIBLOKIR (readSrc)", () => {
+  const src = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(src.includes('label="Lot disarankan"'), "kartu hilang");
+  assert(src.includes('"DIBLOKIR"'), "status blokir hilang");
+  assert(src.includes("dibatasi margin"), "keterangan pangkas hilang");
+  assert(src.includes(": number(orderLot, 4)"), "kartu tidak pakai orderLot");
+  assert(!src.includes("value={number(result.suggestedLot, 4)}"), "masih lot mentah");
+});
+
+test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
+  const forex = applyBrokerPreset(makeEmptyBroker(), "GBPUSD_ORB", "orbitraderberjangka");
+  const baba = applyBrokerPreset(forex, "BABA.US", "orbitraderberjangka");
+  assert(baba.buffer === 0.05, `buffer BABA.US=${baba.buffer}`);
+  const back = applyBrokerPreset(baba, "GBPUSD_ORB", "orbitraderberjangka");
+  assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
+});
+
 /* ---------------- Diagnosis end-to-end: TEST 121-138 ---------------- */
 test("484. wiring guard margin di hasil analisa (readSrc)", () => {
   const src = readSrc("src/components/result/AnalysisResult.tsx");
@@ -3332,7 +3349,10 @@ test("217. OTB preset dipilih bila broker orbitraderberjangka", () => {
   );
   assert(applied.minLot === 0.1, `minLot=${applied.minLot}`);
   assert(applied.lotStep === 0.1, `lotStep=${applied.lotStep}`);
-  assert(applied.buffer === 0, "buffer OTB dikarang (tidak ada datanya)");
+  assert(
+    applied.buffer === 0.00005,
+    `buffer OTB harus 5 tick spec (0.00005), dapat ${applied.buffer}`,
+  );
   assert(applied.equity === 0, "equity ikut ditebak");
   assert(
     applied.commission === 33,

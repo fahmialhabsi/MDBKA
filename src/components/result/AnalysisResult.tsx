@@ -470,7 +470,17 @@ export default function AnalysisResult({
         <Metric label="Risiko maksimum" value={money(result.maxRiskUsd)} />
         <Metric label="Risiko lot minimum" value={money(result.riskAtMinLot)} />
         <Metric label="Lot teoritis" value={number(result.theoreticalLot, 4)} />
-        <Metric label="Lot disarankan" value={number(result.suggestedLot, 4)} />
+        <Metric
+          label="Lot disarankan"
+          value={
+            marginCap !== null && marginCap.blocked
+              ? "DIBLOKIR"
+              : marginCap !== null &&
+                  marginCap.cappedLot !== result.suggestedLot
+                ? `${number(orderLot, 4)} (risiko: ${number(result.suggestedLot, 4)} · dibatasi margin)`
+                : number(orderLot, 4)
+          }
+        />
       </div>
 
       {/* Live panels (LiveEquity + LiveQuotes) direlokasi ke sidebar
@@ -615,17 +625,17 @@ function BeginnerGuide({ result }: { result: ResultType }) {
         </p>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
           <li>
-            Tunggu sampai penunjuk arah kompak: skor minimal 3 untuk BELI
-            atau -3 untuk JUAL (sekarang {result.score}/5).
+            Tunggu sampai penunjuk arah kompak: skor minimal 3 untuk BELI atau
+            -3 untuk JUAL (sekarang {result.score}/5).
           </li>
           <li>
-            Untuk akun kecil, tunggu setup yang jarak entry ke batas
-            ruginya RAPAT (kecil) — makin rapat jaraknya, makin kecil modal
-            yang dibutuhkan untuk ikut.
+            Untuk akun kecil, tunggu setup yang jarak entry ke batas ruginya
+            RAPAT (kecil) — makin rapat jaraknya, makin kecil modal yang
+            dibutuhkan untuk ikut.
           </li>
           <li>
-            Tidak entry = tidak rugi. Menunggu adalah keputusan yang benar
-            hari ini.
+            Tidak entry = tidak rugi. Menunggu adalah keputusan yang benar hari
+            ini.
           </li>
         </ul>
       </div>
@@ -641,8 +651,8 @@ function BeginnerGuide({ result }: { result: ResultType }) {
     return (
       <div className="rounded-2xl border border-amber-400/25 bg-amber-400/5 p-5">
         <p className="font-semibold text-amber-200">
-          Artinya gampang: sinyalnya ada, tapi dompet belum muat. JANGAN
-          dipaksa entry.
+          Artinya gampang: sinyalnya ada, tapi dompet belum muat. JANGAN dipaksa
+          entry.
         </p>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
           <li>
@@ -658,8 +668,8 @@ function BeginnerGuide({ result }: { result: ResultType }) {
             .
           </li>
           <li>
-            Solusi 1 (gratis): tunggu setup ber-SL rapat — jarak entry ke
-            batas rugi yang kecil membuat risiko lot minimum ikut kecil.
+            Solusi 1 (gratis): tunggu setup ber-SL rapat — jarak entry ke batas
+            rugi yang kecil membuat risiko lot minimum ikut kecil.
           </li>
           <li>
             Solusi 2 (bayar): tambah modal hingga batas aman ≥ risiko lot
@@ -674,9 +684,9 @@ function BeginnerGuide({ result }: { result: ResultType }) {
   return (
     <div className="rounded-2xl border border-emerald-400/25 bg-emerald-400/5 p-5">
       <p className="font-semibold text-emerald-200">
-        Artinya gampang: setup ini BOLEH diikuti persis seperti blok
-        &quot;Salin order&quot; (simbol, arah, lot, batas rugi, target
-        untung — jangan diubah angkanya).
+        Artinya gampang: setup ini BOLEH diikuti persis seperti blok &quot;Salin
+        order&quot; (simbol, arah, lot, batas rugi, target untung — jangan
+        diubah angkanya).
       </p>
       <p className="mt-2 text-sm leading-6 text-slate-300">
         Setelah entry, pantau kartu posisi di bawah: begitu banner hijau
