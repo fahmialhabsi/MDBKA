@@ -121,7 +121,9 @@ import { marginFileTag, parseMarginCsv } from "../server/types/marginCsv";
 import { parseSwapLogCsv, swapLogLogin } from "../server/types/swapLogCsv";
 import { extractIdrAmount, parseHistoryCsv } from "../server/types/historyCsv";
 import {
+  applyKursRules,
   mergeDeals,
+  parseKursText,
   summarizeByYear,
   updateEntry,
 } from "../server/types/jurnalPajak";
@@ -1973,6 +1975,45 @@ test("505. jurnalPajak: impor anti-duplikat, kurs/catatan tidak tertimpa, rekap 
     s[0].tanpaKurs === 1 && s[0].dealCount === 2,
     "tanpaKurs/dealCount salah",
   );
+});
+
+test("506. kurs pajak tempel: tanggal/rentang menimpa kurs per transaksi, baris asing ditolak", () => {
+  const header =
+    "DealTicket,PositionId,OrderTicket,ServerTime,Symbol,Type,Entry,Volume,Price,Commission,Swap,Profit,Fee,Magic,Comment,Login,Company,AccountCurrency";
+  const rows = [
+    "2,10,10,2026.09.29 04:08:06,GBPUSD,BUY,IN,0.01,1.32483,-0.01,0.00,0.00,0.00,0,,91811209,PT,USD",
+    "3,10,11,2026.09.30 10:48:00,GBPUSD,SELL,OUT,0.01,1.32339,0.00,0.00,-1.44,0.00,0,,91811209,PT,USD",
+    "4,11,11,2026.10.08 10:48:00,GBPUSD,SELL,OUT,0.01,1.32339,0.00,0.00,1.00,0.00,0,,91811209,PT,USD",
+  ];
+  const deals = parseHistoryCsv([header, ...rows, ""].join("\r\n"));
+  const base = mergeDeals([], deals).entries;
+  const text = [
+    "29/09/2026 16.650,50",
+    "2026-09-30 s/d 2026-10-06 16700",
+    "bukan kurs",
+    "2026-10-09 99",
+  ].join("\n");
+  const parsed = parseKursText(text);
+  assert(parsed.rules.length === 2, `rules=${parsed.rules.length}`);
+  assert(parsed.rejected.length === 2, `rejected=${parsed.rejected.length}`);
+  assert(
+    parsed.rules[0].kurs === 16650.5 && parsed.rules[0].from === "2026-09-29",
+    "aturan 1 salah",
+  );
+  assert(
+    parsed.rules[1].from === "2026-09-30" &&
+      parsed.rules[1].to === "2026-10-06",
+    "rentang salah",
+  );
+  const applied = applyKursRules(base, parsed.rules);
+  assert(applied.updated === 2, `updated=${applied.updated}`);
+  const byId = (id: string) => applied.entries.find((e) => e.dealTicket === id);
+  assert(
+    byId("2")?.kursIdr === 16650.5 && byId("2")?.kursSumber === "KMK",
+    "kurs 29/09 salah",
+  );
+  assert(byId("3")?.kursIdr === 16700, "kurs rentang salah");
+  assert(byId("4")?.kursIdr === null, "di luar rentang harus tetap null");
 });
 
 test("502. predictDailySwap: INTEREST_CURRENT tahunan ÷360, DISABLED 0, mode lain null", () => {

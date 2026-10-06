@@ -12,6 +12,8 @@ import type { HistoryDeal } from "./historyCsv";
 export interface JurnalEntry extends HistoryDeal {
   /** Kurs pajak (KMK) Rp per 1 USD pada tanggal transaksi; null = belum diisi. */
   readonly kursIdr: number | null;
+  /** Asal kurs: KMK (ditempel pengguna), manual (diedit per transaksi), atau null. */
+  readonly kursSumber: "KMK" | "manual" | null;
   readonly catatan: string;
 }
 
@@ -51,7 +53,7 @@ export function mergeDeals(
   for (const deal of incoming) {
     if (seen.has(deal.dealTicket)) continue;
     seen.add(deal.dealTicket);
-    entries.push({ ...deal, kursIdr: null, catatan: "" });
+    entries.push({ ...deal, kursIdr: null, kursSumber: null, catatan: "" });
     added++;
   }
   entries.sort((a, b) => a.serverTime.localeCompare(b.serverTime));
@@ -77,6 +79,8 @@ export function updateEntry(
     return {
       ...e,
       kursIdr: kurs,
+      kursSumber:
+        patch.kursIdr === undefined ? e.kursSumber : kurs === null ? null : "manual",
       catatan: patch.catatan === undefined ? e.catatan : patch.catatan.trim(),
     };
   });
@@ -142,4 +146,92 @@ export function summarizeByYear(
       dealCount: y.count,
       tanpaKurs: y.tanpaKurs,
     }));
+}
+
+export interface KursRule {
+  /** Tanggal mulai-akhir (YYYY-MM-DD, inklusif). Satu tanggal: from === to. */
+  readonly from: string;
+  readonly to: string;
+  readonly kurs: number;
+}
+
+const DATE_RE = /(\d{4})[-./](\d{2})[-./](\d{2})|(\d{2})[-/](\d{2})[-/](\d{4})/g;
+
+function parseKursNumber(raw: string): number | null {
+  let s = raw.trim().replace(/[^0-9.,]/g, "");
+  if (s === "") return null;
+  const lastDot = s.lastIndexOf(".");
+  const lastComma = s.lastIndexOf(",");
+  if (lastDot >= 0 && lastComma >= 0) {
+    const dec = lastDot > lastComma ? "." : ",";
+    const thou = dec === "." ? "," : ".";
+    s = s.split(thou).join("").replace(dec, ".");
+  } else if (lastDot >= 0 || lastComma >= 0) {
+    const sep = lastDot >= 0 ? "." : ",";
+    const parts = s.split(sep);
+    if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
+      s = parts.join("");
+    } else {
+      s = s.replace(sep, ".");
+    }
+  }
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 1000 && n <= 100000 ? n : null;
+}
+
+/**
+ * Tempel kurs pajak: satu aturan per baris. Contoh yang dikenali:
+ *   2026-09-30 16650
+ *   30/09/2026 s/d 06/10/2026 16.650,00
+ *   2026-09-30 - 2026-10-06 16650
+ * Baris tak dikenali dikembalikan di `rejected` (tidak ada tebakan).
+ */
+export function parseKursText(text: string): {
+  rules: KursRule[];
+  rejected: string[];
+} {
+  const rules: KursRule[] = [];
+  const rejected: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const raw = line.trim();
+    if (raw === "") continue;
+    const dates: string[] = [];
+    const rest = raw.replace(DATE_RE, (_m, y, mo, d, d2, mo2, y2) => {
+      dates.push(y ? `${y}-${mo}-${d}` : `${y2}-${mo2}-${d2}`);
+      return " ";
+    });
+    const kurs = parseKursNumber(rest.replace(/s\/d|sd|-|sampai/gi, " ").trim());
+    const valid = dates.every((d) => !Number.isNaN(Date.parse(d)));
+    if (dates.length < 1 || dates.length > 2 || kurs === null || !valid) {
+      rejected.push(raw);
+      continue;
+    }
+    const from = dates[0];
+    const to = dates[1] ?? dates[0];
+    if (from > to) {
+      rejected.push(raw);
+      continue;
+    }
+    rules.push({ from, to, kurs });
+  }
+  return { rules, rejected };
+}
+
+/** Terapkan aturan kurs (yang di bawah menimpa yang di atas) ke transaksi dalam rentang. */
+export function applyKursRules(
+  entries: readonly JurnalEntry[],
+  rules: readonly KursRule[],
+): { entries: JurnalEntry[]; updated: number } {
+  let updated = 0;
+  const out = entries.map((e) => {
+    const day = e.serverTime.slice(0, 10).replace(/\./g, "-");
+    let hit: KursRule | null = null;
+    for (const r of rules) {
+      if (day >= r.from && day <= r.to) hit = r;
+    }
+    if (hit === null) return e;
+    updated++;
+    return { ...e, kursIdr: hit.kurs, kursSumber: "KMK" as const };
+  });
+  return { entries: out, updated };
 }
