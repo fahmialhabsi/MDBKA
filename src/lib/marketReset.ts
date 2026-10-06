@@ -452,12 +452,14 @@ export function applyBrokerPreset(
       riskPercent: needsFill(previous.riskPercent)
         ? STRATEGY_DEFAULTS.riskPercent
         : previous.riskPercent,
+      // minLot tidak boleh di bawah minimum broker (0.01 default/Finex
+      // nyangkut di OTB 0.10); nilai pengguna >= spec dipertahankan.
+      // lotStep = aturan broker murni, selalu dari spec.
       minLot:
-        force || needsFill(previous.minLot) ? otb.minVolume : previous.minLot,
-      lotStep:
-        force || needsFill(previous.lotStep)
-          ? otb.volumeStep
-          : previous.lotStep,
+        needsFill(previous.minLot) || previous.minLot < otb.minVolume
+          ? otb.minVolume
+          : previous.minLot,
+      lotStep: otb.volumeStep,
       atrMultiplier: needsFill(previous.atrMultiplier)
         ? STRATEGY_DEFAULTS.atrMultiplier
         : previous.atrMultiplier,
