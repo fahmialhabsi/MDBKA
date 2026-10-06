@@ -38,6 +38,7 @@ import {
   SUPPORTED_SYMBOLS,
 } from "./lib/instrumentConfig";
 import { parseCsvCandles } from "./lib/csvCandleParser";
+import { resolveSwingLevels } from "./calculations/swingDetector";
 import { computeIndicators } from "./calculations/indicators";
 import { traceOcrStage } from "./lib/debugTrace";
 import {
@@ -593,6 +594,9 @@ export default function App() {
         // lolos guard ask > bid — WAJIB diverifikasi via Live Quotes/MT5,
         // karena spread asli hanya diketahui dari quote berjalan).
         const tick = tickSizeForSymbol(baseSymbol);
+        // S/R dihitung sinkron agar analisa pertama tidak "ditahan" menunggu
+        // SwingLevelsForm (race: market baru S/R=0 → blocked → baru terisi).
+        const levels = resolveSwingLevels(parsed.candles, last.close);
         nextMarket = {
           ...base,
           open: last.open,
@@ -612,6 +616,10 @@ export default function App() {
                 macd: indicators.macd,
                 macdSignal: indicators.macdSignal,
               }
+            : {}),
+          ...(levels.support !== null ? { support: levels.support } : {}),
+          ...(levels.resistance !== null
+            ? { resistance: levels.resistance }
             : {}),
         };
       }

@@ -8,7 +8,6 @@ import {
 import { DEFAULT_BROKER_ID, ORBITRADER_BROKER_ID } from "./brokerRegistry";
 import { exactOtbSymbol } from "./brokerSymbols";
 import {
-  calculateOtbTickValue,
   getOtbInstrumentProfile,
 } from "./otbInstrumentConfig";
 import { getSpec32FormDefaults } from "./spec32Wiring";
@@ -459,7 +458,9 @@ export function applyBrokerPreset(
 
     return {
       ...previous,
-      pointValue: calculateOtbTickValue(otb),
+      // Rumus engine: jarak harga × pointValue → pointValue = nilai per 1,0
+      // harga per lot = contractSize (bukan tick value: BABA meleset 100×).
+      pointValue: otb.contractSize,
       contractSize: otb.contractSize,
       commission:
         force || needsFill(previous.commission)

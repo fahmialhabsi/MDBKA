@@ -1856,6 +1856,38 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
 });
 
+test("490. pointValue OTB = contractSize: BABA.US 100 (cocok MT5 0,1 lot SL 5,97 ≈ $58)", () => {
+  const baba = applyBrokerPreset(
+    makeEmptyBroker(),
+    "BABA.US",
+    "orbitraderberjangka",
+  );
+  assert(baba.pointValue === 100, `pointValue BABA=${baba.pointValue}`);
+  const lossPerLot = 5.97 * baba.pointValue;
+  assert(
+    Math.abs(lossPerLot * 0.1 - 59.7) < 0.01,
+    `rugi 0,1 lot=${lossPerLot * 0.1}`,
+  );
+});
+
+test("489. handleCsvLoaded isi S/R sinkron sebelum analisa (readSrc)", () => {
+  const app = readSrc("src/App.tsx");
+  const i = app.indexOf("resolveSwingLevels(parsed.candles, last.close)");
+  assert(i > 0, "S/R tidak dihitung sinkron di handleCsvLoaded");
+  assert(
+    app.includes("{ support: levels.support }"),
+    "support tak masuk nextMarket",
+  );
+  assert(
+    app.includes("{ resistance: levels.resistance }"),
+    "resistance tak masuk nextMarket",
+  );
+  assert(
+    app.indexOf("executeAnalysis(nextMarket, nextBroker)") > i,
+    "analisa jalan sebelum S/R",
+  );
+});
+
 test("488. ask CSV dibulatkan: tanpa sisa float (readSrc)", () => {
   const app = readSrc("src/App.tsx");
   assert(
@@ -3357,7 +3389,7 @@ test("217. OTB preset dipilih bila broker orbitraderberjangka", () => {
     "GBPUSD_ORB",
     "orbitraderberjangka",
   );
-  assert(applied.pointValue === 1, `pointValue=${applied.pointValue}`);
+  assert(applied.pointValue === 100000, `pointValue=${applied.pointValue}`);
   assert(
     applied.contractSize === 100000,
     `contractSize=${applied.contractSize}`,
@@ -3383,10 +3415,10 @@ test("218. OTB tickValue dari kalkulator, bukan Finex", () => {
     "GBPUSD_ORB",
     "orbitraderberjangka",
   );
-  assert(applied.pointValue === 1, "tick value OTB bukan 1.00");
+  assert(applied.pointValue === 100000, "pointValue OTB harus = contractSize");
   assert(
-    applied.pointValue !== getInstrumentProfile("GBPUSD").defaultPointValue,
-    "pointValue memakai angka Finex",
+    applied.pointValue === getInstrumentProfile("GBPUSD").defaultPointValue,
+    "pointValue OTB harus sekonvensi Finex (per 1,0 harga per lot)",
   );
 });
 
@@ -3425,7 +3457,7 @@ test("220. preset OTB EXACT match: GBPUSD bukan GBPUSD_ORB", () => {
     "GBPUSD_ORB",
     "orbitraderberjangka",
   );
-  assert(ok.minLot === 0.1 && ok.pointValue === 1, "simbol exact ditolak");
+  assert(ok.minLot === 0.1 && ok.pointValue === 100000, "simbol exact ditolak");
 });
 
 test("221. OTB tanpa preset tidak apply partial", () => {
@@ -4181,7 +4213,7 @@ test("246. komisi AUDCAD_ORB aktif via spec32 (commission=33)", () => {
   );
   assert(applied !== previous, "preset spec32 tidak ter-apply");
   assert(applied.commission === 33, `komisi=${applied.commission} (spec32 33)`);
-  assert(applied.pointValue === 1, `pointValue=${applied.pointValue}`);
+  assert(applied.pointValue === 100000, `pointValue=${applied.pointValue}`);
   assert(applied.minLot === 0.1, `minLot=${applied.minLot}`);
   const manual = applyBrokerPreset(
     otbBrokerWithCommission(50),
@@ -4222,7 +4254,7 @@ test("247. komisi EURCHF_ORB aktif via spec32 (commission=33)", () => {
   );
   assert(applied !== previous, "preset spec32 tidak ter-apply");
   assert(applied.commission === 33, `komisi=${applied.commission} (spec32 33)`);
-  assert(applied.pointValue === 1, `pointValue=${applied.pointValue}`);
+  assert(applied.pointValue === 100000, `pointValue=${applied.pointValue}`);
 });
 
 test("248. komisi simbol OTB invented tetap kosong", () => {
@@ -6548,8 +6580,8 @@ test("405. applyBrokerPreset: AUDJPY_ORB → commission=33 + pointValue OTB", ()
     `commission=${applied.commission} (spec32)`,
   );
   assert(
-    applied.pointValue === 100,
-    `pointValue=${applied.pointValue} (kalkulator OTB)`,
+    applied.pointValue === 100000,
+    `pointValue=${applied.pointValue} (contractSize; JPY belum dikonversi USD)`,
   );
   assert(applied.minLot === 0.1, `minLot=${applied.minLot}`);
 });
