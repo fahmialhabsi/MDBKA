@@ -48,6 +48,7 @@ import {
   parseMarketInput,
 } from "../src/lib/marketReset";
 import { validateAnalysisInputs } from "../src/calculations/inputValidator";
+import { MARGIN_USAGE_MAX_PCT, checkMarginCap } from "../src/lib/marginGuard";
 import { detectScaleMismatch } from "../src/calculations/scaleValidator";
 import {
   getValidationViewState,
@@ -1774,6 +1775,24 @@ test("480. Finex volume spec: saham # 1.00, GBXUSD 0.10, forex 0.01", () => {
   const gbp = applyBrokerPreset(makeEmptyBroker(), "GBPUSD", "finex");
   assert(gbp.minLot === 0.01 && gbp.lotStep === 0.01, "GBPUSD bukan 0.01");
   assert(getFinexVolumeSpec("#NVDA").minVolume === 1, "#NVDA bukan 1");
+});
+
+test("481. checkMarginCap: BABA dipangkas, #AAPL diblokir, data kosong jujur", () => {
+  assert(MARGIN_USAGE_MAX_PCT === 50, "batas berubah");
+  // Kasus nyata: 12.6 lot BABA.US, margin $2217.80/lot, free $4848.
+  const baba = checkMarginCap({ suggestedLot: 12.6, minLot: 0.1, lotStep: 0.1, marginPerLot: 2217.8, freeMargin: 4848 });
+  assert(baba.cappedLot === 1, `BABA capped=${baba.cappedLot} (harus 1.0)`);
+  assert(!baba.blocked && baba.warning !== null, "BABA harus dipangkas + warning");
+  // Kasus nyata: #AAPL Finex min 1 lot, margin $13.32, free $8.41.
+  const aapl = checkMarginCap({ suggestedLot: 1, minLot: 1, lotStep: 1, marginPerLot: 13.32, freeMargin: 8.41 });
+  assert(aapl.blocked && aapl.cappedLot === null, "#AAPL harus diblokir");
+  assert(aapl.warning !== null && aapl.warning.includes("JANGAN"), "pesan blokir hilang");
+  // Muat: GBPUSD Finex 0.01 lot, margin $264.62/lot, free $8.41 → budget 4.2 → max 0.01.
+  const gu = checkMarginCap({ suggestedLot: 0.01, minLot: 0.01, lotStep: 0.01, marginPerLot: 264.62, freeMargin: 8.41 });
+  assert(gu.cappedLot === 0.01 && gu.warning === null, `GBPUSD=${gu.cappedLot}`);
+  // Data margin kosong: lot tidak diubah, warning jujur.
+  const none = checkMarginCap({ suggestedLot: 0.5, minLot: 0.1, lotStep: 0.1, marginPerLot: null, freeMargin: 100 });
+  assert(none.cappedLot === 0.5 && !none.blocked && none.warning !== null, "fallback salah");
 });
 
 /* ---------------- Diagnosis end-to-end: TEST 121-138 ---------------- */
