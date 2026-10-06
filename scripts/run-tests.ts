@@ -120,6 +120,11 @@ import { PositionsLogReader } from "../server/services/positionsLogReader";
 import { marginFileTag, parseMarginCsv } from "../server/types/marginCsv";
 import { parseSwapLogCsv, swapLogLogin } from "../server/types/swapLogCsv";
 import { extractIdrAmount, parseHistoryCsv } from "../server/types/historyCsv";
+import {
+  mergeDeals,
+  summarizeByYear,
+  updateEntry,
+} from "../server/types/jurnalPajak";
 import { predictDailySwap } from "../src/lib/swapPrediction";
 import {
   ADVERSE_DRIFT_PCT,
@@ -1917,6 +1922,57 @@ test("504. parseHistoryCsv: setoran BALANCE (IDR di komentar) + deal BUY/SELL Fi
     "deal OUT salah",
   );
   assert(extractIdrAmount("tanpa nominal") === null, "IDR harus null");
+});
+
+test("505. jurnalPajak: impor anti-duplikat, kurs/catatan tidak tertimpa, rekap tahunan", () => {
+  const header =
+    "DealTicket,PositionId,OrderTicket,ServerTime,Symbol,Type,Entry,Volume,Price,Commission,Swap,Profit,Fee,Magic,Comment,Login,Company,AccountCurrency";
+  const rows = [
+    "1,0,0,2026.09.29 03:47:04,External,BALANCE,IN,0.00,0,0.00,0.00,11.11,0.00,0,IDR 200000.00,91811209,PT,USD",
+    "2,10,10,2026.09.29 04:08:06,GBPUSD,BUY,IN,0.01,1.32483,-0.01,0.00,0.00,0.00,0,,91811209,PT,USD",
+    "3,10,11,2026.09.29 10:48:00,GBPUSD,SELL,OUT,0.01,1.32339,0.00,-0.05,-1.44,0.00,0,,91811209,PT,USD",
+  ];
+  const deals = parseHistoryCsv([header, ...rows, ""].join("\r\n"));
+  const first = mergeDeals([], deals);
+  assert(first.added === 3, `added=${first.added}`);
+  const edited = updateEntry(first.entries, "3", {
+    kursIdr: 16000,
+    catatan: " tes ",
+  });
+  if (edited === null) throw new Error("updateEntry null");
+  const again = mergeDeals(edited, deals);
+  assert(
+    again.added === 0 && again.entries.length === 3,
+    "duplikat tidak boleh masuk",
+  );
+  const e3 = again.entries.find((e) => e.dealTicket === "3");
+  assert(
+    e3?.kursIdr === 16000 && e3.catatan === "tes",
+    "kurs/catatan tertimpa",
+  );
+  assert(
+    updateEntry(edited, "999", { catatan: "x" }) === null,
+    "tiket asing harus null",
+  );
+  const s = summarizeByYear(again.entries);
+  assert(s.length === 1 && s[0].year === "2026", "tahun salah");
+  assert(
+    s[0].depositUsd === 11.11 && s[0].withdrawalUsd === 0,
+    "setoran salah",
+  );
+  assert(
+    s[0].profitUsd === -1.44 && s[0].swapUsd === -0.05,
+    "profit/swap salah",
+  );
+  assert(
+    s[0].commissionUsd === -0.01 && s[0].nettoUsd === -1.5,
+    `netto=${s[0].nettoUsd}`,
+  );
+  assert(s[0].nettoIdr === Math.round(-1.49 * 16000), `idr=${s[0].nettoIdr}`);
+  assert(
+    s[0].tanpaKurs === 1 && s[0].dealCount === 2,
+    "tanpaKurs/dealCount salah",
+  );
 });
 
 test("502. predictDailySwap: INTEREST_CURRENT tahunan ÷360, DISABLED 0, mode lain null", () => {
