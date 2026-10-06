@@ -10,6 +10,7 @@ import {
   Activity,
   BarChart3,
   Briefcase,
+  History,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import AnalysisResult from "./components/result/AnalysisResult";
 import { LiveEquityView } from "./components/result/LiveEquity";
 import { useEquityStream } from "./hooks/useEquityStream";
 import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
+import { SwapLogPanel } from "./components/swaplog/SwapLogPanel";
 import {
   createWorkspaceStore,
   hasWorkspaceWork,
@@ -1050,6 +1052,14 @@ export default function App() {
                 fxRates={fxRates}
                 activeSymbol={market.symbol}
               />
+            </Panel>
+
+            <Panel
+              icon={<History size={20} />}
+              title="8. Log Swap (MT5)"
+              description="Catatan EA MDBKASwapLogger jam demi jam: swap nyata terminal vs prediksi rumus ÷360."
+            >
+              <SwapLogPanel brokerId={activeBrokerId} />
             </Panel>
           </div>
 

@@ -119,6 +119,7 @@ import { isBrokerPosition, parsePositionRow } from "../server/types/positions";
 import { PositionsLogReader } from "../server/services/positionsLogReader";
 import { marginFileTag, parseMarginCsv } from "../server/types/marginCsv";
 import { parseSwapLogCsv, swapLogLogin } from "../server/types/swapLogCsv";
+import { predictDailySwap } from "../src/lib/swapPrediction";
 import {
   ADVERSE_DRIFT_PCT,
   MARGIN_GUARD_PCT,
@@ -1857,6 +1858,61 @@ test("487. buffer OTB = 5 tick spec: BABA.US 0.05, tidak terbawa forex", () => {
   assert(baba.buffer === 0.05, `buffer BABA.US=${baba.buffer}`);
   const back = applyBrokerPreset(baba, "GBPUSD_ORB", "orbitraderberjangka");
   assert(back.buffer === 0.00005, `buffer GBPUSD_ORB=${back.buffer}`);
+});
+
+test("502. predictDailySwap: INTEREST_CURRENT tahunan ÷360, DISABLED 0, mode lain null", () => {
+  const base = {
+    type: "BUY",
+    volume: 0.1,
+    priceCurrent: 0.69819,
+    contractSize: 100000,
+    swapMode: "SYMBOL_SWAP_MODE_INTEREST_CURRENT",
+    swapLong: -1.5,
+    swapShort: -1.5,
+    profitCurrency: "USD",
+  };
+  const audusd = predictDailySwap(base);
+  assert(
+    audusd !== null && Math.abs(audusd.value - -0.2909125) < 1e-9,
+    `AUDUSD=${audusd?.value}`,
+  );
+  const meta = predictDailySwap({
+    ...base,
+    priceCurrent: 743.67,
+    contractSize: 1,
+    swapLong: -10,
+  });
+  assert(
+    meta !== null && Math.abs(meta.value - -0.020657) < 1e-6,
+    `META=${meta?.value}`,
+  );
+  const sell = predictDailySwap({
+    ...base,
+    type: "SELL",
+    swapShort: -1.75,
+    priceCurrent: 110.994,
+    profitCurrency: "JPY",
+  });
+  assert(
+    sell !== null &&
+      sell.currency === "JPY" &&
+      Math.abs(sell.value - -53.95541666666667) < 1e-9,
+    `CADJPY SELL=${sell?.value}`,
+  );
+  assert(
+    predictDailySwap({ ...base, swapMode: "SYMBOL_SWAP_MODE_DISABLED" })
+      ?.value === 0,
+    "DISABLED harus 0",
+  );
+  assert(
+    predictDailySwap({ ...base, swapMode: "SYMBOL_SWAP_MODE_POINTS" }) === null,
+    "mode lain harus null",
+  );
+  const app = readSrc("src/App.tsx");
+  assert(
+    app.includes("<SwapLogPanel brokerId={activeBrokerId} />"),
+    "panel tak terpasang",
+  );
 });
 
 test("501. parseSwapLogCsv: format MDBKASwapLogger 28 kolom + baris NO_POSITIONS", () => {
