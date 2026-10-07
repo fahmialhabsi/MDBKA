@@ -1058,7 +1058,7 @@ export default function App() {
 
             <Panel
               icon={<Briefcase size={20} />}
-              title="9. Monitor posisi (manual)"
+              title="10. Monitor posisi (manual)"
               description="Catat posisi MT5 manual; pantau P&L live + sinyal exit. Tanpa order."
             >
               <HoldingsMonitor
@@ -1070,7 +1070,7 @@ export default function App() {
 
             <Panel
               icon={<History size={20} />}
-              title="10. Log Swap (MT5)"
+              title="11. Log Swap (MT5)"
               description="Catatan EA MDBKASwapLogger jam demi jam: swap nyata terminal vs prediksi rumus ÷360."
             >
               <SwapLogPanel brokerId={activeBrokerId} />
