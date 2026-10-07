@@ -1,5 +1,6 @@
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { useSignalPrediction, type Candle } from "../../hooks/useSignalPrediction";
+import type { BrokerId } from "../../types/broker";
 
 /**
  * T4 - Live Signals Panel v2 (integrated with T2+T3)
@@ -12,14 +13,20 @@ import { useSignalPrediction, type Candle } from "../../hooks/useSignalPredictio
 
 interface LiveSignalsPanelProps {
   readonly symbols: readonly string[];
-  readonly lastCandles: Map<string, Candle>;
+  readonly lastCandles: ReadonlyMap<string, Candle>;
+  readonly brokerId: BrokerId;
 }
 
 export function LiveSignalsPanel({
   symbols,
   lastCandles,
+  brokerId,
 }: LiveSignalsPanelProps) {
-  const { predictions, loading, error } = useSignalPrediction(symbols, lastCandles);
+  const { predictions, loading, error } = useSignalPrediction(
+    symbols,
+    lastCandles,
+    brokerId,
+  );
 
   if (loading) {
     return (

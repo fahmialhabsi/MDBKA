@@ -1,77 +1,85 @@
 import { useEffect, useState } from "react";
+import { API_BASE_URL } from "../lib/apiBaseUrl";
+import { extractQuoteFromRestPayload } from "../../server/types/quotes";
 import type { QuoteSnapshot } from "../types/quotes";
+import type { BrokerId } from "../types/broker";
+
+const EMPTY_QUOTES: ReadonlyMap<string, QuoteSnapshot> = new Map();
 
 /**
- * #509 - React hook: poll live quotes dari backend setiap 30 dtk.
- * Input: array simbol (AUDUSD_ORB, EURUSD_ORB, dll).
- * Output: Map symbol → QuoteSnapshot, error, loading state.
+ * #509 - React hook: poll quote live per broker dari endpoint yang sama
+ * dengan dashboard (GET /api/quotes/:symbol?broker=..., sumber quotes.csv
+ * EA yang diperbarui terus) — BUKAN snapshot margin CSV yang statis.
+ *
+ * Input: simbol sesuai penamaan broker (Finex: AUDUSD, OTB: AUDUSD_ORB).
+ * Output: Map symbol → QuoteSnapshot, error, loading.
+ *
+ * Effect dikunci pada `key` (string) agar array `symbols` baru di tiap
+ * render parent tidak memicu ulang polling (banjir request).
  */
-export function useLiveQuotes(symbols: readonly string[] = []) {
-  const [quotes, setQuotes] = useState<Map<string, QuoteSnapshot>>(new Map());
+export function useLiveQuotes(
+  symbols: readonly string[] = [],
+  brokerId?: BrokerId,
+  pollIntervalMs: number = 30000,
+): {
+  readonly quotes: ReadonlyMap<string, QuoteSnapshot>;
+  readonly error: string | null;
+  readonly loading: boolean;
+} {
+  const key = symbols.join(",") + "|" + (brokerId ?? "");
+  const [quotes, setQuotes] =
+    useState<ReadonlyMap<string, QuoteSnapshot>>(EMPTY_QUOTES);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(symbols.length > 0);
-  const symbolsKey = symbols.join(","); // Extract to avoid complex dependency
+  // Key terakhir yang selesai di-fetch; loading diturunkan darinya
+  // (tanpa setState sinkron di dalam effect).
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (symbols.length === 0) {
-      return;
-    }
+    if (symbols.length === 0) return;
 
-    let isMounted = true;
-    const POLL_INTERVAL_MS = 30000; // 30 dtk
+    let cancelled = false;
+    const query = brokerId === undefined ? "" : `?broker=${brokerId}`;
 
-    const syncQuotes = async (): Promise<void> => {
-      try {
-        const nextQuotes = new Map<string, QuoteSnapshot>();
-        for (const symbol of symbols) {
+    const fetchAll = async (): Promise<void> => {
+      const next = new Map<string, QuoteSnapshot>();
+      let failure: string | null = null;
+      await Promise.all(
+        symbols.map(async (symbol) => {
           try {
-            const url = `/api/quotes-live/latest/${encodeURIComponent(symbol)}`;
-            const response = await fetch(url);
-            if (response.ok) {
-              const data = (await response.json()) as unknown;
-              if (isQuoteSnapshot(data)) {
-                nextQuotes.set(symbol, data);
-              }
-            }
+            const res = await fetch(
+              `${API_BASE_URL}/api/quotes/${encodeURIComponent(symbol)}${query}`,
+            );
+            if (!res.ok) return; // simbol belum ada di quotes.csv broker ini
+            const payload: unknown = (await res.json()) as unknown;
+            const latest = extractQuoteFromRestPayload(payload, symbol);
+            if (latest !== null) next.set(symbol, latest);
           } catch (e) {
-            console.warn(`Error fetching quote ${symbol}:`, e);
+            failure = e instanceof Error ? e.message : String(e);
           }
-        }
-        if (isMounted) {
-          setQuotes(nextQuotes);
-          setError(null);
-          setLoading(false);
-        }
-      } catch (e) {
-        if (isMounted) {
-          setError(String(e));
-          setLoading(false);
-        }
-      }
+        }),
+      );
+      if (cancelled) return;
+      setQuotes(next);
+      setError(failure);
+      setLoadedKey(key);
     };
 
-    // Sync immediately, then poll
-    syncQuotes();
-    const interval = setInterval(syncQuotes, POLL_INTERVAL_MS);
+    void fetchAll();
+    const id = window.setInterval(() => {
+      void fetchAll();
+    }, pollIntervalMs);
 
     return () => {
-      isMounted = false;
-      clearInterval(interval);
+      cancelled = true;
+      window.clearInterval(id);
     };
-  }, [symbols, symbolsKey]); // Depend on both symbols and key
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- symbols & brokerId dibekukan via key
+  }, [key, pollIntervalMs]);
 
-  return { quotes, error, loading };
-}
-
-/** Type guard: validate QuoteSnapshot shape. */
-function isQuoteSnapshot(value: unknown): value is QuoteSnapshot {
-  if (typeof value !== "object" || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    typeof obj.symbol === "string" &&
-    typeof obj.bid === "number" &&
-    typeof obj.ask === "number" &&
-    typeof obj.timestamp === "string" &&
-    obj.ask > obj.bid
-  );
+  const ready = loadedKey === key;
+  return {
+    quotes: ready ? quotes : EMPTY_QUOTES,
+    error: ready ? error : null,
+    loading: symbols.length > 0 && !ready,
+  };
 }
