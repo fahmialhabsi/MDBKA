@@ -23,6 +23,7 @@ import SwingLevelsForm from "./components/analysis/SwingLevelsForm";
 import AnalysisResult from "./components/result/AnalysisResult";
 import { LiveEquityView } from "./components/result/LiveEquity";
 import { KursProfitBar } from "./components/layout/KursProfitBar";
+import { AccountBalancesBar } from "./components/layout/AccountBalancesBar";
 import { useEquityStream } from "./hooks/useEquityStream";
 import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
 import { SwapLogPanel } from "./components/swaplog/SwapLogPanel";
@@ -836,6 +837,10 @@ export default function App() {
             <Activity size={16} />
             Analisa Otomatis
           </div>
+        </div>
+        {/* Langkah C: saldo & setoran semua akun (Rupiah) dari History MT5. */}
+        <div className="mx-auto w-full max-w-[1600px] px-3 pb-2 sm:px-4 lg:px-6">
+          <AccountBalancesBar fxRates={fxRates} />
         </div>
       </header>
 

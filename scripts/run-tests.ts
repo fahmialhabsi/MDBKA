@@ -226,6 +226,7 @@ import {
 import { isEquitySnapshot } from "../server/types/equity";
 import { autoCsvFileName, autoLoadKey, findCandleItem } from "../src/lib/autoCandle";
 import { summarizeAccountBalance } from "../server/services/accountBalance";
+import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -6339,6 +6340,28 @@ test("533. saldo akun dari History: setoran, penarikan, trade, kredit diabaikan"
   const kosong = summarizeAccountBalance([]);
   assert(kosong.balance === 0 && kosong.lastDealTime === null && kosong.depositsIdr === null, "kosong");
   assert(readSrc("server/routes/evaluationRoutes.ts").includes("balance: summarizeAccountBalance(deals)"), "belum tersambung ke /api/evaluation");
+});
+
+test("534. header saldo: Rupiah, setoran asli, live di depan, tanpa kurs pakai USD", () => {
+  const b = (balance: number, deposits: number, depositsIdr: number | null) => ({
+    balance, deposits, withdrawals: 0, depositsIdr, currency: "USD", lastDealTime: "2026.10.08 00:45:35",
+  });
+  const accounts = [
+    { login: "70930952", label: "OTB demo", balance: b(5000.22, 5000, null) },
+    { login: "91811209", label: "Finex live", balance: b(8.5, 22.21, 400000) },
+    { login: "61823011", label: "Finex demo", balance: b(4999.97, 5000, null) },
+    { login: "1", label: "Tanpa saldo" },
+  ];
+  const rows = buildBalanceRows(accounts, 17870.85);
+  assert(rows.map((r) => r.label).join("|") === "Finex live|Finex demo|OTB demo", rows.map((r) => r.label).join("|"));
+  assert(rows[0].isLive && rows[0].balanceText === "Rp152.000", rows[0].balanceText);
+  assert(rows[0].depositText === "Rp400.000", `setoran asli ${rows[0].depositText}`);
+  assert(rows[2].balanceText === "Rp89.358.000", rows[2].balanceText);
+  assert(rows[2].depositText === "Rp89.354.000" && rows[2].balanceUsdText === "$5.000,22", rows[2].depositText);
+  const tanpaKurs = buildBalanceRows(accounts, null);
+  assert(tanpaKurs[0].balanceText === "$8,50" && tanpaKurs[0].depositText === "Rp400.000", JSON.stringify(tanpaKurs[0]));
+  assert(usdToIdrText(1, 0) === null, "kurs 0");
+  assert(readSrc("src/App.tsx").includes("<AccountBalancesBar fxRates={fxRates} />"), "belum dipasang di header");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
