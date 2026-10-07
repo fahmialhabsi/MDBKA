@@ -497,6 +497,23 @@ export function KewajibanPajakPanel(): JSX.Element {
           </tbody>
         </table>
       </div>
+      <div className="flex flex-wrap gap-3">
+        <a
+          href={`${API_BASE_URL}/api/pajak/laporan?year=${year}`}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-lg bg-sky-500/20 px-3 py-1.5 text-xs font-semibold text-sky-200"
+        >
+          Lihat Laporan Pajak {year}
+        </a>
+        <a
+          href={`${API_BASE_URL}/api/pajak/laporan?year=${year}&download=1`}
+          download
+          className="rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200"
+        >
+          Unduh Laporan (HTML)
+        </a>
+      </div>
       <p className="text-[11px] text-slate-500">
         Perkiraan berdasarkan UU PPh Pasal 17 ayat (1) huruf a (UU HPP) dan PTKP
         PMK 101/PMK.010/2016; bukan nasihat pajak. Perlakuan rugi trading dan

@@ -134,6 +134,7 @@ import {
   progressiveTax,
   ptkpAmount,
 } from "../server/types/pajakOP";
+import { buildLaporanHtml, escapeHtml } from "../server/types/laporanPajak";
 import { createPembayaranPajakStore } from "../server/services/pembayaranPajakStore";
 import {
   decodeBukti,
@@ -2298,6 +2299,60 @@ test("509. pembayaranPajak: validasi, simpan pembayaran + bukti, profil, tolak i
     "tidak persisten",
   );
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("510. laporanPajak: HTML memuat ringkasan, pasal, kode setoran, pembayaran + escape", () => {
+  const liability = calculateTaxLiability({
+    year: 2026,
+    nettoTradingIdr: 100_000_000,
+    otherNetIncomeIdr: 0,
+    ptkpStatus: "TK/0",
+    creditIdr: 0,
+  });
+  const html = buildLaporanHtml({
+    year: 2026,
+    generatedAt: "2026-10-07 10:00",
+    login: "91811209",
+    summary: undefined,
+    liability,
+    dibayarPasal29Idr: 0,
+    sisaKurangBayarIdr: liability.kurangBayarIdr,
+    pembayaran: [
+      {
+        id: "x",
+        year: 2026,
+        tanggalBayar: "2027-03-20",
+        jenis: "PPh Pasal 29 OP",
+        kodeAkun: "411125-200",
+        jumlahIdr: 1,
+        ntpn: "",
+        kodeBilling: "",
+        catatan: "",
+        bukti: {
+          fileName: "<b>x</b>.pdf",
+          mime: "application/pdf",
+          size: 1,
+          storedName: "x.pdf",
+        },
+        createdAt: "",
+      },
+    ],
+    entries: [],
+  });
+  assert(
+    html.includes("Laporan Pajak Penghasilan Trading - Tahun 2026"),
+    "judul",
+  );
+  assert(
+    html.includes("411125-200") && html.includes("Pasal 17"),
+    "kode/pasal",
+  );
+  assert(html.includes("Rp2.300.000"), "pajak 5% x 46jt");
+  assert(
+    !html.includes("<b>x</b>") && html.includes("&lt;b&gt;"),
+    "escape bukti",
+  );
+  assert(escapeHtml('a&"<') === "a&amp;&quot;&lt;", "escapeHtml");
 });
 
 test("502. predictDailySwap: INTEREST_CURRENT tahunan ÷360, DISABLED 0, mode lain null", () => {

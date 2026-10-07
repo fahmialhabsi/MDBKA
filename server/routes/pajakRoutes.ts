@@ -11,6 +11,7 @@ import {
   type PembayaranPajakStore,
 } from "../services/pembayaranPajakStore";
 import { summarizeByYear } from "../types/jurnalPajak";
+import { buildLaporanHtml } from "../types/laporanPajak";
 import { calculateTaxLiability } from "../types/pajakOP";
 
 /**
@@ -71,6 +72,54 @@ export function createPajakRoutes(
         sisaKurangBayarIdr: Math.max(0, liability.kurangBayarIdr - dibayar29),
         pembayaran,
       });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  router.get("/laporan", (req: Request, res: Response) => {
+    try {
+      const year = parseYear(req.query["year"] ?? new Date().getFullYear());
+      if (year === null) {
+        res.status(400).json({ error: "Tahun pajak tidak valid" });
+        return;
+      }
+      jurnal.sync();
+      const entries = jurnal.load();
+      const summary = summarizeByYear(entries).find(
+        (s) => s.year === String(year),
+      );
+      const profil = store.getProfil(year);
+      const liability = calculateTaxLiability({
+        year,
+        nettoTradingIdr: summary?.nettoIdr ?? 0,
+        otherNetIncomeIdr: profil.otherNetIncomeIdr,
+        ptkpStatus: profil.ptkpStatus,
+        creditIdr: profil.creditIdr,
+      });
+      const pembayaran = store.list(year);
+      const dibayar29 = pembayaran
+        .filter((p) => p.jenis === "PPh Pasal 29 OP")
+        .reduce((sum, p) => sum + p.jumlahIdr, 0);
+      const html = buildLaporanHtml({
+        year,
+        generatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
+        login: entries[0]?.login ?? "",
+        summary,
+        liability,
+        dibayarPasal29Idr: dibayar29,
+        sisaKurangBayarIdr: Math.max(0, liability.kurangBayarIdr - dibayar29),
+        pembayaran,
+        entries,
+      });
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      if (req.query["download"] === "1") {
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="laporan-pajak-${year}.html"`,
+        );
+      }
+      res.send(html);
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
