@@ -28,9 +28,7 @@ import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
 import { SwapLogPanel } from "./components/swaplog/SwapLogPanel";
 import { JurnalPajakPanel } from "./components/jurnal/JurnalPajakPanel";
 import { KewajibanPajakPanel } from "./components/jurnal/KewajibanPajakPanel";
-import {
-  createWorkspaceStore,
-} from "./lib/brokerWorkspace";
+import { createWorkspaceStore } from "./lib/brokerWorkspace";
 import { LiveQuotes } from "./components/analysis/LiveQuotes";
 import { useQuotesStream } from "./hooks/useQuotesStream";
 import dashboard from "./styles/dashboard.module.css";
@@ -196,7 +194,9 @@ export default function App() {
         // Kurs Transaksi BI (utama bila terjangkau); gagal = tetap ECB.
         const bi = await fetchBackendBiUsdIdr(API_BASE_URL);
         if (bi !== null) {
-          setFxRates((prev) => (prev === null ? prev : { ...prev, usdIdr: bi }));
+          setFxRates((prev) =>
+            prev === null ? prev : { ...prev, usdIdr: bi },
+          );
         }
       });
   }, []);
@@ -935,25 +935,6 @@ export default function App() {
                 )}
               </Panel>
 
-              <Panel
-                icon={<ShieldCheck size={20} />}
-                title={`2. Atur parameter broker dan risiko — ${activeBrokerLabel}`}
-                description="Nilai point dan contract size wajib diverifikasi dari broker."
-              >
-                <BrokerSettingsForm
-                  broker={broker}
-                  symbol={market.symbol}
-                  brokerId={activeBrokerId}
-                  onChange={(nextBroker) => {
-                    setBroker(nextBroker);
-                    setResult(null);
-                    setConfirmed(false);
-                    setBlockedReasons(null);
-                  }}
-                  onApplyPreset={handleApplyBrokerPreset}
-                />
-              </Panel>
-
               <CsvFileConnector
                 onCsvLoaded={handleCsvLoaded}
                 onConnectionChange={handleConnectionChange}
@@ -975,6 +956,25 @@ export default function App() {
               <p className="text-xs text-slate-500">
                 Sumber broker: {activeBrokerLabel}
               </p>
+
+              <Panel
+                icon={<ShieldCheck size={20} />}
+                title={`2. Atur parameter broker dan risiko — ${activeBrokerLabel}`}
+                description="Nilai point dan contract size wajib diverifikasi dari broker."
+              >
+                <BrokerSettingsForm
+                  broker={broker}
+                  symbol={market.symbol}
+                  brokerId={activeBrokerId}
+                  onChange={(nextBroker) => {
+                    setBroker(nextBroker);
+                    setResult(null);
+                    setConfirmed(false);
+                    setBlockedReasons(null);
+                  }}
+                  onApplyPreset={handleApplyBrokerPreset}
+                />
+              </Panel>
 
               <SwingLevelsForm
                 symbol={market.symbol}
