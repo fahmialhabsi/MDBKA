@@ -11,6 +11,13 @@ function round(value: number, decimals = 2) {
   return Math.round(value * factor) / factor;
 }
 
+/**
+ * Mode Aman: biaya transaksi (spread + slippage + komisi) per lot boleh
+ * memakan maksimal 10% dari risiko per lot. Di atas itu keuntungan kecil
+ * habis oleh biaya, jadi setup ditahan (TUNGGU). Lihat jurnal 7 Okt 2026.
+ */
+export const MAX_COST_SHARE_OF_RISK = 0.1;
+
 function floorToStep(value: number, step: number) {
   if (!step || step <= 0) return value;
   return Math.floor(value / step) * step;
@@ -131,6 +138,34 @@ export function analyzeMarket(
     }
   }
 
+  // Mode Aman: setup BELI/JUAL ditahan bila biaya terlalu besar terhadap
+  // risiko, atau bila lot minimum broker sudah melewati batas risiko.
+  let costShareOfRisk: number | null = null;
+  if (riskDistance !== null && riskDistance > 0) {
+    const spread = Math.abs(market.ask - market.bid);
+    const costPerOneLot =
+      (spread + broker.slippage) * broker.pointValue + broker.commission;
+    const riskPerOneLot =
+      (riskDistance + spread + broker.slippage) * broker.pointValue +
+      broker.commission;
+    costShareOfRisk = riskPerOneLot > 0 ? costPerOneLot / riskPerOneLot : null;
+  }
+  const blockedByCost =
+    decision !== "TUNGGU" &&
+    costShareOfRisk !== null &&
+    costShareOfRisk > MAX_COST_SHARE_OF_RISK;
+  const blockedByRisk =
+    decision !== "TUNGGU" &&
+    riskAtMinLot !== null &&
+    riskAtMinLot > maxRiskUsd;
+  if (blockedByCost || blockedByRisk) {
+    decision = "TUNGGU";
+    // Tanpa angka eksekusi: SL/TP/lot tidak ditampilkan untuk setup ditahan.
+    stopLoss = null;
+    takeProfit = null;
+    suggestedLot = null;
+  }
+
   const factors: string[] = [];
 
   if (trendScore > 0) {
@@ -152,13 +187,23 @@ export function analyzeMarket(
 
   const warnings: string[] = [];
 
-  if (decision === "TUNGGU") {
+  if (blockedByCost && costShareOfRisk !== null) {
+    warnings.push(
+      `Mode Aman: biaya transaksi ${round(costShareOfRisk * 100, 0)}% dari risiko (maks ${round(MAX_COST_SHARE_OF_RISK * 100, 0)}%). Setup ditahan.`
+    );
+  }
+  if (blockedByRisk && riskAtMinLot !== null) {
+    warnings.push(
+      `Mode Aman: risiko lot minimum ${round(riskAtMinLot, 2)} USD melebihi batas ${round(broker.riskPercent, 2)}% equity (${round(maxRiskUsd, 2)} USD). Setup ditahan.`
+    );
+  }
+  if (decision === "TUNGGU" && !blockedByCost && !blockedByRisk) {
     warnings.push(
       "Skor belum cukup kuat atau indikator belum searah."
     );
   }
 
-  if (riskAtMinLot !== null && riskAtMinLot > maxRiskUsd) {
+  if (riskAtMinLot !== null && riskAtMinLot > maxRiskUsd && !blockedByRisk) {
     warnings.push(
       "Risiko pada lot minimum broker melebihi batas risiko equity."
     );
@@ -182,6 +227,9 @@ export function analyzeMarket(
   } else if (decision === "JUAL") {
     explanation =
       "Bias bearish terdeteksi, tetapi tetap periksa konfirmasi candle dan risiko sebelum mengambil keputusan.";
+  } else if (blockedByCost || blockedByRisk) {
+    explanation =
+      "Mode Aman: indikator searah, tetapi biaya atau risiko belum aman. Menjaga modal lebih penting daripada memaksa entry.";
   } else {
     explanation =
       "Lebih baik menunggu karena skor belum cukup kuat atau indikator masih bertentangan.";
@@ -189,6 +237,8 @@ export function analyzeMarket(
 
   return {
     decision,
+    costShareOfRisk:
+      costShareOfRisk === null ? null : round(costShareOfRisk, 4),
     score,
     trendScore,
     cciScore,

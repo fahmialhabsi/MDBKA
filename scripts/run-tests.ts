@@ -27,6 +27,10 @@ import {
   sma,
 } from "../src/calculations/indicators";
 import {
+  analyzeMarket,
+  MAX_COST_SHARE_OF_RISK,
+} from "../src/calculations/decisionEngine";
+import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
   getInstrumentProfile,
@@ -4261,7 +4265,7 @@ test("217. OTB preset dipilih bila broker orbitraderberjangka", () => {
     `komisi OTB tidak terisi: ${applied.commission} (spec32 33, 6G)`,
   );
   assert(applied.slippage === 0, "slippage ikut ditebak");
-  assert(applied.riskPercent === 10, "default strategi tidak diisi");
+  assert(applied.riskPercent === 1, "default strategi tidak diisi (Mode Aman 1%)");
 });
 
 test("218. OTB tickValue dari kalkulator, bukan Finex", () => {
@@ -6001,6 +6005,42 @@ test("513. formatPriceDistance: jarak forex tidak terpotong jadi 0", () => {
   assert(formatPriceDistance(187.5) === "187.50", "indeks 2 desimal");
   assert(formatPriceDistance(1.2345) === "1.234" || formatPriceDistance(1.2345) === "1.235", "menengah 3 desimal");
   assert(formatPriceDistance(Number.NaN) === "-", "NaN aman");
+});
+
+const modeAmanMarket = {
+  symbol: "GBPUSD", timeframe: "H1", bid: 1.3, ask: 1.3001, close: 1.3,
+  open: 1.2995, high: 1.301, low: 1.299, ma50: 1.295, cci: 150, rsi: 60,
+  macd: 0.001, macdSignal: 0, atr: 0.001, support: 1.299, resistance: 1.305,
+};
+const modeAmanBroker = {
+  equity: 10000, riskPercent: 1, minLot: 0.01, lotStep: 0.01,
+  pointValue: 100000, contractSize: 100000, commission: 1, slippage: 0,
+  buffer: 0.00005, atrMultiplier: 1.2, targetRR: 1.5,
+};
+
+test("514. Mode Aman: biaya kecil (<10% risiko) tetap BELI", () => {
+  const r = analyzeMarket(modeAmanMarket, modeAmanBroker);
+  assert(r.decision === "BELI", `harus BELI, dapat ${r.decision}`);
+  assert(
+    r.costShareOfRisk !== null && r.costShareOfRisk !== undefined &&
+      r.costShareOfRisk < MAX_COST_SHARE_OF_RISK,
+    `porsi biaya ${r.costShareOfRisk}`,
+  );
+  assert(r.stopLoss !== null && r.takeProfit !== null, "SL/TP harus ada");
+});
+
+test("515. Mode Aman: komisi besar (OTB 33/lot) menahan setup jadi TUNGGU", () => {
+  const r = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, commission: 33 });
+  assert(r.decision === "TUNGGU", `harus TUNGGU, dapat ${r.decision}`);
+  assert(r.stopLoss === null && r.takeProfit === null, "SL/TP tidak boleh tampil");
+  assert(r.suggestedLot === null, "lot tidak boleh tampil");
+  assert(r.warnings.some((w) => w.includes("Mode Aman: biaya")), "alasan biaya hilang");
+});
+
+test("516. Mode Aman: lot minimum melewati batas risiko (saldo kecil) jadi TUNGGU", () => {
+  const r = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, equity: 8.5 });
+  assert(r.decision === "TUNGGU", `harus TUNGGU, dapat ${r.decision}`);
+  assert(r.warnings.some((w) => w.includes("Mode Aman: risiko lot minimum")), "alasan risiko hilang");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

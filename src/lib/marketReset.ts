@@ -399,7 +399,8 @@ export function getFinexVolumeSpec(symbol: string): {
 
 /** Default strategi (bukan data broker): aman diisi saat belum ada nilai. */
 const STRATEGY_DEFAULTS = {
-  riskPercent: 10,
+  // Mode Aman (7 Okt 2026): risiko default 1% per trade.
+  riskPercent: 1,
   minLot: 0.01,
   lotStep: 0.01,
   atrMultiplier: 1.2,

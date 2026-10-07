@@ -103,7 +103,7 @@ const initialMarket: MarketData = {
 
 const initialBroker: BrokerSettings = {
   equity: 8.99,
-  riskPercent: 10,
+  riskPercent: 1,
   minLot: 0.01,
   lotStep: 0.01,
   pointValue: 100000,

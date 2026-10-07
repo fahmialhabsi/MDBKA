@@ -54,5 +54,7 @@ export interface AnalysisResult {
   explanation: string;
   factors: string[];
   warnings: string[];
+  /** Mode Aman: porsi biaya terhadap risiko per lot (0..1); null bila tanpa setup. */
+  costShareOfRisk?: number | null;
 }
 
