@@ -5,6 +5,8 @@ import {
 } from "../../hooks/useHoldingsQuotes";
 import {
   buildUsdConverter,
+  profitToIdr,
+  usdIdrRate,
   type ExchangeRates,
 } from "../../services/fxRateService";
 import {
@@ -60,6 +62,18 @@ function money(value: number | null, currency: string): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)} ${currency}`;
 }
 
+/** Rupiah bertanda; hanya P&L berdenominasi USD yang dikonversi. */
+function rupiah(
+  value: number | null,
+  currency: string,
+  kurs: number | null,
+): string {
+  if (value === null || currency !== "USD") return "-";
+  const idr = profitToIdr(value, kurs);
+  if (idr === null) return "-";
+  return `${idr >= 0 ? "+" : "-"}Rp${Math.abs(idr).toLocaleString("id-ID")}`;
+}
+
 export interface ExitRequest {
   readonly exitPrice: number;
   readonly note: string;
@@ -74,6 +88,7 @@ function HoldingCard({
   holding,
   live,
   convert,
+  kurs,
   onExit,
   onRemove,
   readOnly,
@@ -81,6 +96,7 @@ function HoldingCard({
   readonly holding: Holding;
   readonly live: HoldingsQuote | undefined;
   readonly convert: (amount: number, currency: string) => number | null;
+  readonly kurs: number | null;
   readonly onExit: (id: string, exit: ExitRequest) => void;
   readonly onRemove: (id: string) => void;
   readonly readOnly?: boolean;
@@ -167,6 +183,19 @@ function HoldingCard({
                   evaluation?.pnlCurrency ?? "USD",
                 )}
           </span>
+          {!exited && (
+            <span
+              data-testid={`holding-pnl-idr-${holding.id}`}
+              className="block text-[11px] font-semibold text-slate-300"
+            >
+              ≈{" "}
+              {rupiah(
+                evaluation?.pnlNet ?? null,
+                evaluation?.pnlCurrency ?? "USD",
+                kurs,
+              )}
+            </span>
+          )}
           {!exited &&
             evaluation?.commission !== null &&
             evaluation?.commission !== undefined &&
@@ -360,6 +389,22 @@ export function HoldingsDashboard({
   const symbols = [...new Set(holdings.map((h) => h.symbol))];
   const { quotes, isConnected } = useHoldingsQuotes(symbols, brokerId);
   const convert = buildUsdConverter(fxRates);
+  const kurs = usdIdrRate(fxRates);
+  // Total P&L per simbol (hanya posisi OPEN dengan P&L USD yang tersedia).
+  const perSymbol = symbols.map((symbol) => {
+    let usd = 0;
+    let count = 0;
+    for (const h of holdings) {
+      if (h.symbol !== symbol || (h.status ?? "OPEN") === "EXITED") continue;
+      const live = quotes[symbol];
+      if (live === undefined) continue;
+      const ev = evaluateExitSignal(h, live.bid, live.ask, convert);
+      if (ev.pnlNet === null || ev.pnlCurrency !== "USD") continue;
+      usd += ev.pnlNet;
+      count++;
+    }
+    return { symbol, usd, count };
+  });
   const noopExit = (): void => {};
   const noopRemove = (): void => {};
 
@@ -387,12 +432,35 @@ export function HoldingsDashboard({
           Menghubungkan harga live… (butuh backend + EA menulis tick simbol ini)
         </p>
       )}
+      {perSymbol.some((s) => s.count > 0) && (
+        <div
+          data-testid="holdings-per-symbol"
+          className="rounded-xl border border-white/10 bg-slate-950/50 p-3 text-xs text-slate-300"
+        >
+          <p className="mb-1 font-semibold text-slate-200">
+            Profit per simbol × kurs
+            {kurs === null ? " (kurs belum tersedia)" : ""}
+          </p>
+          {perSymbol
+            .filter((s) => s.count > 0)
+            .map((s) => (
+              <p key={s.symbol}>
+                {s.symbol} ({s.count} posisi):{" "}
+                {money(s.usd, "USD")} →{" "}
+                <span className="font-bold text-white">
+                  {rupiah(s.usd, "USD", kurs)}
+                </span>
+              </p>
+            ))}
+        </div>
+      )}
       {holdings.map((holding) => (
         <HoldingCard
           key={holding.id}
           holding={holding}
           live={quotes[holding.symbol]}
           convert={convert}
+          kurs={kurs}
           onExit={onExit ?? noopExit}
           onRemove={onRemove ?? noopRemove}
           readOnly={readOnly}

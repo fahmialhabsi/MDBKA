@@ -98,3 +98,8 @@
     scroll-behavior: auto;
   }
 }
+
+/* Kartu live tidak boleh menyusut saat kolom penuh: kolom yang scroll. */
+.sideCol > * {
+  flex-shrink: 0;
+}

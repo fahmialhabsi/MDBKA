@@ -12,6 +12,16 @@
  * - Rate di-cache di state React selama session (reload = fetch ulang).
  */
 
+export type UsdIdrQuote = {
+  /** Kurs tengah (beli+jual)/2, Rp per 1 USD. */
+  rate: number;
+  buy: number;
+  sell: number;
+  /** Tanggal kurs BI (YYYY-MM-DD). */
+  date: string;
+  source: "BANK_INDONESIA";
+};
+
 export type ExchangeRates = {
   EUR: number;
   USD: number;
@@ -21,6 +31,12 @@ export type ExchangeRates = {
   GBP: number;
   JPY: number;
   NZD: number;
+  /** Rupiah per 1 EUR (ECB); opsional: hanya ada bila XML memuatnya. */
+  IDR?: number;
+  /** Tanggal acuan ECB (YYYY-MM-DD) dari atribut time XML. */
+  ecbDate?: string;
+  /** Kurs USD→Rp langsung dari Bank Indonesia (utama bila ada). */
+  usdIdr?: UsdIdrQuote;
   fetchedAt?: string;
 };
 
@@ -74,6 +90,7 @@ export function parseECBXml(xml: string): ExchangeRates {
       case "GBP":
       case "JPY":
       case "NZD":
+      case "IDR":
         result[currency] = rate;
         break;
       default:
@@ -81,7 +98,72 @@ export function parseECBXml(xml: string): ExchangeRates {
     }
   }
 
+  const dateMatch = /<Cube time=(["'])(\d{4}-\d{2}-\d{2})\1/.exec(xml);
+  if (dateMatch !== null) result.ecbDate = dateMatch[2];
+
   return result;
+}
+
+/**
+ * Kurs USD→Rupiah (Rp per 1 USD) dari kurs silang ECB: IDR/USD per EUR.
+ * Null bila IDR/USD tidak tersedia (tanpa angka tebakan).
+ */
+export function usdIdrRate(rates: ExchangeRates | null): number | null {
+  if (rates === null) return null;
+  const bi = rates.usdIdr;
+  if (bi !== undefined && Number.isFinite(bi.rate) && bi.rate > 0) {
+    return bi.rate;
+  }
+  const { IDR, USD } = rates;
+  if (typeof IDR !== "number" || !Number.isFinite(IDR) || IDR <= 0) return null;
+  if (!Number.isFinite(USD) || USD <= 0) return null;
+  return IDR / USD;
+}
+
+/**
+ * Kurs USD→Rp dari backend (/api/fx/bi = Kurs Transaksi BI). Null bila
+ * backend/BI tak terjangkau atau bentuk respons tak valid.
+ */
+export async function fetchBackendBiUsdIdr(
+  baseUrl: string,
+): Promise<UsdIdrQuote | null> {
+  try {
+    const doFetch = resolveFetch();
+    if (doFetch === null) return null;
+    const response = await doFetch(`${baseUrl.replace(/\/+$/, "")}/api/fx/bi`);
+    if (!response.ok) return null;
+    const d = (await (
+      response as unknown as { json(): Promise<unknown> }
+    ).json()) as Record<string, unknown>;
+    const buy = Number(d["buy"]);
+    const sell = Number(d["sell"]);
+    const unit = Number(d["unit"]);
+    const date = String(d["date"] ?? "");
+    if (![buy, sell, unit].every((n) => Number.isFinite(n) && n > 0)) {
+      return null;
+    }
+    if (d["currency"] !== "USD" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return null;
+    }
+    return {
+      rate: (buy + sell) / 2 / unit,
+      buy,
+      sell,
+      date,
+      source: "BANK_INDONESIA",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Profit USD → Rupiah (dibulatkan ke rupiah). Null bila kurs tak ada. */
+export function profitToIdr(
+  profitUsd: number,
+  rate: number | null,
+): number | null {
+  if (rate === null || !Number.isFinite(profitUsd)) return null;
+  return Math.round(profitUsd * rate);
 }
 
 type FetchFn = (

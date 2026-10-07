@@ -22,6 +22,7 @@ import ValidationSummaryCard from "./components/analysis/ValidationSummaryCard";
 import SwingLevelsForm from "./components/analysis/SwingLevelsForm";
 import AnalysisResult from "./components/result/AnalysisResult";
 import { LiveEquityView } from "./components/result/LiveEquity";
+import { KursProfitBar } from "./components/layout/KursProfitBar";
 import { useEquityStream } from "./hooks/useEquityStream";
 import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
 import { SwapLogPanel } from "./components/swaplog/SwapLogPanel";
@@ -29,8 +30,6 @@ import { JurnalPajakPanel } from "./components/jurnal/JurnalPajakPanel";
 import { KewajibanPajakPanel } from "./components/jurnal/KewajibanPajakPanel";
 import {
   createWorkspaceStore,
-  hasWorkspaceWork,
-  snapshotWorkspace,
 } from "./lib/brokerWorkspace";
 import { LiveQuotes } from "./components/analysis/LiveQuotes";
 import { useQuotesStream } from "./hooks/useQuotesStream";
@@ -77,6 +76,7 @@ import {
   getValidationViewState,
 } from "./lib/validationView";
 import {
+  fetchBackendBiUsdIdr,
   fetchBackendRates,
   fetchECBRates,
   type ExchangeRates,
@@ -169,14 +169,14 @@ export default function App() {
   const [swingCsv, setSwingCsv] = useState("");
   const [connectedCsvName, setConnectedCsvName] = useState("");
   const [csvResetKey, setCsvResetKey] = useState(0);
-  const [market, setMarket] = useState<MarketData>(initialMarket);
-  const [broker, setBroker] = useState<BrokerSettings>(initialBroker);
+  const [market, setMarket] = useState<MarketData>(emptyMarket);
+  const [broker, setBroker] = useState<BrokerSettings>(emptyBroker);
   // Tahap 3: satu-satunya sumber kebenaran broker aktif. Default Finex.
   const [activeBrokerId, setActiveBrokerId] =
     useState<BrokerId>(DEFAULT_BROKER_ID);
   const [brokerNotice, setBrokerNotice] = useState("");
   const [symbolNotice, setSymbolNotice] = useState("");
-  const [swingSource, setSwingSource] = useState<string | null>(null);
+  const [, setSwingSource] = useState<string | null>(null);
   const [blockedReasons, setBlockedReasons] = useState<string[] | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [result, setResult] = useState<ReturnType<typeof analyzeMarket> | null>(
@@ -190,13 +190,18 @@ export default function App() {
   useEffect(() => {
     fetchBackendRates(API_BASE_URL)
       .then((viaBackend) => viaBackend ?? fetchECBRates())
-      .then((rates) => {
+      .then(async (rates) => {
         setFxRates(rates);
         console.log("FX rates loaded:", rates.fetchedAt);
+        // Kurs Transaksi BI (utama bila terjangkau); gagal = tetap ECB.
+        const bi = await fetchBackendBiUsdIdr(API_BASE_URL);
+        if (bi !== null) {
+          setFxRates((prev) => (prev === null ? prev : { ...prev, usdIdr: bi }));
+        }
       });
   }, []);
 
-  const lastSymbol = useRef(initialMarket.symbol);
+  const lastSymbol = useRef(emptyMarket.symbol);
   const lastBroker = useRef<BrokerId>(DEFAULT_BROKER_ID);
   // Tahap WS: simpanan workspace per broker (ref: ditulis di handler/
   // effect saja, dibaca untuk badge via state savedFlags di bawah).
@@ -230,11 +235,10 @@ export default function App() {
   // Nilai live terakhir yang diterapkan otomatis. Melindungi edit manual:
   // live hanya menimpa bila field kosong ATAU masih sama dengan nilai
   // live yang diterapkan sebelumnya (bukan ketikan pengguna).
-  // Equity contoh bawaan (initialBroker) bukan ketikan pengguna: anggap
-  // nilai otomatis agar equity live boleh menggantikannya.
+  // Start kini kosong (bukan data contoh): equity live mengisi otomatis.
   const appliedLiveEquityRef = useRef<Record<BrokerId, number | null>>({
-    finex: initialBroker.equity,
-    orbitraderberjangka: initialBroker.equity,
+    finex: null,
+    orbitraderberjangka: null,
   });
 
   // Quote live simbol aktif: sumber spread asli untuk ask dari CSV.
@@ -697,32 +701,24 @@ export default function App() {
 
   // Tahap 3: ganti konteks broker saja. Tidak menyentuh data market,
   // pengaturan broker (equity/risiko/preset), parser, atau rumus analisis.
-  // Tahap WS: slice aktif DISIMPAN ke workspace broker (bukan dibuang);
-  // effect simbol/broker memulihkan simpanan (tanpa wipe) atau memulai
-  // segar untuk broker baru. Field yang dibersihkan di bawah hanya
-  // tampilan sementara sampai effect pulih/me-reset.
+  // Tahap WS (diganti): pindah broker kini SELALU mulai bersih; workspace
+  // lama tidak dipulihkan (permintaan pengguna, hindari data basi).
   // Tidak ada angka OTB yang diisi otomatis.
   const handleBrokerChange = useCallback(
     (nextBrokerId: BrokerId) => {
       if (nextBrokerId === activeBrokerId) return;
 
-      workspacesRef.current[activeBrokerId] = snapshotWorkspace({
-        market,
-        broker,
-        swingCsv,
-        connectedCsvName,
-        swingSource,
-        result,
-        confirmed,
-        blockedReasons,
-        image: null,
-        rawOcr: "",
-      });
-      const store = workspacesRef.current;
-      setSavedFlags({
-        finex: hasWorkspaceWork(store.finex),
-        orbitraderberjangka: hasWorkspaceWork(store.orbitraderberjangka),
-      });
+      // Pindah broker = mulai bersih (tanpa pulihkan workspace lama):
+      // data pasar, setting broker, CSV, dan hasil dikosongkan otomatis.
+      workspacesRef.current = createWorkspaceStore();
+      setSavedFlags({ finex: false, orbitraderberjangka: false });
+      setMarket(emptyMarket);
+      setBroker(emptyBroker);
+      appliedLiveEquityRef.current[nextBrokerId] = null;
+      setSymbolNotice("");
+      setSwingSource(null);
+      lastSymbol.current = "";
+      lastBroker.current = nextBrokerId;
 
       setActiveBrokerId(nextBrokerId);
       setSwingCsv("");
@@ -735,18 +731,7 @@ export default function App() {
       );
       clearAnalysisOutput();
     },
-    [
-      activeBrokerId,
-      market,
-      broker,
-      swingCsv,
-      connectedCsvName,
-      swingSource,
-      result,
-      confirmed,
-      blockedReasons,
-      clearAnalysisOutput,
-    ],
+    [activeBrokerId, clearAnalysisOutput],
   );
 
   function clearAll() {
@@ -797,6 +782,10 @@ export default function App() {
               Merangkak Dari Bawah Ke Atas
             </h1>
           </div>
+          <KursProfitBar
+            profitUsd={equityStream.equity?.profit ?? null}
+            fxRates={fxRates}
+          />
 
           <div className="hidden items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300 sm:flex">
             <Activity size={16} />

@@ -192,6 +192,8 @@ import {
   convertToUSD,
   fetchECBRates,
   parseECBXml,
+  profitToIdr,
+  usdIdrRate,
 } from "../src/services/fxRateService";
 import { withUsdPointValue } from "../src/lib/usdPointValue";
 import { resolveCsvBidAsk } from "../src/lib/csvQuote";
@@ -2355,6 +2357,27 @@ test("510. laporanPajak: HTML memuat ringkasan, pasal, kode setoran, pembayaran 
   assert(escapeHtml('a&"<') === "a&amp;&quot;&lt;", "escapeHtml");
 });
 
+test("511. ECB IDR: kurs USD→Rp silang + profit Rupiah, tanpa tebakan", () => {
+  const xml =
+    "<Cube time='2026-10-06'><Cube currency='USD' rate='1.2'/><Cube currency='IDR' rate='21600'/></Cube>";
+  const r = parseECBXml(xml);
+  assert(
+    r.IDR === 21600 && r.ecbDate === "2026-10-06",
+    "IDR/tanggal ECB salah",
+  );
+  assert(usdIdrRate(r) === 18000, "kurs silang USD→IDR salah");
+  assert(
+    profitToIdr(2.5, 18000) === 45000 && profitToIdr(-1.234, 18000) === -22212,
+    "profit Rupiah salah",
+  );
+  assert(
+    usdIdrRate(FALLBACK_RATES) === null &&
+      usdIdrRate(null) === null &&
+      profitToIdr(1, null) === null,
+    "tanpa kurs harus null (bukan tebakan)",
+  );
+});
+
 test("502. predictDailySwap: INTEREST_CURRENT tahunan ÷360, DISABLED 0, mode lain null", () => {
   const base = {
     type: "BUY",
@@ -3474,8 +3497,15 @@ test("183. pergantian broker membersihkan hasil analisis lama", () => {
 test("184. pergantian broker tidak memodifikasi decision engine", () => {
   const body = readAppBrokerHandler();
   assert(!body.includes("analyzeMarket"), "handler menyentuh decision engine");
-  assert(!body.includes("setMarket("), "handler mengubah data market");
-  assert(!body.includes("setBroker("), "handler mengubah setting broker");
+  // #512: pindah broker hanya boleh MENGOSONGKAN (emptyMarket/emptyBroker).
+  assert(
+    !body.replace("setMarket(emptyMarket)", "").includes("setMarket("),
+    "handler menulis data market selain kosong",
+  );
+  assert(
+    !body.replace("setBroker(emptyBroker)", "").includes("setBroker("),
+    "handler menulis setting broker selain kosong",
+  );
   const engine = readSrc("src/calculations/decisionEngine.ts");
   assert(!engine.includes("BrokerId"), "engine tercemar tipe broker");
   assert(!engine.includes("brokerRegistry"), "engine tercemar registry");
@@ -8474,8 +8504,7 @@ test("441. hasWorkspaceWork: hasil/parsial vs kosong", () => {
 test("442. App wiring workspace: simpan-pulihkan + badge (readSrc)", () => {
   const app = readSrc("src/App.tsx");
   assert(app.includes("brokerWorkspace"), "impor workspace hilang");
-  assert(app.includes("snapshotWorkspace"), "save snapshot hilang");
-  assert(app.includes("hasWorkspaceWork"), "badge guard hilang");
+  assert(!app.includes("snapshotWorkspace"), "pindah broker tidak lagi menyimpan");
   assert(app.includes("createWorkspaceStore"), "store awal hilang");
   assert(app.includes("workspacesRef"), "ref store hilang");
   assert(app.includes("savedFlags"), "state badge hilang");
@@ -8486,7 +8515,8 @@ test("442. App wiring workspace: simpan-pulihkan + badge (readSrc)", () => {
   const body = readAppBrokerHandler();
   assert(body.includes("clearAnalysisOutput()"), "pembersih tampilan hilang");
   assert(body.includes('setSwingCsv("")'), "putus CSV hilang");
-  assert(!body.includes("setMarket("), "handler menulis market (regresi 184)");
+  assert(body.includes("setMarket(emptyMarket)"), "pindah broker harus mengosongkan market");
+  assert(body.includes("setBroker(emptyBroker)"), "pindah broker harus mengosongkan broker");
   assert(!body.includes("analyzeMarket"), "handler menyentuh engine");
 });
 

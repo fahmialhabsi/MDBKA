@@ -4,6 +4,34 @@ import {
   parseECBXml,
   type ExchangeRates,
 } from "../../src/services/fxRateService";
+import { latestKursBi, parseBiKursXml, type KursBi } from "../types/kursBi";
+
+export const BI_WS_URL =
+  "https://www.bi.go.id/biwebservice/wskursbi.asmx/getSubKursLokal3";
+export const BI_CACHE_TTL_MS = 6 * 3600 * 1000;
+let biCache: { kurs: KursBi; atMs: number } | null = null;
+
+const isoDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+
+/** Ambil Kurs Transaksi BI terbaru (10 hari terakhir); null bila gagal. */
+async function fetchBiLatest(currency: string): Promise<KursBi | null> {
+  try {
+    const doFetch = (globalThis as { fetch?: typeof fetch }).fetch;
+    if (typeof doFetch !== "function") return null;
+    const now = Date.now();
+    const url =
+      `${BI_WS_URL}?mts=${encodeURIComponent(currency)}` +
+      `&startdate=${isoDay(now - 10 * 86400000)}&enddate=${isoDay(now + 86400000)}`;
+    const response = await doFetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return null;
+    return latestKursBi(parseBiKursXml(await response.text()), currency);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Tahap FX-PROXY — kurs ECB via backend (bukan browser langsung).
@@ -79,6 +107,27 @@ export function createFxRoutes(): Router {
       console.error("Error proxy ECB:", error);
       res.json(FALLBACK_RATES);
     }
+  });
+
+  // Kurs Transaksi BI (informasi, BUKAN kurs pajak KMK). Cache 6 jam;
+  // BI gagal -> pakai cache lama bila ada, selain itu 502 jujur.
+  router.get("/bi", async (_req: Request, res: Response) => {
+    const now = Date.now();
+    if (biCache !== null && now - biCache.atMs < BI_CACHE_TTL_MS) {
+      res.json(biCache.kurs);
+      return;
+    }
+    const fresh = await fetchBiLatest("USD");
+    if (fresh !== null) {
+      biCache = { kurs: fresh, atMs: now };
+      res.json(fresh);
+      return;
+    }
+    if (biCache !== null) {
+      res.json(biCache.kurs);
+      return;
+    }
+    res.status(502).json({ error: "Kurs BI tidak dapat dijangkau" });
   });
 
   return router;
