@@ -283,7 +283,7 @@ export default function CsvFileConnector({
     <div className="space-y-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4">
       <div>
         <h3 className="font-bold text-white">
-          3. Hubungkan CSV MetaTrader
+          2. Hubungkan CSV MetaTrader
         </h3>
         <p className="mt-1 text-sm text-slate-400">
           Pilih file CSV satu kali. MDBKA akan memeriksa perubahan file secara

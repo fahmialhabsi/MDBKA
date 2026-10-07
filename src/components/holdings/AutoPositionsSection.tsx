@@ -26,7 +26,7 @@ export function AutoPositionsSection({
         brokerId={active}
         fxRates={fxRates}
         readOnly
-        heading={`Posisi MT5 otomatis (${holdings.length})`}
+        heading={`4. Posisi MT5 otomatis (${holdings.length})`}
         emptyText={
           auto.sourceMissing
             ? "EA ExportPositions belum dipasang di terminal ini - lihat ea/ExportPositions.mq5."

@@ -960,7 +960,7 @@ export default function App() {
 
               <Panel
                 icon={<Activity size={20} />}
-                title="6. Hasil analisa"
+                title="3. Hasil analisa"
                 description={
                   confirmed
                     ? "Hasil dihitung otomatis dari CSV yang dihubungkan."
@@ -986,7 +986,7 @@ export default function App() {
 
               <Panel
                 icon={<Landmark size={20} />}
-                title="9. Jurnal Pajak (Finex)"
+                title="5. Jurnal Pajak (Finex)"
                 description="Transaksi Finex otomatis dari MT5, kurs pajak ditempel per tanggal, rekap tahunan + unduh CSV."
               >
                 <JurnalPajakPanel />
@@ -994,7 +994,7 @@ export default function App() {
 
               <Panel
                 icon={<Landmark size={20} />}
-                title="10. Kewajiban Pajak (Finex)"
+                title="6. Kewajiban Pajak (Finex)"
                 description="Hitung otomatis jenis pajak, pasal, kode setoran, dan nilai yang harus dibayar; catat pembayaran dan unggah bukti bayar."
               >
                 <KewajibanPajakPanel />
@@ -1002,7 +1002,7 @@ export default function App() {
 
               <Panel
                 icon={<ShieldCheck size={20} />}
-                title={`2. Atur parameter broker dan risiko — ${activeBrokerLabel}`}
+                title={`7. Atur parameter broker dan risiko — ${activeBrokerLabel}`}
                 description="Nilai point dan contract size wajib diverifikasi dari broker."
               >
                 <BrokerSettingsForm
@@ -1058,7 +1058,7 @@ export default function App() {
 
             <Panel
               icon={<Briefcase size={20} />}
-              title="7. Monitor posisi (manual)"
+              title="9. Monitor posisi (manual)"
               description="Catat posisi MT5 manual; pantau P&L live + sinyal exit. Tanpa order."
             >
               <HoldingsMonitor
@@ -1070,7 +1070,7 @@ export default function App() {
 
             <Panel
               icon={<History size={20} />}
-              title="8. Log Swap (MT5)"
+              title="10. Log Swap (MT5)"
               description="Catatan EA MDBKASwapLogger jam demi jam: swap nyata terminal vs prediksi rumus ÷360."
             >
               <SwapLogPanel brokerId={activeBrokerId} />
