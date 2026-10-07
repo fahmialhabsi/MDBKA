@@ -482,9 +482,10 @@ export function checkRewardRisk(
 }
 
 /**
- * Ambang breakeven: profit (jarak harga) ≥ 1× risiko terencana.
+ * Ambang breakeven Mode Aman (8 Okt 2026): profit (jarak harga) ≥ 0,5×
+ * risiko terencana — amankan lebih awal; profit kecil > rugi.
  */
-export const BREAKEVEN_R_MULTIPLE = 1;
+export const BREAKEVEN_R_MULTIPLE = 0.5;
 
 export interface BreakevenSignal {
   /** Kelipatan-R posisi saat ini (profit harga / risiko harga). */
@@ -536,9 +537,53 @@ export function checkBreakeven(
     multiple: rounded,
     slTarget: holding.entryPrice,
     message:
-      `Profit ${rounded.toFixed(2)}R (≥1R). Amankan di MT5: klik kanan ` +
+      `Profit ${rounded.toFixed(2)}R (≥${String(BREAKEVEN_R_MULTIPLE).replace(".", ",")}R). Amankan di MT5: klik kanan ` +
       `posisi → Modify → isi Stop Loss = ${holding.entryPrice} → OK. ` +
       `TP jangan diubah.`,
+  };
+}
+
+/**
+ * Time-stop Mode Aman (8 Okt 2026): horizon analisa 3 jam. Lewat itu
+ * sinyal awal sudah tidak berlaku — tutup posisi, jangan ditahan
+ * berhari-hari (3 posisi yang ditahan berhari-hari = ±89% rugi OTB).
+ */
+export const TIME_STOP_HOURS = 3;
+
+export interface TimeStopSignal {
+  readonly hoursHeld: number;
+  readonly message: string;
+}
+
+const MT5_TIME = /^\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2}$/;
+
+/**
+ * Sinyal time-stop (MODUL MURNI). Lama posisi = jam quote live − jam
+ * buka, KEDUANYA jam server MT5 ("YYYY.MM.DD HH:MM:SS") agar tidak salah
+ * zona waktu. Format lain (holding manual ISO) → null. Display-only.
+ */
+export function checkTimeStop(
+  holding: Pick<Holding, "entryTime">,
+  serverNow: string,
+): TimeStopSignal | null {
+  if (!MT5_TIME.test(holding.entryTime.trim()) || !MT5_TIME.test(serverNow.trim())) {
+    return null;
+  }
+  const openMs = parseSnapshotTime(holding.entryTime);
+  const nowMs = parseSnapshotTime(serverNow);
+  if (openMs === null || nowMs === null) return null;
+  const hours = (nowMs - openMs) / 3_600_000;
+  if (!(hours >= TIME_STOP_HOURS)) return null;
+  const shown =
+    hours >= 48
+      ? `${(hours / 24).toFixed(1).replace(".", ",")} hari`
+      : `${(Math.floor(hours * 10) / 10).toFixed(1).replace(".", ",")} jam`;
+  return {
+    hoursHeld: Math.floor(hours * 10) / 10,
+    message:
+      `Posisi sudah terbuka ${shown} (batas Mode Aman ${TIME_STOP_HOURS} jam). ` +
+      `Sinyal awal sudah kedaluwarsa: tutup di MT5 sekarang — untung kecil ` +
+      `atau rugi kecil lebih baik daripada ditahan dan rugi membesar.`,
   };
 }
 

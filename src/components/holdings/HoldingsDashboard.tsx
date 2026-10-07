@@ -11,6 +11,8 @@ import {
 } from "../../services/fxRateService";
 import {
   checkBreakeven,
+  checkTimeStop,
+  TIME_STOP_HOURS,
   checkMarginGuard,
   checkRewardRisk,
   evaluateExitSignal,
@@ -115,6 +117,8 @@ function HoldingCard({
     exited || live === undefined
       ? null
       : checkBreakeven(holding, live.bid, live.ask);
+  const timeStop =
+    exited || live === undefined ? null : checkTimeStop(holding, live.timestamp);
   const marginWarning = exited ? null : checkMarginGuard(holding, convert);
   const rrWarning = checkRewardRisk(holding.entryPrice, holding.sl, holding.tp);
   const badge = exited
@@ -218,6 +222,15 @@ function HoldingCard({
           </span>
         </div>
       </div>
+
+      {timeStop !== null && (
+        <div className="mt-2 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3">
+          <p className="text-sm font-bold text-amber-200">
+            TIME-STOP — lewat {TIME_STOP_HOURS} jam
+          </p>
+          <p className="mt-1 text-sm leading-6 text-amber-100">{timeStop.message}</p>
+        </div>
+      )}
 
       {breakeven !== null && (
         <div className="mt-2 rounded-xl border border-emerald-400/40 bg-emerald-400/10 p-3">

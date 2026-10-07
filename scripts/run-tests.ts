@@ -177,6 +177,8 @@ import {
   validateHoldingInput,
   type Holding,
   BREAKEVEN_R_MULTIPLE,
+  TIME_STOP_HOURS,
+  checkTimeStop,
   checkBreakeven,
   formatPriceDistance,
 } from "../src/lib/exitMonitor";
@@ -6273,6 +6275,23 @@ test("529. pemindai: label Lolos = win rate nyata hanya bila n>=20 (demo+live di
   assert(lolosLabel(rugi) === "Lolos · terbukti rugi, win rate 60,0% (n=20)", lolosLabel(rugi));
 });
 
+test("530. Mode Aman: breakeven 0,5R & time-stop 3 jam (jam server MT5)", () => {
+  const be = checkBreakeven({ direction: "BELI", entryPrice: 1.32, sl: 1.319 }, 1.3205, 1.3207);
+  assert(be !== null && be.multiple === 0.5 && be.message.includes("0,5R"), JSON.stringify(be));
+  assert(TIME_STOP_HOURS === 3, "horizon bukan 3 jam");
+  const h = { entryTime: "2026.10.06 14:41:45" };
+  assert(checkTimeStop(h, "2026.10.06 17:41:44") === null, "belum 3 jam ikut terpicu");
+  const ts = checkTimeStop(h, "2026.10.06 17:41:45");
+  assert(ts !== null && ts.hoursHeld === 3 && ts.message.includes("3,0 jam"), JSON.stringify(ts));
+  const lama = checkTimeStop(h, "2026.10.07 20:25:07");
+  assert(lama !== null && lama.message.includes("29,7 jam"), JSON.stringify(lama));
+  const hari = checkTimeStop(h, "2026.10.09 14:41:45");
+  assert(hari !== null && hari.message.includes("3,0 hari"), JSON.stringify(hari));
+  // Holding manual (ISO UTC) beda jam dengan quote server → tidak dinilai.
+  assert(checkTimeStop({ entryTime: "2026-10-06T05:41:45.000Z" }, "2026.10.07 20:25:07") === null, "ISO ikut dinilai");
+  assert(checkTimeStop(h, "") === null, "tanpa jam quote");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
@@ -9394,7 +9413,7 @@ test("463. wiring guard stops: live + warning di blok salin (readSrc)", () => {
 /* ---------------- Sinyal breakeven 1R (BE): TEST 464-468 ---------------- */
 
 test("464. checkBreakeven: BELI 1R terpicu, target = entry", () => {
-  assert(BREAKEVEN_R_MULTIPLE === 1, "ambang bukan 1R");
+  assert(BREAKEVEN_R_MULTIPLE === 0.5, "ambang bukan 0,5R (Mode Aman)");
   // Entry 1.32246, SL 1.32317? bukan — BELI: entry 1.32000, SL 1.31900
   // (risiko 100 point), bid 1.32100 → profit 100 point = 1R.
   const hit = checkBreakeven(
@@ -9424,10 +9443,10 @@ test("466. checkBreakeven: belum 1R dan rugi → null", () => {
   assert(
     checkBreakeven(
       { direction: "BELI", entryPrice: 1.32, sl: 1.319 },
+      1.3203,
       1.3205,
-      1.3207,
     ) === null,
-    "0.5R ikut terpicu",
+    "0.3R ikut terpicu",
   );
   assert(
     checkBreakeven(
