@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrokerId } from "../../src/types/broker";
 import { evaluateTrades, type TradeEvaluation } from "../services/tradeEvaluation";
+import { summarizeAccountBalance, type AccountBalance } from "../services/accountBalance";
 import { readTradeEntries } from "../services/tradeEntryLog";
 import { parseHistoryCsv } from "../types/historyCsv";
 import { resolveCommonFilesDir } from "./marginRoutes";
@@ -22,6 +23,8 @@ export interface AccountEvaluation {
   readonly company: string;
   readonly broker: BrokerId | null;
   readonly evaluation: TradeEvaluation;
+  /** Langkah B: saldo & setoran dari History (akun login maupun tidak). */
+  readonly balance: AccountBalance;
 }
 
 export function parseAccountLabels(raw: string | undefined): Record<string, string> {
@@ -62,6 +65,7 @@ export function collectAccountEvaluations(
     } catch {
       continue; // terkunci MT5 saat ditulis: coba lagi pada request berikutnya
     }
+    const deals = parseHistoryCsv(csv);
     const company = companyOf(csv);
     const broker = brokerFromCompany(company);
     const entries =
@@ -71,7 +75,8 @@ export function collectAccountEvaluations(
       label: labels[login] ?? `${company || "Akun"} ${login}`,
       company,
       broker,
-      evaluation: evaluateTrades(parseHistoryCsv(csv), entries),
+      evaluation: evaluateTrades(deals, entries),
+      balance: summarizeAccountBalance(deals),
     });
   }
   return out;

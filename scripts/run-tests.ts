@@ -225,6 +225,7 @@ import {
 } from "../server/services/mt5LogReader";
 import { isEquitySnapshot } from "../server/types/equity";
 import { autoCsvFileName, autoLoadKey, findCandleItem } from "../src/lib/autoCandle";
+import { summarizeAccountBalance } from "../server/services/accountBalance";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -6314,6 +6315,30 @@ test("532. analisa otomatis: kunci muat & wiring App (readSrc)", () => {
   assert(app.includes("/api/candles?broker=${activeBrokerId}"), "App tidak memakai /api/candles");
   assert(app.includes("handleCsvLoadedRef.current(item.csv, autoCsvFileName(symbol))"), "tidak lewat alur upload yang sama");
   assert(app.includes("<CsvFileConnector"), "upload manual cadangan hilang");
+});
+
+test("533. saldo akun dari History: setoran, penarikan, trade, kredit diabaikan", () => {
+  const deal = (type: string, profit: number, extra: Partial<{ commission: number; swap: number; fee: number; idrAmount: number | null; serverTime: string }> = {}) => ({
+    dealTicket: "1", positionId: "0", orderTicket: "0", serverTime: extra.serverTime ?? "2026.10.01 10:00:00",
+    symbol: "", type, entry: "IN", volume: 0, price: 0, commission: extra.commission ?? 0,
+    swap: extra.swap ?? 0, profit, fee: extra.fee ?? 0, comment: "", login: "70930952",
+    accountCurrency: "USD", idrAmount: extra.idrAmount ?? null,
+  });
+  const s = summarizeAccountBalance([
+    deal("BALANCE", 10, { idrAmount: 165000 }),
+    deal("BALANCE", 5000),
+    deal("BUY", 0, { commission: -3.3 }),
+    deal("SELL", -19.41, { swap: -0.2, serverTime: "2026.10.06 14:41:45" }),
+    deal("BALANCE", -2),
+    deal("CREDIT", 100),
+  ]);
+  assert(s.balance === 4985.09, `saldo ${s.balance}`);
+  assert(s.deposits === 5010 && s.withdrawals === 2, `setoran ${s.deposits} tarik ${s.withdrawals}`);
+  assert(s.depositsIdr === 165000, `idr ${s.depositsIdr}`);
+  assert(s.currency === "USD" && s.lastDealTime === "2026.10.06 14:41:45", JSON.stringify(s));
+  const kosong = summarizeAccountBalance([]);
+  assert(kosong.balance === 0 && kosong.lastDealTime === null && kosong.depositsIdr === null, "kosong");
+  assert(readSrc("server/routes/evaluationRoutes.ts").includes("balance: summarizeAccountBalance(deals)"), "belum tersambung ke /api/evaluation");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
