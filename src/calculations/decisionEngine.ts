@@ -239,6 +239,7 @@ export function analyzeMarket(
     decision,
     costShareOfRisk:
       costShareOfRisk === null ? null : round(costShareOfRisk, 4),
+    heldBy: blockedByCost ? "biaya" : blockedByRisk ? "risiko" : null,
     score,
     trendScore,
     cciScore,

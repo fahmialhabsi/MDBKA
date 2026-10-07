@@ -6027,6 +6027,7 @@ test("514. Mode Aman: biaya kecil (<10% risiko) tetap BELI", () => {
     `porsi biaya ${r.costShareOfRisk}`,
   );
   assert(r.stopLoss !== null && r.takeProfit !== null, "SL/TP harus ada");
+  assert(r.heldBy === null, `heldBy harus null, dapat ${r.heldBy}`);
 });
 
 test("515. Mode Aman: komisi besar (OTB 33/lot) menahan setup jadi TUNGGU", () => {
@@ -6035,12 +6036,14 @@ test("515. Mode Aman: komisi besar (OTB 33/lot) menahan setup jadi TUNGGU", () =
   assert(r.stopLoss === null && r.takeProfit === null, "SL/TP tidak boleh tampil");
   assert(r.suggestedLot === null, "lot tidak boleh tampil");
   assert(r.warnings.some((w) => w.includes("Mode Aman: biaya")), "alasan biaya hilang");
+  assert(r.heldBy === "biaya", `heldBy harus biaya, dapat ${r.heldBy}`);
 });
 
 test("516. Mode Aman: lot minimum melewati batas risiko (saldo kecil) jadi TUNGGU", () => {
   const r = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, equity: 8.5 });
   assert(r.decision === "TUNGGU", `harus TUNGGU, dapat ${r.decision}`);
   assert(r.warnings.some((w) => w.includes("Mode Aman: risiko lot minimum")), "alasan risiko hilang");
+  assert(r.heldBy === "risiko", `heldBy harus risiko, dapat ${r.heldBy}`);
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

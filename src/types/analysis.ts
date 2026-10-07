@@ -56,5 +56,7 @@ export interface AnalysisResult {
   warnings: string[];
   /** Mode Aman: porsi biaya terhadap risiko per lot (0..1); null bila tanpa setup. */
   costShareOfRisk?: number | null;
+  /** Mode Aman: alasan setup BELI/JUAL ditahan menjadi TUNGGU (null = tidak ditahan). */
+  heldBy?: "biaya" | "risiko" | null;
 }
 

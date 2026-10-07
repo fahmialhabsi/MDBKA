@@ -13,6 +13,7 @@ import type {
 import type { BrokerId } from "../../types/broker";
 import type { ValidationViewState } from "../../lib/validationView";
 import { attachSwapToResult } from "../../calculations/attachSwapToResult";
+import { MAX_COST_SHARE_OF_RISK } from "../../calculations/decisionEngine";
 import { getTripleSwapLabel } from "../../services/dateService";
 import { isOtbSymbolVerified } from "../../lib/brokerSymbols";
 import { checkStopsDistance } from "../../lib/orderTicket";
@@ -616,8 +617,38 @@ function Metric({ label, value }: { label: string; value: string }) {
  * target untung = take profit otomatis, lot = ukuran transaksi.
  */
 function BeginnerGuide({ result }: { result: ResultType }) {
-  // TUNGGU = tidak ada perintah transaksi.
-  if (result.decision === "TUNGGU") {
+  // Mode Aman: arah sudah kompak, tapi biaya memakan terlalu banyak risiko.
+  if (result.decision === "TUNGGU" && result.heldBy === "biaya") {
+    const share =
+      typeof result.costShareOfRisk === "number"
+        ? Math.round(result.costShareOfRisk * 100)
+        : null;
+    return (
+      <div className="rounded-2xl border border-sky-400/25 bg-sky-400/5 p-5">
+        <p className="font-semibold text-sky-200">
+          Artinya gampang: arah sudah kompak, tapi biayanya terlalu mahal.
+          JANGAN entry.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+          <li>
+            Komisi + spread memakan {share === null ? "-" : share}% dari batas
+            rugi (maksimal {Math.round(MAX_COST_SHARE_OF_RISK * 100)}%). Untung
+            kecil akan habis dipotong biaya.
+          </li>
+          <li>
+            Cari simbol atau broker dengan biaya lebih rendah (spread rapat,
+            komisi kecil).
+          </li>
+          <li>
+            Tidak entry = tidak rugi. Menjaga modal adalah keputusan yang benar.
+          </li>
+        </ul>
+      </div>
+    );
+  }
+
+  // TUNGGU karena skor (bukan ditahan Mode Aman) = tidak ada perintah transaksi.
+  if (result.decision === "TUNGGU" && result.heldBy !== "risiko") {
     return (
       <div className="rounded-2xl border border-sky-400/25 bg-sky-400/5 p-5">
         <p className="font-semibold text-sky-200">
@@ -642,8 +673,12 @@ function BeginnerGuide({ result }: { result: ResultType }) {
     );
   }
 
-  // Sinyal ada tapi akun tak muat / lot tak memenuhi syarat broker.
-  if (result.riskStatus !== "MEMENUHI batas risiko") {
+  // Sinyal ada tapi akun tak muat / lot tak memenuhi syarat broker
+  // (Mode Aman menahannya jadi TUNGGU dengan heldBy = "risiko").
+  if (
+    result.heldBy === "risiko" ||
+    result.riskStatus !== "MEMENUHI batas risiko"
+  ) {
     const over =
       result.riskAtMinLot !== null && result.maxRiskUsd > 0
         ? result.riskAtMinLot / result.maxRiskUsd
