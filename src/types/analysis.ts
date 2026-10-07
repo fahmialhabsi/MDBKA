@@ -58,5 +58,7 @@ export interface AnalysisResult {
   costShareOfRisk?: number | null;
   /** Mode Aman: alasan setup BELI/JUAL ditahan menjadi TUNGGU (null = tidak ditahan). */
   heldBy?: "biaya" | "risiko" | null;
+  /** Arah asli (BELI/JUAL) sebelum ditahan Mode Aman; null bila tidak ditahan. */
+  heldDecision?: Decision | null;
 }
 

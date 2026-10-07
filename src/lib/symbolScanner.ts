@@ -28,6 +28,7 @@ export type ScanStatus =
   | "DITAHAN_BIAYA"
   | "DITAHAN_RISIKO"
   | "TUNGGU"
+  | "PASAR_TUTUP"
   | "DATA";
 
 export interface ScanInput {
@@ -38,12 +39,22 @@ export interface ScanInput {
   readonly equity: number;
   readonly fxRates: ExchangeRates | null;
   readonly nowMs?: number;
+  /**
+   * Waktu candle TERBARU di antara semua simbol broker yang sama (ms, jam
+   * server). Simbol yang tertinggal >= 2 jam = pasar tutup / data basi.
+   * Perbandingan relatif → aman tanpa konversi zona waktu.
+   */
+  readonly referenceCandleMs?: number | null;
 }
 
 export interface ScanRow {
   readonly symbol: string;
   readonly status: ScanStatus;
   readonly decision: AnalysisResult["decision"] | null;
+  /** Arah asli: BELI/JUAL bila ada sinyal (termasuk yang ditahan), selain itu TUNGGU. */
+  readonly direction: AnalysisResult["decision"] | null;
+  /** true = sinyal BELI/JUAL ditahan Mode Aman (biaya/risiko). */
+  readonly held: boolean;
   readonly score: number | null;
   readonly reason: string;
   readonly costShareOfRisk: number | null;
@@ -64,9 +75,26 @@ const ZERO_BROKER: BrokerSettings = {
 
 function dataRow(symbol: string, reason: string, candles: number): ScanRow {
   return {
-    symbol, status: "DATA", decision: null, score: null, reason,
-    costShareOfRisk: null, candles,
+    symbol, status: "DATA", decision: null, direction: null, held: false,
+    score: null, reason, costShareOfRisk: null, candles,
   };
+}
+
+/** Selisih minimum (jam) terhadap candle terbaru broker agar dianggap basi. */
+export const STALE_CANDLE_HOURS = 2;
+
+/** "2026.10.07 19:00" → ms (diperlakukan sebagai UTC; hanya untuk selisih). */
+export function candleTimeMs(time: string): number | null {
+  const m = /^(\d{4})[.-](\d{2})[.-](\d{2})[ T](\d{2}):(\d{2})/.exec(time.trim());
+  if (m === null) return null;
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
+}
+
+/** Waktu candle terakhir pada teks CSV MDBKA (kolom pertama baris terakhir). */
+export function lastCandleTimeMs(csv: string): number | null {
+  const lines = csv.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (lines.length < 2) return null;
+  return candleTimeMs(lines[lines.length - 1].split(",")[0] ?? "");
 }
 
 export function scanSymbol(input: ScanInput): ScanRow {
@@ -81,6 +109,20 @@ export function scanSymbol(input: ScanInput): ScanRow {
   }
 
   const last = parsed.candles[count - 1];
+  const lastMs = candleTimeMs(String(last.time ?? ""));
+  if (
+    input.referenceCandleMs !== undefined &&
+    input.referenceCandleMs !== null &&
+    lastMs !== null &&
+    input.referenceCandleMs - lastMs >= STALE_CANDLE_HOURS * 3_600_000
+  ) {
+    const lagHours = Math.round((input.referenceCandleMs - lastMs) / 3_600_000);
+    return {
+      symbol, status: "PASAR_TUTUP", decision: null, direction: null,
+      held: false, score: null, costShareOfRisk: null, candles: count,
+      reason: `Pasar tutup / data basi: candle terakhir ${last.time}, tertinggal ${lagHours} jam`,
+    };
+  }
   const quote = resolveCsvBidAsk(
     last.close,
     tickSizeForSymbol(symbol),
@@ -137,6 +179,8 @@ export function scanSymbol(input: ScanInput): ScanRow {
     symbol,
     status,
     decision: result.decision,
+    direction: result.heldDecision ?? result.decision,
+    held: result.heldDecision !== null && result.heldDecision !== undefined,
     score: result.score,
     reason: signalReason(result),
     costShareOfRisk: result.costShareOfRisk ?? null,
@@ -149,7 +193,8 @@ const STATUS_ORDER: Record<ScanStatus, number> = {
   DITAHAN_BIAYA: 1,
   DITAHAN_RISIKO: 2,
   TUNGGU: 3,
-  DATA: 4,
+  PASAR_TUTUP: 4,
+  DATA: 5,
 };
 
 /** Urutan tampil: LOLOS dulu, lalu yang paling dekat lolos; skor kuat di atas. */

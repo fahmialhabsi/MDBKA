@@ -14,6 +14,7 @@ import type { BrokerId } from "../../types/broker";
 import type { ValidationViewState } from "../../lib/validationView";
 import { attachSwapToResult } from "../../calculations/attachSwapToResult";
 import { MAX_COST_SHARE_OF_RISK } from "../../calculations/decisionEngine";
+import { formatSharePercent } from "../../lib/signalReason";
 import { getTripleSwapLabel } from "../../services/dateService";
 import { isOtbSymbolVerified } from "../../lib/brokerSymbols";
 import { checkStopsDistance } from "../../lib/orderTicket";
@@ -621,7 +622,7 @@ function BeginnerGuide({ result }: { result: ResultType }) {
   if (result.decision === "TUNGGU" && result.heldBy === "biaya") {
     const share =
       typeof result.costShareOfRisk === "number"
-        ? Math.round(result.costShareOfRisk * 100)
+        ? formatSharePercent(result.costShareOfRisk)
         : null;
     return (
       <div className="rounded-2xl border border-sky-400/25 bg-sky-400/5 p-5">

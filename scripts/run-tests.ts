@@ -30,9 +30,9 @@ import {
   analyzeMarket,
   MAX_COST_SHARE_OF_RISK,
 } from "../src/calculations/decisionEngine";
-import { signalReason } from "../src/lib/signalReason";
+import { formatSharePercent, signalReason } from "../src/lib/signalReason";
 import { collectCandleItems } from "../server/routes/candlesRoutes";
-import { scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
+import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
 import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
@@ -6040,6 +6040,7 @@ test("515. Mode Aman: komisi besar (OTB 33/lot) menahan setup jadi TUNGGU", () =
   assert(r.suggestedLot === null, "lot tidak boleh tampil");
   assert(r.warnings.some((w) => w.includes("Mode Aman: biaya")), "alasan biaya hilang");
   assert(r.heldBy === "biaya", `heldBy harus biaya, dapat ${r.heldBy}`);
+  assert(r.heldDecision === "BELI", `arah asli harus BELI, dapat ${r.heldDecision}`);
 });
 
 test("516. Mode Aman: lot minimum melewati batas risiko (saldo kecil) jadi TUNGGU", () => {
@@ -6051,7 +6052,7 @@ test("516. Mode Aman: lot minimum melewati batas risiko (saldo kecil) jadi TUNGG
 
 test("517. panel header: alasan sama dengan hasil analisa (Mode Aman)", () => {
   const ok = analyzeMarket(modeAmanMarket, modeAmanBroker);
-  assert(signalReason(ok) === "Lolos Mode Aman", signalReason(ok));
+  assert(signalReason(ok) === "Lolos biaya & risiko · belum terbukti", signalReason(ok));
   const mahal = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, commission: 33 });
   assert(signalReason(mahal).startsWith("Ditahan: biaya"), signalReason(mahal));
   const kecil = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, equity: 8.5 });
@@ -6113,13 +6114,31 @@ test("520. pemindai: CSV valid menghasilkan keputusan + alasan dari mesin yang s
 
 test("521. pemindai: urutan LOLOS > ditahan biaya > ditahan risiko > TUNGGU > DATA", () => {
   const mk = (symbol: string, status: ScanRow["status"], score: number | null, cost: number | null): ScanRow =>
-    ({ symbol, status, decision: null, score, reason: "", costShareOfRisk: cost, candles: 80 });
+    ({ symbol, status, decision: null, direction: null, held: false, score, reason: "", costShareOfRisk: cost, candles: 80 });
   const sorted = sortScanRows([
-    mk("D", "DATA", null, null), mk("T", "TUNGGU", 1, 0.05), mk("R", "DITAHAN_RISIKO", 4, 0.05),
+    mk("D", "DATA", null, null), mk("P", "PASAR_TUTUP", null, null), mk("T", "TUNGGU", 1, 0.05), mk("R", "DITAHAN_RISIKO", 4, 0.05),
     mk("B2", "DITAHAN_BIAYA", 3, 0.2), mk("B1", "DITAHAN_BIAYA", 5, 0.3), mk("L", "LOLOS", 3, 0.05),
   ]);
   const got = sorted.map((r) => r.symbol).join(",");
-  assert(got === "L,B1,B2,R,T,D", `urutan salah: ${got}`);
+  assert(got === "L,B1,B2,R,T,P,D", `urutan salah: ${got}`);
+});
+
+test("522. pemindai: simbol tertinggal >=2 jam dari candle terbaru = PASAR_TUTUP", () => {
+  const csv = scanCsv(80);
+  const last = lastCandleTimeMs(csv);
+  assert(last !== null, "waktu candle terakhir tidak terbaca");
+  const segar = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv, quote: null, equity: 10000, fxRates: null, referenceCandleMs: last });
+  assert(segar.status !== "PASAR_TUTUP", `acuan sama tidak boleh basi: ${segar.status}`);
+  const basi = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv, quote: null, equity: 10000, fxRates: null, referenceCandleMs: (last ?? 0) + 3 * 3_600_000 });
+  assert(basi.status === "PASAR_TUTUP" && basi.decision === null, `harus PASAR_TUTUP, dapat ${basi.status}`);
+  assert(basi.reason.includes("tertinggal 3 jam"), basi.reason);
+});
+
+test("523. format biaya satu desimal gaya Indonesia", () => {
+  assert(formatSharePercent(0.104) === "10,4", formatSharePercent(0.104));
+  assert(formatSharePercent(0.1) === "10,0", formatSharePercent(0.1));
+  const mahal = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, commission: 33 });
+  assert(/biaya \d+,\d%/.test(signalReason(mahal)), signalReason(mahal));
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

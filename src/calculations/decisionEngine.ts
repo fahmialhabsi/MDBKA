@@ -158,6 +158,9 @@ export function analyzeMarket(
     decision !== "TUNGGU" &&
     riskAtMinLot !== null &&
     riskAtMinLot > maxRiskUsd;
+  // Arah asli sebelum ditahan (untuk ditampilkan, mis. "JUAL · ditahan").
+  const heldDecision: Decision | null =
+    blockedByCost || blockedByRisk ? decision : null;
   if (blockedByCost || blockedByRisk) {
     decision = "TUNGGU";
     // Tanpa angka eksekusi: SL/TP/lot tidak ditampilkan untuk setup ditahan.
@@ -189,7 +192,7 @@ export function analyzeMarket(
 
   if (blockedByCost && costShareOfRisk !== null) {
     warnings.push(
-      `Mode Aman: biaya transaksi ${round(costShareOfRisk * 100, 0)}% dari risiko (maks ${round(MAX_COST_SHARE_OF_RISK * 100, 0)}%). Setup ditahan.`
+      `Mode Aman: biaya transaksi ${String(round(costShareOfRisk * 100, 1)).replace(".", ",")}% dari risiko (maks ${round(MAX_COST_SHARE_OF_RISK * 100, 0)}%). Setup ditahan.`
     );
   }
   if (blockedByRisk && riskAtMinLot !== null) {
@@ -240,6 +243,7 @@ export function analyzeMarket(
     costShareOfRisk:
       costShareOfRisk === null ? null : round(costShareOfRisk, 4),
     heldBy: blockedByCost ? "biaya" : blockedByRisk ? "risiko" : null,
+    heldDecision,
     score,
     trendScore,
     cciScore,

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { RefreshCw, ScanSearch } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
+import { formatSharePercent } from "../../lib/signalReason";
 import {
+  lastCandleTimeMs,
   scanSymbol,
   sortScanRows,
   type ScanStatus,
@@ -35,10 +37,11 @@ const REFRESH_MS = 60_000;
 const COLLAPSED_ROWS = 12;
 
 const STATUS_VIEW: Record<ScanStatus, { label: string; className: string }> = {
-  LOLOS: { label: "Lolos", className: "bg-emerald-400/15 text-emerald-300" },
+  LOLOS: { label: "Lolos · belum terbukti", className: "bg-emerald-400/15 text-emerald-300" },
   DITAHAN_BIAYA: { label: "Biaya mahal", className: "bg-sky-400/15 text-sky-300" },
   DITAHAN_RISIKO: { label: "Risiko > batas", className: "bg-amber-400/15 text-amber-300" },
   TUNGGU: { label: "Tunggu", className: "bg-white/10 text-slate-300" },
+  PASAR_TUTUP: { label: "Pasar tutup / basi", className: "bg-white/5 text-slate-500" },
   DATA: { label: "Data kurang", className: "bg-white/5 text-slate-500" },
 };
 
@@ -80,29 +83,35 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- key memuat brokerId + tick
   }, [key]);
 
-  const rows = useMemo(
-    () =>
-      sortScanRows(
-        (itemsBroker === brokerId ? items : []).map((item) =>
-          scanSymbol({
-            symbol: item.symbol,
-            brokerId,
-            csv: item.csv,
-            quote: item.quote,
-            equity,
-            fxRates,
-          }),
-        ),
+  const rows = useMemo(() => {
+    const source = itemsBroker === brokerId ? items : [];
+    // Candle terbaru broker ini = acuan "pasar buka" (jam server yang sama).
+    const reference = source.reduce<number | null>((max, item) => {
+      const t = lastCandleTimeMs(item.csv);
+      return t !== null && (max === null || t > max) ? t : max;
+    }, null);
+    return sortScanRows(
+      source.map((item) =>
+        scanSymbol({
+          symbol: item.symbol,
+          brokerId,
+          csv: item.csv,
+          quote: item.quote,
+          equity,
+          fxRates,
+          referenceCandleMs: reference,
+        }),
       ),
-    [items, itemsBroker, brokerId, equity, fxRates],
-  );
+    );
+  }, [items, itemsBroker, brokerId, equity, fxRates]);
 
   const counts = rows.reduce<Record<ScanStatus, number>>(
     (acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }),
-    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, TUNGGU: 0, DATA: 0 },
+    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
   );
   const visible = showAll ? rows : rows.slice(0, COLLAPSED_ROWS);
-  const loading = loadedKey === null || itemsBroker !== brokerId && error === null;
+  const loading =
+    loadedKey === null || (itemsBroker !== brokerId && error === null);
 
   return (
     <section className="rounded-3xl border border-white/10 bg-white/[0.035] p-5 shadow-2xl shadow-black/10 lg:p-6">
@@ -116,7 +125,8 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
             <p className="mt-1 text-sm text-slate-400">
               {rows.length} simbol ber-CSV · {counts.LOLOS} lolos ·{" "}
               {counts.DITAHAN_BIAYA} biaya mahal · {counts.DITAHAN_RISIKO} risiko
-              &gt; batas · {counts.TUNGGU} tunggu · {counts.DATA} data kurang
+              &gt; batas · {counts.TUNGGU} tunggu · {counts.PASAR_TUTUP} pasar
+              tutup · {counts.DATA} data kurang
             </p>
           </div>
         </div>
@@ -167,14 +177,17 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
                       {STATUS_VIEW[row.status].label}
                     </span>
                   </td>
-                  <td className="py-2 pr-3 text-slate-300">{row.decision ?? "-"}</td>
+                  <td className="py-2 pr-3 text-slate-300">
+                    {row.direction ?? "-"}
+                    {row.held ? " · ditahan" : ""}
+                  </td>
                   <td className="py-2 pr-3 text-right text-slate-300">
                     {row.score === null ? "-" : `${row.score}/5`}
                   </td>
                   <td className="py-2 pr-3 text-right text-slate-300">
                     {row.costShareOfRisk === null
                       ? "-"
-                      : `${Math.round(row.costShareOfRisk * 100)}%`}
+                      : `${formatSharePercent(row.costShareOfRisk)}%`}
                   </td>
                   <td className="py-2 text-slate-400">{row.reason}</td>
                 </tr>
@@ -194,8 +207,9 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
       )}
 
       <p className="mt-4 text-xs leading-5 text-slate-500">
-        Memakai default Mode Aman (risiko 1%, gerbang biaya 10%) dan equity
-        live broker aktif. Sebelum entry, muat CSV simbol itu dan pastikan Hasil
+        &quot;Lolos&quot; = biaya &amp; risiko aman, BELUM berarti peluang menang
+        terbukti (menunggu data History). Memakai default Mode Aman (risiko 1%,
+        gerbang biaya 10%) dan equity live broker aktif. Sebelum entry, muat CSV simbol itu dan pastikan Hasil
         Analisa menunjukkan hal yang sama. Bukan nasihat keuangan.
       </p>
     </section>
