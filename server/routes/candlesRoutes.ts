@@ -14,7 +14,7 @@ import { resolveCommonFilesDir } from "./marginRoutes";
  * Simbol = yang ada di quotes.csv broker itu (Market Watch terminalnya),
  * CSV = Common\Files\MDBKA_<symbol>_H1.csv (service AutoExportMDBKA).
  * Simbol tanpa file CSV dilewati (tanpa data fiktif). Dibaca ulang tiap
- * request: file kecil (±50 candle) dan selalu segar.
+ * request: file kecil (±200 candle) dan selalu segar.
  */
 export interface CandleSource {
   getSymbols(): string[];
