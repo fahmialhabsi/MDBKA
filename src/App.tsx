@@ -243,30 +243,6 @@ export default function App() {
     activeBrokerId,
   );
 
-  // T4: panel sinyal hanya untuk simbol aktif, dan hanya bila candle CSV
-  // valid (H/L/C > 0) — tanpa prediksi dari candle nol. Referensi stabil
-  // (useMemo) agar polling quote tidak diulang di setiap render.
-  const liveSignalSymbols = useMemo<readonly string[]>(
-    () =>
-      market.symbol !== "" &&
-      market.high > 0 &&
-      market.low > 0 &&
-      market.close > 0
-        ? [market.symbol]
-        : [],
-    [market.symbol, market.high, market.low, market.close],
-  );
-  const liveSignalCandles = useMemo(
-    () =>
-      new Map(
-        liveSignalSymbols.map((sym) => [
-          sym,
-          { high: market.high, low: market.low, close: market.close },
-        ] as const),
-      ),
-    [liveSignalSymbols, market.high, market.low, market.close],
-  );
-
   // Inti analisa yang bisa dipanggil dengan nilai eksplisit (bukan state
   // yang belum ter-commit) — dipakai alur otomatis setelah CSV masuk.
   const executeAnalysis = useCallback(
@@ -806,11 +782,11 @@ export default function App() {
               profitUsd={autoProfitUsd ?? equityStream.equity?.profit ?? null}
               fxRates={fxRates}
             />
-            {liveSignalSymbols.length > 0 && (
+            {result !== null && market.symbol !== "" && (
               <LiveSignalsPanel
-                symbols={liveSignalSymbols}
-                lastCandles={liveSignalCandles}
-                brokerId={activeBrokerId}
+                symbol={market.symbol}
+                result={result}
+                bid={liveQuote?.bid ?? null}
               />
             )}
           </div>

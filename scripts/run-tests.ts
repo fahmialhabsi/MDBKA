@@ -30,6 +30,7 @@ import {
   analyzeMarket,
   MAX_COST_SHARE_OF_RISK,
 } from "../src/calculations/decisionEngine";
+import { signalReason } from "../src/lib/signalReason";
 import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
@@ -6044,6 +6045,17 @@ test("516. Mode Aman: lot minimum melewati batas risiko (saldo kecil) jadi TUNGG
   assert(r.decision === "TUNGGU", `harus TUNGGU, dapat ${r.decision}`);
   assert(r.warnings.some((w) => w.includes("Mode Aman: risiko lot minimum")), "alasan risiko hilang");
   assert(r.heldBy === "risiko", `heldBy harus risiko, dapat ${r.heldBy}`);
+});
+
+test("517. panel header: alasan sama dengan hasil analisa (Mode Aman)", () => {
+  const ok = analyzeMarket(modeAmanMarket, modeAmanBroker);
+  assert(signalReason(ok) === "Lolos Mode Aman", signalReason(ok));
+  const mahal = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, commission: 33 });
+  assert(signalReason(mahal).startsWith("Ditahan: biaya"), signalReason(mahal));
+  const kecil = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, equity: 8.5 });
+  assert(signalReason(kecil) === "Ditahan: risiko lot minimum", signalReason(kecil));
+  const lemah = analyzeMarket({ ...modeAmanMarket, cci: 0, macd: 0, rsi: 50 }, modeAmanBroker);
+  assert(signalReason(lemah) === "Skor belum kompak", signalReason(lemah));
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
