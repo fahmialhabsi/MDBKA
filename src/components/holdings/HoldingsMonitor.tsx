@@ -100,7 +100,7 @@ export function HoldingsMonitor({
       toAutoHolding(position, "orbitraderberjangka"),
     ),
   };
-  const autoHoldings = autoByBroker[tab];
+
 
   const add = (input: NewHolding): void => {
     const next: Holding[] = [
@@ -143,7 +143,11 @@ export function HoldingsMonitor({
 
   return (
     <div className="space-y-4" data-testid="holdings-monitor">
-      <div className="flex gap-2" role="tablist" aria-label="Monitor per broker">
+      <div
+        className="flex gap-2"
+        role="tablist"
+        aria-label="Monitor per broker"
+      >
         {TABS.map((broker) => {
           const inTab = filterHoldingsByBroker(holdings, broker);
           const counts = countHoldings(inTab);
@@ -165,25 +169,13 @@ export function HoldingsMonitor({
                   : "bg-white/5 text-slate-400 hover:bg-white/10"
               }`}
             >
-              {broker === "finex" ? "Finex" : "OTB"} · POSISI OPEN (
-              {open}/{total})
+              {broker === "finex" ? "Finex" : "OTB"} · POSISI OPEN ({open}/
+              {total})
             </button>
           );
         })}
       </div>
       <HoldingsForm brokerId={tab} activeSymbol={activeSymbol} onAdd={add} />
-      <HoldingsDashboard
-        holdings={autoHoldings}
-        brokerId={tab}
-        fxRates={fxRates}
-        readOnly
-        heading={`Posisi MT5 otomatis (${autoHoldings.length})`}
-        emptyText={
-          (tab === "finex" ? autoFinex.sourceMissing : autoOtb.sourceMissing)
-            ? "EA ExportPositions belum dipasang di terminal ini — lihat ea/ExportPositions.mq5."
-            : "Tidak ada posisi terbuka di MT5."
-        }
-      />
       <HoldingsDashboard
         holdings={filterHoldingsByBroker(holdings, tab)}
         brokerId={tab}
@@ -193,10 +185,10 @@ export function HoldingsMonitor({
         heading="Posisi manual"
       />
       <p className="text-xs text-slate-500">
-        Entri manual sesuai posisi MT5 Anda — app tidak membaca posisi
-        broker dan tidak menempatkan order. "Tandai Keluar" hanya mencatat
-        log lokal; konfirmasi penutupan tetap di MT5. Harga live butuh
-        backend + EA menulis tick simbol terkait.
+        Entri manual sesuai posisi MT5 Anda — app tidak membaca posisi broker
+        dan tidak menempatkan order. "Tandai Keluar" hanya mencatat log lokal;
+        konfirmasi penutupan tetap di MT5. Harga live butuh backend + EA menulis
+        tick simbol terkait.
       </p>
     </div>
   );

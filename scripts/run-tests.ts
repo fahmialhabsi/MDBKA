@@ -8648,7 +8648,18 @@ test("449. wiring AP: route + hook + seksi otomatis + env (readSrc)", () => {
   assert(hook.includes("sourceMissing"), "flag EA-belum-pasang hilang");
   const monitor = readSrc("src/components/holdings/HoldingsMonitor.tsx");
   assert(monitor.includes("useBrokerPositions"), "hook tak dipakai monitor");
-  assert(monitor.includes("Posisi MT5 otomatis"), "seksi otomatis hilang");
+  const autoSection = readSrc(
+    "src/components/holdings/AutoPositionsSection.tsx",
+  );
+  assert(autoSection.includes("Posisi MT5 otomatis"), "seksi otomatis hilang");
+  assert(
+    autoSection.includes("useBrokerPositions"),
+    "hook tak dipakai seksi otomatis",
+  );
+  assert(
+    readSrc("src/App.tsx").includes("<AutoPositionsSection"),
+    "seksi otomatis tak dipasang di App",
+  );
   const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
   assert(dash.includes("readOnly"), "mode read-only hilang");
   assert(dash.includes("tutup/ubah di terminal"), "label read-only hilang");

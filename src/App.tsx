@@ -62,6 +62,7 @@ import { resolveCsvBidAsk } from "./lib/csvQuote";
 import type { BrokerSettings, MarketData } from "./types/analysis";
 import type { BrokerId } from "./types/broker";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
+import { AutoPositionsSection } from "./components/holdings/AutoPositionsSection";
 import {
   applyBrokerPreset,
   applyCsvSwingLevels,
@@ -977,6 +978,11 @@ export default function App() {
                   fxRates={fxRates}
                 />
               </Panel>
+
+              <AutoPositionsSection
+                brokerId={activeBrokerId}
+                fxRates={fxRates}
+              />
 
               <Panel
                 icon={<Landmark size={20} />}
