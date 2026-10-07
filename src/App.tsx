@@ -60,6 +60,7 @@ import { tickSizeForSymbol } from "./lib/tickSize";
 import type { BrokerSettings, MarketData } from "./types/analysis";
 import type { BrokerId } from "./types/broker";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
+import { SymbolScannerPanel } from "./components/analysis/SymbolScannerPanel";
 import { AutoPositionsSection } from "./components/holdings/AutoPositionsSection";
 import {
   applyBrokerPreset,
@@ -889,6 +890,13 @@ export default function App() {
             </p>
           )}
         </section>
+
+        {/* Langkah 3c Mode Aman: pemindai semua simbol ber-CSV broker aktif. */}
+        <SymbolScannerPanel
+          brokerId={activeBrokerId}
+          equity={liveEquityValue ?? broker.equity}
+          fxRates={fxRates}
+        />
 
         <div className={dashboard.workGrid}>
           <div className={dashboard.mainCol}>

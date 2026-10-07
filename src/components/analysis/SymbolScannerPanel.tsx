@@ -1,0 +1,203 @@
+import { useEffect, useMemo, useState } from "react";
+import { RefreshCw, ScanSearch } from "lucide-react";
+import { API_BASE_URL } from "../../lib/apiBaseUrl";
+import type { LiveQuoteLike } from "../../lib/csvQuote";
+import {
+  scanSymbol,
+  sortScanRows,
+  type ScanStatus,
+} from "../../lib/symbolScanner";
+import type { ExchangeRates } from "../../services/fxRateService";
+import type { BrokerId } from "../../types/broker";
+
+/**
+ * Langkah 3c (Mode Aman, 8 Okt 2026) — pemindai simbol.
+ *
+ * Semua simbol broker aktif yang punya CSV H1 dianalisa dengan mesin yang
+ * sama dengan "Hasil analisa", lalu diurutkan: lolos Mode Aman dulu,
+ * kemudian yang paling dekat lolos. Hanya informasi; keputusan entry tetap
+ * diverifikasi di Hasil Analisa simbol itu.
+ */
+interface CandleItem {
+  readonly symbol: string;
+  readonly csv: string;
+  readonly modified: string;
+  readonly quote: LiveQuoteLike | null;
+}
+
+interface Props {
+  readonly brokerId: BrokerId;
+  readonly equity: number;
+  readonly fxRates: ExchangeRates | null;
+}
+
+const REFRESH_MS = 60_000;
+const COLLAPSED_ROWS = 12;
+
+const STATUS_VIEW: Record<ScanStatus, { label: string; className: string }> = {
+  LOLOS: { label: "Lolos", className: "bg-emerald-400/15 text-emerald-300" },
+  DITAHAN_BIAYA: { label: "Biaya mahal", className: "bg-sky-400/15 text-sky-300" },
+  DITAHAN_RISIKO: { label: "Risiko > batas", className: "bg-amber-400/15 text-amber-300" },
+  TUNGGU: { label: "Tunggu", className: "bg-white/10 text-slate-300" },
+  DATA: { label: "Data kurang", className: "bg-white/5 text-slate-500" },
+};
+
+export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
+  const [items, setItems] = useState<readonly CandleItem[]>([]);
+  // Broker asal `items`: hasil hanya dipakai untuk broker yang sama.
+  const [itemsBroker, setItemsBroker] = useState<BrokerId | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  const [showAll, setShowAll] = useState(false);
+  const key = `${brokerId}|${tick}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async (): Promise<void> => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/candles?broker=${brokerId}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as { items?: CandleItem[] };
+        if (cancelled) return;
+        setItems(Array.isArray(body.items) ? body.items : []);
+        setItemsBroker(brokerId);
+        setError(null);
+        setFetchedAt(new Date().toLocaleTimeString("id-ID"));
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : String(e));
+      }
+      if (!cancelled) setLoadedKey(key);
+    };
+    void load();
+    const id = window.setInterval(() => setTick((t) => t + 1), REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- key memuat brokerId + tick
+  }, [key]);
+
+  const rows = useMemo(
+    () =>
+      sortScanRows(
+        (itemsBroker === brokerId ? items : []).map((item) =>
+          scanSymbol({
+            symbol: item.symbol,
+            brokerId,
+            csv: item.csv,
+            quote: item.quote,
+            equity,
+            fxRates,
+          }),
+        ),
+      ),
+    [items, itemsBroker, brokerId, equity, fxRates],
+  );
+
+  const counts = rows.reduce<Record<ScanStatus, number>>(
+    (acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }),
+    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, TUNGGU: 0, DATA: 0 },
+  );
+  const visible = showAll ? rows : rows.slice(0, COLLAPSED_ROWS);
+  const loading = loadedKey === null || itemsBroker !== brokerId && error === null;
+
+  return (
+    <section className="rounded-3xl border border-white/10 bg-white/[0.035] p-5 shadow-2xl shadow-black/10 lg:p-6">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-emerald-400/10 p-2 text-emerald-400">
+            <ScanSearch size={20} />
+          </div>
+          <div>
+            <h2 className="font-bold text-white">Pemindai simbol — Mode Aman</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              {rows.length} simbol ber-CSV · {counts.LOLOS} lolos ·{" "}
+              {counts.DITAHAN_BIAYA} biaya mahal · {counts.DITAHAN_RISIKO} risiko
+              &gt; batas · {counts.TUNGGU} tunggu · {counts.DATA} data kurang
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setTick((t) => t + 1)}
+          className="inline-flex items-center gap-2 rounded-full border border-white/15 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5"
+        >
+          <RefreshCw size={14} />
+          Pindai ulang{fetchedAt !== null ? ` · ${fetchedAt}` : ""}
+        </button>
+      </div>
+
+      {error !== null && (
+        <p className="mb-3 rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
+          Gagal memuat candle: {error}
+        </p>
+      )}
+      {loading && <p className="text-sm text-slate-400">Memindai…</p>}
+      {!loading && rows.length === 0 && error === null && (
+        <p className="text-sm text-slate-400">
+          Belum ada CSV candle untuk broker ini. Pastikan service AutoExportMDBKA
+          berjalan dan simbol tampil di Market Watch.
+        </p>
+      )}
+
+      {rows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="py-2 pr-3">Simbol</th>
+                <th className="py-2 pr-3">Status</th>
+                <th className="py-2 pr-3">Arah</th>
+                <th className="py-2 pr-3 text-right">Skor</th>
+                <th className="py-2 pr-3 text-right">Biaya</th>
+                <th className="py-2">Alasan</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {visible.map((row) => (
+                <tr key={row.symbol}>
+                  <td className="py-2 pr-3 font-semibold text-white">{row.symbol}</td>
+                  <td className="py-2 pr-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs ${STATUS_VIEW[row.status].className}`}
+                    >
+                      {STATUS_VIEW[row.status].label}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-3 text-slate-300">{row.decision ?? "-"}</td>
+                  <td className="py-2 pr-3 text-right text-slate-300">
+                    {row.score === null ? "-" : `${row.score}/5`}
+                  </td>
+                  <td className="py-2 pr-3 text-right text-slate-300">
+                    {row.costShareOfRisk === null
+                      ? "-"
+                      : `${Math.round(row.costShareOfRisk * 100)}%`}
+                  </td>
+                  <td className="py-2 text-slate-400">{row.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length > COLLAPSED_ROWS && (
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              className="mt-3 text-xs text-emerald-300 hover:underline"
+            >
+              {showAll ? "Tampilkan ringkas" : `Tampilkan semua (${rows.length})`}
+            </button>
+          )}
+        </div>
+      )}
+
+      <p className="mt-4 text-xs leading-5 text-slate-500">
+        Memakai default Mode Aman (risiko 1%, gerbang biaya 10%) dan equity
+        live broker aktif. Sebelum entry, muat CSV simbol itu dan pastikan Hasil
+        Analisa menunjukkan hal yang sama. Bukan nasihat keuangan.
+      </p>
+    </section>
+  );
+}
