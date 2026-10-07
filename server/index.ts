@@ -20,10 +20,6 @@ import {
   TickHistoryLogger,
   resolveTzOffset,
 } from "./services/tickHistory";
-import {
-  createLiveQuotesStore,
-  resolveMarginFile,
-} from "./services/liveQuotesStore";
 
 dotenv.config();
 
@@ -132,14 +128,10 @@ if (quotesReaderFinex !== null && historyFinex !== null) {
   });
 }
 
-// Tahap #509: live quotes dari MDBKA_Margin_Finex.csv (sinkron polling).
-const marginFile = resolveMarginFile();
-const liveQuotesStore = createLiveQuotesStore({ file: marginFile });
-
 const app = createApp(reader, quotesReader, readerFinex, quotesReaderFinex, {
   otb: historyOtb,
   finex: historyFinex,
-}, positionsReader, positionsReaderFinex, liveQuotesStore);
+}, positionsReader, positionsReaderFinex);
 
 // Polling startup: tunggu data pertama kali tersedia
 async function startServer() {

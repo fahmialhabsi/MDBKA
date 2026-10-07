@@ -16,10 +16,8 @@ import { createMarginRoutes } from "./routes/marginRoutes";
 import { createSwapLogRoutes } from "./routes/swapLogRoutes";
 import { createJurnalPajakRoutes } from "./routes/jurnalPajakRoutes";
 import { createPajakRoutes } from "./routes/pajakRoutes";
-import { createLiveQuotesRoutes } from "./routes/liveQuotesRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
 import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
-import type { LiveQuotesStore } from "./services/liveQuotesStore";
 
 /**
  * Origin frontend yang diizinkan CORS (B2: browser → backend).
@@ -46,7 +44,6 @@ export function createApp(
   } | null = null,
   positionsReader: PositionsLogReader | null = null,
   positionsReaderFinex: PositionsLogReader | null = null,
-  liveQuotesStore: LiveQuotesStore | null = null,
 ): Express {
   const app = express();
   app.use(cors({ origin: FRONTEND_ORIGIN }));
@@ -71,11 +68,6 @@ export function createApp(
     "/api/positions",
     createPositionsRoutes(positionsReader, positionsReaderFinex),
   );
-
-  // Tahap #509: live quotes dari MDBKA_Margin_Finex.csv (sinkron polling).
-  if (liveQuotesStore !== null) {
-    app.use("/api/quotes-live", createLiveQuotesRoutes(liveQuotesStore));
-  }
 
   // Tahap HIST-1: cakupan arsip tick (per broker/simbol/rentang).
   // Fail-closed jujur: logger absen → null (bukan 404), agar dashboard
