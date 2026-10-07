@@ -134,6 +134,13 @@ import {
   progressiveTax,
   ptkpAmount,
 } from "../server/types/pajakOP";
+import { createPembayaranPajakStore } from "../server/services/pembayaranPajakStore";
+import {
+  decodeBukti,
+  kodeAkunFor,
+  validatePembayaran,
+  validateProfil,
+} from "../server/types/pembayaranPajak";
 import { predictDailySwap } from "../src/lib/swapPrediction";
 import {
   ADVERSE_DRIFT_PCT,
@@ -2144,6 +2151,153 @@ test("508. pajakOP: tarif Pasal 17 HPP, PTKP, bagian trading, rugi, kredit pajak
     lebih.kurangBayarIdr === 0 && lebih.lebihBayarIdr === 700_000,
     "lebih bayar salah",
   );
+});
+
+test("509. pembayaranPajak: validasi, simpan pembayaran + bukti, profil, tolak input salah", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const ok = validatePembayaran({
+    year: 2026,
+    tanggalBayar: "2027-03-20",
+    jenis: "PPh Pasal 29 OP",
+    jumlahIdr: 123456.4,
+    ntpn: "abcd1234abcd1234",
+    kodeBilling: "123456789012345",
+  });
+  assert(
+    ok.ok &&
+      ok.value.jumlahIdr === 123456 &&
+      ok.value.ntpn === "ABCD1234ABCD1234",
+    "validasi sah gagal",
+  );
+  assert(
+    !validatePembayaran({
+      year: 2026,
+      tanggalBayar: "2027-02-30",
+      jenis: "Lainnya",
+      jumlahIdr: 1,
+    }).ok,
+    "tanggal palsu harus ditolak",
+  );
+  assert(
+    !validatePembayaran({
+      year: 2026,
+      tanggalBayar: "2027-03-20",
+      jenis: "Lainnya",
+      jumlahIdr: 0,
+    }).ok,
+    "jumlah 0 harus ditolak",
+  );
+  assert(
+    !validatePembayaran({
+      year: 2026,
+      tanggalBayar: "2027-03-20",
+      jenis: "Lainnya",
+      jumlahIdr: 1,
+      ntpn: "123",
+    }).ok,
+    "NTPN pendek harus ditolak",
+  );
+  assert(
+    !validatePembayaran({
+      year: 2026,
+      tanggalBayar: "2027-03-20",
+      jenis: "Lainnya",
+      jumlahIdr: 1,
+      kodeBilling: "12",
+    }).ok,
+    "billing salah harus ditolak",
+  );
+  assert(
+    kodeAkunFor("PPh Pasal 29 OP") === "411125-200" &&
+      kodeAkunFor("PPh Pasal 25 OP") === "411125-260",
+    "kode akun salah",
+  );
+  assert(
+    !validateProfil({ ptkpStatus: "XX" }).ok &&
+      validateProfil({ ptkpStatus: "K/2", otherNetIncomeIdr: 5 }).ok,
+    "validasi profil salah",
+  );
+  assert(
+    !decodeBukti({ mime: "text/html", dataBase64: "QQ==" }).ok,
+    "mime asing harus ditolak",
+  );
+  assert(
+    !decodeBukti({ mime: "image/png", dataBase64: "!!" }).ok,
+    "base64 rusak harus ditolak",
+  );
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pajak-"));
+  const store = createPembayaranPajakStore(dir);
+  assert(store.getProfil(2026).ptkpStatus === "TK/0", "profil default salah");
+  const sp = store.setProfil(2026, {
+    ptkpStatus: "K/1",
+    otherNetIncomeIdr: 100000000,
+    creditIdr: 2000000,
+  });
+  assert(
+    sp.ok && store.getProfil(2026).ptkpStatus === "K/1",
+    "profil tidak tersimpan",
+  );
+  assert(
+    !store.setProfil(2026, { ptkpStatus: "bad" }).ok,
+    "profil salah harus ditolak",
+  );
+  const bad = store.add({ year: 2026 });
+  assert(!bad.ok, "pembayaran tak lengkap harus ditolak");
+  const raw = {
+    year: 2026,
+    tanggalBayar: "2027-03-20",
+    jenis: "PPh Pasal 29 OP",
+    jumlahIdr: 500000,
+  };
+  const a = store.add(raw);
+  assert(
+    a.ok && a.value.bukti === null && a.value.kodeAkun === "411125-200",
+    "tambah pembayaran gagal",
+  );
+  if (!a.ok) return;
+  const bukti = {
+    name: "../bukti pajak.pdf",
+    mime: "application/pdf",
+    dataBase64: Buffer.from("%PDF-1.4 tes").toString("base64"),
+  };
+  const att = store.attachBukti(a.value.id, bukti);
+  assert(
+    att.ok &&
+      att.value.bukti?.storedName === `${a.value.id}.pdf` &&
+      att.value.bukti.size === 12,
+    "lampir bukti gagal",
+  );
+  const f = store.buktiFile(a.value.id);
+  assert(
+    f !== null &&
+      fs.readFileSync(f.path, "utf8") === "%PDF-1.4 tes" &&
+      f.mime === "application/pdf",
+    "file bukti tidak terbaca",
+  );
+  assert(
+    f !== null && !f.fileName.includes("/"),
+    "nama file bukti harus bersih",
+  );
+  const nf = store.attachBukti("tidak-ada", bukti);
+  assert(!nf.ok && nf.notFound === true, "id asing harus notFound");
+  const b = store.add(
+    { ...raw, year: 2027, tanggalBayar: "2028-01-05" },
+    bukti,
+  );
+  assert(b.ok && b.value.bukti !== null, "tambah dengan bukti gagal");
+  assert(
+    store.list().length === 2 && store.list(2026).length === 1,
+    "daftar per tahun salah",
+  );
+  assert(
+    createPembayaranPajakStore(dir).list(2026)[0]?.bukti?.mime ===
+      "application/pdf",
+    "tidak persisten",
+  );
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("502. predictDailySwap: INTEREST_CURRENT tahunan ÷360, DISABLED 0, mode lain null", () => {

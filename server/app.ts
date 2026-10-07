@@ -15,6 +15,7 @@ import { createPositionsRoutes } from "./routes/positionsRoutes";
 import { createMarginRoutes } from "./routes/marginRoutes";
 import { createSwapLogRoutes } from "./routes/swapLogRoutes";
 import { createJurnalPajakRoutes } from "./routes/jurnalPajakRoutes";
+import { createPajakRoutes } from "./routes/pajakRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
 import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
 
@@ -46,7 +47,7 @@ export function createApp(
 ): Express {
   const app = express();
   app.use(cors({ origin: FRONTEND_ORIGIN }));
-  app.use(express.json());
+  app.use(express.json({ limit: "8mb" }));
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -61,6 +62,8 @@ export function createApp(
   app.use("/api/swaplog", createSwapLogRoutes());
   // #507: jurnal pajak Finex (sinkron otomatis dari CSV History MT5).
   app.use("/api/jurnal-pajak", createJurnalPajakRoutes());
+  // #510: kewajiban pajak OP, pembayaran, bukti bayar.
+  app.use("/api/pajak", createPajakRoutes());
   app.use(
     "/api/positions",
     createPositionsRoutes(positionsReader, positionsReaderFinex),
