@@ -34,6 +34,8 @@ import { formatSharePercent, signalReason } from "../src/lib/signalReason";
 import { collectCandleItems } from "../server/routes/candlesRoutes";
 import { createTradeEntryLog } from "../server/services/tradeEntryLog";
 import { getBackupStatus, runBackup } from "../server/services/dataBackup";
+import { evaluateTrades, GROUP_BEFORE_LOG, GROUP_NO_LOG } from "../server/services/tradeEvaluation";
+import { brokerFromCompany, parseAccountLabels } from "../server/routes/evaluationRoutes";
 import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
 import {
   SUPPORTED_SYMBOLS,
@@ -6172,6 +6174,49 @@ test("524. catatan entry: posisi lama tanpa scan, posisi baru dipindai, tanpa du
   const restart = mk();
   assert(restart.ingest([pos("100"), pos("101")]).length === 0, "setelah restart tidak boleh duplikat");
   assert(restart.readAll().length === 2, `file harus 2 catatan, dapat ${restart.readAll().length}`);
+});
+
+test("526. evaluasi: pasangkan IN/OUT, hasil bersih, R dari SL awal, kelompok status entry", () => {
+  const deal = (positionId: string, time: string, type: string, entry: string, price: number, profit: number, commission: number, comment = "") => ({
+    dealTicket: `${positionId}-${entry}`, positionId, orderTicket: positionId, serverTime: time,
+    symbol: "GBPUSD", type, entry, volume: 0.1, price, commission, swap: 0, profit, fee: 0,
+    comment, login: "1", accountCurrency: "USD", idrAmount: null,
+  });
+  const deals = [
+    deal("1", "2026.10.08 10:00:00", "BUY", "IN", 1.3, 0, -3.3),
+    deal("1", "2026.10.08 12:30:00", "SELL", "OUT", 1.302, 20, 0, "[tp 1.30200]"),
+    deal("2", "2026.10.08 11:00:00", "SELL", "IN", 1.31, 0, -3.3),
+    deal("2", "2026.10.08 11:20:00", "BUY", "OUT", 1.311, -10, 0, "[sl 1.31100]"),
+    deal("3", "2026.10.08 13:00:00", "BUY", "IN", 1.3, 0, -3.3),
+    deal("4", "2026.10.08 14:00:00", "BUY", "IN", 1.3, 0, -3.3),
+    deal("4", "2026.10.08 14:05:00", "SELL", "OUT", 1.3001, 1, 0),
+  ];
+  const entry = (ticket: string, sl: number, status: string | null, preExisting = false) => ({
+    ticket, broker: "finex" as const, symbol: "GBPUSD", side: "BUY" as const, volume: 0.1,
+    priceOpen: 1.3, sl, tp: 0, timeOpen: "", firstSeenUtc: "", preExisting, equity: 1000,
+    scan: status === null ? null : { status: status as "LOLOS", direction: "BELI" as const, score: 5, costShareOfRisk: 0.05, reason: "" },
+  });
+  const ev = evaluateTrades(deals, [entry("1", 1.299, "LOLOS"), entry("2", 1.311, "TUNGGU"), entry("4", 0, null, true)]);
+  assert(ev.trades.length === 3 && ev.openPositions === 1, `tertutup ${ev.trades.length}, terbuka ${ev.openPositions}`);
+  const t1 = ev.trades.find((t) => t.positionId === "1");
+  assert(t1 !== undefined && t1.net === 16.7 && t1.exit === "TP" && t1.durationMin === 150, `t1 ${JSON.stringify(t1)}`);
+  assert(t1 !== undefined && t1.rMultiple === 2 && t1.group === "LOLOS", `R t1 ${t1?.rMultiple}`);
+  const t2 = ev.trades.find((t) => t.positionId === "2");
+  assert(t2 !== undefined && t2.exit === "SL" && t2.rMultiple === -1 && t2.net === -13.3, `t2 ${JSON.stringify(t2)}`);
+  const t4 = ev.trades.find((t) => t.positionId === "4");
+  assert(t4 !== undefined && t4.group === GROUP_BEFORE_LOG && t4.rMultiple === null, "t4 sebelum pencatatan tanpa R");
+  assert(ev.overall.n === 3 && ev.overall.wins === 1 && ev.overall.net === 1.1, `overall ${JSON.stringify(ev.overall)}`);
+  assert(ev.byGroup["LOLOS"]?.n === 1 && ev.byGroup["LOLOS"]?.winRate === 1, "kelompok LOLOS salah");
+  const tanpa = evaluateTrades(deals, []);
+  assert(tanpa.trades.every((t) => t.group === GROUP_NO_LOG), "tanpa catatan harus TANPA_CATATAN");
+});
+
+test("527. evaluasi: broker dari nama perusahaan & label akun dari env", () => {
+  assert(brokerFromCompany("PT. Orbi Trade Berjangka") === "orbitraderberjangka", "OTB");
+  assert(brokerFromCompany("PT. Finex Bisnis Solusi Futures") === "finex", "Finex");
+  assert(brokerFromCompany("Lain") === null, "tak dikenal");
+  const l = parseAccountLabels("91811209:Finex live, 61823011:Finex demo,rusak");
+  assert(l["91811209"] === "Finex live" && l["61823011"] === "Finex demo" && Object.keys(l).length === 2, JSON.stringify(l));
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

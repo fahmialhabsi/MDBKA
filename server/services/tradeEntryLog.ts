@@ -63,7 +63,8 @@ export interface TradeEntryLog {
   readAll(): TradeEntryRecord[];
 }
 
-function readRecords(file: string): TradeEntryRecord[] {
+/** Baca semua catatan entry (baris rusak dilewati). Dipakai evaluasi 4c. */
+export function readTradeEntries(file: string): TradeEntryRecord[] {
   if (!existsSync(file)) return [];
   const out: TradeEntryRecord[] = [];
   for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
@@ -80,7 +81,7 @@ function readRecords(file: string): TradeEntryRecord[] {
 
 export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
   const now = opts.now ?? (() => new Date());
-  const known = new Set(readRecords(opts.file).map((r) => r.ticket));
+  const known = new Set(readTradeEntries(opts.file).map((r) => r.ticket));
   let first = true;
 
   const scanFor = (symbol: string, equity: number | null): EntryScan => {
@@ -166,7 +167,7 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       return added;
     },
     readAll() {
-      return readRecords(opts.file);
+      return readTradeEntries(opts.file);
     },
   };
 }

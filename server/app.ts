@@ -18,6 +18,7 @@ import { createJurnalPajakRoutes } from "./routes/jurnalPajakRoutes";
 import { createPajakRoutes } from "./routes/pajakRoutes";
 import { createCandlesRoutes } from "./routes/candlesRoutes";
 import { createBackupRoutes } from "./routes/backupRoutes";
+import { createEvaluationRoutes } from "./routes/evaluationRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
 import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
 
@@ -71,6 +72,8 @@ export function createApp(
   app.use("/api/candles", createCandlesRoutes(quotesReader, quotesReaderFinex));
   // Backup data MDBKA (pengingat + tombol "Backup sekarang").
   app.use("/api/backup", createBackupRoutes());
+  // Langkah 4c: evaluasi trade tertutup (History MT5 + catatan entry).
+  app.use("/api/evaluation", createEvaluationRoutes());
   app.use(
     "/api/positions",
     createPositionsRoutes(positionsReader, positionsReaderFinex),
