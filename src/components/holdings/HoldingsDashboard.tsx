@@ -1,4 +1,4 @@
-import { useState, type JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 import {
   useHoldingsQuotes,
   type HoldingsQuote,
@@ -116,23 +116,18 @@ function HoldingCard({
       ? null
       : checkBreakeven(holding, live.bid, live.ask);
   const marginWarning = exited ? null : checkMarginGuard(holding, convert);
-  const rrWarning = checkRewardRisk(
-    holding.entryPrice,
-    holding.sl,
-    holding.tp,
-  );
+  const rrWarning = checkRewardRisk(holding.entryPrice, holding.sl, holding.tp);
   const badge = exited
     ? "KELUAR — konfirmasi di MT5"
-    : (evaluation !== null
+    : evaluation !== null
       ? SIGNAL_STYLE[evaluation.signal].label
-      : "Menunggu harga");
+      : "Menunggu harga";
   const badgeClass = exited
     ? "rounded-lg bg-slate-400/10 px-2 py-1 text-xs font-bold text-slate-300"
-    : (evaluation !== null
+    : evaluation !== null
       ? SIGNAL_STYLE[evaluation.signal].className
-      : "rounded-lg bg-slate-400/10 px-2 py-1 text-xs text-slate-400");
-  const liveRef =
-    holding.direction === "BELI" ? live?.bid : live?.ask;
+      : "rounded-lg bg-slate-400/10 px-2 py-1 text-xs text-slate-400";
+  const liveRef = holding.direction === "BELI" ? live?.bid : live?.ask;
 
   const confirmExit = (): void => {
     const price = Number(exitPrice);
@@ -208,10 +203,7 @@ function HoldingCard({
         <div>
           <span className="text-slate-500">Risiko/Rwd </span>
           <span className="text-white">
-            {money(
-              evaluation?.risk ?? null,
-              evaluation?.planCurrency ?? "USD",
-            )}{" "}
+            {money(evaluation?.risk ?? null, evaluation?.planCurrency ?? "USD")}{" "}
             /{" "}
             {money(
               evaluation?.reward ?? null,
@@ -250,22 +242,22 @@ function HoldingCard({
           {marginWarning !== null && (
             <p className="text-xs text-red-300">• {marginWarning}</p>
           )}
-            {rrWarning !== null && (
-              <p className="text-xs text-amber-200">• {rrWarning}</p>
+          {rrWarning !== null && (
+            <p className="text-xs text-amber-200">• {rrWarning}</p>
+          )}
+          {evaluation?.swap !== null &&
+            evaluation?.swap !== undefined &&
+            evaluation.swap.daysHeld > 0 && (
+              <p className="text-xs text-slate-400">
+                Swap est.{" "}
+                {money(evaluation.swap.value, evaluation.swap.currency)} (
+                {evaluation.swap.daysHeld} hari menginap)
+              </p>
             )}
-            {evaluation?.swap !== null &&
-              evaluation?.swap !== undefined &&
-              evaluation.swap.daysHeld > 0 && (
-                <p className="text-xs text-slate-400">
-                  Swap est. {money(evaluation.swap.value, evaluation.swap.currency)}{" "}
-                  ({evaluation.swap.daysHeld} hari menginap)
-                </p>
-              )}
           {exited ? (
             <div className="text-xs text-slate-400">
               <p>
-                Keluar @ {holding.exitPrice} ·{" "}
-                {holding.exitTime ?? "-"}
+                Keluar @ {holding.exitPrice} · {holding.exitTime ?? "-"}
                 {holding.exitNote !== undefined && holding.exitNote !== ""
                   ? ` · “${holding.exitNote}”`
                   : ""}
@@ -374,6 +366,7 @@ export function HoldingsDashboard({
   onExit,
   onRemove,
   readOnly = false,
+  onTotalProfitChange,
   heading,
   emptyText,
 }: {
@@ -385,6 +378,7 @@ export function HoldingsDashboard({
   readonly readOnly?: boolean;
   readonly heading?: string;
   readonly emptyText?: string;
+  readonly onTotalProfitChange?: (usd: number | null) => void;
 }): JSX.Element {
   const symbols = [...new Set(holdings.map((h) => h.symbol))];
   const { quotes, isConnected } = useHoldingsQuotes(symbols, brokerId);
@@ -405,6 +399,18 @@ export function HoldingsDashboard({
     }
     return { symbol, usd, count };
   });
+  // Total P&L USD semua posisi OPEN (null = harga live belum tersedia).
+  const hasOpen = holdings.some((h) => (h.status ?? "OPEN") !== "EXITED");
+  const totalProfitUsd: number | null = !hasOpen
+    ? 0
+    : perSymbol.some((s) => s.count > 0)
+      ? perSymbol.reduce((sum, s) => sum + s.usd, 0)
+      : null;
+  useEffect(() => {
+    if (onTotalProfitChange === undefined) return undefined;
+    onTotalProfitChange(totalProfitUsd);
+    return () => onTotalProfitChange(null);
+  }, [totalProfitUsd, onTotalProfitChange]);
   const noopExit = (): void => {};
   const noopRemove = (): void => {};
 
@@ -445,8 +451,7 @@ export function HoldingsDashboard({
             .filter((s) => s.count > 0)
             .map((s) => (
               <p key={s.symbol}>
-                {s.symbol} ({s.count} posisi):{" "}
-                {money(s.usd, "USD")} →{" "}
+                {s.symbol} ({s.count} posisi): {money(s.usd, "USD")} →{" "}
                 <span className="font-bold text-white">
                   {rupiah(s.usd, "USD", kurs)}
                 </span>

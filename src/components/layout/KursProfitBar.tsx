@@ -7,7 +7,7 @@ import {
 } from "../../services/fxRateService";
 
 /**
- * #514 - kurs USD→Rp (ECB) + "Hasil (Profit × Kurs)" di header.
+ * #514 - kurs USD→Rp (ECB) + "Hasil (Total Profit × Kurs)" di header.
  * Profit = profit floating akun dari Live Equity (MT5). Kurs indikatif,
  * bukan kurs pajak (KMK) atau kurs broker; tanpa kurs → "belum tersedia".
  */
@@ -41,7 +41,7 @@ export function KursProfitBar({
         })}
       </p>
       <p className="mt-0.5">
-        Hasil (Profit × Kurs):{" "}
+        Hasil (Total Profit × Kurs):{" "}
         <span
           data-testid="kurs-profit-idr"
           className={[

@@ -10,9 +10,11 @@ import type { BrokerId } from "../../types/broker";
 export function AutoPositionsSection({
   brokerId,
   fxRates,
+  onTotalProfitChange,
 }: {
   readonly brokerId: BrokerId | undefined;
   readonly fxRates: ExchangeRates | null;
+  readonly onTotalProfitChange?: (usd: number | null) => void;
 }): JSX.Element {
   const active: BrokerId = brokerId ?? DEFAULT_BROKER_ID;
   const auto = useBrokerPositions(active);
@@ -26,6 +28,9 @@ export function AutoPositionsSection({
         brokerId={active}
         fxRates={fxRates}
         readOnly
+        onTotalProfitChange={
+          auto.sourceMissing ? undefined : onTotalProfitChange
+        }
         heading={`4. Posisi MT5 otomatis (${holdings.length})`}
         emptyText={
           auto.sourceMissing

@@ -184,6 +184,7 @@ export default function App() {
   // Tahap 5D-STEP2: ECB daily rate 1x saat app init, cache selama session.
   // Tahap FX-PROXY: via backend sendiri dulu (bebas blokir CORS ECB);
   // direct fetchECBRates hanya cadangan (konteks Node/test).
+  const [autoProfitUsd, setAutoProfitUsd] = useState<number | null>(null);
   const [fxRates, setFxRates] = useState<ExchangeRates | null>(null);
 
   useEffect(() => {
@@ -784,7 +785,7 @@ export default function App() {
             </h1>
           </div>
           <KursProfitBar
-            profitUsd={equityStream.equity?.profit ?? null}
+            profitUsd={autoProfitUsd ?? equityStream.equity?.profit ?? null}
             fxRates={fxRates}
           />
 
@@ -980,6 +981,7 @@ export default function App() {
               </Panel>
 
               <AutoPositionsSection
+                onTotalProfitChange={setAutoProfitUsd}
                 brokerId={activeBrokerId}
                 fxRates={fxRates}
               />
