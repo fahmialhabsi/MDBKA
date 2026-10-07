@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { RefreshCw, ScanSearch } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
+import {
+  lolosLabel,
+  mergeGroupStats,
+  proofStatus,
+  type EvalAccount,
+} from "../../lib/evaluationView";
 import { formatSharePercent } from "../../lib/signalReason";
 import {
   lastCandleTimeMs,
@@ -34,6 +40,7 @@ interface Props {
 }
 
 const REFRESH_MS = 60_000;
+const EVAL_REFRESH_MS = 5 * 60_000;
 const COLLAPSED_ROWS = 12;
 
 const STATUS_VIEW: Record<ScanStatus, { label: string; className: string }> = {
@@ -55,6 +62,36 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
   const [tick, setTick] = useState(0);
   const [showAll, setShowAll] = useState(false);
   const key = `${brokerId}|${tick}`;
+  // Langkah 4d: hasil nyata trade berstatus LOLOS (History MT5).
+  const [evalAccounts, setEvalAccounts] = useState<readonly EvalAccount[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async (): Promise<void> => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/evaluation`);
+        if (!res.ok) return;
+        const body = (await res.json()) as { accounts?: EvalAccount[] };
+        if (!cancelled) setEvalAccounts(Array.isArray(body.accounts) ? body.accounts : []);
+      } catch {
+        // Evaluasi opsional: label tetap "belum terbukti".
+      }
+    };
+    void load();
+    const id = window.setInterval(() => void load(), EVAL_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+  const lolosStats = mergeGroupStats(evalAccounts, brokerId, "LOLOS");
+  const lolosView = {
+    label: lolosLabel(lolosStats),
+    className:
+      lolosStats !== null && proofStatus(lolosStats) === "TERBUKTI_NEGATIF"
+        ? "bg-red-400/15 text-red-200"
+        : STATUS_VIEW.LOLOS.className,
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -172,9 +209,9 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
                   <td className="py-2 pr-3 font-semibold text-white">{row.symbol}</td>
                   <td className="py-2 pr-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${STATUS_VIEW[row.status].className}`}
+                      className={`rounded-full px-2 py-0.5 text-xs ${(row.status === "LOLOS" ? lolosView : STATUS_VIEW[row.status]).className}`}
                     >
-                      {STATUS_VIEW[row.status].label}
+                      {(row.status === "LOLOS" ? lolosView : STATUS_VIEW[row.status]).label}
                     </span>
                   </td>
                   <td className="py-2 pr-3 text-slate-300">
@@ -207,8 +244,9 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
       )}
 
       <p className="mt-4 text-xs leading-5 text-slate-500">
-        &quot;Lolos&quot; = biaya &amp; risiko aman, BELUM berarti peluang menang
-        terbukti (menunggu data History). Memakai default Mode Aman (risiko 1%,
+        &quot;Lolos&quot; = biaya &amp; risiko aman. Win rate baru ditampilkan setelah
+        minimal 20 trade berstatus Lolos tertutup di History MT5 broker ini (demo +
+        live); sebelum itu tertulis &quot;belum terbukti (n/20)&quot;. Memakai default Mode Aman (risiko 1%,
         gerbang biaya 10%) dan equity live broker aktif. Sebelum entry, muat CSV simbol itu dan pastikan Hasil
         Analisa menunjukkan hal yang sama. Bukan nasihat keuangan.
       </p>

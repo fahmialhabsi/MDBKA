@@ -253,9 +253,12 @@ import {
   formatUsd,
   formatWinRate,
   isLegacyGroup,
+  lolosLabel,
+  mergeGroupStats,
   proofLabel,
   proofStatus,
   sortGroups,
+  type EvalAccount,
   type EvalTradeStats,
 } from "../src/lib/evaluationView";
 
@@ -6246,6 +6249,28 @@ test("528. panel evaluasi: format USD/Rupiah, bukti n>=20, urutan grup", () => {
   assert(isLegacyGroup("TANPA_CATATAN") && !isLegacyGroup("LOLOS"), "legacy");
   const order = sortGroups(["TANPA_CATATAN", "TUNGGU", "SEBELUM_PENCATATAN", "LOLOS"]);
   assert(order.join(",") === "LOLOS,TUNGGU,TANPA_CATATAN,SEBELUM_PENCATATAN", order.join(","));
+});
+
+test("529. pemindai: label Lolos = win rate nyata hanya bila n>=20 (demo+live digabung)", () => {
+  const st = (n: number, wins: number, net: number): EvalTradeStats => ({ n, wins, losses: n - wins, winRate: wins / n, net, avgWin: null, avgLoss: null, expectancy: net / n, avgR: null, rCount: 0 });
+  const acc = (login: string, broker: string, groups: Record<string, EvalTradeStats>): EvalAccount => ({
+    login, label: login, company: "", broker,
+    evaluation: { trades: [], overall: st(1, 1, 1), byGroup: groups, bySymbol: {}, openPositions: 0 },
+  });
+  assert(mergeGroupStats([], "finex", "LOLOS") === null, "kosong");
+  assert(lolosLabel(null) === "Lolos · belum terbukti (0/20)", lolosLabel(null));
+  const accounts = [
+    acc("1", "finex", { LOLOS: st(14, 8, 12) }),
+    acc("2", "finex", { LOLOS: st(10, 5, 3), TANPA_CATATAN: st(19, 4, -13.71) }),
+    acc("3", "orbitraderberjangka", { LOLOS: st(5, 1, -40) }),
+  ];
+  const fx = mergeGroupStats(accounts, "finex", "LOLOS");
+  assert(fx !== null && fx.n === 24 && fx.wins === 13 && fx.net === 15 && fx.expectancy === 0.63, JSON.stringify(fx));
+  assert(lolosLabel(fx) === "Lolos · win rate 54,2% (n=24)", lolosLabel(fx));
+  const otb = mergeGroupStats(accounts, "orbitraderberjangka", "LOLOS");
+  assert(lolosLabel(otb) === "Lolos · belum terbukti (5/20)", lolosLabel(otb));
+  const rugi = mergeGroupStats([acc("4", "finex", { LOLOS: st(20, 12, -5) })], "finex", "LOLOS");
+  assert(lolosLabel(rugi) === "Lolos · terbukti rugi, win rate 60,0% (n=20)", lolosLabel(rugi));
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

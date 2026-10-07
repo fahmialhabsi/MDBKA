@@ -129,3 +129,46 @@ export function formatDuration(minutes: number | null): string {
   if (minutes < 48 * 60) return `${numberId(minutes / 60, 1)} jam`;
   return `${numberId(minutes / 1440, 1)} hari`;
 }
+
+/**
+ * Langkah 4d — gabungkan statistik satu kelompok (mis. "LOLOS") dari semua
+ * akun satu broker (demo + live). Null bila broker belum punya trade itu.
+ */
+export function mergeGroupStats(
+  accounts: readonly EvalAccount[],
+  broker: string,
+  group: string,
+): EvalTradeStats | null {
+  const list = accounts
+    .filter((a) => a.broker === broker)
+    .map((a) => a.evaluation.byGroup[group])
+    .filter((x): x is EvalTradeStats => x !== undefined);
+  if (list.length === 0) return null;
+  const n = list.reduce((s, x) => s + x.n, 0);
+  const wins = list.reduce((s, x) => s + x.wins, 0);
+  const net = Math.round(list.reduce((s, x) => s + x.net, 0) * 100) / 100;
+  return {
+    n,
+    wins,
+    losses: n - wins,
+    winRate: n > 0 ? wins / n : null,
+    net,
+    avgWin: null,
+    avgLoss: null,
+    expectancy: n > 0 ? Math.round((net / n) * 100) / 100 : null,
+    avgR: null,
+    rCount: 0,
+  };
+}
+
+/** Label status LOLOS di pemindai: klaim "terbukti" hanya bila n ≥ 20. */
+export function lolosLabel(stats: EvalTradeStats | null): string {
+  const n = stats?.n ?? 0;
+  if (stats === null || proofStatus(stats) === "BELUM_CUKUP") {
+    return `Lolos · belum terbukti (${n}/${MIN_PROVEN_TRADES})`;
+  }
+  const wr = formatWinRate(stats.winRate);
+  return proofStatus(stats) === "TERBUKTI_POSITIF"
+    ? `Lolos · win rate ${wr} (n=${n})`
+    : `Lolos · terbukti rugi, win rate ${wr} (n=${n})`;
+}
