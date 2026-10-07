@@ -76,7 +76,6 @@ import {
   getValidationViewState,
 } from "./lib/validationView";
 import {
-  fetchBackendBiUsdIdr,
   fetchBackendRates,
   fetchECBRates,
   type ExchangeRates,
@@ -191,16 +190,9 @@ export default function App() {
   useEffect(() => {
     fetchBackendRates(API_BASE_URL)
       .then((viaBackend) => viaBackend ?? fetchECBRates())
-      .then(async (rates) => {
+      .then((rates) => {
         setFxRates(rates);
         console.log("FX rates loaded:", rates.fetchedAt);
-        // Kurs Transaksi BI (utama bila terjangkau); gagal = tetap ECB.
-        const bi = await fetchBackendBiUsdIdr(API_BASE_URL);
-        if (bi !== null) {
-          setFxRates((prev) =>
-            prev === null ? prev : { ...prev, usdIdr: bi },
-          );
-        }
       });
   }, []);
 

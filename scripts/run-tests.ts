@@ -197,11 +197,6 @@ import {
   profitToIdr,
   usdIdrRate,
 } from "../src/services/fxRateService";
-import {
-  latestKursBi,
-  midRateIdr,
-  parseBiKursXml,
-} from "../server/types/kursBi";
 import { withUsdPointValue } from "../src/lib/usdPointValue";
 import { resolveCsvBidAsk } from "../src/lib/csvQuote";
 import {
@@ -5997,25 +5992,6 @@ test("287. fetchECBRates() returns rates object (mock/live)", () => {
       (maybePromise === undefined || typeof maybePromise === "function"),
     "fetch boundary tidak aman",
   );
-});
-
-test("512. kursBi: parse XML BI, ambil terbaru, kurs tengah", () => {
-  const rec = (id: number, tgl: string, beli: string, jual: string) =>
-    `<Table><id_subkurslokal>${id}</id_subkurslokal>` +
-    `<nil_subkurslokal>1.00</nil_subkurslokal>` +
-    `<beli_subkurslokal>${beli}</beli_subkurslokal>` +
-    `<jual_subkurslokal>${jual}</jual_subkurslokal>` +
-    `<tgl_subkurslokal>${tgl}T00:00:00+07:00</tgl_subkurslokal>` +
-    `<mts_subkurslokal>USD </mts_subkurslokal></Table>`;
-  const xml =
-    rec(1, "2026-10-06", "17827.42", "18006.58") +
-    rec(2, "2026-10-07", "17820.45", "17999.55");
-  const list = parseBiKursXml(xml);
-  assert(list.length === 2, "harus ada 2 rekaman");
-  const latest = latestKursBi(list, "USD");
-  assert(latest !== null, "kurs terbaru null");
-  assert(midRateIdr(latest!) === 17910, "kurs tengah tgl terbaru harus 17910");
-  assert(parseBiKursXml("<x/>").length === 0, "XML kosong harus 0 rekaman");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

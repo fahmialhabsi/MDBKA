@@ -59,9 +59,7 @@ export function KursProfitBar({
         </span>
       </p>
       <p className="mt-0.5 text-[11px] text-slate-500">
-        {fxRates?.usdIdr !== undefined
-          ? `Kurs Transaksi Bank Indonesia tgl ${fxRates.usdIdr.date} (tengah: beli ${fxRates.usdIdr.buy.toLocaleString("id-ID")} / jual ${fxRates.usdIdr.sell.toLocaleString("id-ID")})`
-          : `Kurs acuan ECB${fxRates?.ecbDate !== undefined ? ` tgl ${fxRates.ecbDate}` : ""}`}
+        {`Kurs acuan ECB${fxRates?.ecbDate !== undefined ? ` tgl ${fxRates.ecbDate}` : ""}`}
         , diperbarui sekali per hari kerja; indikatif, bukan kurs pajak (KMK)
         atau kurs broker.
       </p>
