@@ -227,6 +227,7 @@ import { isEquitySnapshot } from "../server/types/equity";
 import { autoCsvFileName, autoLoadKey, findCandleItem } from "../src/lib/autoCandle";
 import { summarizeAccountBalance } from "../server/services/accountBalance";
 import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
+import { exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -6362,6 +6363,24 @@ test("534. header saldo: Rupiah, setoran asli, live di depan, tanpa kurs pakai U
   assert(tanpaKurs[0].balanceText === "$8,50" && tanpaKurs[0].depositText === "Rp400.000", JSON.stringify(tanpaKurs[0]));
   assert(usdToIdrText(1, 0) === null, "kurs 0");
   assert(readSrc("src/App.tsx").includes("<AccountBalancesBar fxRates={fxRates} />"), "belum dipasang di header");
+});
+
+test("535. taruhan ganda: eksposur searah diblok, lindung nilai tidak", () => {
+  const ex = exposureOf("AUDUSD_ORB", "BELI");
+  assert(ex.AUD === 1 && ex.USD === -1, JSON.stringify(ex));
+  const otb = [{ symbol: "AUDUSD_ORB", side: "BUY" }, { symbol: "META.US", side: "BUY" }];
+  const aud = findDoubleBet("AUDJPY_ORB", "BELI", otb);
+  assert(aud !== null && aud.key === "AUD" && aud.reason.includes("sama-sama AUD naik"), JSON.stringify(aud));
+  assert(findDoubleBet("US500.DEC", "BELI", otb)?.key === "Saham AS", "indeks AS vs META");
+  assert(findDoubleBet("USDCAD_ORB", "JUAL", otb)?.key === "USD", "short USD dobel");
+  assert(findDoubleBet("AUDJPY_ORB", "JUAL", otb) === null, "berlawanan (lindung nilai) tidak diblok");
+  assert(findDoubleBet("XAUUSD_ORB", "BELI", otb) === null, "emas berdiri sendiri");
+  const finex = [{ symbol: "GBPUSD", side: "SELL" }, { symbol: "XTIUSD", side: "SELL" }];
+  assert(findDoubleBet("GBPUSD", "JUAL", finex)?.key === "GBP", "simbol sama arah sama");
+  assert(findDoubleBet("XTIUSD", "JUAL", finex)?.key === "Minyak", "minyak dobel");
+  assert(findDoubleBet("#META", "BELI", otb)?.key === "Saham AS", "saham Finex # = AS");
+  assert(findDoubleBet("#BMW", "BELI", otb) === null, "saham Jerman bukan AS");
+  assert(findDoubleBet("EURCHF", "BELI", []) === null, "tanpa posisi");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
