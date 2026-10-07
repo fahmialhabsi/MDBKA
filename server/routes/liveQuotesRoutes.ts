@@ -5,8 +5,8 @@ import type { LiveQuotesStore } from "../services/liveQuotesStore";
  * #509 - live quotes routes: sync dari MDBKA_Margin_Finex.csv,
  * atau serve dari cache in-memory.
  *
- * POST /api/quotes/sync → trigger sync(), return {added, total}
- * GET /api/quotes/latest/:symbol → return QuoteSnapshot atau 404
+ * POST /api/quotes-live/sync → trigger sync(), return {added, total}
+ * GET /api/quotes-live/latest/:symbol → return QuoteSnapshot atau 404
  */
 export function createLiveQuotesRoutes(store: LiveQuotesStore): Router {
   const router = Router();

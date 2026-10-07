@@ -20,6 +20,10 @@ import {
   TickHistoryLogger,
   resolveTzOffset,
 } from "./services/tickHistory";
+import {
+  createLiveQuotesStore,
+  resolveMarginFile,
+} from "./services/liveQuotesStore";
 
 dotenv.config();
 
@@ -68,17 +72,7 @@ const positionsLogPathFinex = process.env.POSITIONS_LOG_PATH_FINEX ?? "";
 const positionsReader =
   positionsLogPath.trim() !== "" ? new PositionsLogReader(positionsLogPath) : null;
 const positionsReaderFinex =
-  positionsLogPathFinex.trim() !== ""
-    ? new PositionsLogReader(positionsLogPathFinex)
-    : null;
-
-// Tahap #509: live quotes dari MDBKA_Margin_Finex.csv (sinkron polling).
-import {
-  createLiveQuotesStore,
-  resolveMarginFile,
-} from "./services/liveQuotesStore";
-const marginFile = resolveMarginFile();
-const liveQuotesStore = createLiveQuotesStore({ file: marginFile });
+  positionsLogPathFinex.trim() !== "" ? new PositionsLogReader(positionsLogPathFinex) : null;
 
 const stopWatching = reader.startWatching();
 if (readerFinex !== null) readerFinex.startWatching();
@@ -138,19 +132,14 @@ if (quotesReaderFinex !== null && historyFinex !== null) {
   });
 }
 
-const app = createApp(
-  reader,
-  quotesReader,
-  readerFinex,
-  quotesReaderFinex,
-  {
-    otb: historyOtb,
-    finex: historyFinex,
-  },
-  positionsReader,
-  positionsReaderFinex,
-  liveQuotesStore,
-);
+// Tahap #509: live quotes dari MDBKA_Margin_Finex.csv (sinkron polling).
+const marginFile = resolveMarginFile();
+const liveQuotesStore = createLiveQuotesStore({ file: marginFile });
+
+const app = createApp(reader, quotesReader, readerFinex, quotesReaderFinex, {
+  otb: historyOtb,
+  finex: historyFinex,
+}, positionsReader, positionsReaderFinex, liveQuotesStore);
 
 // Polling startup: tunggu data pertama kali tersedia
 async function startServer() {

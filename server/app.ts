@@ -14,11 +14,12 @@ import { createFxRoutes } from "./routes/fxRoutes";
 import { createPositionsRoutes } from "./routes/positionsRoutes";
 import { createMarginRoutes } from "./routes/marginRoutes";
 import { createSwapLogRoutes } from "./routes/swapLogRoutes";
-import { createLiveQuotesRoutes } from "./routes/liveQuotesRoutes";
 import { createJurnalPajakRoutes } from "./routes/jurnalPajakRoutes";
 import { createPajakRoutes } from "./routes/pajakRoutes";
+import { createLiveQuotesRoutes } from "./routes/liveQuotesRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
 import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
+import type { LiveQuotesStore } from "./services/liveQuotesStore";
 
 /**
  * Origin frontend yang diizinkan CORS (B2: browser → backend).
@@ -33,8 +34,6 @@ export const FRONTEND_ORIGIN: string =
     : "http://localhost:5173";
 
 import type { QuotesLogReader } from "./services/quotesLogReader";
-
-import type { LiveQuotesStore } from "./services/liveQuotesStore";
 
 export function createApp(
   reader: MT5LogReader,
@@ -73,13 +72,16 @@ export function createApp(
     createPositionsRoutes(positionsReader, positionsReaderFinex),
   );
 
+  // Tahap #509: live quotes dari MDBKA_Margin_Finex.csv (sinkron polling).
+  if (liveQuotesStore !== null) {
+    app.use("/api/quotes-live", createLiveQuotesRoutes(liveQuotesStore));
+  }
+
   // Tahap HIST-1: cakupan arsip tick (per broker/simbol/rentang).
   // Fail-closed jujur: logger absen → null (bukan 404), agar dashboard
   // coverage tetap render tanpa mengarang ketiadaan data.
   app.get("/api/history/coverage", (_req, res) => {
-    const cover = (
-      logger: TickHistoryLogger | null | undefined,
-    ): BrokerCoverage | null =>
+    const cover = (logger: TickHistoryLogger | null | undefined): BrokerCoverage | null =>
       logger === null || logger === undefined ? null : logger.coverage();
     res.json({
       otb: cover(history?.otb),
@@ -87,10 +89,6 @@ export function createApp(
       timestamp: new Date().toISOString(),
     });
   });
-
-    if (liveQuotesStore !== null) {
-      app.use("/api/quotes-live", createLiveQuotesRoutes(liveQuotesStore));
-    }
 
   return app;
 }
