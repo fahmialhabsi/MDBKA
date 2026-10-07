@@ -247,6 +247,18 @@ import {
   spec32VerificationNotice,
 } from "../src/lib/spec32Wiring";
 
+import {
+  formatDuration,
+  formatRupiah,
+  formatUsd,
+  formatWinRate,
+  isLegacyGroup,
+  proofLabel,
+  proofStatus,
+  sortGroups,
+  type EvalTradeStats,
+} from "../src/lib/evaluationView";
+
 let passed = 0;
 let failed = 0;
 
@@ -6217,6 +6229,23 @@ test("527. evaluasi: broker dari nama perusahaan & label akun dari env", () => {
   assert(brokerFromCompany("Lain") === null, "tak dikenal");
   const l = parseAccountLabels("91811209:Finex live, 61823011:Finex demo,rusak");
   assert(l["91811209"] === "Finex live" && l["61823011"] === "Finex demo" && Object.keys(l).length === 2, JSON.stringify(l));
+});
+
+test("528. panel evaluasi: format USD/Rupiah, bukti n>=20, urutan grup", () => {
+  assert(formatUsd(-183.18) === "−$183,18", formatUsd(-183.18));
+  assert(formatUsd(7.5) === "+$7,50", formatUsd(7.5));
+  assert(formatRupiah(-183.18, 17850) === "−Rp3.270.000", String(formatRupiah(-183.18, 17850)));
+  assert(formatRupiah(10, null) === null, "tanpa kurs");
+  assert(formatWinRate(4 / 15) === "26,7%", formatWinRate(4 / 15));
+  assert(formatDuration(45) === "45 mnt" && formatDuration(192) === "3,2 jam", "durasi jam");
+  assert(formatDuration(3024) === "2,1 hari", formatDuration(3024));
+  const base: EvalTradeStats = { n: 15, wins: 4, losses: 11, winRate: 4 / 15, net: -183.18, avgWin: 7.59, avgLoss: -19.41, expectancy: -12.21, avgR: null, rCount: 0 };
+  assert(proofStatus(base) === "BELUM_CUKUP" && proofLabel(base) === "Belum cukup data (15/20)", proofLabel(base));
+  assert(proofStatus({ ...base, n: 20 }) === "TERBUKTI_NEGATIF", "rugi terbukti");
+  assert(proofStatus({ ...base, n: 24, expectancy: 1.2 }) === "TERBUKTI_POSITIF", "untung terbukti");
+  assert(isLegacyGroup("TANPA_CATATAN") && !isLegacyGroup("LOLOS"), "legacy");
+  const order = sortGroups(["TANPA_CATATAN", "TUNGGU", "SEBELUM_PENCATATAN", "LOLOS"]);
+  assert(order.join(",") === "LOLOS,TUNGGU,TANPA_CATATAN,SEBELUM_PENCATATAN", order.join(","));
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

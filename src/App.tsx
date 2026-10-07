@@ -62,6 +62,7 @@ import type { BrokerId } from "./types/broker";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
 import { SymbolScannerPanel } from "./components/analysis/SymbolScannerPanel";
 import { BackupBanner } from "./components/layout/BackupBanner";
+import { TradeEvaluationPanel } from "./components/analysis/TradeEvaluationPanel";
 import { AutoPositionsSection } from "./components/holdings/AutoPositionsSection";
 import {
   applyBrokerPreset,
@@ -901,6 +902,9 @@ export default function App() {
           equity={liveEquityValue ?? broker.equity}
           fxRates={fxRates}
         />
+
+        {/* Langkah 4c-2: hasil nyata dari History MT5, trade lama vs Mode Aman. */}
+        <TradeEvaluationPanel fxRates={fxRates} />
 
         <div className={dashboard.workGrid}>
           <div className={dashboard.mainCol}>
