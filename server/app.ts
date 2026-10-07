@@ -16,6 +16,7 @@ import { createMarginRoutes } from "./routes/marginRoutes";
 import { createSwapLogRoutes } from "./routes/swapLogRoutes";
 import { createJurnalPajakRoutes } from "./routes/jurnalPajakRoutes";
 import { createPajakRoutes } from "./routes/pajakRoutes";
+import { createCandlesRoutes } from "./routes/candlesRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
 import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
 
@@ -64,6 +65,9 @@ export function createApp(
   app.use("/api/jurnal-pajak", createJurnalPajakRoutes());
   // #510: kewajiban pajak OP, pembayaran, bukti bayar.
   app.use("/api/pajak", createPajakRoutes());
+  // Langkah 3a Mode Aman: CSV candle H1 + quote terakhir per simbol broker
+  // (bahan pemindai simbol di frontend).
+  app.use("/api/candles", createCandlesRoutes(quotesReader, quotesReaderFinex));
   app.use(
     "/api/positions",
     createPositionsRoutes(positionsReader, positionsReaderFinex),

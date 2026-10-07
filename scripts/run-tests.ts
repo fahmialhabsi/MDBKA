@@ -31,6 +31,7 @@ import {
   MAX_COST_SHARE_OF_RISK,
 } from "../src/calculations/decisionEngine";
 import { signalReason } from "../src/lib/signalReason";
+import { collectCandleItems } from "../server/routes/candlesRoutes";
 import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
@@ -6056,6 +6057,29 @@ test("517. panel header: alasan sama dengan hasil analisa (Mode Aman)", () => {
   assert(signalReason(kecil) === "Ditahan: risiko lot minimum", signalReason(kecil));
   const lemah = analyzeMarket({ ...modeAmanMarket, cci: 0, macd: 0, rsi: 50 }, modeAmanBroker);
   assert(signalReason(lemah) === "Skor belum kompak", signalReason(lemah));
+});
+
+test("518. candles: hanya simbol broker yang punya CSV H1, plus quote terakhir", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "candles-"));
+  const csv = "time,open,high,low,close,tick_volume\n2026.10.07 10:00,1.1,1.2,1.0,1.15,10\n";
+  nfs.writeFileSync(npath.join(dir, "MDBKA_GBPUSD_H1.csv"), csv);
+  nfs.writeFileSync(npath.join(dir, "MDBKA_#AAPL_H1.csv"), csv);
+  const quote = { timestamp: "2026.10.07 10:00:01", symbol: "GBPUSD", bid: 1.1, ask: 1.1002 };
+  const source = {
+    getSymbols: () => ["GBPUSD", "EURUSD", "#AAPL"],
+    getLatestBySymbol: (s: string) => (s === "GBPUSD" ? [quote] : []),
+  };
+  const items = collectCandleItems(source, dir);
+  assert(items.length === 2, `harus 2 simbol ber-CSV, dapat ${items.length}`);
+  assert(items.every((i) => i.symbol !== "EURUSD"), "EURUSD tanpa CSV harus dilewati");
+  const gbp = items.find((i) => i.symbol === "GBPUSD");
+  assert(gbp !== undefined && gbp.quote !== null && gbp.quote.bid === 1.1, "quote GBPUSD hilang");
+  assert(gbp !== undefined && gbp.csv === csv, "isi CSV berubah");
+  const aapl = items.find((i) => i.symbol === "#AAPL");
+  assert(aapl !== undefined && aapl.quote === null, "simbol tanpa quote = null");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
