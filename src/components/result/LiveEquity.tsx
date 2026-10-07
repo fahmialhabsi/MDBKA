@@ -21,11 +21,7 @@ import {
   type EquityStreamState,
 } from "../../hooks/useEquityStream";
 import { useNow } from "../../hooks/useNow";
-import {
-  formatAge,
-  isClearlyStale,
-  isStale,
-} from "../../lib/dataFreshness";
+import { formatAge, isClearlyStale, isStale } from "../../lib/dataFreshness";
 import type { EquitySnapshot } from "../../../server/types/equity";
 import type { BrokerId } from "../../types/broker";
 
@@ -96,12 +92,14 @@ export function LiveEquityView({
   error,
   brokerId,
   onApplyEquity,
+  totalProfitUsd,
 }: EquityStreamState & {
+  /** Total P&L USD posisi MT5 otomatis; null = pakai profit terminal. */
+  totalProfitUsd?: number | null;
   /** Hanya untuk petunjuk sumber di pesan offline. */
   brokerId?: BrokerId;
   onApplyEquity?: (equity: number) => void;
 }): JSX.Element {
-
   // Tahap P2 — kesegaran data (anti-timezone, sama seperti LiveQuotes).
   // Lihat catatan disable terlingkup di LiveQuotes.tsx.
   const nowMs = useNow();
@@ -191,11 +189,13 @@ export function LiveEquityView({
               data-testid="live-equity-profit"
               className={[
                 "mt-1 text-base font-bold",
-                equity.profit >= 0 ? "text-emerald-300" : "text-red-300",
+                (totalProfitUsd ?? equity.profit) >= 0
+                  ? "text-emerald-300"
+                  : "text-red-300",
               ].join(" ")}
             >
-              {equity.profit >= 0 ? "+" : ""}
-              {equity.profit.toFixed(2)}
+              {(totalProfitUsd ?? equity.profit) >= 0 ? "+" : ""}
+              {(totalProfitUsd ?? equity.profit).toFixed(2)}
             </dd>
           </div>
           <div className="rounded-xl border border-white/10 bg-slate-950/50 p-2.5">

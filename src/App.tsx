@@ -1083,6 +1083,7 @@ export default function App() {
             <LiveQuotes symbol={market.symbol} brokerId={activeBrokerId} />
             <LiveEquityView
               {...equityStream}
+              totalProfitUsd={autoProfitUsd}
               brokerId={activeBrokerId}
               onApplyEquity={(liveEquity) => {
                 if (!Number.isFinite(liveEquity) || liveEquity <= 0) return;
