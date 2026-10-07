@@ -50,15 +50,18 @@ void Export()
       double sl     = PositionGetDouble(POSITION_SL);
       double tp     = PositionGetDouble(POSITION_TP);
       datetime t    = (datetime)PositionGetInteger(POSITION_TIME);
+      // Presisi per SIMBOL posisi (bukan _Digits milik chart EA):
+      // tanpa ini AUDUSD 0.69812 terekam 0.698 bila EA di chart CFD.
+      int    digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
       // FileClose tiap tulis agar backend bisa shared-read (tanpa lock).
       FileWrite(handle,
                 ticket,
                 symbol,
                 (ptype == POSITION_TYPE_BUY ? "BUY" : "SELL"),
                 DoubleToString(vol, 2),
-                DoubleToString(open, _Digits),
-                DoubleToString(sl, _Digits),
-                DoubleToString(tp, _Digits),
+                DoubleToString(open, digits),
+                DoubleToString(sl, digits),
+                DoubleToString(tp, digits),
                 TimeToString(t, TIME_DATE | TIME_SECONDS));
      }
    FileClose(handle);

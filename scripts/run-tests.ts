@@ -167,6 +167,7 @@ import {
   type Holding,
   BREAKEVEN_R_MULTIPLE,
   checkBreakeven,
+  formatPriceDistance,
 } from "../src/lib/exitMonitor";
 import {
   createFreshWorkspace,
@@ -5992,6 +5993,14 @@ test("287. fetchECBRates() returns rates object (mock/live)", () => {
       (maybePromise === undefined || typeof maybePromise === "function"),
     "fetch boundary tidak aman",
   );
+});
+
+test("513. formatPriceDistance: jarak forex tidak terpotong jadi 0", () => {
+  assert(formatPriceDistance(0.00186) === "0.00186", "forex 5 desimal");
+  assert(formatPriceDistance(-0.00186) === "0.00186", "selalu absolut");
+  assert(formatPriceDistance(187.5) === "187.50", "indeks 2 desimal");
+  assert(formatPriceDistance(1.2345) === "1.234" || formatPriceDistance(1.2345) === "1.235", "menengah 3 desimal");
+  assert(formatPriceDistance(Number.NaN) === "-", "NaN aman");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

@@ -206,6 +206,19 @@ function round2(value: number): number {
 }
 
 /**
+ * Jarak harga untuk teks badge. round2 memotong jarak forex (0.00186)
+ * menjadi "0"; presisi mengikuti besaran jarak (forex 5 desimal,
+ * indeks/saham 2 desimal).
+ */
+export function formatPriceDistance(distance: number): string {
+  const d = Math.abs(distance);
+  if (!Number.isFinite(d)) return "-";
+  if (d >= 10) return d.toFixed(2);
+  if (d >= 1) return d.toFixed(3);
+  return d.toFixed(5);
+}
+
+/**
  * Evaluasi sinyal exit untuk satu holding pada harga berjalan.
  * Urutan: TP tersentuh → SL tersentuh → dekat TP/SL → drift harga 0,5%
  * → drift risiko 50% → HOLD. Tak pernah throw; input invalid → HOLD.
@@ -327,7 +340,7 @@ export function evaluateExitSignal(
       return {
         signal: "WARN_NEAR_TP",
         reasons: [
-          `Dekat target (${round2(Math.abs(ref - holding.tp))} lagi). Siapkan exit bertahap.`,
+          `Dekat target (${formatPriceDistance(ref - holding.tp)} lagi). Siapkan exit bertahap.`,
         ],
         ...base,
       };
@@ -336,7 +349,7 @@ export function evaluateExitSignal(
       return {
         signal: "WARN_NEAR_SL",
         reasons: [
-          `Dekat stop loss (${round2(Math.abs(ref - holding.sl))} lagi). Jangan geser SL.`,
+          `Dekat stop loss (${formatPriceDistance(ref - holding.sl)} lagi). Jangan geser SL.`,
         ],
         ...base,
       };
