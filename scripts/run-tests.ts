@@ -32,6 +32,8 @@ import {
 } from "../src/calculations/decisionEngine";
 import { formatSharePercent, signalReason } from "../src/lib/signalReason";
 import { collectCandleItems } from "../server/routes/candlesRoutes";
+import { createTradeEntryLog } from "../server/services/tradeEntryLog";
+import { getBackupStatus, runBackup } from "../server/services/dataBackup";
 import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
 import {
   SUPPORTED_SYMBOLS,
@@ -6141,6 +6143,37 @@ test("523. format biaya satu desimal gaya Indonesia", () => {
   assert(/biaya \d+,\d%/.test(signalReason(mahal)), signalReason(mahal));
 });
 
+test("524. catatan entry: posisi lama tanpa scan, posisi baru dipindai, tanpa duplikat setelah restart", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "entries-"));
+  nfs.writeFileSync(npath.join(dir, "MDBKA_GBPUSD_H1.csv"), scanCsv(80));
+  const quotes = { getSymbols: () => ["GBPUSD"], getLatestBySymbol: () => [] };
+  const file = npath.join(dir, "trades", "entries-finex.jsonl");
+  const mk = () =>
+    createTradeEntryLog({
+      file, broker: "finex", commonDir: dir, quotes,
+      getEquity: () => 10000, getFxRates: () => null,
+      now: () => new Date("2026-10-08T00:00:00Z"),
+    });
+  const pos = (ticket: string) => ({
+    ticket, symbol: "GBPUSD", side: "BUY" as const, volume: 0.01,
+    priceOpen: 1.3, sl: 1.29, tp: 1.31, timeOpen: "2026.10.07 20:00:00",
+  });
+  const log = mk();
+  const awal = log.ingest([pos("100")]);
+  assert(awal.length === 1 && awal[0].preExisting && awal[0].scan === null, "posisi saat start harus preExisting tanpa scan");
+  assert(log.ingest([pos("100")]).length === 0, "tiket sama tidak boleh dicatat ulang");
+  const baru = log.ingest([pos("100"), pos("101")]);
+  assert(baru.length === 1 && baru[0].ticket === "101" && !baru[0].preExisting, "posisi baru harus dicatat");
+  assert(baru[0].scan !== null && baru[0].scan.status !== "DATA", `scan entry harus ada: ${JSON.stringify(baru[0].scan)}`);
+  assert(baru[0].sl === 1.29 && baru[0].tp === 1.31 && baru[0].equity === 10000, "SL/TP/equity entry hilang");
+  const restart = mk();
+  assert(restart.ingest([pos("100"), pos("101")]).length === 0, "setelah restart tidak boleh duplikat");
+  assert(restart.readAll().length === 2, `file harus 2 catatan, dapat ${restart.readAll().length}`);
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
@@ -9489,6 +9522,41 @@ test("472. kanonis + profil preservasi nama bertitik/bertanda", () => {
     // Samakan dengan LIVE_SOURCE_TEST_COUNT di
     // server/types/liveSource.test.ts.
     failed += 8;
+  }
+
+  // 525: backup data MDBKA (async: salin berkas).
+  try {
+    const os = require("node:os") as unknown as { tmpdir(): string };
+    const nfs = require("node:fs") as unknown as typeof import("node:fs");
+    const npath = require("node:path") as unknown as typeof import("node:path");
+    const root = nfs.mkdtempSync(npath.join(os.tmpdir(), "backup-"));
+    const dataDir = npath.join(root, "data");
+    const backupDir = npath.join(root, "bak");
+    nfs.mkdirSync(npath.join(dataDir, "trades"), { recursive: true });
+    nfs.mkdirSync(npath.join(dataDir, "history", "otb"), { recursive: true });
+    nfs.writeFileSync(npath.join(dataDir, "trades", "entries-finex.jsonl"), "{}\n");
+    nfs.writeFileSync(npath.join(dataDir, "history", "otb", "ticks-1.jsonl"), "x\n");
+    const awal = getBackupStatus(dataDir, backupDir);
+    assert(awal.due && awal.last === null, "belum pernah backup harus due");
+    const m = await runBackup(dataDir, backupDir, new Date(Date.now() + 1000));
+    assert(m.files === 1 && m.historyCopied === 1, `salin: ${m.files} penting, ${m.historyCopied} tick`);
+    assert(
+      nfs.existsSync(npath.join(backupDir, m.snapshot, "trades", "entries-finex.jsonl")),
+      "file penting tidak tersalin ke snapshot",
+    );
+    assert(
+      !nfs.existsSync(npath.join(backupDir, m.snapshot, "history")),
+      "arsip tick tidak boleh masuk snapshot (mirror terpisah)",
+    );
+    const sesudah = getBackupStatus(dataDir, backupDir);
+    assert(!sesudah.due && sesudah.historyPending === 0, `sesudah backup harus terbaru: ${sesudah.reason}`);
+    const m2 = await runBackup(dataDir, backupDir, new Date(Date.now() + 2000));
+    assert(m2.historyCopied === 0, "arsip tick yang sama tidak boleh disalin ulang");
+    passed += 1;
+    console.log("ok - 525. backup: snapshot data penting + mirror tick bertahap + pengingat");
+  } catch (e) {
+    failed += 1;
+    console.log(`FAIL - 525. backup: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   console.log(

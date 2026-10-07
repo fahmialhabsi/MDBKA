@@ -28,6 +28,11 @@ interface FxCache {
 
 let cache: FxCache | null = null;
 
+/** Kurs ECB terakhir di cache (null bila belum pernah diambil). Langkah 4b. */
+export function getCachedEcbRates(): ExchangeRates | null {
+  return cache?.rates ?? null;
+}
+
 /** True bila cache masih segar (murni, untuk test). */
 export function isFxCacheFresh(
   cachedAtMs: number,

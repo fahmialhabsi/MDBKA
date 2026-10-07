@@ -12,6 +12,9 @@ import * as dotenv from "dotenv";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createApp } from "./app";
+import { getCachedEcbRates } from "./routes/fxRoutes";
+import { resolveCommonFilesDir } from "./routes/marginRoutes";
+import { createTradeEntryLog } from "./services/tradeEntryLog";
 import { MT5LogReader } from "./services/mt5LogReader";
 import { QuotesLogReader } from "./services/quotesLogReader";
 import { PositionsLogReader } from "./services/positionsLogReader";
@@ -182,6 +185,40 @@ async function startServer() {
     await positionsReaderFinex.init().catch(() => {
       console.log(`⚠ Positions Finex init ditunda (file terkunci/hilang)`);
     });
+  }
+
+  // Langkah 4b Mode Aman: catat tiap posisi baru (SL/TP awal + hasil
+  // pemindai saat entry) ke data/trades/entries-<broker>.jsonl.
+  const tradesDir = path.join(process.cwd(), "data", "trades");
+  const entrySources = [
+    { broker: "orbitraderberjangka" as const, positions: positionsReader, quotes: quotesReader, equity: reader },
+    { broker: "finex" as const, positions: positionsReaderFinex, quotes: quotesReaderFinex, equity: readerFinex },
+  ];
+  for (const src of entrySources) {
+    if (src.positions === null || src.quotes === null) continue;
+    const equityReader = src.equity;
+    const log = createTradeEntryLog({
+      file: path.join(tradesDir, `entries-${src.broker}.jsonl`),
+      broker: src.broker,
+      commonDir: resolveCommonFilesDir(),
+      quotes: src.quotes,
+      getEquity: () => equityReader?.getLatest()?.equity ?? null,
+      getFxRates: getCachedEcbRates,
+    });
+    const record = (positions: readonly import("./types/positions").BrokerPosition[]): void => {
+      try {
+        for (const rec of log.ingest(positions)) {
+          console.log(
+            `✓ Entry ${src.broker} #${rec.ticket} ${rec.symbol} ${rec.side}` +
+              (rec.preExisting ? " (sudah terbuka saat start)" : ` → ${rec.scan?.status ?? "-"}`),
+          );
+        }
+      } catch (e) {
+        console.log(`⚠ Catat entry ${src.broker} gagal: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    };
+    record(src.positions.getAll());
+    src.positions.onUpdate(record);
   }
 
   const server = app.listen(PORT, () => {

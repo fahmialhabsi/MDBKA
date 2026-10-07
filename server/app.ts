@@ -17,6 +17,7 @@ import { createSwapLogRoutes } from "./routes/swapLogRoutes";
 import { createJurnalPajakRoutes } from "./routes/jurnalPajakRoutes";
 import { createPajakRoutes } from "./routes/pajakRoutes";
 import { createCandlesRoutes } from "./routes/candlesRoutes";
+import { createBackupRoutes } from "./routes/backupRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
 import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
 
@@ -68,6 +69,8 @@ export function createApp(
   // Langkah 3a Mode Aman: CSV candle H1 + quote terakhir per simbol broker
   // (bahan pemindai simbol di frontend).
   app.use("/api/candles", createCandlesRoutes(quotesReader, quotesReaderFinex));
+  // Backup data MDBKA (pengingat + tombol "Backup sekarang").
+  app.use("/api/backup", createBackupRoutes());
   app.use(
     "/api/positions",
     createPositionsRoutes(positionsReader, positionsReaderFinex),
