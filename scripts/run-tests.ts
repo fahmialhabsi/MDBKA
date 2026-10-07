@@ -224,6 +224,7 @@ import {
   parseEquityFromText,
 } from "../server/services/mt5LogReader";
 import { isEquitySnapshot } from "../server/types/equity";
+import { autoCsvFileName, autoLoadKey, findCandleItem } from "../src/lib/autoCandle";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -6290,6 +6291,29 @@ test("530. Mode Aman: breakeven 0,5R & time-stop 3 jam (jam server MT5)", () => 
   // Holding manual (ISO UTC) beda jam dengan quote server → tidak dinilai.
   assert(checkTimeStop({ entryTime: "2026-10-06T05:41:45.000Z" }, "2026.10.07 20:25:07") === null, "ISO ikut dinilai");
   assert(checkTimeStop(h, "") === null, "tanpa jam quote");
+});
+
+test("531. analisa otomatis: cari CSV simbol + nama file sintetis", () => {
+  const items = [
+    { symbol: "AUDUSD_ORB", csv: "a" },
+    { symbol: "#META", csv: "m" },
+    { symbol: "US30", csv: "u" },
+  ];
+  assert(findCandleItem(items, "AUDUSD_ORB")?.csv === "a", "exact OTB");
+  assert(findCandleItem(items, "#meta")?.csv === "m", "beda huruf besar/kecil");
+  assert(findCandleItem(items, "US30.DEC") === null, "tidak boleh cocok sebagian");
+  assert(findCandleItem(items, "") === null, "simbol kosong");
+  assert(autoCsvFileName("AUDUSD_ORB") === "MDBKA_AUDUSD_ORB_H1.csv", autoCsvFileName("AUDUSD_ORB"));
+});
+
+test("532. analisa otomatis: kunci muat & wiring App (readSrc)", () => {
+  assert(autoLoadKey("finex", "EURUSD", "") === "finex|EURUSD", "kunci");
+  assert(autoLoadKey("finex", "", "") === null, "simbol kosong tidak dimuat");
+  assert(autoLoadKey("finex", "EURUSD", "upload.csv") === null, "upload manual tidak ditimpa");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("/api/candles?broker=${activeBrokerId}"), "App tidak memakai /api/candles");
+  assert(app.includes("handleCsvLoadedRef.current(item.csv, autoCsvFileName(symbol))"), "tidak lewat alur upload yang sama");
+  assert(app.includes("<CsvFileConnector"), "upload manual cadangan hilang");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

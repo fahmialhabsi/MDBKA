@@ -81,6 +81,12 @@ import {
   type ExchangeRates,
 } from "./services/fxRateService";
 import { API_BASE_URL } from "./lib/apiBaseUrl";
+import {
+  autoCsvFileName,
+  autoLoadKey,
+  findCandleItem,
+  type CandleItemLike,
+} from "./lib/autoCandle";
 
 const initialMarket: MarketData = {
   symbol: "GBPUSD",
@@ -665,6 +671,57 @@ export default function App() {
     },
     [],
   );
+
+  // Langkah A: analisa otomatis tanpa upload. Simbol dipilih & belum ada
+  // CSV terhubung → ambil CSV H1 dari server (AutoExportMDBKAService) lalu
+  // lewat alur yang SAMA dengan upload manual. Upload tetap jadi cadangan.
+  const handleCsvLoadedRef = useRef(handleCsvLoaded);
+  useEffect(() => {
+    handleCsvLoadedRef.current = handleCsvLoaded;
+  }, [handleCsvLoaded]);
+  const autoLoadKeyRef = useRef("");
+  useEffect(() => {
+    const symbol = canonicalSymbolForBroker(market.symbol, activeBrokerId);
+    const key = autoLoadKey(activeBrokerId, symbol, connectedCsvName);
+    if (key === null || key === autoLoadKeyRef.current) return;
+    autoLoadKeyRef.current = key;
+    let cancelled = false;
+    let done = false;
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/api/candles?broker=${activeBrokerId}`,
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as { items?: CandleItemLike[] };
+        if (cancelled) return;
+        done = true;
+        const item = findCandleItem(
+          Array.isArray(body.items) ? body.items : [],
+          symbol,
+        );
+        if (item === null) {
+          setSymbolNotice(
+            `Data otomatis ${symbol} belum ada. Pastikan simbol ada di Market Watch MT5, atau upload CSV manual.`,
+          );
+          return;
+        }
+        handleCsvLoadedRef.current(item.csv, autoCsvFileName(symbol));
+      } catch (e) {
+        if (cancelled) return;
+        done = true;
+        setSymbolNotice(
+          `Gagal memuat data otomatis ${symbol} (${e instanceof Error ? e.message : String(e)}). Upload CSV manual bisa dipakai.`,
+        );
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+      // Dibatalkan sebelum selesai → izinkan coba lagi untuk kunci yang sama.
+      if (!done && autoLoadKeyRef.current === key) autoLoadKeyRef.current = "";
+    };
+  }, [market.symbol, activeBrokerId, connectedCsvName]);
 
   const handleApplyBrokerPreset = useCallback(() => {
     setBroker((previous) =>
