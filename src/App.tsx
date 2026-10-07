@@ -958,6 +958,43 @@ export default function App() {
               </p>
 
               <Panel
+                icon={<Activity size={20} />}
+                title="6. Hasil analisa"
+                description={
+                  confirmed
+                    ? "Hasil dihitung otomatis dari CSV yang dihubungkan."
+                    : "Hasil tampil otomatis setelah file CSV dihubungkan."
+                }
+              >
+                <AnalysisResult
+                  result={result}
+                  market={market}
+                  viewState={viewState}
+                  blockedReasons={blockedReasons}
+                  minLot={broker.minLot}
+                  lotStep={broker.lotStep}
+                  brokerId={activeBrokerId}
+                  fxRates={fxRates}
+                />
+              </Panel>
+
+              <Panel
+                icon={<Landmark size={20} />}
+                title="9. Jurnal Pajak (Finex)"
+                description="Transaksi Finex otomatis dari MT5, kurs pajak ditempel per tanggal, rekap tahunan + unduh CSV."
+              >
+                <JurnalPajakPanel />
+              </Panel>
+
+              <Panel
+                icon={<Landmark size={20} />}
+                title="10. Kewajiban Pajak (Finex)"
+                description="Hitung otomatis jenis pajak, pasal, kode setoran, dan nilai yang harus dibayar; catat pembayaran dan unggah bukti bayar."
+              >
+                <KewajibanPajakPanel />
+              </Panel>
+
+              <Panel
                 icon={<ShieldCheck size={20} />}
                 title={`2. Atur parameter broker dan risiko — ${activeBrokerLabel}`}
                 description="Nilai point dan contract size wajib diverifikasi dari broker."
@@ -1014,27 +1051,6 @@ export default function App() {
             </div>
 
             <Panel
-              icon={<Activity size={20} />}
-              title="6. Hasil analisa"
-              description={
-                confirmed
-                  ? "Hasil dihitung otomatis dari CSV yang dihubungkan."
-                  : "Hasil tampil otomatis setelah file CSV dihubungkan."
-              }
-            >
-              <AnalysisResult
-                result={result}
-                market={market}
-                viewState={viewState}
-                blockedReasons={blockedReasons}
-                minLot={broker.minLot}
-                lotStep={broker.lotStep}
-                brokerId={activeBrokerId}
-                fxRates={fxRates}
-              />
-            </Panel>
-
-            <Panel
               icon={<Briefcase size={20} />}
               title="7. Monitor posisi (manual)"
               description="Catat posisi MT5 manual; pantau P&L live + sinyal exit. Tanpa order."
@@ -1052,22 +1068,6 @@ export default function App() {
               description="Catatan EA MDBKASwapLogger jam demi jam: swap nyata terminal vs prediksi rumus ÷360."
             >
               <SwapLogPanel brokerId={activeBrokerId} />
-            </Panel>
-
-            <Panel
-              icon={<Landmark size={20} />}
-              title="9. Jurnal Pajak (Finex)"
-              description="Transaksi Finex otomatis dari MT5, kurs pajak ditempel per tanggal, rekap tahunan + unduh CSV."
-            >
-              <JurnalPajakPanel />
-            </Panel>
-
-            <Panel
-              icon={<Landmark size={20} />}
-              title="10. Kewajiban Pajak (Finex)"
-              description="Hitung otomatis jenis pajak, pasal, kode setoran, dan nilai yang harus dibayar; catat pembayaran dan unggah bukti bayar."
-            >
-              <KewajibanPajakPanel />
             </Panel>
           </div>
 
