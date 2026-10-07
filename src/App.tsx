@@ -11,6 +11,7 @@ import {
   BarChart3,
   Briefcase,
   History,
+  Landmark,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { LiveEquityView } from "./components/result/LiveEquity";
 import { useEquityStream } from "./hooks/useEquityStream";
 import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
 import { SwapLogPanel } from "./components/swaplog/SwapLogPanel";
+import { JurnalPajakPanel } from "./components/jurnal/JurnalPajakPanel";
 import {
   createWorkspaceStore,
   hasWorkspaceWork,
@@ -1060,6 +1062,14 @@ export default function App() {
               description="Catatan EA MDBKASwapLogger jam demi jam: swap nyata terminal vs prediksi rumus ÷360."
             >
               <SwapLogPanel brokerId={activeBrokerId} />
+            </Panel>
+
+            <Panel
+              icon={<Landmark size={20} />}
+              title="9. Jurnal Pajak (Finex)"
+              description="Transaksi Finex otomatis dari MT5, kurs pajak ditempel per tanggal, rekap tahunan + unduh CSV."
+            >
+              <JurnalPajakPanel />
             </Panel>
           </div>
 
