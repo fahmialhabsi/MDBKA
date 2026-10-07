@@ -32,6 +32,7 @@ import {
 } from "../src/calculations/decisionEngine";
 import { signalReason } from "../src/lib/signalReason";
 import { collectCandleItems } from "../server/routes/candlesRoutes";
+import { scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
 import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
@@ -6080,6 +6081,45 @@ test("518. candles: hanya simbol broker yang punya CSV H1, plus quote terakhir",
   assert(gbp !== undefined && gbp.csv === csv, "isi CSV berubah");
   const aapl = items.find((i) => i.symbol === "#AAPL");
   assert(aapl !== undefined && aapl.quote === null, "simbol tanpa quote = null");
+});
+
+function scanCsv(n: number): string {
+  const rows = ["time,open,high,low,close,tick_volume"];
+  for (let i = 0; i < n; i++) {
+    const base = 1.3 + 0.002 * Math.sin(i / 5) + 0.00003 * i;
+    const day = String(1 + Math.floor(i / 24)).padStart(2, "0");
+    const hour = String(i % 24).padStart(2, "0");
+    rows.push(
+      `2026.10.${day} ${hour}:00,${base.toFixed(5)},${(base + 0.0009).toFixed(5)},${(base - 0.0009).toFixed(5)},${(base + 0.0003).toFixed(5)},100`,
+    );
+  }
+  return rows.join("\n");
+}
+
+test("519. pemindai: candle kurang dan equity kosong jadi DATA (tanpa angka fiktif)", () => {
+  const pendek = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: scanCsv(10), quote: null, equity: 1000, fxRates: null });
+  assert(pendek.status === "DATA" && pendek.decision === null, `pendek: ${pendek.status}`);
+  assert(pendek.reason.includes("Candle kurang"), pendek.reason);
+  const tanpaEquity = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: scanCsv(80), quote: null, equity: 0, fxRates: null });
+  assert(tanpaEquity.status === "DATA", `tanpa equity: ${tanpaEquity.status} ${tanpaEquity.reason}`);
+});
+
+test("520. pemindai: CSV valid menghasilkan keputusan + alasan dari mesin yang sama", () => {
+  const row = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: scanCsv(80), quote: null, equity: 10000, fxRates: null });
+  assert(row.status !== "DATA", `harus dianalisa, dapat DATA: ${row.reason}`);
+  assert(row.decision !== null && row.score !== null, "keputusan/skor hilang");
+  assert(row.reason.length > 0 && row.candles === 80, "alasan/candle hilang");
+});
+
+test("521. pemindai: urutan LOLOS > ditahan biaya > ditahan risiko > TUNGGU > DATA", () => {
+  const mk = (symbol: string, status: ScanRow["status"], score: number | null, cost: number | null): ScanRow =>
+    ({ symbol, status, decision: null, score, reason: "", costShareOfRisk: cost, candles: 80 });
+  const sorted = sortScanRows([
+    mk("D", "DATA", null, null), mk("T", "TUNGGU", 1, 0.05), mk("R", "DITAHAN_RISIKO", 4, 0.05),
+    mk("B2", "DITAHAN_BIAYA", 3, 0.2), mk("B1", "DITAHAN_BIAYA", 5, 0.3), mk("L", "LOLOS", 3, 0.05),
+  ]);
+  const got = sorted.map((r) => r.symbol).join(",");
+  assert(got === "L,B1,B2,R,T,D", `urutan salah: ${got}`);
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

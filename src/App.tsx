@@ -37,10 +37,7 @@ import dashboard from "./styles/dashboard.module.css";
 import { analyzeMarket } from "./calculations/decisionEngine";
 import { detectScaleMismatch } from "./calculations/scaleValidator";
 import { validateAnalysisInputs } from "./calculations/inputValidator";
-import {
-  getInstrumentProfile,
-  SUPPORTED_SYMBOLS,
-} from "./lib/instrumentConfig";
+import { SUPPORTED_SYMBOLS } from "./lib/instrumentConfig";
 import { parseCsvCandles } from "./lib/csvCandleParser";
 import { resolveSwingLevels } from "./calculations/swingDetector";
 import { computeIndicators } from "./calculations/indicators";
@@ -57,9 +54,9 @@ import {
   OTB_ALL_SYMBOLS,
 } from "./lib/brokerSymbols";
 
-import { getOtbInstrumentProfile } from "./lib/otbInstrumentConfig";
 import { withUsdPointValue } from "./lib/usdPointValue";
 import { resolveCsvBidAsk } from "./lib/csvQuote";
+import { tickSizeForSymbol } from "./lib/tickSize";
 import type { BrokerSettings, MarketData } from "./types/analysis";
 import type { BrokerId } from "./types/broker";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
@@ -147,22 +144,6 @@ const emptyBroker: BrokerSettings = {
   atrMultiplier: 0,
   targetRR: 0,
 };
-
-/**
- * Ukuran 1 tick untuk simbol (dipakai sebagai spread minimal placeholder
- * saat auto-fill Bid/Ask dari candle CSV). OTB dibaca dari profil
- * Specification (EXACT, _ORB terjaga); selainnya dari instrumentConfig.
- * Selalu > 0 agar guard ask > bid lolos.
- */
-function tickSizeForSymbol(symbol: string): number {
-  const otb = getOtbInstrumentProfile(symbol.trim().toUpperCase());
-  if (otb !== null && otb.tickSize > 0) return otb.tickSize;
-  const profile = getInstrumentProfile(symbol);
-  if (profile.category !== "unknown" && profile.decimals > 0) {
-    return Math.pow(10, -profile.decimals);
-  }
-  return 0.00001;
-}
 
 export default function App() {
   const [swingCsv, setSwingCsv] = useState("");
