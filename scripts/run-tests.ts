@@ -122,9 +122,11 @@ import { parseSwapLogCsv, swapLogLogin } from "../server/types/swapLogCsv";
 import { extractIdrAmount, parseHistoryCsv } from "../server/types/historyCsv";
 import {
   applyKursRules,
+  DEFAULT_SERVER_UTC_OFFSET_HOURS,
   entriesToCsv,
   mergeDeals,
   parseKursText,
+  serverDateWib,
   summarizeByYear,
   updateEntry,
 } from "../server/types/jurnalPajak";
@@ -2038,6 +2040,38 @@ test("506. kurs pajak tempel: tanggal/rentang menimpa kurs per transaksi, baris 
   assert(byId("4")?.kursIdr === null, "di luar rentang harus tetap null");
 });
 
+test("513. jurnalPajak: tanggal transaksi untuk kurs = tanggal WIB (server UTC+1, WIB +6 jam)", () => {
+  assert(
+    DEFAULT_SERVER_UTC_OFFSET_HOURS === 1,
+    "default offset server harus +1",
+  );
+  assert(
+    serverDateWib("2026.09.29 17:59:59") === "2026-09-29",
+    "17:59 server masih 29 Sep WIB",
+  );
+  assert(
+    serverDateWib("2026.09.29 18:00:00") === "2026-09-30",
+    "18:00 server = 00:00 WIB 30 Sep",
+  );
+  assert(
+    serverDateWib("2026.10.06 23:08:54") === "2026-10-07",
+    "malam server geser ke tanggal WIB berikutnya",
+  );
+  assert(
+    serverDateWib("2026.09.29 03:47:04") === "2026-09-29",
+    "pagi server tetap tanggal yang sama",
+  );
+  assert(
+    serverDateWib("2026.09.29 16:59:59", 0) === "2026-09-29" &&
+      serverDateWib("2026.09.29 17:00:00", 0) === "2026-09-30",
+    "offset 0 (server UTC): batas pindah hari pukul 17:00",
+  );
+  assert(
+    serverDateWib("rusak") === "rusak",
+    "format tak dikenal dikembalikan apa adanya",
+  );
+});
+
 test("507. jurnalPajakStore: sinkron otomatis idempoten, kurs tempel & catatan tersimpan, CSV ekspor", () => {
   const os = require("node:os") as unknown as { tmpdir(): string };
   const fs = require("node:fs") as unknown as typeof import("node:fs");
@@ -2052,27 +2086,52 @@ test("507. jurnalPajakStore: sinkron otomatis idempoten, kurs tempel & catatan t
   ];
   const csvPath = path.join(dir, "MDBKA_History_91811209.csv");
   const file = path.join(dir, "data", "jurnal.json");
-  const store = createJurnalPajakStore({ commonDir: dir, file, login: "91811209" });
+  const store = createJurnalPajakStore({
+    commonDir: dir,
+    file,
+    login: "91811209",
+  });
   assert(store.sync() === null, "tanpa CSV harus null");
   fs.writeFileSync(csvPath, [header, ...body, ""].join("\r\n"), "utf8");
   const s1 = store.sync();
-  assert(s1 !== null && s1.added === 3 && s1.total === 3, "sinkron pertama salah");
+  assert(
+    s1 !== null && s1.added === 3 && s1.total === 3,
+    "sinkron pertama salah",
+  );
   const s2 = store.sync();
-  assert(s2 !== null && s2.added === 0 && s2.total === 3, "sinkron kedua harus 0 baru");
+  assert(
+    s2 !== null && s2.added === 0 && s2.total === 3,
+    "sinkron kedua harus 0 baru",
+  );
   const k = store.applyKursText("29/09/2026 16650\nngawur");
-  assert(k.updated === 3 && k.rejected.length === 1, `kurs updated=${k.updated}`);
+  assert(
+    k.updated === 3 && k.rejected.length === 1,
+    `kurs updated=${k.updated}`,
+  );
   assert(store.patch("3", { catatan: "tes" }) === true, "patch gagal");
-  assert(store.patch("999", { catatan: "x" }) === false, "tiket asing harus false");
+  assert(
+    store.patch("999", { catatan: "x" }) === false,
+    "tiket asing harus false",
+  );
   fs.appendFileSync(
     csvPath,
     "4,11,11,2026.09.30 10:00:00,GBPUSD,BUY,IN,0.01,1.3,-0.01,0.00,0.00,0.00,0,,91811209,PT,USD\r\n",
   );
   const s3 = store.sync();
-  assert(s3 !== null && s3.added === 1 && s3.total === 4, "deal baru harus masuk");
+  assert(
+    s3 !== null && s3.added === 1 && s3.total === 4,
+    "deal baru harus masuk",
+  );
   const e3 = store.load().find((e) => e.dealTicket === "3");
-  assert(e3?.kursIdr === 16650 && e3.catatan === "tes", "kurs/catatan hilang setelah sinkron");
+  assert(
+    e3?.kursIdr === 16650 && e3.catatan === "tes",
+    "kurs/catatan hilang setelah sinkron",
+  );
   const csv = entriesToCsv(store.load());
-  assert(csv.charCodeAt(0) === 0xfeff && csv.slice(1).startsWith("DealTicket,"), "BOM/header CSV salah");
+  assert(
+    csv.charCodeAt(0) === 0xfeff && csv.slice(1).startsWith("DealTicket,"),
+    "BOM/header CSV salah",
+  );
   assert(csv.includes("-1.44") && csv.includes("tes"), "isi CSV salah");
   fs.rmSync(dir, { recursive: true, force: true });
 });

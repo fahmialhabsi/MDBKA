@@ -9,11 +9,21 @@ import { dirname, join } from "node:path";
 import { parseHistoryCsv } from "../types/historyCsv";
 import {
   applyKursRules,
+  DEFAULT_SERVER_UTC_OFFSET_HOURS,
   mergeDeals,
   parseKursText,
   updateEntry,
   type JurnalEntry,
 } from "../types/jurnalPajak";
+
+/** Selisih jam server MT5 terhadap UTC; env MT5_SERVER_UTC_OFFSET_HOURS menimpa default. */
+function serverUtcOffsetHours(): number {
+  const raw = (process.env?.["MT5_SERVER_UTC_OFFSET_HOURS"] ?? "").trim();
+  const n = raw === "" ? Number.NaN : Number(raw);
+  return Number.isFinite(n) && n >= -12 && n <= 14
+    ? n
+    : DEFAULT_SERVER_UTC_OFFSET_HOURS;
+}
 
 /**
  * #507 - penyimpanan jurnal pajak Finex (file JSON di data/ proyek).
@@ -80,7 +90,7 @@ export function createJurnalPajakStore(args: {
     },
     applyKursText(text) {
       const { rules, rejected } = parseKursText(text);
-      const applied = applyKursRules(load(), rules);
+      const applied = applyKursRules(load(), rules, serverUtcOffsetHours());
       if (applied.updated > 0) save(applied.entries);
       return { updated: applied.updated, rejected };
     },

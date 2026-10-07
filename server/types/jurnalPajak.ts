@@ -217,14 +217,39 @@ export function parseKursText(text: string): {
   return { rules, rejected };
 }
 
-/** Terapkan aturan kurs (yang di bawah menimpa yang di atas) ke transaksi dalam rentang. */
+/**
+ * Selisih jam server MT5 Finex terhadap UTC. Diukur 2026-10-07: Market Watch
+ * 07:46 saat jam WIB 13:46 (UTC+1). Bisa ditimpa env MT5_SERVER_UTC_OFFSET_HOURS.
+ */
+export const DEFAULT_SERVER_UTC_OFFSET_HOURS = 1;
+const WIB_UTC_OFFSET_HOURS = 7;
+
+/** Tanggal WIB (YYYY-MM-DD) dari waktu server MT5 "YYYY.MM.DD HH:MM:SS". */
+export function serverDateWib(
+  serverTime: string,
+  serverUtcOffsetHours: number = DEFAULT_SERVER_UTC_OFFSET_HOURS,
+): string {
+  const m = /^(\d{4})[.\-/](\d{2})[.\-/](\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(
+    serverTime,
+  );
+  if (m === null) return serverTime.slice(0, 10).replace(/\./g, "-");
+  const utcMs =
+    Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) -
+    serverUtcOffsetHours * 3_600_000;
+  return new Date(utcMs + WIB_UTC_OFFSET_HOURS * 3_600_000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+/** Terapkan aturan kurs (yang di bawah menimpa yang di atas); tanggal transaksi = tanggal WIB. */
 export function applyKursRules(
   entries: readonly JurnalEntry[],
   rules: readonly KursRule[],
+  serverUtcOffsetHours: number = DEFAULT_SERVER_UTC_OFFSET_HOURS,
 ): { entries: JurnalEntry[]; updated: number } {
   let updated = 0;
   const out = entries.map((e) => {
-    const day = e.serverTime.slice(0, 10).replace(/\./g, "-");
+    const day = serverDateWib(e.serverTime, serverUtcOffsetHours);
     let hit: KursRule | null = null;
     for (const r of rules) {
       if (day >= r.from && day <= r.to) hit = r;

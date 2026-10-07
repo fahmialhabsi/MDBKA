@@ -255,7 +255,8 @@ export function KewajibanPajakPanel(): JSX.Element {
           <dd>{liab.jenisPenghasilan}</dd>
           <dt className="text-slate-400">Netto trading (kurs pajak)</dt>
           <dd>
-            {rp(liab.nettoTradingIdr)} (${data.tradingNettoUsd.toFixed(2)})
+            {rp(liab.nettoTradingIdr)} ({data.tradingNettoUsd < 0 ? "-" : ""}$
+            {Math.abs(data.tradingNettoUsd).toFixed(2)})
             {liab.tradingLoss &&
               " - rugi, tidak ditambahkan ke penghasilan kena pajak (asumsi konservatif)"}
           </dd>
@@ -312,7 +313,10 @@ export function KewajibanPajakPanel(): JSX.Element {
             <select
               value={profil.ptkpStatus}
               onChange={(ev) =>
-                setDraft({ ...profil, ptkpStatus: ev.target.value as PtkpStatus })
+                setDraft({
+                  ...profil,
+                  ptkpStatus: ev.target.value as PtkpStatus,
+                })
               }
               className={inputCls}
             >
@@ -337,7 +341,9 @@ export function KewajibanPajakPanel(): JSX.Element {
             <input
               inputMode="numeric"
               value={profil.credit}
-              onChange={(ev) => setDraft({ ...profil, credit: ev.target.value })}
+              onChange={(ev) =>
+                setDraft({ ...profil, credit: ev.target.value })
+              }
               className={inputCls}
             />
           </label>
@@ -465,11 +471,15 @@ export function KewajibanPajakPanel(): JSX.Element {
             )}
             {data.pembayaran.map((p) => (
               <tr key={p.id} className="border-t border-white/5">
-                <td className="px-2 py-1 whitespace-nowrap">{p.tanggalBayar}</td>
+                <td className="px-2 py-1 whitespace-nowrap">
+                  {p.tanggalBayar}
+                </td>
                 <td className="px-2 py-1">{p.jenis}</td>
                 <td className="px-2 py-1 font-mono">{p.kodeAkun}</td>
                 <td className="px-2 py-1">{rp(p.jumlahIdr)}</td>
-                <td className="px-2 py-1 font-mono">{p.ntpn === "" ? "-" : p.ntpn}</td>
+                <td className="px-2 py-1 font-mono">
+                  {p.ntpn === "" ? "-" : p.ntpn}
+                </td>
                 <td className="px-2 py-1">
                   {p.bukti !== null ? (
                     <a
@@ -517,8 +527,8 @@ export function KewajibanPajakPanel(): JSX.Element {
       <p className="text-[11px] text-slate-500">
         Perkiraan berdasarkan UU PPh Pasal 17 ayat (1) huruf a (UU HPP) dan PTKP
         PMK 101/PMK.010/2016; bukan nasihat pajak. Perlakuan rugi trading dan
-        kredit pajak sebaiknya dikonfirmasi ke KPP/konsultan pajak sebelum
-        SPT Tahunan.
+        kredit pajak sebaiknya dikonfirmasi ke KPP/konsultan pajak sebelum SPT
+        Tahunan.
       </p>
     </div>
   );
