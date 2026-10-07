@@ -32,7 +32,9 @@ const rp = (n: number): string =>
 export function JurnalPajakPanel(): JSX.Element {
   const [data, setData] = useState<JurnalResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [kursText, setKursText] = useState("");
+  const [kursFrom, setKursFrom] = useState("");
+  const [kursTo, setKursTo] = useState("");
+  const [kursValue, setKursValue] = useState("");
   const [kursMsg, setKursMsg] = useState<string | null>(null);
 
   const [tick, setTick] = useState(0);
@@ -62,12 +64,19 @@ export function JurnalPajakPanel(): JSX.Element {
     };
   }, [tick]);
 
+  const kursReady =
+    kursFrom !== "" && kursTo !== "" && kursValue.trim() !== "" && kursFrom <= kursTo;
+
   const applyKurs = async (): Promise<void> => {
+    if (!kursReady) {
+      setKursMsg("Isi tanggal mulai, tanggal akhir (tidak boleh lebih awal), dan nilai kurs.");
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/api/jurnal-pajak/kurs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: kursText }),
+        body: JSON.stringify({ text: `${kursFrom} s/d ${kursTo} ${kursValue.trim()}` }),
       });
       const body = (await res.json()) as {
         updated?: number;
@@ -162,22 +171,46 @@ export function JurnalPajakPanel(): JSX.Element {
       </p>
 
       <div className="space-y-2 rounded-xl border border-white/10 p-3">
-        <label className="text-xs font-semibold text-slate-300" htmlFor="kurs-pajak">
-          Tempel kurs pajak (satu baris per tanggal atau rentang)
-        </label>
-        <textarea
-          id="kurs-pajak"
-          value={kursText}
-          onChange={(e) => setKursText(e.target.value)}
-          rows={4}
-          placeholder={"2026-09-29 16650\n30/09/2026 s/d 06/10/2026 16.700,00"}
-          className="w-full rounded-lg border border-white/10 bg-slate-950 p-2 font-mono text-xs text-slate-200"
-        />
+        <p className="text-xs font-semibold text-slate-300">
+          Kurs pajak (KMK): pilih rentang tanggal, tempel nilai kurs, lalu Terapkan
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="space-y-1 text-xs text-slate-400">
+            Dari tanggal
+            <input
+              type="date"
+              value={kursFrom}
+              onChange={(ev) => setKursFrom(ev.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-xs text-slate-200"
+            />
+          </label>
+          <label className="space-y-1 text-xs text-slate-400">
+            Sampai tanggal
+            <input
+              type="date"
+              value={kursTo}
+              min={kursFrom}
+              onChange={(ev) => setKursTo(ev.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-xs text-slate-200"
+            />
+          </label>
+          <label className="space-y-1 text-xs text-slate-400">
+            Kurs (Rp per 1 USD)
+            <input
+              type="text"
+              inputMode="decimal"
+              value={kursValue}
+              onChange={(ev) => setKursValue(ev.target.value)}
+              placeholder="contoh: 16.650,00"
+              className="w-full rounded-lg border border-white/10 bg-slate-950 p-2 font-mono text-xs text-slate-200"
+            />
+          </label>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={() => void applyKurs()}
-            disabled={kursText.trim() === ""}
+            disabled={!kursReady}
             className="rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 disabled:opacity-40"
           >
             Terapkan kurs

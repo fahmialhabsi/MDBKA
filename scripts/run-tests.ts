@@ -129,6 +129,11 @@ import {
   updateEntry,
 } from "../server/types/jurnalPajak";
 import { createJurnalPajakStore } from "../server/services/jurnalPajakStore";
+import {
+  calculateTaxLiability,
+  progressiveTax,
+  ptkpAmount,
+} from "../server/types/pajakOP";
 import { predictDailySwap } from "../src/lib/swapPrediction";
 import {
   ADVERSE_DRIFT_PCT,
@@ -2055,6 +2060,90 @@ test("507. jurnalPajakStore: sinkron otomatis idempoten, kurs tempel & catatan t
   assert(csv.charCodeAt(0) === 0xfeff && csv.slice(1).startsWith("DealTicket,"), "BOM/header CSV salah");
   assert(csv.includes("-1.44") && csv.includes("tes"), "isi CSV salah");
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("508. pajakOP: tarif Pasal 17 HPP, PTKP, bagian trading, rugi, kredit pajak", () => {
+  assert(ptkpAmount("TK/0") === 54_000_000, "PTKP TK/0 salah");
+  assert(ptkpAmount("K/0") === 58_500_000, "PTKP K/0 salah");
+  assert(
+    ptkpAmount("K/I/3") === 126_000_000,
+    `PTKP K/I/3=${ptkpAmount("K/I/3")}`,
+  );
+  assert(progressiveTax(46_000_000) === 2_300_000, "5% salah");
+  assert(progressiveTax(96_000_000) === 8_400_000, "lapis 15% salah");
+  assert(
+    progressiveTax(54_123_456) === 2_706_150,
+    `pembulatan=${progressiveTax(54_123_456)}`,
+  );
+  assert(
+    progressiveTax(300_000_000) === 3_000_000 + 28_500_000 + 12_500_000,
+    "lapis 25% salah",
+  );
+  assert(
+    progressiveTax(6_000_000_000) ===
+      3_000_000 + 28_500_000 + 62_500_000 + 1_350_000_000 + 350_000_000,
+    "lapis 35% salah",
+  );
+  const solo = calculateTaxLiability({
+    year: 2026,
+    nettoTradingIdr: 100_000_000,
+    otherNetIncomeIdr: 0,
+    ptkpStatus: "TK/0",
+    creditIdr: 0,
+  });
+  assert(
+    solo.pkpTotalIdr === 46_000_000 && solo.taxTotalIdr === 2_300_000,
+    "kasus trading saja salah",
+  );
+  assert(
+    solo.kodeAkunPajak === "411125" && solo.kodeJenisSetoran === "200",
+    "kode setoran salah",
+  );
+  assert(solo.jatuhTempo === "2027-03-31", `jatuhTempo=${solo.jatuhTempo}`);
+  const gabung = calculateTaxLiability({
+    year: 2026,
+    nettoTradingIdr: 50_000_000,
+    otherNetIncomeIdr: 100_000_000,
+    ptkpStatus: "TK/0",
+    creditIdr: 1_000_000,
+  });
+  assert(
+    gabung.taxTotalIdr === 8_400_000 &&
+      gabung.taxWithoutTradingIdr === 2_300_000,
+    "pajak gabungan salah",
+  );
+  assert(
+    gabung.taxFromTradingIdr === 6_100_000,
+    `bagian trading=${gabung.taxFromTradingIdr}`,
+  );
+  assert(
+    gabung.kurangBayarIdr === 7_400_000 && gabung.lebihBayarIdr === 0,
+    "kurang bayar salah",
+  );
+  const rugi = calculateTaxLiability({
+    year: 2026,
+    nettoTradingIdr: -246_780,
+    otherNetIncomeIdr: 100_000_000,
+    ptkpStatus: "TK/0",
+    creditIdr: 0,
+  });
+  assert(
+    rugi.tradingLoss &&
+      rugi.tradingTaxableIdr === 0 &&
+      rugi.taxFromTradingIdr === 0,
+    "rugi tidak boleh mengurangi penghasilan lain",
+  );
+  const lebih = calculateTaxLiability({
+    year: 2026,
+    nettoTradingIdr: 100_000_000,
+    otherNetIncomeIdr: 0,
+    ptkpStatus: "TK/0",
+    creditIdr: 3_000_000,
+  });
+  assert(
+    lebih.kurangBayarIdr === 0 && lebih.lebihBayarIdr === 700_000,
+    "lebih bayar salah",
+  );
 });
 
 test("502. predictDailySwap: INTEREST_CURRENT tahunan ÷360, DISABLED 0, mode lain null", () => {
