@@ -31,6 +31,7 @@ import { KewajibanPajakPanel } from "./components/jurnal/KewajibanPajakPanel";
 import { createWorkspaceStore } from "./lib/brokerWorkspace";
 import { LiveQuotes } from "./components/analysis/LiveQuotes";
 import { useQuotesStream } from "./hooks/useQuotesStream";
+import { LiveSignalsPanel } from "./components/layout/LiveSignalsPanel";
 import dashboard from "./styles/dashboard.module.css";
 
 import { analyzeMarket } from "./calculations/decisionEngine";
@@ -775,7 +776,7 @@ export default function App() {
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-clip bg-slate-950 text-white">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between px-3 py-3 sm:px-4 lg:px-6">
+        <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-3 py-3 sm:px-4 lg:px-6">
           <div>
             <p className="text-xs font-bold tracking-[0.35em] text-emerald-400">
               MDBKA
@@ -784,10 +785,27 @@ export default function App() {
               Merangkak Dari Bawah Ke Atas
             </h1>
           </div>
-          <KursProfitBar
-            profitUsd={autoProfitUsd ?? equityStream.equity?.profit ?? null}
-            fxRates={fxRates}
-          />
+          <div className="flex items-center gap-3">
+            <KursProfitBar
+              profitUsd={autoProfitUsd ?? equityStream.equity?.profit ?? null}
+              fxRates={fxRates}
+            />
+            <LiveSignalsPanel
+              symbols={["AUDUSD_ORB", "EURUSD_ORB", "GBPUSD_ORB"]}
+              lastCandles={
+                new Map([
+                  [
+                    market.symbol,
+                    {
+                      high: market.high ?? 0,
+                      low: market.low ?? 0,
+                      close: market.close ?? 0,
+                    },
+                  ],
+                ])
+              }
+            />
+          </div>
 
           <div className="hidden items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300 sm:flex">
             <Activity size={16} />

@@ -14,6 +14,7 @@ import { createFxRoutes } from "./routes/fxRoutes";
 import { createPositionsRoutes } from "./routes/positionsRoutes";
 import { createMarginRoutes } from "./routes/marginRoutes";
 import { createSwapLogRoutes } from "./routes/swapLogRoutes";
+import { createLiveQuotesRoutes } from "./routes/liveQuotesRoutes";
 import { createJurnalPajakRoutes } from "./routes/jurnalPajakRoutes";
 import { createPajakRoutes } from "./routes/pajakRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
@@ -33,6 +34,8 @@ export const FRONTEND_ORIGIN: string =
 
 import type { QuotesLogReader } from "./services/quotesLogReader";
 
+import type { LiveQuotesStore } from "./services/liveQuotesStore";
+
 export function createApp(
   reader: MT5LogReader,
   quotesReader: QuotesLogReader,
@@ -44,6 +47,7 @@ export function createApp(
   } | null = null,
   positionsReader: PositionsLogReader | null = null,
   positionsReaderFinex: PositionsLogReader | null = null,
+  liveQuotesStore: LiveQuotesStore | null = null,
 ): Express {
   const app = express();
   app.use(cors({ origin: FRONTEND_ORIGIN }));
@@ -73,7 +77,9 @@ export function createApp(
   // Fail-closed jujur: logger absen → null (bukan 404), agar dashboard
   // coverage tetap render tanpa mengarang ketiadaan data.
   app.get("/api/history/coverage", (_req, res) => {
-    const cover = (logger: TickHistoryLogger | null | undefined): BrokerCoverage | null =>
+    const cover = (
+      logger: TickHistoryLogger | null | undefined,
+    ): BrokerCoverage | null =>
       logger === null || logger === undefined ? null : logger.coverage();
     res.json({
       otb: cover(history?.otb),
@@ -81,6 +87,10 @@ export function createApp(
       timestamp: new Date().toISOString(),
     });
   });
+
+    if (liveQuotesStore !== null) {
+      app.use("/api/quotes-live", createLiveQuotesRoutes(liveQuotesStore));
+    }
 
   return app;
 }
