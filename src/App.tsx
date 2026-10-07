@@ -26,6 +26,7 @@ import { useEquityStream } from "./hooks/useEquityStream";
 import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
 import { SwapLogPanel } from "./components/swaplog/SwapLogPanel";
 import { JurnalPajakPanel } from "./components/jurnal/JurnalPajakPanel";
+import { KewajibanPajakPanel } from "./components/jurnal/KewajibanPajakPanel";
 import {
   createWorkspaceStore,
   hasWorkspaceWork,
@@ -1070,6 +1071,14 @@ export default function App() {
               description="Transaksi Finex otomatis dari MT5, kurs pajak ditempel per tanggal, rekap tahunan + unduh CSV."
             >
               <JurnalPajakPanel />
+            </Panel>
+
+            <Panel
+              icon={<Landmark size={20} />}
+              title="10. Kewajiban Pajak (Finex)"
+              description="Hitung otomatis jenis pajak, pasal, kode setoran, dan nilai yang harus dibayar; catat pembayaran dan unggah bukti bayar."
+            >
+              <KewajibanPajakPanel />
             </Panel>
           </div>
 
