@@ -487,7 +487,13 @@ export class TickHistoryLogger {
     return { appended, skipped };
   }
 
-  /** Cakupan arsip: per simbol {count, first, last} + jumlah file. */
+  /**
+   * Cakupan arsip: per simbol {count, first, last} + jumlah file.
+   * Langkah 4b-3: dibaca per potongan (forEachLineSync) → aman untuk file
+   * > 512 MB. PERINGATAN: tetap SINKRON — membaca seluruh arsip (GB) memblok
+   * server ±1–2 menit. Hanya untuk diagnosa manual (/api/history/coverage);
+   * JANGAN dipanggil dari UI/polling sebelum diubah ke async streaming.
+   */
   coverage(): BrokerCoverage {
     const symbols: Record<string, { count: number; first: string; last: string }> =
       {};
@@ -503,20 +509,14 @@ export class TickHistoryLogger {
         continue;
       }
       files++;
-      let text: string;
-      try {
-        text = fs.readFileSync(path.join(this.dir, name), "utf-8");
-      } catch {
-        continue;
-      }
-      for (const line of text.split("\n")) {
+      const onLine = (line: string): void => {
         const trimmed = line.trim();
-        if (trimmed === "") continue;
+        if (trimmed === "") return;
         let rec: Partial<HistoryTick>;
         try {
           rec = JSON.parse(trimmed) as Partial<HistoryTick>;
         } catch {
-          continue;
+          return;
         }
         if (
           typeof rec.symbol !== "string" ||
@@ -524,7 +524,7 @@ export class TickHistoryLogger {
           rec.symbol === "" ||
           rec.ts_utc === ""
         ) {
-          continue;
+          return;
         }
         const prev = symbols[rec.symbol];
         if (prev === undefined) {
@@ -536,6 +536,11 @@ export class TickHistoryLogger {
             last: rec.ts_utc > prev.last ? rec.ts_utc : prev.last,
           };
         }
+      };
+      try {
+        forEachLineSync(path.join(this.dir, name), onLine);
+      } catch {
+        continue; // terkunci/hilang: lewati file ini
       }
     }
     return { broker: this.broker, files, symbols };

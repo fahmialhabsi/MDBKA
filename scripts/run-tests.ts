@@ -6708,6 +6708,16 @@ test("555. arsip tick: pembersih duplikat sekali per file, lewati hari ini, baca
     nfs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("556. arsip tick: tidak ada lagi pembacaan file arsip utuh (4b-3, readSrc)", () => {
+  const src = readSrc("server/services/tickHistory.ts");
+  const kode = src.split("\n").filter((l) => !l.trim().startsWith("*") && !l.trim().startsWith("//"));
+  const utuh = kode.filter((l) => l.includes("readFileSync("));
+  assert(utuh.length === 1 && utuh[0].includes("JSON.parse(fs.readFileSync(file"), `readFileSync tersisa: ${utuh.join(" | ")}`);
+  assert(src.includes("forEachLineSync(path.join(this.dir, name), onLine)"), "coverage belum per potongan");
+  assert(src.includes("JANGAN dipanggil dari UI"), "peringatan sinkron hilang");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
