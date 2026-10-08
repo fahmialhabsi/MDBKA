@@ -271,6 +271,7 @@ import {
 } from "../src/lib/spec32Wiring";
 
 import {
+  excursionCell,
   formatDuration,
   formatRupiah,
   formatUsd,
@@ -6591,6 +6592,22 @@ test("551. /api/evaluation membawa MFE/MAE per posisi (hanya akun sendiri, tanpa
   assert(e !== undefined && e.coverage === "PENUH" && e.mfe === 0.06 && e.maeR === -1, `MFE/MAE: ${JSON.stringify(e)}`);
   const kosong = collectAccountEvaluations(common, npath.join(root, "tanpa-buku"), {})[0];
   assert(Object.keys(kosong.excursions).length === 0, "buku belum ada → excursions kosong");
+});
+
+test("552. panel Evaluasi: sel Untung terbaik / Rugi terdalam (R, harga, ≈, –, …)", () => {
+  const xti = { coverage: "PENUH" as const, ticks: 3980, mfe: 0.06, mae: -0.8, mfeR: 0.08, maeR: -1 };
+  assert(excursionCell(xti, "XTIUSD", "mfe").text === "+0,08R", excursionCell(xti, "XTIUSD", "mfe").text);
+  const mae = excursionCell(xti, "XTIUSD", "mae");
+  assert(mae.text === "−1,00R" && mae.tone === "rugi" && mae.title.includes("lengkap (3980 harga)"), JSON.stringify(mae));
+  const gbp = { coverage: "PENUH" as const, ticks: 2871, mfe: 0.00007, mae: -0.00094, mfeR: null, maeR: null };
+  assert(excursionCell(gbp, "GBPUSD_ORB", "mfe").text === "+0,00007", "harga 5 desimal");
+  const parsial = excursionCell({ ...gbp, coverage: "PARSIAL" }, "GBPUSD_ORB", "mae");
+  assert(parsial.text === "≈−0,00094" && parsial.title.includes("sebagian"), parsial.text);
+  assert(excursionCell(undefined, "GBPUSD", "mfe").text === "…", "belum tercatat");
+  const kosong = excursionCell({ coverage: "TANPA_DATA", ticks: 0, mfe: null, mae: null, mfeR: null, maeR: null }, "GBPUSD", "mae");
+  assert(kosong.text === "–" && kosong.tone === "netral", "tanpa data");
+  const panel = readSrc("src/components/analysis/TradeEvaluationPanel.tsx");
+  assert(panel.includes("excursionCell(account.excursions?.[t.positionId], t.symbol, which)") && panel.includes("Rugi terdalam"), "kolom belum dipasang di panel");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

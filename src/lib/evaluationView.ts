@@ -6,6 +6,8 @@
  * Prinsip: hasil disebut "terbukti" hanya bila sampel cukup (n ≥ 20) —
  * sebelum itu angka ditampilkan apa adanya tanpa klaim.
  */
+import { priceDigits } from "./tickSize";
+
 export interface EvalTradeStats {
   readonly n: number;
   readonly wins: number;
@@ -45,6 +47,18 @@ export interface EvalAccount {
     readonly bySymbol: Readonly<Record<string, EvalTradeStats>>;
     readonly openPositions: number;
   };
+  /** Langkah 5c: MFE/MAE per positionId (opsional: server lama tidak mengirim). */
+  readonly excursions?: Readonly<Record<string, EvalExcursion>>;
+}
+
+/** Cermin TradeExcursion (server/services/tradeExcursion.ts). */
+export interface EvalExcursion {
+  readonly coverage: "PENUH" | "PARSIAL" | "TANPA_DATA";
+  readonly ticks: number;
+  readonly mfe: number | null;
+  readonly mae: number | null;
+  readonly mfeR: number | null;
+  readonly maeR: number | null;
 }
 
 export const MIN_PROVEN_TRADES = 20;
@@ -173,4 +187,44 @@ export function lolosLabel(stats: EvalTradeStats | null): string {
   return proofStatus(stats) === "TERBUKTI_POSITIF"
     ? `Lolos · win rate ${wr} (n=${n})`
     : `Lolos · terbukti rugi, win rate ${wr} (n=${n})`;
+}
+
+/**
+ * Langkah 5d — isi sel "Untung terbaik" (MFE) / "Rugi terdalam" (MAE).
+ * Dalam R bila SL awal diketahui, selain itu selisih harga (desimal simbol).
+ * PARSIAL diberi tanda "≈"; TANPA_DATA "–"; belum tercatat "…".
+ */
+export interface ExcursionCell {
+  readonly text: string;
+  readonly title: string;
+  readonly tone: "untung" | "rugi" | "netral";
+}
+
+export function excursionCell(
+  e: EvalExcursion | undefined,
+  symbol: string,
+  which: "mfe" | "mae",
+): ExcursionCell {
+  if (e === undefined) {
+    return { text: "…", title: "Sedang dihitung (paling lambat 10 menit)", tone: "netral" };
+  }
+  const value = which === "mfe" ? e.mfe : e.mae;
+  const r = which === "mfe" ? e.mfeR : e.maeR;
+  if (e.coverage === "TANPA_DATA" || value === null) {
+    return { text: "–", title: "Tanpa rekaman harga (arsip tick mulai 5 Okt 2026)", tone: "netral" };
+  }
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  const body =
+    r !== null
+      ? `${sign}${numberId(Math.abs(r), 2)}R`
+      : `${sign}${numberId(Math.abs(value), priceDigits(symbol))}`;
+  const partial = e.coverage === "PARSIAL";
+  return {
+    text: partial ? `≈${body}` : body,
+    title:
+      (which === "mfe" ? "Untung terbaik yang sempat tersedia" : "Rugi terdalam yang sempat dialami") +
+      (r !== null ? " (dalam R = kelipatan risiko SL)" : " (selisih harga)") +
+      (partial ? ` · rekaman sebagian (${e.ticks} harga)` : ` · rekaman lengkap (${e.ticks} harga)`),
+    tone: value > 0 ? "untung" : value < 0 ? "rugi" : "netral",
+  };
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ClipboardCheck, RefreshCw } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import {
+  excursionCell,
   formatDuration,
   formatRupiah,
   formatUsd,
@@ -35,6 +36,12 @@ const PROOF_CLASS: Record<ReturnType<typeof proofStatus>, string> = {
   TERBUKTI_NEGATIF: "bg-red-400/15 text-red-200",
   BELUM_CUKUP: "bg-white/5 text-slate-400",
 };
+
+const EXCURSION_TONE = {
+  untung: "text-emerald-300",
+  rugi: "text-rose-300",
+  netral: "text-slate-500",
+} as const;
 
 const netClass = (v: number | null): string =>
   v === null || v === 0 ? "text-slate-300" : v > 0 ? "text-emerald-300" : "text-red-300";
@@ -182,6 +189,12 @@ function AccountCard({ account, kurs }: { account: EvalAccount; kurs: number | n
                     <th className="py-1.5 pr-3">Keluar</th>
                     <th className="py-1.5 pr-3 text-right">Lama</th>
                     <th className="py-1.5 pr-3 text-right">R</th>
+                    <th className="py-1.5 pr-3 text-right" title="Untung terbaik yang sempat tersedia selama posisi terbuka (MFE)">
+                      Untung terbaik
+                    </th>
+                    <th className="py-1.5 pr-3 text-right" title="Rugi terdalam yang sempat dialami selama posisi terbuka (MAE)">
+                      Rugi terdalam
+                    </th>
                     <th className="py-1.5 text-right">Bersih</th>
                   </tr>
                 </thead>
@@ -199,6 +212,14 @@ function AccountCard({ account, kurs }: { account: EvalAccount; kurs: number | n
                       <td className="py-1.5 pr-3 text-right text-slate-300">
                         {t.rMultiple === null ? "-" : t.rMultiple.toFixed(2)}
                       </td>
+                      {(["mfe", "mae"] as const).map((which) => {
+                        const cell = excursionCell(account.excursions?.[t.positionId], t.symbol, which);
+                        return (
+                          <td key={which} className={`py-1.5 pr-3 text-right ${EXCURSION_TONE[cell.tone]}`} title={cell.title}>
+                            {cell.text}
+                          </td>
+                        );
+                      })}
                       <td className="py-1.5 text-right">
                         <Money usd={t.net} kurs={kurs} />
                       </td>
@@ -206,6 +227,10 @@ function AccountCard({ account, kurs }: { account: EvalAccount; kurs: number | n
                   ))}
                 </tbody>
               </table>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Untung terbaik / Rugi terdalam = gerak harga terbaik &amp; terburuk selama posisi terbuka.
+                R = kelipatan risiko SL. ≈ rekaman sebagian · – tanpa rekaman (sebelum 5 Okt) · … sedang dihitung.
+              </p>
             </div>
           )}
         </>
