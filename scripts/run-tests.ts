@@ -230,6 +230,7 @@ import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
 import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
 import { applyLossPauseHold, checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
 import { formatPrice, priceDigits } from "../src/lib/tickSize";
+import { computeExcursion } from "../server/services/tradeExcursion";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -6477,6 +6478,44 @@ test("542. MDBKAHistoryService menulis ulang saat ganti akun walau jumlah deal s
   const src = readSrc("ea/MDBKAHistoryService.mq5");
   assert(src.includes("if(total != lastTotal || login != lastLogin)"), "ganti akun tidak memicu tulis ulang");
   assert(src.includes("lastLogin = login;"), "akun terakhir tidak diingat");
+});
+
+test("543. MFE/MAE BUY: bid, rentang jam server, R dari SL", () => {
+  const trade = { side: "BUY" as const, openTime: "2026.10.06 06:29:29", closeTime: "2026.10.06 08:06:56", openPrice: 1.3, sl: 1.299 };
+  const ticks = [
+    { ts_raw: "2026.10.06 06:29:00", bid: 1.31, ask: 1.311 }, // sebelum buka: diabaikan
+    { ts_raw: "2026.10.06 06:29:30", bid: 1.3002, ask: 1.3003 },
+    { ts_raw: "2026.10.06 07:00:00", bid: 1.2995, ask: 1.2996 },
+    { ts_raw: "2026.10.06 08:06:56", bid: 1.2991, ask: 1.2992 },
+    { ts_raw: "2026.10.06 08:10:00", bid: 1.2, ask: 1.201 }, // sesudah tutup: diabaikan
+  ];
+  const x = computeExcursion(trade, ticks);
+  assert(x.coverage === "PENUH" && x.ticks === 3, `cakupan ${x.coverage} n=${x.ticks}`);
+  assert(x.mfe === 0.0002 && x.mae === -0.0009, `mfe ${x.mfe} mae ${x.mae}`);
+  assert(x.mfeR === 0.2 && x.maeR === -0.9, `R ${x.mfeR}/${x.maeR}`);
+  assert(x.mfeAt === "2026.10.06 06:29:30" && x.maeAt === "2026.10.06 08:06:56", "waktu MFE/MAE");
+});
+
+test("544. MFE/MAE SELL pakai ask; tanpa SL → R null", () => {
+  const trade = { side: "SELL" as const, openTime: "2026.10.06 06:22:58", closeTime: "2026.10.06 06:30:38", openPrice: 111.0, sl: null };
+  const ticks = [
+    { ts_raw: "2026.10.06 06:22:58", bid: 110.9, ask: 111.005 },
+    { ts_raw: "2026.10.06 06:30:38", bid: 111.03, ask: 111.053 },
+  ];
+  const x = computeExcursion(trade, ticks);
+  assert(x.coverage === "PENUH", x.coverage);
+  assert(x.mfe === -0.005 && x.mae === -0.053, `mfe ${x.mfe} mae ${x.mae} (harus pakai ask)`);
+  assert(x.mfeR === null && x.maeR === null, "tanpa SL R harus null");
+});
+
+test("545. MFE/MAE cakupan PARSIAL bila celah > 60 dtk, TANPA_DATA bila kosong", () => {
+  const trade = { side: "BUY" as const, openTime: "2026.10.05 14:16:33", closeTime: "2026.10.05 17:01:06", openPrice: 1.3, sl: null };
+  const p = computeExcursion(trade, [{ ts_raw: "2026.10.05 14:58:56", bid: 1.301, ask: 1.3012 }, { ts_raw: "2026.10.05 17:01:06", bid: 1.3, ask: 1.3002 }]);
+  assert(p.coverage === "PARSIAL" && p.ticks === 2, `parsial: ${p.coverage}`);
+  const e = computeExcursion(trade, [{ ts_raw: "2026.10.04 10:00:00", bid: 1.3, ask: 1.3002 }]);
+  assert(e.coverage === "TANPA_DATA" && e.mfe === null && e.ticks === 0, `kosong: ${e.coverage}`);
+  const tepi = computeExcursion(trade, [{ ts_raw: "2026.10.05 14:17:30", bid: 1.3, ask: 1.3002 }, { ts_raw: "2026.10.05 17:00:10", bid: 1.3, ask: 1.3002 }]);
+  assert(tepi.coverage === "PENUH", `celah ≤ 60 dtk harus PENUH: ${tepi.coverage}`);
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
