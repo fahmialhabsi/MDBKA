@@ -2655,7 +2655,7 @@ test("497. minLot 1.00 saham # tidak nyangkut di OTB forex / Finex forex", () =>
   assert(user.minLot === 0.5, "minLot pengguna 0.5 harus dipertahankan");
 });
 
-test("496. withUsdPointValue: OTB JPY dikonversi USD, USD/Finex/tanpa kurs tetap", () => {
+test("496. withUsdPointValue: OTB & Finex non-USD dikonversi USD, profit USD/tanpa kurs tetap", () => {
   const otb = applyBrokerPreset(
     makeEmptyBroker(),
     "AUDJPY_ORB",
@@ -2691,10 +2691,12 @@ test("496. withUsdPointValue: OTB JPY dikonversi USD, USD/Finex/tanpa kurs tetap
     withUsdPointValue(otb, "AUDJPY_ORB", "orbitraderberjangka", null) === otb,
     "tanpa kurs tetap",
   );
-  assert(
-    withUsdPointValue(otb, "CADJPY", "finex", FALLBACK_RATES) === otb,
-    "Finex tetap",
-  );
+  // Perbaikan 8 Okt 2026: Finex JPY juga dikonversi (dulu "Finex tetap" = bug).
+  const finexJpy = applyBrokerPreset(makeEmptyBroker(), "CADJPY", "finex");
+  const fj = withUsdPointValue(finexJpy, "CADJPY", "finex", FALLBACK_RATES);
+  assert(Math.abs(fj.pointValue - expected) < 1e-9, `Finex CADJPY pointValue=${fj.pointValue}`);
+  const finexUsd = applyBrokerPreset(makeEmptyBroker(), "GBPUSD", "finex");
+  assert(withUsdPointValue(finexUsd, "GBPUSD", "finex", FALLBACK_RATES) === finexUsd, "Finex profit USD tetap");
   const app = readSrc("src/App.tsx");
   assert(!app.includes("convertToUSD("), "App tidak lagi konversi manual");
   assert(
