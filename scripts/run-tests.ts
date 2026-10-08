@@ -231,6 +231,7 @@ import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correl
 import { applyLossPauseHold, checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
 import { formatPrice, priceDigits } from "../src/lib/tickSize";
 import { computeExcursion } from "../server/services/tradeExcursion";
+import { computeExcursionsFromArchive, excursionFileNames } from "../server/services/excursionReader";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -9901,6 +9902,48 @@ test("472. kanonis + profil preservasi nama bertitik/bertanda", () => {
   } catch (e) {
     failed += 1;
     console.log(`FAIL - 525. backup: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // 546: pembaca arsip tick streaming untuk MFE/MAE (async: baca berkas).
+  try {
+    const os = require("node:os") as unknown as { tmpdir(): string };
+    const nfs = require("node:fs") as unknown as typeof import("node:fs");
+    const npath = require("node:path") as unknown as typeof import("node:path");
+    const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "excursion-"));
+    const row = (ts: string, symbol: string, bid: number, ask: number): string =>
+      JSON.stringify({ ts_utc: "x", ts_raw: ts, broker: "otb", symbol, bid, ask, received_at: "x" });
+    nfs.writeFileSync(
+      npath.join(dir, "ticks-2026-10-05.jsonl"),
+      [
+        row("2026.10.05 23:59:30", "GBPUSD_ORB", 1.3005, 1.3007),
+        row("2026.10.05 23:59:40", "AUDCAD_ORB", 0.99, 0.991),
+        "{rusak",
+      ].join("\n") + "\n",
+    );
+    nfs.writeFileSync(
+      npath.join(dir, "ticks-2026-10-06.jsonl"),
+      [
+        row("2026.10.06 00:00:10", "GBPUSD_ORB", 1.2992, 1.2994),
+        row("2026.10.06 00:00:20", "GBPUSD_ORB", 1.301, 1.3012),
+      ].join("\n") + "\n",
+    );
+    const buy = { key: "otb:1", symbol: "GBPUSD_ORB", side: "BUY" as const, openTime: "2026.10.05 23:59:30", closeTime: "2026.10.06 00:00:20", openPrice: 1.3, sl: 1.299 };
+    const sell = { key: "otb:2", symbol: "GBPUSD_ORB", side: "SELL" as const, openTime: "2026.10.06 00:00:10", closeTime: "2026.10.06 00:00:20", openPrice: 1.3, sl: null };
+    const lama = { key: "otb:3", symbol: "GBPUSD_ORB", side: "BUY" as const, openTime: "2026.09.29 10:00:00", closeTime: "2026.09.29 11:00:00", openPrice: 1.3, sl: null };
+    const names = excursionFileNames(buy);
+    assert(names.join(",") === "ticks-2026-10-04.jsonl,ticks-2026-10-05.jsonl,ticks-2026-10-06.jsonl,ticks-2026-10-07.jsonl", `file ±1 hari: ${names.join(",")}`);
+    const hasil = await computeExcursionsFromArchive(dir, [buy, sell, lama]);
+    const b = hasil.get("otb:1");
+    assert(b !== undefined && b.ticks === 3 && b.coverage === "PENUH", `BUY lintas 2 file: n=${b?.ticks} ${b?.coverage}`);
+    assert(b !== undefined && b.mfe === 0.001 && b.mae === -0.0008 && b.mfeR === 1 && b.maeR === -0.8, `BUY mfe ${b?.mfe} mae ${b?.mae} R ${b?.mfeR}/${b?.maeR}`);
+    const s2 = hasil.get("otb:2");
+    assert(s2 !== undefined && s2.ticks === 2 && s2.mfe === 0.0006 && s2.mae === -0.0012, `SELL ask: n=${s2?.ticks} mfe ${s2?.mfe} mae ${s2?.mae}`);
+    assert(hasil.get("otb:3")?.coverage === "TANPA_DATA", "trade sebelum arsip harus TANPA_DATA");
+    passed += 1;
+    console.log("ok - 546. pembaca arsip tick streaming: lintas file harian, saring simbol & jam server, baris rusak dilewati");
+  } catch (e) {
+    failed += 1;
+    console.log(`FAIL - 546. pembaca arsip tick: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   console.log(
