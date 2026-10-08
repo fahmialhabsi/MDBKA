@@ -1,8 +1,9 @@
 # HANDOFF MDBKA — Mode Aman (8 Okt 2026)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir: **22cb986** (branch `main`, sudah di-push, working tree bersih).
-Test terakhir: **526 lolos, 0 gagal**, build `tsc -b && vite build` sukses.
+Commit terakhir: **lihat `git log`** (sesi 8 Okt pagi: 32a7299 → e0168a2 → commit jeda; branch `main`).
+Test terakhir: **536 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
+Nomor test terakhir: **540** → test baru mulai **541**.
 
 ---
 
@@ -29,7 +30,11 @@ Test terakhir: **526 lolos, 0 gagal**, build `tsc -b && vite build` sukses.
   lalu `device_commit_files`. Jangan menyalin ulang isi file dari output tool (bisa terpotong).
 - **tsc tidak bisa jalan di VM** (TS7 binary Windows). ESLint bisa: `node node_modules/eslint/bin/eslint.js <file>`.
 - Test runner: `scripts/run-tests.ts` (CommonJS via `tsconfig.test.json`, **tidak bisa import .tsx** → logika
-  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **530**.
+  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **540**.
+- `tsx` juga tidak jalan di VM (esbuild Windows) → test hanya bisa dijalankan pengguna. `scripts/run-tests.ts` CRLF:
+  sisipkan teks dengan `\r\n`. File CRLF lain: `src/types/analysis.ts`, `AnalysisResult.tsx`.
+- Test `readSrc` mengecek teks sumber: bila kalimat kode diubah, sesuaikan test lamanya (pernah gagal di 538).
+- TS: objek uji dengan `decision: "BELI" as const` membuat tipe sempit → pakai anotasi `ReturnType<typeof analyzeMarket>`.
 - `git diff` di VM bisa menampilkan seluruh run-tests.ts berubah (CRLF campur) — itu artefak VM; git Windows menormalkan.
 - Frontend wajib memakai `API_BASE_URL` (`src/lib/apiBaseUrl.ts`), **jangan** `/api` relatif (akan kena Vite → HTML).
 
@@ -72,6 +77,13 @@ Test terakhir: **526 lolos, 0 gagal**, build `tsc -b && vite build` sukses.
 | 11a3946 | **4d** label Lolos di pemindai = win rate nyata bila n ≥ 20 (`mergeGroupStats`, `lolosLabel`), merah bila terbukti rugi |
 | ba6ff11 | **Breakeven +0,5R** (`BREAKEVEN_R_MULTIPLE = 0.5`) + **time-stop 3 jam** (`checkTimeStop`, `TIME_STOP_HOURS = 3`) di monitor posisi (`HoldingsDashboard.tsx`) |
 | 22cb986 | AutoExportMDBKAService ekspor **200 candle H1** (dulu 50); salinan di `ea/AutoExportMDBKAService.mq5`. Diverifikasi: 150 file × 201 baris |
+| 32a7299 | **Analisa otomatis tanpa upload**: pilih simbol → CSV dari `/api/candles` masuk alur `handleCsvLoaded` (`src/lib/autoCandle.ts`). Upload manual tetap cadangan |
+| 39fa063 | **Saldo & setoran per akun** dari History MT5 (`server/services/accountBalance.ts`, field `balance` di `/api/evaluation`). Cocok MT5: OTB $5.000,22 |
+| 549ade1 | **Header saldo Rupiah** 3 akun (`AccountBalancesBar.tsx`, `accountBalanceView.ts`); live di depan; setoran Rupiah asli dari komentar deal |
+| abb1f6a / 2412c15 | **Taruhan ganda**: `src/lib/correlationGuard.ts` (eksposur mata uang, Emas/Perak sendiri, "Saham AS" = indeks AS + saham .US/#, "Minyak"); pemindai status `DITAHAN_KORELASI`; pencatat entry menilai terhadap posisi LAIN |
+| fb3e81c | Status pemindai = tombol: hanya **Lolos** aktif → pilih simbol + gulir ke `#hasil-analisa`; status lain disabled (tooltip alasan) |
+| 4b61766 | Hasil analisa ikut menahan taruhan ganda (`applyDoubleBetHold`, `heldBy: "korelasi"`, kotak ungu) |
+| e0168a2 + berikutnya | **Jeda 3 rugi beruntun**: `src/lib/lossStreakGuard.ts` (24 jam jam server, demo+live per broker, fail-safe tanpa jam server), `useLossPause`, pemindai `DITAHAN_JEDA` + baris "Rugi beruntun n/3", Hasil analisa `heldBy: "jeda"` (kotak merah) |
 
 ### Aturan Mode Aman yang aktif sekarang
 1. Default **TUNGGU**; sinyal hanya bila skor (MA50, CCI, MACD, RSI) kompak.
@@ -83,6 +95,10 @@ Test terakhir: **526 lolos, 0 gagal**, build `tsc -b && vite build` sukses.
 6. **Bukti n ≥ 20**: "Lolos · belum terbukti (n/20)" → "Lolos · win rate X% (n=N)"; merah "terbukti rugi" bila ekspektansi ≤ 0.
    Demo + live satu broker digabung.
 7. Data indikator dari **200 candle H1**.
+8. **Taruhan ganda diblok**: sinyal searah eksposur posisi terbuka broker aktif → TUNGGU (pemindai + Hasil analisa).
+   Aturan USD ketat: posisi apa pun "USD naik/turun" memblok semua sinyal dengan arah USD yang sama.
+9. **Jeda 24 jam setelah 3 rugi berturut-turut** (per broker, demo+live). Didahulukan dari taruhan ganda.
+10. Urutan tahanan di Hasil analisa: jeda → taruhan ganda (biaya/risiko dari `analyzeMarket`).
 
 ### Hasil evaluasi (patokan "sebelum Mode Aman", semua kelompok TANPA_CATATAN)
 | Akun | Trade | Win rate | Bersih | Rata-rata untung / rugi |
@@ -127,6 +143,10 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 
 ## 4. Kondisi terbuka / perlu diperhatikan
 
+- **8 Okt 10:17**: Finex rugi beruntun **2/3** (CADJPY, EURCHF) → satu rugi lagi di Finex = jeda 24 jam. OTB 0 (US100 +$186,70).
+- Finex demo punya posisi terbuka (GBPUSD/GBPCHF/XTIUSD SELL) → beberapa sinyal JUAL GBP/minyak berstatus Taruhan ganda.
+- Pencatat entry server (`tradeEntryLog`) BELUM memperhitungkan jeda (hanya korelasi). Opsional ditambah.
+
 - Posisi OTB masih terbuka sejak 6 Okt: **META.US BUY 0,10 @741,07 tanpa SL/TP**, **AUDUSD_ORB BUY 0,10 @0,69811**
   (SL 0,69311, TP 0,70626). Keduanya kena TIME-STOP; META tanpa SL = risiko tak terbatas. Keputusan di tangan Fahmi.
 - OTB Experts log 03:28: `ExportPositions: FileOpen gagal: 5004` (sekali; kemungkinan file sedang dibaca). Pantau bila berulang.
@@ -138,20 +158,22 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 ## 5. Langkah berikutnya (urutan usulan)
 
 1. **Kumpulkan ≥ 20 trade Mode Aman berstatus Lolos**, lalu nilai ulang di panel Evaluasi trade (win rate, ekspektansi, R).
-2. **Peringatan korelasi**: posisi baru searah dengan posisi open yang berkorelasi (AUD, indeks AS, saham AS).
-3. **Pause setelah 3 kali rugi berturut-turut**.
+2. ~~Peringatan korelasi~~ ✅ selesai (diblok, bukan sekadar peringatan).
+3. ~~Pause setelah 3 kali rugi berturut-turut~~ ✅ selesai (jeda 24 jam).
 4. Gerak terbaik/terburuk (MFE/MAE) tiap trade dari arsip tick.
 5. Opsional: biaya breakeven (SL = entry + biaya) agar BE tidak rugi kecil karena komisi/spread.
+6. Opsional: pencatat entry server ikut mencatat status jeda; akun ke-4 di header bila ada file History-nya.
+7. Opsional: kecilkan bundle JS (> 500 kB) dengan dynamic import.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **531**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **541**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
 
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
-> Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, commit terakhir 22cb986,
-> 526 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
+> Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, lihat git log,
+> 536 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
-> lalu minus". Langkah berikutnya: peringatan korelasi (mulai dengan audit read-only).
+> lalu minus". Langkah berikutnya: MFE/MAE dari arsip tick (mulai dengan audit read-only).
