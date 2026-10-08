@@ -7,6 +7,7 @@ import type { ExchangeRates } from "../services/fxRateService";
 import type { AnalysisResult, BrokerSettings, MarketData } from "../types/analysis";
 import type { BrokerId } from "../types/broker";
 import { canonicalSymbolForBroker } from "./brokerSymbols";
+import { findDoubleBet, type OpenPositionLike } from "./correlationGuard";
 import { parseCsvCandles } from "./csvCandleParser";
 import { resolveCsvBidAsk, type LiveQuoteLike } from "./csvQuote";
 import { applyBrokerPreset, createEmptyMarketForSymbol } from "./marketReset";
@@ -27,6 +28,7 @@ export type ScanStatus =
   | "LOLOS"
   | "DITAHAN_BIAYA"
   | "DITAHAN_RISIKO"
+  | "DITAHAN_KORELASI"
   | "TUNGGU"
   | "PASAR_TUTUP"
   | "DATA";
@@ -45,6 +47,8 @@ export interface ScanInput {
    * Perbandingan relatif → aman tanpa konversi zona waktu.
    */
   readonly referenceCandleMs?: number | null;
+  /** Langkah D: posisi terbuka broker ini; sinyal searah → DITAHAN_KORELASI. */
+  readonly openPositions?: readonly OpenPositionLike[];
 }
 
 export interface ScanRow {
@@ -175,6 +179,27 @@ export function scanSymbol(input: ScanInput): ScanRow {
           : result.riskStatus === "MEMENUHI batas risiko"
             ? "LOLOS"
             : "DITAHAN_RISIKO";
+  // Langkah D: lolos tapi searah dengan posisi terbuka → taruhan ganda.
+  if (
+    status === "LOLOS" &&
+    (result.decision === "BELI" || result.decision === "JUAL") &&
+    input.openPositions !== undefined
+  ) {
+    const dobel = findDoubleBet(symbol, result.decision, input.openPositions);
+    if (dobel !== null) {
+      return {
+        symbol,
+        status: "DITAHAN_KORELASI",
+        decision: "TUNGGU",
+        direction: result.decision,
+        held: true,
+        score: result.score,
+        reason: dobel.reason,
+        costShareOfRisk: result.costShareOfRisk ?? null,
+        candles: count,
+      };
+    }
+  }
   return {
     symbol,
     status,
@@ -192,9 +217,10 @@ const STATUS_ORDER: Record<ScanStatus, number> = {
   LOLOS: 0,
   DITAHAN_BIAYA: 1,
   DITAHAN_RISIKO: 2,
-  TUNGGU: 3,
-  PASAR_TUTUP: 4,
-  DATA: 5,
+  DITAHAN_KORELASI: 3,
+  TUNGGU: 4,
+  PASAR_TUTUP: 5,
+  DATA: 6,
 };
 
 /** Urutan tampil: LOLOS dulu, lalu yang paling dekat lolos; skor kuat di atas. */

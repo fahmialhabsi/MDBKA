@@ -6383,6 +6383,17 @@ test("535. taruhan ganda: eksposur searah diblok, lindung nilai tidak", () => {
   assert(findDoubleBet("EURCHF", "BELI", []) === null, "tanpa posisi");
 });
 
+test("536. wiring taruhan ganda: pemindai, panel, pencatat entry (readSrc)", () => {
+  const sc = readSrc("src/lib/symbolScanner.ts");
+  assert(sc.includes('status: "DITAHAN_KORELASI"') && sc.includes("findDoubleBet(symbol, result.decision, input.openPositions)"), "pemindai belum memblok");
+  assert(sc.includes('decision: "TUNGGU"'), "keputusan harus TUNGGU saat ditahan");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes("useBrokerPositions(brokerId)") && panel.includes("openPositions,"), "panel tanpa posisi terbuka");
+  assert(panel.includes('label: "Taruhan ganda"'), "label status hilang");
+  const log = readSrc("server/services/tradeEntryLog.ts");
+  assert(log.includes("positions.filter((o) => o.ticket !== p.ticket)"), "entry harus dinilai terhadap posisi lain");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

@@ -15,6 +15,7 @@ import {
   sortScanRows,
   type ScanStatus,
 } from "../../lib/symbolScanner";
+import { useBrokerPositions } from "../../hooks/useBrokerPositions";
 import type { ExchangeRates } from "../../services/fxRateService";
 import type { BrokerId } from "../../types/broker";
 
@@ -47,6 +48,7 @@ const STATUS_VIEW: Record<ScanStatus, { label: string; className: string }> = {
   LOLOS: { label: "Lolos · belum terbukti", className: "bg-emerald-400/15 text-emerald-300" },
   DITAHAN_BIAYA: { label: "Biaya mahal", className: "bg-sky-400/15 text-sky-300" },
   DITAHAN_RISIKO: { label: "Risiko > batas", className: "bg-amber-400/15 text-amber-300" },
+  DITAHAN_KORELASI: { label: "Taruhan ganda", className: "bg-fuchsia-400/15 text-fuchsia-300" },
   TUNGGU: { label: "Tunggu", className: "bg-white/10 text-slate-300" },
   PASAR_TUTUP: { label: "Pasar tutup / basi", className: "bg-white/5 text-slate-500" },
   DATA: { label: "Data kurang", className: "bg-white/5 text-slate-500" },
@@ -84,6 +86,22 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
       window.clearInterval(id);
     };
   }, []);
+  // Langkah D: posisi terbuka broker aktif → blokir sinyal searah.
+  const { positions } = useBrokerPositions(brokerId);
+  const positionsKey = positions
+    .map((p) => `${p.symbol}:${p.side}`)
+    .sort()
+    .join(",");
+  const openPositions = useMemo(
+    () =>
+      positionsKey === ""
+        ? []
+        : positionsKey.split(",").map((part) => {
+            const i = part.lastIndexOf(":");
+            return { symbol: part.slice(0, i), side: part.slice(i + 1) };
+          }),
+    [positionsKey],
+  );
   const lolosStats = mergeGroupStats(evalAccounts, brokerId, "LOLOS");
   const lolosView = {
     label: lolosLabel(lolosStats),
@@ -137,14 +155,15 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
           equity,
           fxRates,
           referenceCandleMs: reference,
+          openPositions,
         }),
       ),
     );
-  }, [items, itemsBroker, brokerId, equity, fxRates]);
+  }, [items, itemsBroker, brokerId, equity, fxRates, openPositions]);
 
   const counts = rows.reduce<Record<ScanStatus, number>>(
     (acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }),
-    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
+    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
   );
   const visible = showAll ? rows : rows.slice(0, COLLAPSED_ROWS);
   const loading =
@@ -162,7 +181,8 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
             <p className="mt-1 text-sm text-slate-400">
               {rows.length} simbol ber-CSV · {counts.LOLOS} lolos ·{" "}
               {counts.DITAHAN_BIAYA} biaya mahal · {counts.DITAHAN_RISIKO} risiko
-              &gt; batas · {counts.TUNGGU} tunggu · {counts.PASAR_TUTUP} pasar
+              &gt; batas · {counts.DITAHAN_KORELASI} taruhan ganda ·{" "}
+              {counts.TUNGGU} tunggu · {counts.PASAR_TUTUP} pasar
               tutup · {counts.DATA} data kurang
             </p>
           </div>

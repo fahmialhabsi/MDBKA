@@ -84,7 +84,11 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
   const known = new Set(readTradeEntries(opts.file).map((r) => r.ticket));
   let first = true;
 
-  const scanFor = (symbol: string, equity: number | null): EntryScan => {
+  const scanFor = (
+    symbol: string,
+    equity: number | null,
+    others: readonly { symbol: string; side: string }[],
+  ): EntryScan => {
     const items = collectCandleItems(opts.quotes, opts.commonDir);
     const item = items.find((i) => i.symbol === symbol);
     if (item === undefined || equity === null) {
@@ -111,6 +115,8 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       equity,
       fxRates: opts.getFxRates(),
       referenceCandleMs: reference,
+      // Langkah D: dinilai terhadap posisi LAIN yang sudah terbuka.
+      openPositions: others,
     });
     return {
       status: row.status,
@@ -133,7 +139,11 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
         let scan: EntryScan | null = null;
         if (!preExisting) {
           try {
-            scan = scanFor(p.symbol, equity);
+            scan = scanFor(
+              p.symbol,
+              equity,
+              positions.filter((o) => o.ticket !== p.ticket),
+            );
           } catch (e) {
             scan = {
               status: "DATA",
