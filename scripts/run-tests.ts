@@ -232,6 +232,13 @@ import { applyLossPauseHold, checkLossStreak, tradesForBroker } from "../src/lib
 import { formatPrice, priceDigits } from "../src/lib/tickSize";
 import { computeExcursion } from "../server/services/tradeExcursion";
 import { computeExcursionsFromArchive, excursionFileNames } from "../server/services/excursionReader";
+import {
+  appendExcursionCache,
+  excursionCacheFile,
+  excursionKey,
+  isFinalExcursion,
+  readExcursionCache,
+} from "../server/services/excursionCache";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -6517,6 +6524,36 @@ test("545. MFE/MAE cakupan PARSIAL bila celah > 60 dtk, TANPA_DATA bila kosong",
   assert(e.coverage === "TANPA_DATA" && e.mfe === null && e.ticks === 0, `kosong: ${e.coverage}`);
   const tepi = computeExcursion(trade, [{ ts_raw: "2026.10.05 14:17:30", bid: 1.3, ask: 1.3002 }, { ts_raw: "2026.10.05 17:00:10", bid: 1.3, ask: 1.3002 }]);
   assert(tepi.coverage === "PENUH", `celah ≤ 60 dtk harus PENUH: ${tepi.coverage}`);
+});
+
+test("547. catatan MFE/MAE: kapan hasil dianggap final", () => {
+  const trade = { side: "BUY" as const, openTime: "2026.10.08 02:00:00", closeTime: "2026.10.08 03:00:00", openPrice: 1.3, sl: null };
+  const penuh = computeExcursion(trade, [{ ts_raw: "2026.10.08 02:00:00", bid: 1.3, ask: 1.3001 }, { ts_raw: "2026.10.08 03:00:00", bid: 1.3, ask: 1.3001 }]);
+  const parsial = computeExcursion(trade, [{ ts_raw: "2026.10.08 02:30:00", bid: 1.3, ask: 1.3001 }]);
+  const kosong = computeExcursion(trade, []);
+  assert(isFinalExcursion(penuh, trade.closeTime, null), "PENUH selalu final");
+  assert(!isFinalExcursion(parsial, trade.closeTime, "2026.10.08 03:30:00"), "baru 30 mnt: belum final");
+  assert(!isFinalExcursion(kosong, trade.closeTime, null), "tanpa tick terbaru: belum final");
+  assert(isFinalExcursion(parsial, trade.closeTime, "2026.10.08 04:00:01"), "> 1 jam: final");
+  assert(isFinalExcursion(kosong, trade.closeTime, "2026.10.09 00:00:00"), "TANPA_DATA lama: final");
+  assert(excursionKey("70930952", "2108869") === "70930952:2108869", "kunci login:positionId");
+});
+
+test("548. catatan MFE/MAE: tulis-baca, baris rusak dilewati, baris terakhir menang", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "exccache-"));
+  const file = excursionCacheFile(npath.join(dir, "trades"), "otb");
+  assert(file.endsWith("excursion-otb.jsonl"), file);
+  assert(readExcursionCache(file).size === 0, "belum ada file → kosong");
+  const x = computeExcursion({ side: "BUY", openTime: "2026.10.08 02:00:00", closeTime: "2026.10.08 02:00:30", openPrice: 1.3, sl: null }, [{ ts_raw: "2026.10.08 02:00:10", bid: 1.301, ask: 1.3012 }]);
+  appendExcursionCache(file, [{ ...x, key: "1:10", computedAt: "a" }, { ...x, key: "1:11", computedAt: "a" }]);
+  nfs.appendFileSync(file, "{rusak\n");
+  appendExcursionCache(file, [{ ...x, key: "1:10", computedAt: "b" }]);
+  const map = readExcursionCache(file);
+  assert(map.size === 2, `jumlah kunci ${map.size}`);
+  assert(map.get("1:10")?.computedAt === "b" && map.get("1:10")?.mfe === 0.001, "baris terakhir harus menang");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
