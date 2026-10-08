@@ -6787,6 +6787,13 @@ test("560. breakeven + biaya: tanpa kurs/spec atau biaya > profit → SL tetap d
   assert(lama !== null && lama.slTarget === 1.32 && lama.costDistance === 0, "tanpa argumen biaya = perilaku lama");
 });
 
+test("561. monitor posisi: kotak BREAKEVEN memakai SL + biaya komisi (opsi 5-2, readSrc)", () => {
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes("breakevenCostDistance(holding, convert),"), "jarak biaya belum dikirim ke checkBreakeven");
+  assert(dash.includes('data-testid="breakeven-cost"') && dash.includes("sudah ditutup oleh SL ini"), "baris biaya Rupiah hilang");
+  assert(dash.includes("breakeven.costDistance > 0"), "baris biaya harus hanya muncul bila biaya dipakai");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

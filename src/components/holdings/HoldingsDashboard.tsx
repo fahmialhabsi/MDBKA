@@ -10,7 +10,9 @@ import {
   type ExchangeRates,
 } from "../../services/fxRateService";
 import {
+  breakevenCostDistance,
   checkBreakeven,
+  commissionForHolding,
   checkTimeStop,
   TIME_STOP_HOURS,
   checkMarginGuard,
@@ -116,7 +118,17 @@ function HoldingCard({
   const breakeven =
     exited || live === undefined
       ? null
-      : checkBreakeven(holding, live.bid, live.ask);
+      : checkBreakeven(
+          holding,
+          live.bid,
+          live.ask,
+          // Opsi 5-2: SL breakeven + biaya komisi agar benar-benar impas.
+          breakevenCostDistance(holding, convert),
+        );
+  const breakevenCommission =
+    breakeven !== null && breakeven.costDistance > 0
+      ? commissionForHolding(holding.symbol, holding.lot)
+      : null;
   const timeStop =
     exited || live === undefined ? null : checkTimeStop(holding, live.timestamp);
   const marginWarning = exited ? null : checkMarginGuard(holding, convert);
@@ -240,6 +252,16 @@ function HoldingCard({
           <p className="mt-1 text-sm leading-6 text-emerald-100">
             {breakeven.message}
           </p>
+          {breakevenCommission !== null && (
+            <p
+              className="mt-1 text-xs text-emerald-200/80"
+              data-testid="breakeven-cost"
+            >
+              Biaya komisi {rupiah(breakevenCommission, "USD", kurs).replace(/^[+-]/, "")} (
+              {breakevenCommission.toFixed(2)} USD) sudah ditutup oleh SL ini —
+              bila kena SL, hasil ≈ impas, bukan rugi kecil.
+            </p>
+          )}
         </div>
       )}
 
