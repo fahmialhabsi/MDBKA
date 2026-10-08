@@ -239,6 +239,7 @@ import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
 import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
 import { applyLossPauseHold, checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
 import { formatPrice, priceDigits } from "../src/lib/tickSize";
+import { RISK_GROUPS, riskGroupOf } from "../src/lib/riskGroup";
 import { computeExcursion } from "../server/services/tradeExcursion";
 import { computeExcursionsFromArchive, excursionFileNames } from "../server/services/excursionReader";
 import {
@@ -6808,6 +6809,20 @@ test("563. format harga indeks tanpa desimal: JP225/HK50 = 0 desimal seperti MT5
   assert(formatPrice(69126, "JP225") === "69126" && formatPrice(23801, "HK50") === "23801", formatPrice(69126, "JP225"));
   assert(priceDigits("US500") === 2 && priceDigits("GBPUSD") === 5 && priceDigits("USDJPY") === 3, "simbol lain tidak boleh berubah");
   assert(priceDigits("TIDAKADA") === 5, "simbol tak dikenal tetap 5 desimal");
+});
+
+test("564. golongan risiko: penetapan Fahmi per golongan, akhiran _ORB/.DEC, tak dikenal = ditahan", () => {
+  const cap = (s: string) => riskGroupOf(s).capIdr;
+  assert(cap("GBPUSD") === 35000 && cap("AUDCHF_ORB") === 35000, "forex Rp35 rb");
+  assert(riskGroupOf("CADJPY_ORB").id === "FOREX_JPY" && cap("USDJPY") === 35000, "JPY Rp35 rb");
+  assert(cap("XTIUSD") === 150000 && cap("CLU") === 150000, "minyak Rp150 rb");
+  assert(cap("XAUUSD_ORB") === 150000 && riskGroupOf("XAGUSD").id === "LOGAM", "logam Rp150 rb");
+  assert(cap("JP225") === 150000 && riskGroupOf("US100.DEC").id === "INDEKS", "indeks Rp150 rb");
+  assert(cap("#NVDA") === 50000 && cap("META.US") === 50000, "saham AS Rp50 rb");
+  assert(cap("#BMW") === null && cap("#700") === null && cap("#XYZ") === null, "saham lain ditahan");
+  assert(cap("USDHKD") === null && cap("GBXUSD") === null, "forex tidak lazim ditahan");
+  assert(riskGroupOf("BTCUSD").id === "LAINNYA" && cap("BTCUSD") === null, "tak dikenal ditahan");
+  assert(Object.keys(RISK_GROUPS).length === 9, "jumlah golongan");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
