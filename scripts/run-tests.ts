@@ -239,7 +239,7 @@ import {
   isFinalExcursion,
   readExcursionCache,
 } from "../server/services/excursionCache";
-import { newestTickRaw, runExcursionPass } from "../server/services/excursionJob";
+import { newestTickRaw, runExcursionPass, startExcursionSchedule } from "../server/services/excursionJob";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -10029,6 +10029,41 @@ test("472. kanonis + profil preservasi nama bertitik/bertanda", () => {
   } catch (e) {
     failed += 1;
     console.log(`FAIL - 549. putaran pengisi buku MFE/MAE: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // 550: jadwal putaran MFE/MAE tidak bertumpuk + terpasang di server (async).
+  try {
+    const logs: string[] = [];
+    let release: () => void = () => undefined;
+    let calls = 0;
+    const sched = startExcursionSchedule(
+      () => {
+        calls += 1;
+        return new Promise((resolve) => {
+          release = () => resolve([{ broker: "finex", pending: 2, saved: 1, notFinal: 1 }]);
+        });
+      },
+      (m) => logs.push(m),
+      1e9,
+      1e9,
+    );
+    const pertama = sched.tick();
+    const kedua = await sched.tick();
+    assert(kedua === false && calls === 1, `putaran kedua harus ditolak saat pertama jalan (calls=${calls})`);
+    release();
+    assert((await pertama) === true, "putaran pertama harus selesai");
+    assert(logs[0] === "✓ MFE/MAE finex: 1 dicatat, 1 dicoba lagi nanti", `log: ${logs[0]}`);
+    const gagal = startExcursionSchedule(() => Promise.reject(new Error("arsip terkunci")), (m) => logs.push(m), 1e9, 1e9);
+    assert((await gagal.tick()) === true && logs[1] === "⚠ MFE/MAE gagal: arsip terkunci", `gagal: ${logs[1]}`);
+    sched.stop();
+    gagal.stop();
+    const idx = readSrc("server/index.ts");
+    assert(idx.includes("startExcursionSchedule(() =>") && idx.includes("excursionSchedule?.stop();"), "jadwal belum terpasang/dihentikan di server/index.ts");
+    passed += 1;
+    console.log("ok - 550. jadwal MFE/MAE: tidak bertumpuk, gagal dilog, terpasang di server");
+  } catch (e) {
+    failed += 1;
+    console.log(`FAIL - 550. jadwal MFE/MAE: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   console.log(

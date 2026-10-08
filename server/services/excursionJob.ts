@@ -120,3 +120,45 @@ export async function runExcursionPass(opts: {
   }
   return out;
 }
+
+/**
+ * Langkah 5b4 — jadwal putaran: sekali `firstDelayMs` setelah start, lalu
+ * tiap `intervalMs`. Putaran tidak pernah bertumpuk (tanda `running`);
+ * gagal satu putaran hanya dilog, putaran berikutnya tetap jalan.
+ */
+export const EXCURSION_FIRST_DELAY_MS = 5000;
+export const EXCURSION_INTERVAL_MS = 10 * 60 * 1000;
+
+export function startExcursionSchedule(
+  run: () => Promise<readonly ExcursionPassSummary[]>,
+  log: (msg: string) => void = console.log,
+  firstDelayMs: number = EXCURSION_FIRST_DELAY_MS,
+  intervalMs: number = EXCURSION_INTERVAL_MS,
+): { stop: () => void; tick: () => Promise<boolean> } {
+  let running = false;
+  const tick = async (): Promise<boolean> => {
+    if (running) return false;
+    running = true;
+    try {
+      for (const s of await run()) {
+        if (s.pending > 0) {
+          log(`✓ MFE/MAE ${s.broker}: ${s.saved} dicatat, ${s.notFinal} dicoba lagi nanti`);
+        }
+      }
+    } catch (e) {
+      log(`⚠ MFE/MAE gagal: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      running = false;
+    }
+    return true;
+  };
+  const first = setTimeout(() => void tick(), firstDelayMs);
+  const every = setInterval(() => void tick(), intervalMs);
+  return {
+    stop: () => {
+      clearTimeout(first);
+      clearInterval(every);
+    },
+    tick,
+  };
+}

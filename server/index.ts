@@ -15,6 +15,7 @@ import { createApp } from "./app";
 import { getCachedEcbRates } from "./routes/fxRoutes";
 import { resolveCommonFilesDir } from "./routes/marginRoutes";
 import { createTradeEntryLog } from "./services/tradeEntryLog";
+import { runExcursionPass, startExcursionSchedule } from "./services/excursionJob";
 import { MT5LogReader } from "./services/mt5LogReader";
 import { QuotesLogReader } from "./services/quotesLogReader";
 import { PositionsLogReader } from "./services/positionsLogReader";
@@ -221,6 +222,12 @@ async function startServer() {
     src.positions.onUpdate(record);
   }
 
+  // Langkah 5b4 Mode Aman: isi buku MFE/MAE (data/trades/excursion-<broker>.jsonl)
+  // di latar belakang: 5 dtk setelah start, lalu tiap 10 menit.
+  excursionSchedule = startExcursionSchedule(() =>
+    runExcursionPass({ commonDir: resolveCommonFilesDir(), tradesDir, historyDir }),
+  );
+
   const server = app.listen(PORT, () => {
     const latest = reader.getLatest();
     console.log(`✓ Backend running on http://localhost:${PORT}`);
@@ -248,6 +255,7 @@ async function startServer() {
   return server;
 }
 
+let excursionSchedule: { stop: () => void } | null = null;
 const serverPromise = startServer();
 
 function shutdown(): void {
@@ -258,6 +266,7 @@ function shutdown(): void {
   if (quotesReaderFinex !== null) quotesReaderFinex.destroy();
   if (positionsReader !== null) positionsReader.destroy();
   if (positionsReaderFinex !== null) positionsReaderFinex.destroy();
+  excursionSchedule?.stop();
   serverPromise
     .then((server) => {
       server.close(() => {
