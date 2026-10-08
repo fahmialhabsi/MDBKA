@@ -1,9 +1,9 @@
-# HANDOFF MDBKA — Mode Aman (8 Okt 2026)
+# HANDOFF MDBKA — Mode Aman (8 Okt 2026, diperbarui 9 Okt 2026)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir kode: **51eae63** (branch `main`; sesi 8 Okt: 32a7299 → 51eae63).
-Test terakhir: **564 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
-Nomor test terakhir: **568** → test baru mulai **569**.
+Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
+Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
+Nomor test terakhir: **569** → test baru mulai **570**.
 
 ---
 
@@ -119,6 +119,7 @@ Nomor test terakhir: **568** → test baru mulai **569**.
 | 597c8e4 | **Fix pointValue Finex non-USD**: `withUsdPointValue` kini juga konversi Finex (mata uang kuotasi dari spec32). Dulu USDJPY terbaca Rp3,6 jt (yen dianggap USD), kini ±Rp24 rb; CHF/CAD/GBP/NZD/AUD meleset 0,6–1,3× ikut benar. Test 496 lama ("Finex tetap" = bug) diganti. Terverifikasi di layar |
 | faabdb4 | **R3b** analisa diulang otomatis sekali begitu kurs USD→Rp termuat (`kursRetryRef`); pesan "kurs belum tersedia" saat start hilang. Terverifikasi. Test 567 |
 | 51eae63 | **R4 panel "Batas risiko per golongan"** (`RiskGroupsPanel.tsx`, `<details>` di bawah pemindai): golongan, batas Rp (≈ $), daftar simbol + catatan; isi dari `riskGroupTable()` (sumber sama dengan aturan, test cek tiap simbol). Terverifikasi di layar. Test 568 |
+| (9 Okt) | **Time-stop khusus Forex**: `timeStopApplies(symbol)` + `TIME_STOP_GROUPS = ["FOREX","FOREX_JPY"]` di `exitMonitor.ts` (pakai `riskGroupOf`). `checkTimeStop` kini butuh `symbol`; logam, minyak, indeks, saham = tanpa batas waktu. Test 530 disesuaikan + test 569 |
 
 ### Aturan Mode Aman yang aktif sekarang
 1. Default **TUNGGU**; sinyal hanya bila skor (MA50, CCI, MACD, RSI) kompak.
@@ -126,7 +127,7 @@ Nomor test terakhir: **568** → test baru mulai **569**.
 3. **Gerbang biaya**: (spread + slippage)·pointValue + komisi ≤ **10%** dari risiko, selain itu "Ditahan: biaya X% (maks 10%)".
    Saat ditahan: decision = TUNGGU, SL/TP/lot = null, `heldBy`/`heldDecision`/`costShareOfRisk` diisi.
 4. **Breakeven di +0,5R** (instruksi Modify SL = entry **+ biaya komisi** di MT5; tanpa kurs/spec → entry).
-5. **Time-stop 3 jam** (selisih jam server quote − jam buka; holding manual format ISO tidak dinilai).
+5. **Time-stop 3 jam — hanya Forex & Forex JPY** (penetapan 9 Okt; selisih jam server quote − jam buka; holding manual ISO tidak dinilai). Logam, Minyak, Indeks, Saham AS: **tanpa batas waktu horizon** — tetap wajib SL.
 6. **Bukti n ≥ 20**: "Lolos · belum terbukti (n/20)" → "Lolos · win rate X% (n=N)"; merah "terbukti rugi" bila ekspektansi ≤ 0.
    Demo + live satu broker digabung.
 7. Data indikator dari **200 candle H1**.
@@ -203,11 +204,39 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 - Kotak BREAKEVEN + biaya (5-2) **belum terlihat langsung** — tunggu posisi ber-SL yang profitnya ≥ 0,5R, lalu cek angka SL & baris Rupiah.
 
 - Posisi OTB masih terbuka sejak 6 Okt: **META.US BUY 0,10 @741,07 tanpa SL/TP**, **AUDUSD_ORB BUY 0,10 @0,69811**
-  (SL 0,69311, TP 0,70626). Keduanya kena TIME-STOP; META tanpa SL = risiko tak terbatas. Keputusan di tangan Fahmi.
+  (SL 0,69311, TP 0,70626). Sejak 9 Okt hanya AUDUSD_ORB yang kena TIME-STOP (META.US = saham, tanpa batas waktu);
+  META tanpa SL tetap = risiko tak terbatas. Keputusan di tangan Fahmi.
 - OTB Experts log 03:28: `ExportPositions: FileOpen gagal: 5004` (sekali; kemungkinan file sedang dibaca). Pantau bila berulang.
 - Belum ada trade Mode Aman tercatat → label pemindai masih "belum terbukti (0/20)".
 - Backup pertama sudah sukses; banner muncul lagi bila data penting berubah.
 - Buku MFE/MAE (`data/trades/excursion-*.jsonl`) di-gitignore seperti `data/` lain → ikut tombol **Backup sekarang**.
+
+---
+
+## 4b. Audit 9 Okt 2026 — bahan analisa & faktor penggerak harga (read-only, belum dikerjakan)
+
+**Mesin analisa sekarang:** hanya candle H1 (200) + bid/ask. Skor: MA50 ±2, CCI(14) ±1 (±100), MACD(12,26,9) ±1, RSI(14) ±1
+(50–70 / 30–50; RSI > 70 dinilai 0, bukan negatif). BELI bila skor ≥ 3 & harga > MA50 (JUAL kebalikan). SL = terjauh dari
+(swing ± buffer 5 tick) dan 1,2×ATR14; TP = 1,5R (bukan 1:2). Catatan: MA50 bernilai 2 → cukup 1 indikator lain setuju.
+
+**7 bahan yang ada:** candle H1 ✅ (tapi kolom `tick_volume` diekspor service dan **dibuang** `csvCandleParser.ts`), bid/ask ✅,
+jam candle vs broker ✅, spesifikasi simbol ⚠️ (**tertulis tetap di kode** `instrumentSpecs32.ts`/`otbInstrumentConfig.ts`, salinan
+3 Okt; belum live dari MT5), equity ✅, kurs ECB ✅, posisi + History ✅.
+
+**Tab MT5:** Calendar ✅ bisa dibaca EA (`CalendarValueHistory`: importance rendah/sedang/tinggi, actual/forecast/previous,
+impact_type, jam server). Journal ✅ (file log; `mt5LogReader.ts` sudah ada) → satpam kesehatan data. News ❌ (tak ada API MQL5),
+Mailbox ❌, Articles ❌, Company sebagian (sesi/spesifikasi lewat `SymbolInfo…`).
+
+**Faktor penggerak → proksi terukur:** suku bunga/PDB/NFP/CPI = Calendar (kejutan aktual vs perkiraan) + swap long/short;
+geopolitik = tidak terjadwal → proksi lonjakan ATR/gap; safe haven = emas naik + indeks AS turun + JPY/CHF menguat (risk-off,
+dari quotes); big boys = tick volume (bukan uang riil) / COT CFTC (mingguan, terlalu lambat); greed/fear = RSI/CCI; S/R =
+swing H1 + level H4/D1 + high/low kemarin + angka bulat. Tambahan: jam sesi (Asia/London/NY), kekuatan mata uang, gap akhir pekan.
+
+**Prinsip:** faktor fundamental dipakai sebagai **penahan** (lebih sering TUNGGU), bukan penentu arah; dibuktikan lewat Evaluasi (≥ 20 trade).
+
+**Urutan usulan:** (1) Satpam Kalender (service ekspor event → TUNGGU sekitar berita berdampak tinggi untuk mata uang simbol);
+(2) simpan tick volume (tampil dulu); (3) ekspor H4/D1 → filter tren D1 + S/R besar untuk TP; (4) proksi risk-off & kekuatan
+mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: News, Mailbox, Articles; COT cadangan.
 
 ---
 
@@ -225,10 +254,11 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 5. ~~Biaya breakeven (SL = entry + biaya)~~ ✅ selesai (5-1, 5-2; 1968ef6 → 5fdc105). Verifikasi layar menunggu.
 6. ~~Pencatat entry ikut status jeda~~ ✅ selesai (6a-1, 6a-2; 426f329 → f350ae3). Sisa **6b**: akun ke-4 di header — hanya bila ada file History akun baru.
 6c. ~~Batas risiko per golongan~~ ✅ selesai (R1–R4, 58ee5a3 → 51eae63).
+6e. **Bahan analisa baru** (audit 9 Okt, bagian 4b): mulai dari Satpam Kalender. Belum diputuskan.
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **562**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **570**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -236,8 +266,9 @@ ESLint → pengguna build/test/commit → verifikasi.
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
 > Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, lihat git log,
-> 564 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
+> 565 test lolos setelah 9 Okt). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
-> lalu minus". Langkah berikutnya: kumpulkan trade Mode Aman (langkah 1); opsi 5 & 6a sudah selesai (cek layar BREAKEVEN + log DITAHAN_JEDA bila terjadi).
+> lalu minus". Time-stop 3 jam hanya Forex & Forex JPY. Langkah berikutnya: kumpulkan trade Mode Aman (langkah 1) dan
+> diskusi bahan analisa baru (bagian 4b, mulai Satpam Kalender).
 > Setiap langkah selesai, jelaskan dulu dalam bahasa awam (GUARD no. 11) sebelum saya commit.

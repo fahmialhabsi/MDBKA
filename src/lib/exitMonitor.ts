@@ -4,6 +4,7 @@ import {
 import { getSpec32SwapPreview } from "./spec32Wiring";
 import { parseSnapshotTime } from "./dataFreshness";
 import { priceDigits, tickSizeForSymbol } from "./tickSize";
+import { riskGroupOf } from "./riskGroup";
 import type { BrokerId } from "../types/broker";
 import type { BrokerPosition } from "../../server/types/positions";
 
@@ -617,8 +618,18 @@ export function checkBreakeven(
  * Time-stop Mode Aman (8 Okt 2026): horizon analisa 3 jam. Lewat itu
  * sinyal awal sudah tidak berlaku — tutup posisi, jangan ditahan
  * berhari-hari (3 posisi yang ditahan berhari-hari = ±89% rugi OTB).
+ * Penetapan Fahmi 9 Okt 2026: horizon 3 jam HANYA untuk golongan Forex &
+ * Forex JPY; golongan lain (logam, minyak, indeks, saham) tanpa batas waktu.
  */
 export const TIME_STOP_HOURS = 3;
+
+/** Golongan risiko yang memakai time-stop (lihat `riskGroup.ts`). */
+export const TIME_STOP_GROUPS: readonly string[] = ["FOREX", "FOREX_JPY"];
+
+/** true bila simbol (akhiran _ORB/.DEC diabaikan) memakai time-stop. */
+export function timeStopApplies(symbol: string): boolean {
+  return TIME_STOP_GROUPS.includes(riskGroupOf(symbol).id);
+}
 
 export interface TimeStopSignal {
   readonly hoursHeld: number;
@@ -631,11 +642,13 @@ const MT5_TIME = /^\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2}$/;
  * Sinyal time-stop (MODUL MURNI). Lama posisi = jam quote live − jam
  * buka, KEDUANYA jam server MT5 ("YYYY.MM.DD HH:MM:SS") agar tidak salah
  * zona waktu. Format lain (holding manual ISO) → null. Display-only.
+ * Simbol di luar golongan Forex/Forex JPY → null (tanpa batas waktu).
  */
 export function checkTimeStop(
-  holding: Pick<Holding, "entryTime">,
+  holding: Pick<Holding, "entryTime" | "symbol">,
   serverNow: string,
 ): TimeStopSignal | null {
+  if (!timeStopApplies(holding.symbol)) return null;
   if (!MT5_TIME.test(holding.entryTime.trim()) || !MT5_TIME.test(serverNow.trim())) {
     return null;
   }

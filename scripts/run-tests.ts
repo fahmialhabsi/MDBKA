@@ -187,6 +187,7 @@ import {
   BREAKEVEN_R_MULTIPLE,
   TIME_STOP_HOURS,
   checkTimeStop,
+  timeStopApplies,
   checkBreakeven,
   breakevenCostDistance,
   formatPriceDistance,
@@ -6309,7 +6310,7 @@ test("530. Mode Aman: breakeven 0,5R & time-stop 3 jam (jam server MT5)", () => 
   const be = checkBreakeven({ direction: "BELI", entryPrice: 1.32, sl: 1.319 }, 1.3205, 1.3207);
   assert(be !== null && be.multiple === 0.5 && be.message.includes("0,5R"), JSON.stringify(be));
   assert(TIME_STOP_HOURS === 3, "horizon bukan 3 jam");
-  const h = { entryTime: "2026.10.06 14:41:45" };
+  const h = { entryTime: "2026.10.06 14:41:45", symbol: "AUDUSD_ORB" };
   assert(checkTimeStop(h, "2026.10.06 17:41:44") === null, "belum 3 jam ikut terpicu");
   const ts = checkTimeStop(h, "2026.10.06 17:41:45");
   assert(ts !== null && ts.hoursHeld === 3 && ts.message.includes("3,0 jam"), JSON.stringify(ts));
@@ -6318,7 +6319,7 @@ test("530. Mode Aman: breakeven 0,5R & time-stop 3 jam (jam server MT5)", () => 
   const hari = checkTimeStop(h, "2026.10.09 14:41:45");
   assert(hari !== null && hari.message.includes("3,0 hari"), JSON.stringify(hari));
   // Holding manual (ISO UTC) beda jam dengan quote server → tidak dinilai.
-  assert(checkTimeStop({ entryTime: "2026-10-06T05:41:45.000Z" }, "2026.10.07 20:25:07") === null, "ISO ikut dinilai");
+  assert(checkTimeStop({ entryTime: "2026-10-06T05:41:45.000Z", symbol: "EURUSD" }, "2026.10.07 20:25:07") === null, "ISO ikut dinilai");
   assert(checkTimeStop(h, "") === null, "tanpa jam quote");
 });
 
@@ -6882,6 +6883,19 @@ test("568. panel golongan: daftar tampil = aturan yang dipakai (R4)", () => {
   assert(app.includes("<RiskGroupsPanel usdIdr={usdIdrRate(fxRates)} />"), "panel belum dipasang di App");
   const panel = readSrc("src/components/analysis/RiskGroupsPanel.tsx");
   assert(panel.includes("riskGroupTable()") && panel.includes("<details"), "panel harus dari buku & bisa dilipat");
+});
+
+test("569. time-stop 3 jam hanya Forex & Forex JPY (penetapan 9 Okt)", () => {
+  assert(timeStopApplies("EURUSD") && timeStopApplies("AUDUSD_ORB") && timeStopApplies("CADJPY_ORB"), "forex harus kena time-stop");
+  for (const s of ["XTIUSD", "XAUUSD_ORB", "US100", "JP225", "META.US", "#AAPL"]) {
+    assert(!timeStopApplies(s), `${s} tidak boleh kena time-stop`);
+  }
+  const lama = "2026.10.06 14:41:45";
+  const now = "2026.10.09 14:41:45";
+  assert(checkTimeStop({ entryTime: lama, symbol: "USDJPY" }, now) !== null, "USDJPY 3 hari harus time-stop");
+  assert(checkTimeStop({ entryTime: lama, symbol: "META.US" }, now) === null, "META.US tanpa batas waktu");
+  assert(checkTimeStop({ entryTime: lama, symbol: "XTIUSD" }, now) === null, "minyak tanpa batas waktu");
+  assert(checkTimeStop({ entryTime: lama, symbol: "US500" }, now) === null, "indeks tanpa batas waktu");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
