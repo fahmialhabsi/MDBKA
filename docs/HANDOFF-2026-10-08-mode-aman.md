@@ -1,9 +1,9 @@
 # HANDOFF MDBKA — Mode Aman (8 Okt 2026)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir: **lihat `git log`** (sesi 8 Okt pagi: 32a7299 → e0168a2 → commit jeda; branch `main`).
-Test terakhir: **536 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
-Nomor test terakhir: **540** → test baru mulai **541**.
+Commit terakhir kode: **25edb19** (branch `main`; sesi 8 Okt: 32a7299 → 25edb19).
+Test terakhir: **538 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
+Nomor test terakhir: **542** → test baru mulai **543**.
 
 ---
 
@@ -30,7 +30,7 @@ Nomor test terakhir: **540** → test baru mulai **541**.
   lalu `device_commit_files`. Jangan menyalin ulang isi file dari output tool (bisa terpotong).
 - **tsc tidak bisa jalan di VM** (TS7 binary Windows). ESLint bisa: `node node_modules/eslint/bin/eslint.js <file>`.
 - Test runner: `scripts/run-tests.ts` (CommonJS via `tsconfig.test.json`, **tidak bisa import .tsx** → logika
-  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **540**.
+  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **542**.
 - `tsx` juga tidak jalan di VM (esbuild Windows) → test hanya bisa dijalankan pengguna. `scripts/run-tests.ts` CRLF:
   sisipkan teks dengan `\r\n`. File CRLF lain: `src/types/analysis.ts`, `AnalysisResult.tsx`.
 - Test `readSrc` mengecek teks sumber: bila kalimat kode diubah, sesuaikan test lamanya (pernah gagal di 538).
@@ -83,7 +83,9 @@ Nomor test terakhir: **540** → test baru mulai **541**.
 | abb1f6a / 2412c15 | **Taruhan ganda**: `src/lib/correlationGuard.ts` (eksposur mata uang, Emas/Perak sendiri, "Saham AS" = indeks AS + saham .US/#, "Minyak"); pemindai status `DITAHAN_KORELASI`; pencatat entry menilai terhadap posisi LAIN |
 | fb3e81c | Status pemindai = tombol: hanya **Lolos** aktif → pilih simbol + gulir ke `#hasil-analisa`; status lain disabled (tooltip alasan) |
 | 4b61766 | Hasil analisa ikut menahan taruhan ganda (`applyDoubleBetHold`, `heldBy: "korelasi"`, kotak ungu) |
-| e0168a2 + berikutnya | **Jeda 3 rugi beruntun**: `src/lib/lossStreakGuard.ts` (24 jam jam server, demo+live per broker, fail-safe tanpa jam server), `useLossPause`, pemindai `DITAHAN_JEDA` + baris "Rugi beruntun n/3", Hasil analisa `heldBy: "jeda"` (kotak merah) |
+| e0168a2 / 9385c5e | **Jeda 3 rugi beruntun**: `src/lib/lossStreakGuard.ts` (24 jam jam server, demo+live per broker, fail-safe tanpa jam server), `useLossPause`, pemindai `DITAHAN_JEDA` + baris "Rugi beruntun n/3", Hasil analisa `heldBy: "jeda"` (kotak merah) |
+| e8ede7d | **Format harga ikut desimal simbol** (`priceDigits`/`formatPrice` di `tickSize.ts`): kartu Entry/SL/TP, kotak "Salin order" (titik desimal, siap tempel MT5), Live Quotes. US30 = 2, forex = 5, JPY = 3 |
+| 25edb19 | **MDBKAHistoryService** tulis ulang History saat ganti akun (`lastLogin`), walau jumlah deal sama. Sudah di-compile & restart di Finex + OTB (0 errors) |
 
 ### Aturan Mode Aman yang aktif sekarang
 1. Default **TUNGGU**; sinyal hanya bila skor (MA50, CCI, MACD, RSI) kompak.
@@ -143,7 +145,11 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 
 ## 4. Kondisi terbuka / perlu diperhatikan
 
-- **8 Okt 10:17**: Finex rugi beruntun **2/3** (CADJPY, EURCHF) → satu rugi lagi di Finex = jeda 24 jam. OTB 0 (US100 +$186,70).
+- **JEDA AKTIF Finex** sejak XTIUSD rugi (8 Okt): 3 rugi beruntun (CADJPY, EURCHF live + XTIUSD demo) → semua sinyal Finex
+  ditahan sampai **2026.10.09 04:47 jam server**. OTB tidak jeda (trade terakhir US100 +$186,70).
+- Format SL/TP baru di Hasil analisa lolos test 541 tapi belum dilihat langsung (tunggu sinyal Lolos berikutnya).
+- Pindah akun demo↔live: chart/EA/service tidak perlu di-attach ulang; server MDBKA saja yang dijalankan ulang.
+- Rencana online: disarankan **VPS Windows** (MT5 + MDBKA satu mesin, wajib login + HTTPS). Belum diputuskan.
 - Finex demo punya posisi terbuka (GBPUSD/GBPCHF/XTIUSD SELL) → beberapa sinyal JUAL GBP/minyak berstatus Taruhan ganda.
 - Pencatat entry server (`tradeEntryLog`) BELUM memperhitungkan jeda (hanya korelasi). Opsional ditambah.
 
@@ -165,7 +171,7 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 6. Opsional: pencatat entry server ikut mencatat status jeda; akun ke-4 di header bila ada file History-nya.
 7. Opsional: kecilkan bundle JS (> 500 kB) dengan dynamic import.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **541**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **543**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -173,7 +179,7 @@ ESLint → pengguna build/test/commit → verifikasi.
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
 > Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, lihat git log,
-> 536 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
+> 538 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
 > lalu minus". Langkah berikutnya: MFE/MAE dari arsip tick (mulai dengan audit read-only).
