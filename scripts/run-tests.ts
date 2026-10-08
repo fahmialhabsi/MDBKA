@@ -6853,6 +6853,19 @@ test("566. batas golongan terpasang di Hasil analisa & pemindai (R3, readSrc)", 
   assert(scan.includes("reason: signalReason(result),"), "alasan pemindai harus dari signalReason (memuat Rupiah)");
 });
 
+test("567. analisa diulang otomatis begitu kurs Rupiah termuat (R3b, readSrc)", () => {
+  const app = readSrc("src/App.tsx");
+  const i = app.indexOf("Auto susulan kurs (R3b)");
+  assert(i > 0, "efek susulan kurs hilang");
+  const blok = app.slice(i, i + 1200);
+  assert(blok.includes("usdIdrRate(fxRates) === null) return;"), "harus menunggu kurs USD→Rp tersedia (anti-loop)");
+  assert(blok.includes('.includes("kurs Rupiah belum tersedia")'), "hanya untuk hasil yang ditahan karena kurs");
+  assert(blok.includes("executeAnalysis(market, broker);"), "harus mengulang analisa");
+  assert(blok.includes("kursRetryRef.current = result;"), "pengaman sekali per hasil hilang");
+  const mesin = readSrc("src/calculations/decisionEngine.ts");
+  assert(mesin.includes("kurs Rupiah belum tersedia (batas"), "teks alasan mesin harus cocok dengan efek App");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

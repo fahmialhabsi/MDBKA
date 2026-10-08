@@ -291,6 +291,19 @@ export default function App() {
     [activeBrokerId, fxRates],
   );
 
+  // Auto susulan kurs (R3b): hasil dihitung sebelum kurs ECB termuat
+  // ("kurs Rupiah belum tersedia") → ulangi otomatis begitu kurs USD→Rp ada.
+  // Tanpa loop: setelah diulang dengan kurs, alasan kurs tidak muncul lagi.
+  const kursRetryRef = useRef<object | null>(null);
+  useEffect(() => {
+    if (result === null || usdIdrRate(fxRates) === null) return;
+    if (!(result.heldReason ?? "").includes("kurs Rupiah belum tersedia")) return;
+    // Satu kali per hasil: hasil yang sama tidak diulang dua kali.
+    if (kursRetryRef.current === result) return;
+    kursRetryRef.current = result;
+    executeAnalysis(market, broker);
+  }, [fxRates, result, market, broker, executeAnalysis]);
+
   // Auto susulan: CSV sudah masuk tapi equity live belum tiba saat itu
   // (hasil masih kosong) → terapkan otomatis begitu live tersedia.
   // Hanya saat belum ada hasil sukses; ketikan manual dilindungi via
