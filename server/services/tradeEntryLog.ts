@@ -53,6 +53,12 @@ export interface TradeEntryLogOptions {
   readonly quotes: CandleSource;
   readonly getEquity: () => number | null;
   readonly getFxRates: () => ExchangeRates | null;
+  /**
+   * Opsi 6a (8 Okt 2026): alasan jeda 3-rugi-beruntun pada jam server
+   * entry (timeOpen posisi), atau null bila tidak jeda. Tanpa ini entry
+   * saat jeda tercatat "LOLOS" dan mencemari bukti n>=20.
+   */
+  readonly getPauseReason?: (serverTime: string) => string | null;
   readonly now?: () => Date;
 }
 
@@ -84,10 +90,21 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
   const known = new Set(readTradeEntries(opts.file).map((r) => r.ticket));
   let first = true;
 
+  // Gagal baca History → tanpa jeda (catatan tetap ditulis; jangan blok).
+  const pauseAt = (timeOpen: string): string | null => {
+    if (opts.getPauseReason === undefined) return null;
+    try {
+      return opts.getPauseReason(timeOpen);
+    } catch {
+      return null;
+    }
+  };
+
   const scanFor = (
     symbol: string,
     equity: number | null,
     others: readonly { symbol: string; side: string }[],
+    timeOpen: string,
   ): EntryScan => {
     const items = collectCandleItems(opts.quotes, opts.commonDir);
     const item = items.find((i) => i.symbol === symbol);
@@ -117,6 +134,7 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       referenceCandleMs: reference,
       // Langkah D: dinilai terhadap posisi LAIN yang sudah terbuka.
       openPositions: others,
+      pauseReason: pauseAt(timeOpen),
     });
     return {
       status: row.status,
@@ -143,6 +161,7 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
               p.symbol,
               equity,
               positions.filter((o) => o.ticket !== p.ticket),
+              p.timeOpen,
             );
           } catch (e) {
             scan = {

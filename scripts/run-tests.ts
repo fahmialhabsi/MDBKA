@@ -6718,6 +6718,43 @@ test("556. arsip tick: tidak ada lagi pembacaan file arsip utuh (4b-3, readSrc)"
   assert(src.includes("JANGAN dipanggil dari UI"), "peringatan sinkron hilang");
 });
 
+test("557. catatan entry: status jeda dinilai pada jam server entry (opsi 6a)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "entries-jeda-"));
+  try {
+    nfs.writeFileSync(npath.join(dir, "MDBKA_GBPUSD_H1.csv"), scanCsv(80));
+    const quotes = { getSymbols: () => ["GBPUSD"], getLatestBySymbol: () => [] };
+    const pos = (ticket: string) => ({
+      ticket, symbol: "GBPUSD", side: "BUY" as const, volume: 0.01,
+      priceOpen: 1.3, sl: 1.29, tp: 1.31, timeOpen: "2026.10.08 09:15:00",
+    });
+    const asked: string[] = [];
+    const log = createTradeEntryLog({
+      file: npath.join(dir, "a.jsonl"), broker: "finex", commonDir: dir, quotes,
+      getEquity: () => 10000, getFxRates: () => null,
+      getPauseReason: (t) => { asked.push(t); return "Jeda: 3 kali rugi berturut-turut"; },
+    });
+    log.ingest([pos("1")]);
+    assert(asked.length === 0, "posisi saat start tidak dipindai → jeda tidak ditanya");
+    const baru = log.ingest([pos("1"), pos("2")]);
+    assert(baru.length === 1 && asked.join() === "2026.10.08 09:15:00", `jeda harus ditanya dgn jam entry: ${asked.join()}`);
+    const rusak = createTradeEntryLog({
+      file: npath.join(dir, "b.jsonl"), broker: "finex", commonDir: dir, quotes,
+      getEquity: () => 10000, getFxRates: () => null,
+      getPauseReason: () => { throw new Error("History terkunci"); },
+    });
+    rusak.ingest([]);
+    const r = rusak.ingest([pos("3")]);
+    assert(r.length === 1 && r[0].scan !== null && r[0].scan.status !== "DATA", `gagal baca jeda tidak boleh blok catatan: ${JSON.stringify(r[0]?.scan)}`);
+    const src = readSrc("server/services/tradeEntryLog.ts");
+    assert(src.includes("pauseReason: pauseAt(timeOpen),"), "alasan jeda belum diteruskan ke pemindai");
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
