@@ -3,6 +3,7 @@ import {
 } from "./instrumentSpecs32";
 import { getSpec32SwapPreview } from "./spec32Wiring";
 import { parseSnapshotTime } from "./dataFreshness";
+import { priceDigits, tickSizeForSymbol } from "./tickSize";
 import type { BrokerId } from "../types/broker";
 import type { BrokerPosition } from "../../server/types/positions";
 
@@ -199,6 +200,14 @@ function plannedValue(
     }
   }
   return { value: quoteAmount, currency: spec.quoteCurrency };
+}
+
+/** Jumlah desimal angka (mis. 0.69811 → 5), dibatasi 0..8. */
+function decimalsOf(value: number): number {
+  for (let d = 0; d <= 8; d += 1) {
+    if (Math.abs(value * Math.pow(10, d) - Math.round(value * Math.pow(10, d))) < 1e-6) return d;
+  }
+  return 8;
 }
 
 function round2(value: number): number {
@@ -490,9 +499,44 @@ export const BREAKEVEN_R_MULTIPLE = 0.5;
 export interface BreakevenSignal {
   /** Kelipatan-R posisi saat ini (profit harga / risiko harga). */
   readonly multiple: number;
-  /** Target SL baru = harga entry (breakeven, sebelum spread/komisi). */
+  /**
+   * Target SL baru: entry ± jarak biaya (opsi 5) bila diketahui, selain
+   * itu harga entry persis.
+   */
   readonly slTarget: number;
+  /** Jarak biaya yang dipakai (satuan harga), 0 bila tanpa biaya. */
+  readonly costDistance: number;
   readonly message: string;
+}
+
+/**
+ * Opsi 5 (8 Okt 2026) — jarak harga yang menutup komisi posisi, agar SL
+ * breakeven benar-benar impas (bukan rugi kecil karena komisi).
+ *   jarak = komisi USD ÷ (USD per 1 satuan harga) ;
+ *   USD per satuan harga = convert(contractSize × lot, quoteCurrency).
+ * Spread tidak ditambah (sudah terbayar lewat harga isi saat entry);
+ * swap diabaikan (time-stop 3 jam = tidak menginap). Dibulatkan NAIK ke
+ * kelipatan tick. null bila spec/komisi/kurs tidak diketahui (jujur:
+ * tanpa angka tebakan). MURNI.
+ */
+export function breakevenCostDistance(
+  holding: Pick<Holding, "symbol" | "lot">,
+  convertToUsd: (amount: number, currency: string) => number | null,
+): number | null {
+  const commission = commissionForHolding(holding.symbol, holding.lot);
+  if (commission === null) return null;
+  if (commission === 0) return 0;
+  const spec = getInstrumentSpec32(holding.symbol.trim());
+  if (spec === null || !Number.isFinite(spec.leverage) || spec.leverage <= 0) {
+    return null;
+  }
+  const usdPerUnit = convertToUsd(spec.leverage * holding.lot, spec.quoteCurrency);
+  if (usdPerUnit === null || !Number.isFinite(usdPerUnit) || usdPerUnit <= 0) {
+    return null;
+  }
+  const tick = tickSizeForSymbol(holding.symbol);
+  const ticks = Math.ceil(commission / usdPerUnit / tick - 1e-9);
+  return Number((ticks * tick).toFixed(priceDigits(holding.symbol)));
 }
 
 /**
@@ -508,6 +552,8 @@ export function checkBreakeven(
   holding: Pick<Holding, "direction" | "entryPrice" | "sl">,
   bid: number,
   ask: number,
+  /** Opsi 5: hasil breakevenCostDistance; null/absen = SL di entry. */
+  costDistance: number | null = null,
 ): BreakevenSignal | null {
   if (!Number.isFinite(bid) || bid <= 0) return null;
   if (!Number.isFinite(ask) || ask <= 0) return null;
@@ -533,12 +579,36 @@ export function checkBreakeven(
   const multipleAdj = multiple + 1e-9;
   if (!(multipleAdj >= BREAKEVEN_R_MULTIPLE)) return null;
   const rounded = Math.floor(multipleAdj * 100) / 100;
+  // Biaya hanya dipakai bila target masih di sisi untung harga sekarang
+  // (selain itu SL di atas bid / di bawah ask = tak bisa dipasang).
+  const cost =
+    costDistance !== null && costDistance > 0 && costDistance < profitDist
+      ? costDistance
+      : 0;
+  const slTarget =
+    cost === 0
+      ? holding.entryPrice
+      : holding.direction === "BELI"
+        ? holding.entryPrice + cost
+        : holding.entryPrice - cost;
+  const decimals = Math.max(
+    decimalsOf(holding.entryPrice),
+    cost === 0 ? 0 : decimalsOf(cost),
+  );
+  const slText = slTarget.toFixed(decimals);
+  const note =
+    cost > 0
+      ? `(entry ${holding.entryPrice} ${holding.direction === "BELI" ? "+" : "−"} biaya komisi, agar benar-benar impas)`
+      : costDistance === null
+        ? "(= entry; biaya komisi belum terhitung)"
+        : "(= entry)";
   return {
     multiple: rounded,
-    slTarget: holding.entryPrice,
+    slTarget: Number(slText),
+    costDistance: cost,
     message:
       `Profit ${rounded.toFixed(2)}R (≥${String(BREAKEVEN_R_MULTIPLE).replace(".", ",")}R). Amankan di MT5: klik kanan ` +
-      `posisi → Modify → isi Stop Loss = ${holding.entryPrice} → OK. ` +
+      `posisi → Modify → isi Stop Loss = ${slText} ${note} → OK. ` +
       `TP jangan diubah.`,
   };
 }

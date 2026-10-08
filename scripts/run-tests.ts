@@ -188,6 +188,7 @@ import {
   TIME_STOP_HOURS,
   checkTimeStop,
   checkBreakeven,
+  breakevenCostDistance,
   formatPriceDistance,
 } from "../src/lib/exitMonitor";
 import {
@@ -6760,6 +6761,30 @@ test("558. server: pencatat entry tersambung ke jeda History MT5 per broker (ops
   assert(idx.includes("getPauseReason: (serverTime) =>"), "getPauseReason belum dipasang di server/index.ts");
   assert(idx.includes("collectAccountEvaluations(resolveCommonFilesDir(), tradesDir, {}), src.broker)"), "jeda harus dari History broker yang sama");
   assert(idx.includes("serverTime,\n        ).reason") || idx.includes("serverTime,\r\n        ).reason"), "jeda harus dinilai pada jam server entry");
+});
+
+test("559. breakeven + biaya: AUDUSD_ORB 0,10 lot komisi $3,30 → SL 0.69844 (opsi 5-1)", () => {
+  const usd = (amount: number, ccy: string) => (ccy === "USD" ? amount : ccy === "CHF" ? amount * 1.25 : null);
+  const dist = breakevenCostDistance({ symbol: "AUDUSD_ORB", lot: 0.1 }, usd);
+  assert(dist === 0.00033, `jarak biaya OTB: ${dist}`);
+  const beli = checkBreakeven({ direction: "BELI", entryPrice: 0.69811, sl: 0.69311 }, 0.70061, 0.70075, dist);
+  assert(beli !== null && beli.slTarget === 0.69844 && beli.costDistance === 0.00033, JSON.stringify(beli));
+  assert(beli !== null && beli.message.includes("Stop Loss = 0.69844") && beli.message.includes("biaya komisi"), beli?.message ?? "");
+  const jual = checkBreakeven({ direction: "JUAL", entryPrice: 0.69811, sl: 0.70311 }, 0.69547, 0.69561, dist);
+  assert(jual !== null && jual.slTarget === 0.69778, JSON.stringify(jual));
+  const finex = breakevenCostDistance({ symbol: "USDCHF", lot: 0.01 }, usd);
+  assert(finex === 0.00001, `Finex 0,01 lot cukup 1 tick: ${finex}`);
+});
+
+test("560. breakeven + biaya: tanpa kurs/spec atau biaya > profit → SL tetap di entry, jujur", () => {
+  assert(breakevenCostDistance({ symbol: "AUDUSD_ORB", lot: 0.1 }, () => null) === null, "tanpa kurs harus null");
+  assert(breakevenCostDistance({ symbol: "TIDAKADA", lot: 0.1 }, (a) => a) === null, "tanpa spec harus null");
+  const tanpa = checkBreakeven({ direction: "BELI", entryPrice: 0.69811, sl: 0.69311 }, 0.70061, 0.70075, null);
+  assert(tanpa !== null && tanpa.slTarget === 0.69811 && tanpa.message.includes("biaya komisi belum terhitung"), tanpa?.message ?? "");
+  const mahal = checkBreakeven({ direction: "BELI", entryPrice: 0.69811, sl: 0.69311 }, 0.70061, 0.70075, 0.003);
+  assert(mahal !== null && mahal.slTarget === 0.69811 && mahal.costDistance === 0, "biaya > profit tak boleh jadi SL di atas bid");
+  const lama = checkBreakeven({ direction: "BELI", entryPrice: 1.32, sl: 1.319 }, 1.321, 1.3212);
+  assert(lama !== null && lama.slTarget === 1.32 && lama.costDistance === 0, "tanpa argumen biaya = perilaku lama");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
