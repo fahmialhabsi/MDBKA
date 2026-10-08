@@ -18,8 +18,11 @@ interface Props {
 
 type FieldSource = "preset" | "account" | "strategy" | "optional";
 
+/** Hanya isian angka; riskCap (batas golongan R2) diisi otomatis, bukan form. */
+type NumericBrokerKey = Exclude<keyof BrokerSettings, "riskCap">;
+
 const fields: Array<{
-  key: keyof BrokerSettings;
+  key: NumericBrokerKey;
   label: string;
   help: string;
   source: FieldSource;
@@ -106,7 +109,7 @@ export default function BrokerSettingsForm({
   onChange,
   onApplyPreset
 }: Props) {
-  function update(key: keyof BrokerSettings, value: string) {
+  function update(key: NumericBrokerKey, value: string) {
     const parsed = parseMarketInput(value);
 
     // Ketikan sementara diabaikan; state tidak pernah NaN/undefined.

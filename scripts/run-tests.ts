@@ -239,7 +239,7 @@ import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
 import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
 import { applyLossPauseHold, checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
 import { formatPrice, priceDigits } from "../src/lib/tickSize";
-import { RISK_GROUPS, riskGroupOf } from "../src/lib/riskGroup";
+import { RISK_GROUPS, riskCapFor, riskGroupOf } from "../src/lib/riskGroup";
 import { computeExcursion } from "../server/services/tradeExcursion";
 import { computeExcursionsFromArchive, excursionFileNames } from "../server/services/excursionReader";
 import {
@@ -6823,6 +6823,24 @@ test("564. golongan risiko: penetapan Fahmi per golongan, akhiran _ORB/.DEC, tak
   assert(cap("USDHKD") === null && cap("GBXUSD") === null, "forex tidak lazim ditahan");
   assert(riskGroupOf("BTCUSD").id === "LAINNYA" && cap("BTCUSD") === null, "tak dikenal ditahan");
   assert(Object.keys(RISK_GROUPS).length === 9, "jumlah golongan");
+});
+
+test("565. mesin analisa: batas golongan Rupiah (R2) — lebih kecil dari 1% dipakai, ditahan jelas", () => {
+  const base = analyzeMarket(modeAmanMarket, modeAmanBroker);
+  assert(base.decision === "BELI" && base.heldBy === null && base.maxRiskUsd === 100, `tanpa batas = perilaku lama: ${base.decision} ${base.maxRiskUsd}`);
+  const minRisk = base.riskAtMinLot ?? 0;
+  assert(minRisk > 1 && minRisk < 2, `risiko lot minimum fixture ${minRisk}`);
+  const longgar = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, riskCap: riskCapFor("GBPUSD", 17500) });
+  assert(longgar.decision === "BELI" && longgar.maxRiskUsd === 2, `Rp35 rb/17.500 = $2 → lolos: ${longgar.decision} ${longgar.maxRiskUsd}`);
+  const ketat = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, riskCap: { label: "Forex", idr: 17500, usd: 1, usdIdr: 17500 } });
+  assert(ketat.decision === "TUNGGU" && ketat.heldBy === "risiko" && ketat.heldDecision === "BELI", `batas $1 harus menahan: ${ketat.decision}`);
+  assert((ketat.heldReason ?? "").startsWith("Ditahan: risiko Rp") && (ketat.heldReason ?? "").includes("> batas Forex Rp17.500"), ketat.heldReason ?? "");
+  assert(signalReason(ketat) === ketat.heldReason, "alasan header harus sama");
+  const golongan = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, riskCap: riskCapFor("#BMW", 17500) });
+  assert(golongan.decision === "TUNGGU" && golongan.heldReason === "Ditahan: golongan Saham Eropa & Hong Kong tidak diperdagangkan", golongan.heldReason ?? "");
+  const tanpaKurs = analyzeMarket(modeAmanMarket, { ...modeAmanBroker, riskCap: riskCapFor("GBPUSD", null) });
+  assert(tanpaKurs.decision === "TUNGGU" && (tanpaKurs.heldReason ?? "").includes("kurs Rupiah belum tersedia"), tanpaKurs.heldReason ?? "");
+  assert(signalReason(analyzeMarket(modeAmanMarket, { ...modeAmanBroker, equity: 50 })) === "Ditahan: risiko lot minimum", "tahanan 1% lama tetap teks lama");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

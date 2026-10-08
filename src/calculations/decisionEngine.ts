@@ -96,7 +96,14 @@ export function analyzeMarket(
     targetDistance = entry - takeProfit;
   }
 
-  const maxRiskUsd = broker.equity * (broker.riskPercent / 100);
+  const pctRiskUsd = broker.equity * (broker.riskPercent / 100);
+  // Mode Aman R2: batas golongan (Rupiah→USD); dipakai yang lebih kecil.
+  const riskCap = broker.riskCap ?? null;
+  const capHeld = riskCap !== null && riskCap.usd === null;
+  const maxRiskUsd =
+    riskCap !== null && riskCap.usd !== null
+      ? Math.min(pctRiskUsd, riskCap.usd)
+      : pctRiskUsd;
 
   let riskAtMinLot: number | null = null;
   let theoreticalLot: number | null = null;
@@ -124,7 +131,9 @@ export function analyzeMarket(
     riskPercentAtMinLot =
       broker.equity > 0 ? (riskAtMinLot / broker.equity) * 100 : null;
 
-    if (
+    if (capHeld) {
+      riskStatus = "TIDAK MEMENUHI \u2014 golongan ditahan";
+    } else if (
       suggestedLot !== null &&
       suggestedLot < broker.minLot
     ) {
@@ -156,8 +165,19 @@ export function analyzeMarket(
     costShareOfRisk > MAX_COST_SHARE_OF_RISK;
   const blockedByRisk =
     decision !== "TUNGGU" &&
-    riskAtMinLot !== null &&
-    riskAtMinLot > maxRiskUsd;
+    (capHeld || (riskAtMinLot !== null && riskAtMinLot > maxRiskUsd));
+  const rupiah = (v: number): string =>
+    `Rp${Math.round(v).toLocaleString("id-ID")}`;
+  const riskHeldReason: string | null =
+    !blockedByRisk || riskCap === null
+      ? null
+      : riskCap.idr === null
+        ? `Ditahan: golongan ${riskCap.label} tidak diperdagangkan`
+        : riskCap.usd === null || riskCap.usdIdr === null
+          ? `Ditahan: kurs Rupiah belum tersedia (batas ${riskCap.label})`
+          : riskAtMinLot !== null && riskCap.usd < pctRiskUsd
+            ? `Ditahan: risiko ${rupiah(riskAtMinLot * riskCap.usdIdr)} > batas ${riskCap.label} ${rupiah(riskCap.idr)}`
+            : null;
   // Arah asli sebelum ditahan (untuk ditampilkan, mis. "JUAL · ditahan").
   const heldDecision: Decision | null =
     blockedByCost || blockedByRisk ? decision : null;
@@ -195,7 +215,9 @@ export function analyzeMarket(
       `Mode Aman: biaya transaksi ${String(round(costShareOfRisk * 100, 1)).replace(".", ",")}% dari risiko (maks ${round(MAX_COST_SHARE_OF_RISK * 100, 0)}%). Setup ditahan.`
     );
   }
-  if (blockedByRisk && riskAtMinLot !== null) {
+  if (blockedByRisk && riskHeldReason !== null) {
+    warnings.push(`Mode Aman: ${riskHeldReason}. Setup ditahan.`);
+  } else if (blockedByRisk && riskAtMinLot !== null) {
     warnings.push(
       `Mode Aman: risiko lot minimum ${round(riskAtMinLot, 2)} USD melebihi batas ${round(broker.riskPercent, 2)}% equity (${round(maxRiskUsd, 2)} USD). Setup ditahan.`
     );
@@ -243,6 +265,9 @@ export function analyzeMarket(
     costShareOfRisk:
       costShareOfRisk === null ? null : round(costShareOfRisk, 4),
     heldBy: blockedByCost ? "biaya" : blockedByRisk ? "risiko" : null,
+    ...(riskHeldReason !== null && !blockedByCost
+      ? { heldReason: riskHeldReason }
+      : {}),
     heldDecision,
     score,
     trendScore,

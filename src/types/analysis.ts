@@ -19,7 +19,20 @@ export interface MarketData {
   resistance: number;
 }
 
+/**
+ * Mode Aman R2 (8 Okt 2026): batas risiko golongan simbol. usd null =
+ * ditahan (golongan tidak diperdagangkan, atau kurs Rupiah belum ada).
+ */
+export interface RiskCapInput {
+  label: string;
+  idr: number | null;
+  usd: number | null;
+  usdIdr: number | null;
+}
+
 export interface BrokerSettings {
+  /** Batas golongan (opsional); absen = hanya batas % equity. */
+  riskCap?: RiskCapInput | null;
   equity: number;
   riskPercent: number;
   minLot: number;

@@ -64,6 +64,24 @@ export function baseRiskSymbol(symbol: string): string {
   return symbol.trim().toUpperCase().replace(/_ORB$/, "").replace(/\.DEC$/, "");
 }
 
+/**
+ * Batas golongan untuk mesin analisa (RiskCapInput). Kurs USD→Rp tidak
+ * ada → usd null (ditahan; tanpa batas Rupiah tidak ada sinyal lolos).
+ */
+export function riskCapFor(
+  symbol: string,
+  usdIdr: number | null,
+): { label: string; idr: number | null; usd: number | null; usdIdr: number | null } {
+  const g = riskGroupOf(symbol);
+  const kurs = usdIdr !== null && Number.isFinite(usdIdr) && usdIdr > 0 ? usdIdr : null;
+  return {
+    label: g.label,
+    idr: g.capIdr,
+    usd: g.capIdr === null || kurs === null ? null : g.capIdr / kurs,
+    usdIdr: kurs,
+  };
+}
+
 export function riskGroupOf(symbol: string): RiskGroup {
   const s = baseRiskSymbol(symbol);
   if (FOREX.has(s)) return RISK_GROUPS.FOREX;

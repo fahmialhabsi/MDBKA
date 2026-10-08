@@ -18,7 +18,7 @@ export function signalReason(result: AnalysisResult): string {
         : "-";
     return `Ditahan: biaya ${share}% (maks ${Math.round(MAX_COST_SHARE_OF_RISK * 100)}%)`;
   }
-  if (result.heldBy === "risiko") return "Ditahan: risiko lot minimum";
+  if (result.heldBy === "risiko") return result.heldReason ?? "Ditahan: risiko lot minimum";
   if (result.heldBy === "korelasi") return result.heldReason ?? "Ditahan: taruhan ganda";
   if (result.heldBy === "jeda") return result.heldReason ?? "Jeda: 3 kali rugi berturut-turut";
   if (result.decision === "TUNGGU") return "Skor belum kompak";
