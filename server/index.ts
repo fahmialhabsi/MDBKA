@@ -12,6 +12,8 @@ import * as dotenv from "dotenv";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createApp } from "./app";
+import { checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
+import { collectAccountEvaluations } from "./routes/evaluationRoutes";
 import { getCachedEcbRates } from "./routes/fxRoutes";
 import { resolveCommonFilesDir } from "./routes/marginRoutes";
 import { createTradeEntryLog } from "./services/tradeEntryLog";
@@ -205,6 +207,13 @@ async function startServer() {
       quotes: src.quotes,
       getEquity: () => equityReader?.getLatest()?.equity ?? null,
       getFxRates: getCachedEcbRates,
+      // Opsi 6a-2: jeda 3 rugi beruntun dari History MT5 (demo+live broker
+      // ini), dinilai pada jam server entry — sama dengan pemindai di UI.
+      getPauseReason: (serverTime) =>
+        checkLossStreak(
+          tradesForBroker(collectAccountEvaluations(resolveCommonFilesDir(), tradesDir, {}), src.broker),
+          serverTime,
+        ).reason,
     });
     const record = (positions: readonly import("./types/positions").BrokerPosition[]): void => {
       try {

@@ -6755,6 +6755,13 @@ test("557. catatan entry: status jeda dinilai pada jam server entry (opsi 6a)", 
   }
 });
 
+test("558. server: pencatat entry tersambung ke jeda History MT5 per broker (opsi 6a-2, readSrc)", () => {
+  const idx = readSrc("server/index.ts");
+  assert(idx.includes("getPauseReason: (serverTime) =>"), "getPauseReason belum dipasang di server/index.ts");
+  assert(idx.includes("collectAccountEvaluations(resolveCommonFilesDir(), tradesDir, {}), src.broker)"), "jeda harus dari History broker yang sama");
+  assert(idx.includes("serverTime,\n        ).reason") || idx.includes("serverTime,\r\n        ).reason"), "jeda harus dinilai pada jam server entry");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
