@@ -1,9 +1,9 @@
 # HANDOFF MDBKA — Mode Aman (8 Okt 2026)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir kode: **5308b19** (branch `main`; sesi 8 Okt: 32a7299 → 5308b19).
-Test terakhir: **552 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
-Nomor test terakhir: **556** → test baru mulai **557**.
+Commit terakhir kode: **5fdc105** (branch `main`; sesi 8 Okt: 32a7299 → 5fdc105).
+Test terakhir: **557 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
+Nomor test terakhir: **561** → test baru mulai **562**.
 
 ---
 
@@ -37,7 +37,7 @@ Nomor test terakhir: **556** → test baru mulai **557**.
   lalu `device_commit_files`. Jangan menyalin ulang isi file dari output tool (bisa terpotong).
 - **tsc tidak bisa jalan di VM** (TS7 binary Windows). ESLint bisa: `node node_modules/eslint/bin/eslint.js <file>`.
 - Test runner: `scripts/run-tests.ts` (CommonJS via `tsconfig.test.json`, **tidak bisa import .tsx** → logika
-  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **556**.
+  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **561**.
 - Uji cepat modul server/lib di VM bisa: Node 22 `--experimental-strip-types` + hook resolve `.ts` (lihat sesi 8 Okt);
   tulis hasil uji ke folder sementara, JANGAN ke `data/` asli.
 - `tsx` juga tidak jalan di VM (esbuild Windows) → test hanya bisa dijalankan pengguna. `scripts/run-tests.ts` CRLF:
@@ -107,13 +107,17 @@ Nomor test terakhir: **556** → test baru mulai **557**.
 | 8dcc5b8 | **4b-1** start hanya baca **ekor** file arsip (`readTailText`, 8 MB) untuk kunci dedup; sekaligus perbaiki bug lama (dulu mengingat 20.000 tick PERTAMA, kini TERBARU). Test 554 |
 | 76ee998 | **4b-2** `compact()` sekali per file: daftar `data/history/<broker>/compacted.json` (nama → ukuran), lewati file hari ini (UTC), baca per potongan 4 MB (`forEachLineSync`), tulis ulang via `.tmp` + rename hanya bila ada duplikat. Terverifikasi: 5 file/broker dicentang, 0 duplikat, start berikutnya cepat. Test 555 |
 | 5308b19 | **4b-3** `coverage()` per potongan + test penjaga: tidak ada lagi readFileSync file arsip (kecuali `compacted.json`). Endpoint `/api/history/coverage` tetap SINKRON (±1–2 mnt) — hanya diagnosa manual, jangan dipakai UI. Test 556 |
+| 426f329 | **6a-1** `tradeEntryLog` opsi `getPauseReason(timeOpen)` → `pauseReason` ke `scanSymbol`; gagal baca = tanpa jeda (catatan tetap ditulis). Test 557 |
+| f350ae3 | **6a-2** `server/index.ts`: jeda dari History MT5 broker yang sama (`collectAccountEvaluations` + `checkLossStreak`) pada **jam server entry**. Entry saat jeda → `DITAHAN_JEDA`, bukan `LOLOS`. Test 558 |
+| 1968ef6 | **5-1** `breakevenCostDistance(holding, convert)` di `exitMonitor.ts`: komisi USD ÷ (contract×lot dlm USD), dibulatkan NAIK ke tick; `checkBreakeven(..., costDistance)` opsional (tanpa = SL di entry seperti dulu). Biaya ≥ profit / tanpa kurs → SL di entry + catatan. Spread tidak ditambah, swap & slippage diabaikan. AUDUSD_ORB 0,10 @0,69811 → SL 0,69844. Test 559–560 |
+| 5fdc105 | **5-2** kotak BREAKEVEN (`HoldingsDashboard.tsx`) pakai SL + biaya; baris `breakeven-cost` "Biaya komisi RpX (Y USD) sudah ditutup oleh SL ini". Test 561 |
 
 ### Aturan Mode Aman yang aktif sekarang
 1. Default **TUNGGU**; sinyal hanya bila skor (MA50, CCI, MACD, RSI) kompak.
 2. **Risiko 1%** equity per trade; lot minimum melebihi batas → "Ditahan: risiko lot minimum".
 3. **Gerbang biaya**: (spread + slippage)·pointValue + komisi ≤ **10%** dari risiko, selain itu "Ditahan: biaya X% (maks 10%)".
    Saat ditahan: decision = TUNGGU, SL/TP/lot = null, `heldBy`/`heldDecision`/`costShareOfRisk` diisi.
-4. **Breakeven di +0,5R** (instruksi Modify SL = harga entry di MT5).
+4. **Breakeven di +0,5R** (instruksi Modify SL = entry **+ biaya komisi** di MT5; tanpa kurs/spec → entry).
 5. **Time-stop 3 jam** (selisih jam server quote − jam buka; holding manual format ISO tidak dinilai).
 6. **Bukti n ≥ 20**: "Lolos · belum terbukti (n/20)" → "Lolos · win rate X% (n=N)"; merah "terbukti rugi" bila ekspektansi ≤ 0.
    Demo + live satu broker digabung.
@@ -172,7 +176,8 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 - Pindah akun demo↔live: chart/EA/service tidak perlu di-attach ulang; server MDBKA saja yang dijalankan ulang.
 - Rencana online: disarankan **VPS Windows** (MT5 + MDBKA satu mesin, wajib login + HTTPS). Belum diputuskan.
 - Finex demo punya posisi terbuka (GBPUSD/GBPCHF/XTIUSD SELL) → beberapa sinyal JUAL GBP/minyak berstatus Taruhan ganda.
-- Pencatat entry server (`tradeEntryLog`) BELUM memperhitungkan jeda (hanya korelasi). Opsional ditambah.
+- Pencatat entry server kini ikut menilai jeda (6a). **Belum terlihat langsung**: baris log `✓ Entry finex #… → DITAHAN_JEDA` muncul hanya bila posisi baru dibuka saat jeda DAN pemindai menilai Lolos.
+- Kotak BREAKEVEN + biaya (5-2) **belum terlihat langsung** — tunggu posisi ber-SL yang profitnya ≥ 0,5R, lalu cek angka SL & baris Rupiah.
 
 - Posisi OTB masih terbuka sejak 6 Okt: **META.US BUY 0,10 @741,07 tanpa SL/TP**, **AUDUSD_ORB BUY 0,10 @0,69811**
   (SL 0,69311, TP 0,70626). Keduanya kena TIME-STOP; META tanpa SL = risiko tak terbatas. Keputusan di tangan Fahmi.
@@ -194,11 +199,11 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
    - Usulan lanjutan (perlu bukti ≥ 20 trade Mode Aman dulu): aturan ambil untung lebih cepat / BE berbasis MFE.
 4b. ~~Risiko arsip tick > 512 MB/hari~~ ✅ **selesai** (4b-1…4b-3, 8dcc5b8 → 5308b19). Koreksi audit: file > 512 MB dulu
    *dilewati diam-diam* (bukan crash); masalah utama justru start lambat (compact baca semua arsip ±25 dtk/file).
-5. Opsional: biaya breakeven (SL = entry + biaya) agar BE tidak rugi kecil karena komisi/spread.
-6. Opsional: pencatat entry server ikut mencatat status jeda; akun ke-4 di header bila ada file History-nya.
-7. Opsional: kecilkan bundle JS (> 500 kB) dengan dynamic import.
+5. ~~Biaya breakeven (SL = entry + biaya)~~ ✅ selesai (5-1, 5-2; 1968ef6 → 5fdc105). Verifikasi layar menunggu.
+6. ~~Pencatat entry ikut status jeda~~ ✅ selesai (6a-1, 6a-2; 426f329 → f350ae3). Sisa **6b**: akun ke-4 di header — hanya bila ada file History akun baru.
+7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **557**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **562**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -206,8 +211,8 @@ ESLint → pengguna build/test/commit → verifikasi.
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
 > Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, lihat git log,
-> 552 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
+> 557 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
-> lalu minus". Langkah berikutnya: kumpulkan trade Mode Aman (langkah 1) atau opsional no. 5–7 (audit read-only dulu).
+> lalu minus". Langkah berikutnya: kumpulkan trade Mode Aman (langkah 1); opsi 5 & 6a sudah selesai (cek layar BREAKEVEN + log DITAHAN_JEDA bila terjadi).
 > Setiap langkah selesai, jelaskan dulu dalam bahasa awam (GUARD no. 11) sebelum saya commit.
