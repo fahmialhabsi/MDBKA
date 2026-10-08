@@ -1,9 +1,9 @@
 # HANDOFF MDBKA — Mode Aman (8 Okt 2026)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir kode: **faabdb4** (branch `main`; sesi 8 Okt: 32a7299 → faabdb4).
-Test terakhir: **563 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
-Nomor test terakhir: **567** → test baru mulai **568**.
+Commit terakhir kode: **51eae63** (branch `main`; sesi 8 Okt: 32a7299 → 51eae63).
+Test terakhir: **564 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
+Nomor test terakhir: **568** → test baru mulai **569**.
 
 ---
 
@@ -37,7 +37,7 @@ Nomor test terakhir: **567** → test baru mulai **568**.
   lalu `device_commit_files`. Jangan menyalin ulang isi file dari output tool (bisa terpotong).
 - **tsc tidak bisa jalan di VM** (TS7 binary Windows). ESLint bisa: `node node_modules/eslint/bin/eslint.js <file>`.
 - Test runner: `scripts/run-tests.ts` (CommonJS via `tsconfig.test.json`, **tidak bisa import .tsx** → logika
-  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **567**.
+  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **568**.
 - Uji cepat modul server/lib di VM bisa: Node 22 `--experimental-strip-types` + hook resolve `.ts` (lihat sesi 8 Okt);
   tulis hasil uji ke folder sementara, JANGAN ke `data/` asli.
 - `tsx` juga tidak jalan di VM (esbuild Windows) → test hanya bisa dijalankan pengguna. `scripts/run-tests.ts` CRLF:
@@ -118,6 +118,7 @@ Nomor test terakhir: **567** → test baru mulai **568**.
 | 622b1f6 | **R3** batas golongan dipasang di `App.tsx` (effectiveBroker) & `symbolScanner.ts` (pencatat entry server ikut). Terverifikasi: JP225 "Ditahan: risiko Rp339.978 > batas Indeks Rp150.000", #HSBA golongan ditahan. Test 566 |
 | 597c8e4 | **Fix pointValue Finex non-USD**: `withUsdPointValue` kini juga konversi Finex (mata uang kuotasi dari spec32). Dulu USDJPY terbaca Rp3,6 jt (yen dianggap USD), kini ±Rp24 rb; CHF/CAD/GBP/NZD/AUD meleset 0,6–1,3× ikut benar. Test 496 lama ("Finex tetap" = bug) diganti. Terverifikasi di layar |
 | faabdb4 | **R3b** analisa diulang otomatis sekali begitu kurs USD→Rp termuat (`kursRetryRef`); pesan "kurs belum tersedia" saat start hilang. Terverifikasi. Test 567 |
+| 51eae63 | **R4 panel "Batas risiko per golongan"** (`RiskGroupsPanel.tsx`, `<details>` di bawah pemindai): golongan, batas Rp (≈ $), daftar simbol + catatan; isi dari `riskGroupTable()` (sumber sama dengan aturan, test cek tiap simbol). Terverifikasi di layar. Test 568 |
 
 ### Aturan Mode Aman yang aktif sekarang
 1. Default **TUNGGU**; sinyal hanya bila skor (MA50, CCI, MACD, RSI) kompak.
@@ -140,7 +141,7 @@ Nomor test terakhir: **567** → test baru mulai **568**.
     | Forex JPY | Rp35 rb | | Saham AS (# Finex, .US OTB) | Rp50 rb |
     | Logam (XAU, XAG) | Rp150 rb | | Forex tidak lazim (USDEUR, USDGBP, USDHKD, GBXUSD) | ditahan |
     | Minyak (XTIUSD, CLU) | Rp150 rb | | Saham Eropa & HK (#ADS…#763) | ditahan |
-    Ubah angka hanya di `RISK_GROUPS` (`src/lib/riskGroup.ts`).
+    Ubah angka hanya di `RISK_GROUPS` (`src/lib/riskGroup.ts`). Tampil di layar: panel "Batas risiko per golongan" di bawah pemindai.
 
 ### Hasil evaluasi (patokan "sebelum Mode Aman", semua kelompok TANPA_CATATAN)
 | Akun | Trade | Win rate | Bersih | Rata-rata untung / rugi |
@@ -185,6 +186,8 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 
 ## 4. Kondisi terbuka / perlu diperhatikan
 
+- **META.US OTB** (BUY 0,10 @741,07, tanpa SL, −$2,01 ≈ −Rp36 rb pada 8 Okt malam) tidak bisa ditutup: "Market closed" — saham AS hanya bisa ditransaksikan saat bursa AS buka (±22:30–05:00 WIT, cek MT5 Specification → Sessions). Keputusan tutup/pasang SL di tangan Fahmi.
+
 - **Audit 8 Okt (5 trade LOLOS Finex demo, bersih ≈ −$5,44 ≈ −Rp97 rb, win 3/5):** rugi besar XTIUSD JUAL −$8 = −1R tepat (SL dipatuhi, MFE hanya 0,08R → sinyal meleset, bukan bug). Akar masalah: risiko 0,01 lot tidak seimbang (minyak ±Rp143 rb vs forex ±Rp12–31 rb) → dijawab batas golongan (R1–R3). Catatan jujur: GBPUSD & GBPCHF menang setelah ditahan **7–8 jam** (melewati time-stop 3 jam); AUDCHF SL hanya 5,4 pip (kena dalam 7 menit). Usulan berikut yang belum dikerjakan: **jarak SL minimum** (mis. berbasis ATR).
 - XTIUSD BELI 8 Okt ditutup di SL breakeven+komisi 90,57 → +$0,09 (bukti pertama BE+komisi bekerja).
 - Rencana grafik per simbol (tab ala MT5) **dibatalkan** Fahmi (pekerjaan terlalu banyak). Mockup tersimpan: https://claude.ai/artifact/Hv6o51xhKruFGUTu2x8sqG
@@ -221,7 +224,7 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
    *dilewati diam-diam* (bukan crash); masalah utama justru start lambat (compact baca semua arsip ±25 dtk/file).
 5. ~~Biaya breakeven (SL = entry + biaya)~~ ✅ selesai (5-1, 5-2; 1968ef6 → 5fdc105). Verifikasi layar menunggu.
 6. ~~Pencatat entry ikut status jeda~~ ✅ selesai (6a-1, 6a-2; 426f329 → f350ae3). Sisa **6b**: akun ke-4 di header — hanya bila ada file History akun baru.
-6c. ~~Batas risiko per golongan~~ ✅ selesai (R1–R3b, 58ee5a3 → faabdb4).
+6c. ~~Batas risiko per golongan~~ ✅ selesai (R1–R4, 58ee5a3 → 51eae63).
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
@@ -233,7 +236,7 @@ ESLint → pengguna build/test/commit → verifikasi.
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
 > Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, lihat git log,
-> 563 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
+> 564 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
 > lalu minus". Langkah berikutnya: kumpulkan trade Mode Aman (langkah 1); opsi 5 & 6a sudah selesai (cek layar BREAKEVEN + log DITAHAN_JEDA bila terjadi).
