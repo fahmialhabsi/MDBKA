@@ -30,6 +30,8 @@ export const HISTORY_FILENAME_PREFIX = "ticks-";
 const TAIL_ROWS = 1000;
 const MAX_SEEN_KEYS = 20000;
 const SEEN_PRUNE_BATCH = 5000;
+/** Langkah 4b-1: ekor file yang dibaca saat start (±40 ribu baris tick). */
+export const SEEN_TAIL_BYTES = 8 * 1024 * 1024;
 
 export interface HistoryTick {
   readonly ts_utc: string;
@@ -121,6 +123,27 @@ function isValidQuote(q: QuoteSnapshot): boolean {
   );
 }
 
+/**
+ * Baca maksimal `maxBytes` terakhir file sebagai teks. Bila tidak dari awal
+ * file, baris pertama (terpotong) dibuang. Aman untuk file sangat besar.
+ */
+export function readTailText(file: string, maxBytes: number): string {
+  const size = fs.statSync(file).size;
+  const len = Math.min(size, Math.max(0, maxBytes));
+  if (len === 0) return "";
+  const buf = Buffer.alloc(len);
+  const fd = fs.openSync(file, "r");
+  try {
+    fs.readSync(fd, buf, 0, len, size - len);
+  } finally {
+    fs.closeSync(fd);
+  }
+  const text = buf.toString("utf-8");
+  if (len === size) return text;
+  const nl = text.indexOf("\n");
+  return nl < 0 ? "" : text.slice(nl + 1);
+}
+
 export class TickHistoryLogger {
   private readonly dir: string;
   private readonly broker: string;
@@ -147,7 +170,10 @@ export class TickHistoryLogger {
   /**
    * Muat kunci tick yang sudah tersimpan ke memori (dedup lintas restart).
    * Tanpa ini, backfill setiap start backend menulis ulang tick lama.
-   * Dibatasi MAX_SEEN_KEYS (file terbaru dulu bila melebihi batas).
+   * Langkah 4b-1: hanya EKOR file terbaru (SEEN_TAIL_BYTES) yang dibaca —
+   * file harian 300–420 MB tidak lagi dimuat utuh (lambat, ±1 GB RAM, dan
+   * > 512 MB gagal jadi string). Yang diingat = tick TERBARU (dulu justru
+   * 20.000 tick pertama file), dibatasi MAX_SEEN_KEYS.
    */
   private loadSeenFromDisk(): void {
     let entries: string[];
@@ -160,13 +186,17 @@ export class TickHistoryLogger {
       .filter((n) => /^ticks-\d{4}-\d{2}-\d{2}\.jsonl$/.test(n))
       .sort()
       .reverse();
+    const batches: string[][] = [];
+    let total = 0;
     for (const name of files) {
+      if (total >= MAX_SEEN_KEYS) break;
       let text: string;
       try {
-        text = fs.readFileSync(path.join(this.dir, name), "utf-8");
+        text = readTailText(path.join(this.dir, name), SEEN_TAIL_BYTES);
       } catch {
         continue;
       }
+      const keys: string[] = [];
       for (const line of text.split("\n")) {
         const trimmed = line.trim();
         if (trimmed === "") continue;
@@ -178,13 +208,19 @@ export class TickHistoryLogger {
             typeof rec.bid === "number" &&
             typeof rec.ask === "number"
           ) {
-            this.seen.add(tickKey(rec.symbol, rec.ts_raw, rec.bid, rec.ask));
-            if (this.seen.size >= MAX_SEEN_KEYS) return;
+            keys.push(tickKey(rec.symbol, rec.ts_raw, rec.bid, rec.ask));
           }
         } catch {
           // Baris korup dilewati (coverage juga melewatinya).
         }
       }
+      const take = keys.slice(-(MAX_SEEN_KEYS - total));
+      batches.push(take);
+      total += take.length;
+    }
+    // File lama dulu, terbaru terakhir → pemangkasan LRU membuang yang lama.
+    for (const batch of batches.reverse()) {
+      for (const key of batch) this.seen.add(key);
     }
   }
 

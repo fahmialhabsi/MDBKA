@@ -127,6 +127,7 @@ import {
   TickHistoryLogger,
   historyFileName,
   normalizeTsToUtc,
+  readTailText,
   resolveTzOffset,
   tickKey,
 } from "../server/services/tickHistory";
@@ -6625,6 +6626,38 @@ test("553. MFE/MAE dalam Rupiah: USD per gerak dari profit kotor broker × kurs"
   const gbp = { ...xti, symbol: "GBPUSD_ORB", side: "BUY" as const, volume: 0.1, openPrice: 1.32172, closePrice: 1.32087, grossProfit: -8.5 };
   assert(Math.abs((usdPerPriceUnit(gbp) ?? 0) - 10000) < 1e-6, `GBPUSD 0,1 lot $10/pip: ${usdPerPriceUnit(gbp)}`);
   assert(readSrc("server/services/tradeEvaluation.ts").includes('grossProfit: round2(total("profit"))'), "server belum kirim grossProfit");
+});
+
+test("554. arsip tick: start hanya baca ekor file & ingat tick TERBARU (4b-1)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "mdbka-tail-"));
+  try {
+    const f = npath.join(dir, "x.txt");
+    nfs.writeFileSync(f, "aaa\nbbb\nccc\n");
+    assert(readTailText(f, 6) === "ccc\n", `ekor terpotong: ${JSON.stringify(readTailText(f, 6))}`);
+    assert(readTailText(f, 100) === "aaa\nbbb\nccc\n", "file kecil dibaca utuh");
+    assert(readTailText(f, 0) === "", "0 byte");
+    // 25.000 tick (> batas ingat 20.000): dulu yang diingat 20.000 PERTAMA,
+    // sehingga tick terakhir ditulis ulang saat restart. Sekarang yang terbaru.
+    const otb = npath.join(dir, "otb");
+    nfs.mkdirSync(otb, { recursive: true });
+    const lines: string[] = [];
+    for (let i = 0; i < 25000; i++) {
+      const ss = String(i % 60).padStart(2, "0");
+      const mm = String(Math.floor(i / 60) % 60).padStart(2, "0");
+      const hh = String(Math.floor(i / 3600)).padStart(2, "0");
+      lines.push(JSON.stringify({ ts_utc: "x", ts_raw: `2026.10.07 ${hh}:${mm}:${ss}`, broker: "otb", symbol: "GBPUSD_ORB", bid: 1.3 + i * 1e-6, ask: 1.3001 + i * 1e-6, received_at: "x" }));
+    }
+    nfs.writeFileSync(npath.join(otb, "ticks-2026-10-07.jsonl"), lines.join("\n") + "\n");
+    const last = { timestamp: "2026.10.07 06:56:39", symbol: "GBPUSD_ORB", bid: 1.3 + 24999 * 1e-6, ask: 1.3001 + 24999 * 1e-6 };
+    const logger = new TickHistoryLogger(dir, "otb", 2);
+    const r = logger.ingest([last], true);
+    assert(r.appended === 0 && r.skipped === 1, `tick terakhir harus diingat setelah restart: +${r.appended}`);
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
