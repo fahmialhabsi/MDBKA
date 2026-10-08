@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { StringDecoder } from "string_decoder";
 import type { QuoteSnapshot } from "../types/quotes";
 
 /**
@@ -144,6 +145,54 @@ export function readTailText(file: string, maxBytes: number): string {
   return nl < 0 ? "" : text.slice(nl + 1);
 }
 
+/** Langkah 4b-2: daftar file arsip yang sudah bersih (nama → ukuran byte). */
+export const COMPACTED_REGISTRY = "compacted.json";
+const LINE_CHUNK_BYTES = 4 * 1024 * 1024;
+
+function readCompactedRegistry(file: string): Record<string, number> {
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, "utf-8")) as unknown;
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof v === "number") out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Panggil `onLine` untuk tiap baris file, dibaca per potongan 4 MB
+ * (sinkron, tanpa memuat file utuh jadi satu string). Aman untuk file
+ * > 512 MB. Karakter UTF-8 yang terbelah antar-potongan dijaga StringDecoder.
+ */
+export function forEachLineSync(
+  file: string,
+  onLine: (line: string) => void,
+  chunkBytes: number = LINE_CHUNK_BYTES,
+): void {
+  const fd = fs.openSync(file, "r");
+  try {
+    const decoder = new StringDecoder("utf8");
+    const buf = Buffer.alloc(chunkBytes);
+    let rest = "";
+    for (;;) {
+      const n = fs.readSync(fd, buf, 0, chunkBytes, null);
+      if (n <= 0) break;
+      const text = rest + decoder.write(buf.subarray(0, n));
+      const parts = text.split("\n");
+      rest = parts.pop() ?? "";
+      for (const line of parts) onLine(line);
+    }
+    rest += decoder.end();
+    if (rest !== "") onLine(rest);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 export class TickHistoryLogger {
   private readonly dir: string;
   private readonly broker: string;
@@ -225,10 +274,18 @@ export class TickHistoryLogger {
   }
 
   /**
-   * Tulis ulang file dengan baris duplikat dibuang (pertahankan kemunculan
-   * pertama). Sekali jalan saat init; murah pada skala personal.
+   * Buang baris duplikat/korup di file arsip (pertahankan kemunculan pertama).
+   *
+   * Langkah 4b-2 (pilihan A): tiap file cukup dibersihkan SEKALI.
+   * - File hari ini (UTC) dan sesudahnya dilewati: masih ditulis; dedup saat
+   *   ingest sudah menjaganya.
+   * - File yang sudah bersih dicatat di `compacted.json` (nama → ukuran);
+   *   dilewati selama ukurannya sama.
+   * - Dibaca per potongan 4 MB (forEachLineSync), tidak lagi readFileSync
+   *   utuh → aman untuk file > 512 MB. Tulis ulang hanya bila ada duplikat
+   *   (ke `.tmp` lalu rename, agar file asli tak rusak bila gagal di tengah).
    */
-  compact(): { filesCompacted: number; dupesRemoved: number } {
+  compact(now: Date = new Date()): { filesCompacted: number; dupesRemoved: number } {
     let filesCompacted = 0;
     let dupesRemoved = 0;
     let entries: string[];
@@ -237,21 +294,23 @@ export class TickHistoryLogger {
     } catch {
       return { filesCompacted, dupesRemoved };
     }
-    for (const name of entries) {
+    const today = historyFileName(now.toISOString());
+    const registryFile = path.join(this.dir, COMPACTED_REGISTRY);
+    const registry = readCompactedRegistry(registryFile);
+    let registryChanged = false;
+    for (const name of entries.sort()) {
       if (!/^ticks-\d{4}-\d{2}-\d{2}\.jsonl$/.test(name)) continue;
+      if (name >= today) continue;
       const full = path.join(this.dir, name);
-      let text: string;
+      let size: number;
       try {
-        text = fs.readFileSync(full, "utf-8");
+        size = fs.statSync(full).size;
       } catch {
         continue;
       }
-      const seenLocal = new Set<string>();
-      const kept: string[] = [];
-      let removed = 0;
-      for (const line of text.split("\n")) {
-        if (line.trim() === "") continue;
-        let key: string | null = null;
+      if (registry[name] === size) continue;
+
+      const lineKey = (line: string): string | null => {
         try {
           const rec = JSON.parse(line) as Partial<HistoryTick>;
           if (
@@ -260,26 +319,68 @@ export class TickHistoryLogger {
             typeof rec.bid === "number" &&
             typeof rec.ask === "number"
           ) {
-            key = tickKey(rec.symbol, rec.ts_raw, rec.bid, rec.ask);
+            return tickKey(rec.symbol, rec.ts_raw, rec.bid, rec.ask);
           }
         } catch {
-          key = null;
+          // korup → dibuang
         }
-        if (key === null || seenLocal.has(key)) {
-          removed++;
-          continue;
-        }
-        seenLocal.add(key);
-        kept.push(line);
+        return null;
+      };
+
+      // Lintasan 1: hitung duplikat saja (tanpa menulis).
+      let removed = 0;
+      try {
+        const seenLocal = new Set<string>();
+        forEachLineSync(full, (line) => {
+          if (line.trim() === "") return;
+          const key = lineKey(line);
+          if (key === null || seenLocal.has(key)) removed++;
+          else seenLocal.add(key);
+        });
+      } catch {
+        continue; // terkunci/hilang: coba lagi start berikutnya
       }
+
+      // Lintasan 2 (jarang): tulis ulang tanpa duplikat.
       if (removed > 0) {
+        const tmp = `${full}.tmp`;
         try {
-          fs.writeFileSync(full, kept.length > 0 ? kept.join("\n") + "\n" : "");
+          const fd = fs.openSync(tmp, "w");
+          try {
+            const seenLocal = new Set<string>();
+            let buffer: string[] = [];
+            const flush = (): void => {
+              if (buffer.length > 0) fs.writeSync(fd, buffer.join("\n") + "\n");
+              buffer = [];
+            };
+            forEachLineSync(full, (line) => {
+              if (line.trim() === "") return;
+              const key = lineKey(line);
+              if (key === null || seenLocal.has(key)) return;
+              seenLocal.add(key);
+              buffer.push(line);
+              if (buffer.length >= 5000) flush();
+            });
+            flush();
+          } finally {
+            fs.closeSync(fd);
+          }
+          fs.renameSync(tmp, full);
+          size = fs.statSync(full).size;
           filesCompacted++;
           dupesRemoved += removed;
         } catch {
-          // Gagal tulis: biarkan file apa adanya.
+          continue; // gagal tulis: file asli utuh, coba lagi start berikutnya
         }
+      }
+      registry[name] = size;
+      registryChanged = true;
+    }
+    if (registryChanged) {
+      try {
+        fs.writeFileSync(registryFile, JSON.stringify(registry, null, 1));
+      } catch {
+        // gagal catat: file akan diperiksa ulang start berikutnya (aman)
       }
     }
     return { filesCompacted, dupesRemoved };

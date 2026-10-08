@@ -126,6 +126,8 @@ import {
   DEFAULT_TZ_OFFSET_HOURS,
   TickHistoryLogger,
   historyFileName,
+  COMPACTED_REGISTRY,
+  forEachLineSync,
   normalizeTsToUtc,
   readTailText,
   resolveTzOffset,
@@ -6660,6 +6662,52 @@ test("554. arsip tick: start hanya baca ekor file & ingat tick TERBARU (4b-1)", 
   }
 });
 
+test("555. arsip tick: pembersih duplikat sekali per file, lewati hari ini, baca per potongan (4b-2)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "mdbka-compact-"));
+  try {
+    // Pembaca per potongan: potongan 1 byte memotong huruf UTF-8 & baris.
+    const f = npath.join(dir, "u.txt");
+    nfs.writeFileSync(f, "αβ\nγ\n\nakhir");
+    const got: string[] = [];
+    forEachLineSync(f, (l) => got.push(l), 1);
+    assert(got.join("|") === "αβ|γ||akhir", `baris: ${got.join("|")}`);
+
+    // Logger dibuat dulu (folder kosong) agar pembersihan saat start tidak ikut campur.
+    const logger = new TickHistoryLogger(dir, "otb", 2);
+    const otb = npath.join(dir, "otb");
+    nfs.mkdirSync(otb, { recursive: true });
+    const row = (ts: string): string =>
+      JSON.stringify({ ts_utc: "x", ts_raw: ts, broker: "otb", symbol: "A", bid: 1, ask: 2, received_at: "x" });
+    const lama = npath.join(otb, "ticks-2026-10-06.jsonl");
+    const kini = npath.join(otb, "ticks-2026-10-08.jsonl");
+    const sudah = npath.join(otb, "ticks-2026-10-05.jsonl");
+    nfs.writeFileSync(lama, [row("t1"), row("t1"), "{rusak", row("t2")].join("\n") + "\n");
+    nfs.writeFileSync(kini, [row("t3"), row("t3")].join("\n") + "\n");
+    nfs.writeFileSync(sudah, [row("t0"), row("t0")].join("\n") + "\n");
+    const reg = npath.join(otb, COMPACTED_REGISTRY);
+    nfs.writeFileSync(reg, JSON.stringify({ "ticks-2026-10-05.jsonl": nfs.statSync(sudah).size }));
+    const hitung = (p: string): number => nfs.readFileSync(p, "utf-8").split("\n").filter((l: string) => l.trim() !== "").length;
+    const now = new Date("2026-10-08T05:00:00Z");
+    const r1 = logger.compact(now);
+    assert(r1.filesCompacted === 1 && r1.dupesRemoved === 2, `putaran 1: ${JSON.stringify(r1)}`);
+    assert(hitung(lama) === 2, `file lama harus bersih: ${hitung(lama)}`);
+    assert(hitung(kini) === 2, "file hari ini tidak boleh disentuh");
+    assert(hitung(sudah) === 2, "file yang tercatat bersih tidak dibaca ulang");
+    assert(!nfs.existsSync(`${lama}.tmp`), "file .tmp harus hilang setelah rename");
+    const r2 = logger.compact(now);
+    assert(r2.filesCompacted === 0 && r2.dupesRemoved === 0, `putaran 2 harus kosong: ${JSON.stringify(r2)}`);
+    const catatan = JSON.parse(nfs.readFileSync(reg, "utf-8")) as Record<string, number>;
+    assert(catatan["ticks-2026-10-06.jsonl"] === nfs.statSync(lama).size && catatan["ticks-2026-10-08.jsonl"] === undefined, JSON.stringify(catatan));
+    nfs.appendFileSync(lama, row("t2") + "\n");
+    const r3 = logger.compact(now);
+    assert(r3.filesCompacted === 1 && r3.dupesRemoved === 1, `file berubah → diperiksa lagi: ${JSON.stringify(r3)}`);
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
