@@ -228,6 +228,7 @@ import { autoCsvFileName, autoLoadKey, findCandleItem } from "../src/lib/autoCan
 import { summarizeAccountBalance } from "../server/services/accountBalance";
 import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
 import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
+import { checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -6419,6 +6420,28 @@ test("538. Hasil analisa ikut menahan taruhan ganda (BELI/JUAL → TUNGGU, tanpa
   const app = readSrc("src/App.tsx");
   assert(app.includes("applyDoubleBetHold(result, market.symbol, openPositionsAll)") && app.includes("result={shownResult}"), "App belum memakai hasil tertahan");
   assert(readSrc("src/components/result/AnalysisResult.tsx").includes('result.heldBy === "korelasi"'), "panduan taruhan ganda hilang");
+});
+
+test("539. jeda 3 rugi beruntun: 24 jam jam server, demo+live satu broker", () => {
+  const tr = (symbol: string, closeTime: string, net: number) => ({ symbol, closeTime, net });
+  // Data nyata Finex live: 2 rugi terakhir lalu untung → belum jeda.
+  const finex = [tr("USDCHF", "2026.10.01 05:06:20", 1.68), tr("EURCHF", "2026.10.01 10:31:50", -1.74), tr("CADJPY", "2026.10.01 18:34:42", -4.42)];
+  const a = checkLossStreak(finex, "2026.10.08 03:00:00");
+  assert(!a.paused && a.streak === 2, JSON.stringify(a));
+  const tiga = [...finex, tr("GBPUSD", "2026.10.08 01:00:00", -1.2)];
+  const b = checkLossStreak(tiga, "2026.10.08 03:00:00");
+  assert(b.paused && b.streak === 3 && b.until === "2026.10.09 01:00", JSON.stringify(b));
+  assert((b.reason ?? "").includes("3 kali rugi berturut-turut") && (b.reason ?? "").includes("GBPUSD"), String(b.reason));
+  assert(!checkLossStreak(tiga, "2026.10.09 01:00:00").paused, "jeda harus berakhir setelah 24 jam");
+  assert(checkLossStreak(tiga, null).paused, "tanpa jam server: tetap jeda (fail-safe)");
+  assert(!checkLossStreak([...tiga, tr("EURUSD", "2026.10.08 02:00:00", 0.5)], "2026.10.08 03:00:00").paused, "untung memutus beruntun");
+  assert(checkLossStreak([], null).streak === 0, "kosong");
+  const accounts = [
+    { broker: "finex", evaluation: { trades: [tr("A", "2026.10.08 01:00:00", -1)] } },
+    { broker: "finex", evaluation: { trades: [tr("B", "2026.10.08 01:10:00", -1)] } },
+    { broker: "orbitraderberjangka", evaluation: { trades: [tr("C", "2026.10.08 01:20:00", -1)] } },
+  ];
+  assert(tradesForBroker(accounts, "finex").length === 2, "gabung demo+live satu broker saja");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
