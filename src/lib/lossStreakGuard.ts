@@ -7,6 +7,8 @@
  * itu ditahan selama 24 jam sejak rugi ke-3 (jam server MT5).
  * Hanya tampilan; MDBKA tidak pernah menempatkan/menutup order. Murni.
  */
+import type { AnalysisResult } from "../types/analysis";
+
 export const LOSS_STREAK_LIMIT = 3;
 export const PAUSE_HOURS = 24;
 
@@ -91,5 +93,30 @@ export function checkLossStreak(
     streak,
     until,
     reason: `Jeda: ${streak} kali rugi berturut-turut (terakhir ${last.t.symbol}). Istirahat sampai ${until} jam server`,
+  };
+}
+
+/**
+ * Tahan hasil analisa BELI/JUAL selama jeda aktif (sama seperti tahanan
+ * biaya/risiko/korelasi: TUNGGU, SL/TP/lot kosong).
+ */
+export function applyLossPauseHold<T extends AnalysisResult>(
+  result: T,
+  pause: LossPause,
+): T {
+  if (!pause.paused || pause.reason === null) return result;
+  if (result.decision !== "BELI" && result.decision !== "JUAL") return result;
+  return {
+    ...result,
+    decision: "TUNGGU",
+    heldBy: "jeda",
+    heldDecision: result.decision,
+    heldReason: pause.reason,
+    stopLoss: null,
+    takeProfit: null,
+    suggestedLot: null,
+    warnings: [`Mode Aman: ${pause.reason}. Setup ditahan.`, ...result.warnings],
+    explanation:
+      "Mode Aman: sedang jeda setelah 3 kali rugi berturut-turut. Istirahat dulu agar keputusan tidak terburu-buru mengejar kerugian.",
   };
 }

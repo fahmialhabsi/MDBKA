@@ -26,6 +26,8 @@ import { KursProfitBar } from "./components/layout/KursProfitBar";
 import { AccountBalancesBar } from "./components/layout/AccountBalancesBar";
 import { useBrokerPositions } from "./hooks/useBrokerPositions";
 import { applyDoubleBetHold } from "./lib/correlationGuard";
+import { applyLossPauseHold } from "./lib/lossStreakGuard";
+import { useLossPause } from "./hooks/useLossPause";
 import { useEquityStream } from "./hooks/useEquityStream";
 import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
 import { SwapLogPanel } from "./components/swaplog/SwapLogPanel";
@@ -470,12 +472,18 @@ export default function App() {
   // Langkah 1c: hasil BELI/JUAL yang searah posisi terbuka broker aktif
   // ditahan (taruhan ganda) — juga saat simbol dipilih manual.
   const { positions: openPositionsAll } = useBrokerPositions(activeBrokerId);
+  // Langkah F: jeda 24 jam setelah 3 rugi beruntun (didahulukan).
+  const lossPause = useLossPause(activeBrokerId, liveQuote?.timestamp ?? null);
   const shownResult = useMemo(
     () =>
       result === null
         ? null
-        : applyDoubleBetHold(result, market.symbol, openPositionsAll),
-    [result, market.symbol, openPositionsAll],
+        : applyDoubleBetHold(
+            applyLossPauseHold(result, lossPause),
+            market.symbol,
+            openPositionsAll,
+          ),
+    [result, market.symbol, openPositionsAll, lossPause],
   );
 
   // Langkah E: klik status LOLOS di pemindai → pilih simbol (data dimuat

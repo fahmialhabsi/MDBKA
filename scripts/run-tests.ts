@@ -228,7 +228,7 @@ import { autoCsvFileName, autoLoadKey, findCandleItem } from "../src/lib/autoCan
 import { summarizeAccountBalance } from "../server/services/accountBalance";
 import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
 import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
-import { checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
+import { applyLossPauseHold, checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -6418,7 +6418,7 @@ test("538. Hasil analisa ikut menahan taruhan ganda (BELI/JUAL → TUNGGU, tanpa
   const tunggu: ReturnType<typeof analyzeMarket> = { ...base, decision: "TUNGGU" };
   assert(applyDoubleBetHold(tunggu, "AUDJPY_ORB", [{ symbol: "AUDUSD_ORB", side: "BUY" }]) === tunggu, "TUNGGU tetap");
   const app = readSrc("src/App.tsx");
-  assert(app.includes("applyDoubleBetHold(result, market.symbol, openPositionsAll)") && app.includes("result={shownResult}"), "App belum memakai hasil tertahan");
+  assert(app.includes("applyDoubleBetHold(") && app.includes("openPositionsAll,") && app.includes("result={shownResult}"), "App belum memakai hasil tertahan");
   assert(readSrc("src/components/result/AnalysisResult.tsx").includes('result.heldBy === "korelasi"'), "panduan taruhan ganda hilang");
 });
 
@@ -6442,6 +6442,22 @@ test("539. jeda 3 rugi beruntun: 24 jam jam server, demo+live satu broker", () =
     { broker: "orbitraderberjangka", evaluation: { trades: [tr("C", "2026.10.08 01:20:00", -1)] } },
   ];
   assert(tradesForBroker(accounts, "finex").length === 2, "gabung demo+live satu broker saja");
+});
+
+test("540. jeda menahan Hasil analisa & pemindai (TUNGGU, tanpa SL/TP/lot)", () => {
+  const base = analyzeMarket(modeAmanMarket, modeAmanBroker);
+  const jual: ReturnType<typeof analyzeMarket> = { ...base, decision: "JUAL", stopLoss: 1, takeProfit: 2, suggestedLot: 0.01 };
+  const pause = { paused: true, streak: 3, until: "2026.10.09 01:00", reason: "Jeda: 3 kali rugi berturut-turut (terakhir GBPUSD). Istirahat sampai 2026.10.09 01:00 jam server" };
+  const held = applyLossPauseHold(jual, pause);
+  assert(held.decision === "TUNGGU" && held.heldBy === "jeda" && held.heldDecision === "JUAL", String(held.decision));
+  assert(held.stopLoss === null && held.suggestedLot === null && signalReason(held) === pause.reason, "angka/alasan");
+  assert(applyLossPauseHold(jual, { paused: false, streak: 2, until: null, reason: null }) === jual, "tanpa jeda tidak diubah");
+  const sc = readSrc("src/lib/symbolScanner.ts");
+  assert(sc.includes('status: "DITAHAN_JEDA"') && sc.includes("reason: input.pauseReason"), "pemindai belum menahan jeda");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes("pauseReason,") && panel.includes('label: "Jeda rugi"') && panel.includes("scan-loss-pause"), "panel jeda");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("applyLossPauseHold(result, lossPause)") && app.includes("useLossPause(activeBrokerId"), "App belum memakai jeda");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

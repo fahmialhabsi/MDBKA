@@ -29,6 +29,7 @@ export type ScanStatus =
   | "DITAHAN_BIAYA"
   | "DITAHAN_RISIKO"
   | "DITAHAN_KORELASI"
+  | "DITAHAN_JEDA"
   | "TUNGGU"
   | "PASAR_TUTUP"
   | "DATA";
@@ -49,6 +50,8 @@ export interface ScanInput {
   readonly referenceCandleMs?: number | null;
   /** Langkah D: posisi terbuka broker ini; sinyal searah → DITAHAN_KORELASI. */
   readonly openPositions?: readonly OpenPositionLike[];
+  /** Langkah F: alasan jeda 3 rugi beruntun (null = tidak jeda). */
+  readonly pauseReason?: string | null;
 }
 
 export interface ScanRow {
@@ -179,6 +182,25 @@ export function scanSymbol(input: ScanInput): ScanRow {
           : result.riskStatus === "MEMENUHI batas risiko"
             ? "LOLOS"
             : "DITAHAN_RISIKO";
+  // Langkah F: jeda setelah 3 rugi beruntun menahan semua sinyal lolos.
+  if (
+    status === "LOLOS" &&
+    (result.decision === "BELI" || result.decision === "JUAL") &&
+    input.pauseReason !== undefined &&
+    input.pauseReason !== null
+  ) {
+    return {
+      symbol,
+      status: "DITAHAN_JEDA",
+      decision: "TUNGGU",
+      direction: result.decision,
+      held: true,
+      score: result.score,
+      reason: input.pauseReason,
+      costShareOfRisk: result.costShareOfRisk ?? null,
+      candles: count,
+    };
+  }
   // Langkah D: lolos tapi searah dengan posisi terbuka → taruhan ganda.
   if (
     status === "LOLOS" &&
@@ -218,9 +240,10 @@ const STATUS_ORDER: Record<ScanStatus, number> = {
   DITAHAN_BIAYA: 1,
   DITAHAN_RISIKO: 2,
   DITAHAN_KORELASI: 3,
-  TUNGGU: 4,
-  PASAR_TUTUP: 5,
-  DATA: 6,
+  DITAHAN_JEDA: 4,
+  TUNGGU: 5,
+  PASAR_TUTUP: 6,
+  DATA: 7,
 };
 
 /** Urutan tampil: LOLOS dulu, lalu yang paling dekat lolos; skor kuat di atas. */

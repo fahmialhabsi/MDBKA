@@ -618,6 +618,29 @@ function Metric({ label, value }: { label: string; value: string }) {
  * target untung = take profit otomatis, lot = ukuran transaksi.
  */
 function BeginnerGuide({ result }: { result: ResultType }) {
+  // Langkah F: jeda setelah 3 kali rugi berturut-turut.
+  if (result.decision === "TUNGGU" && result.heldBy === "jeda") {
+    return (
+      <div className="rounded-2xl border border-rose-400/25 bg-rose-400/5 p-5">
+        <p className="font-semibold text-rose-200">
+          Artinya gampang: sedang istirahat setelah 3 kali rugi berturut-turut.
+          JANGAN entry dulu.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+          <li>{result.heldReason ?? "Jeda: 3 kali rugi berturut-turut"}.</li>
+          <li>
+            Rugi beruntun sering membuat ingin cepat &quot;balas dendam&quot;. Jeda
+            mencegah kerugian bertambah karena keputusan terburu-buru.
+          </li>
+          <li>
+            Gunakan waktu ini untuk membaca ulang trade yang rugi di panel
+            Evaluasi trade.
+          </li>
+        </ul>
+      </div>
+    );
+  }
+
   // Langkah 1c: arah kompak, tapi searah posisi terbuka (taruhan ganda).
   if (result.decision === "TUNGGU" && result.heldBy === "korelasi") {
     return (

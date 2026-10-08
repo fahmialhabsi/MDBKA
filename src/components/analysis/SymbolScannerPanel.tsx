@@ -16,6 +16,7 @@ import {
   type ScanStatus,
 } from "../../lib/symbolScanner";
 import { useBrokerPositions } from "../../hooks/useBrokerPositions";
+import { checkLossStreak, tradesForBroker } from "../../lib/lossStreakGuard";
 import type { ExchangeRates } from "../../services/fxRateService";
 import type { BrokerId } from "../../types/broker";
 
@@ -51,6 +52,7 @@ const STATUS_VIEW: Record<ScanStatus, { label: string; className: string }> = {
   DITAHAN_BIAYA: { label: "Biaya mahal", className: "bg-sky-400/15 text-sky-300" },
   DITAHAN_RISIKO: { label: "Risiko > batas", className: "bg-amber-400/15 text-amber-300" },
   DITAHAN_KORELASI: { label: "Taruhan ganda", className: "bg-fuchsia-400/15 text-fuchsia-300" },
+  DITAHAN_JEDA: { label: "Jeda rugi", className: "bg-rose-400/15 text-rose-300" },
   TUNGGU: { label: "Tunggu", className: "bg-white/10 text-slate-300" },
   PASAR_TUTUP: { label: "Pasar tutup / basi", className: "bg-white/5 text-slate-500" },
   DATA: { label: "Data kurang", className: "bg-white/5 text-slate-500" },
@@ -140,6 +142,20 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- key memuat brokerId + tick
   }, [key]);
 
+  // Langkah F: jam server terbaru (quote) + status jeda 3 rugi beruntun.
+  const nowServer = (itemsBroker === brokerId ? items : []).reduce<string | null>(
+    (max, item) =>
+      item.quote !== null && (max === null || item.quote.timestamp > max)
+        ? item.quote.timestamp
+        : max,
+    null,
+  );
+  const lossPause = useMemo(
+    () => checkLossStreak(tradesForBroker(evalAccounts, brokerId), nowServer),
+    [evalAccounts, brokerId, nowServer],
+  );
+  const pauseReason = lossPause.paused ? lossPause.reason : null;
+
   const rows = useMemo(() => {
     const source = itemsBroker === brokerId ? items : [];
     // Candle terbaru broker ini = acuan "pasar buka" (jam server yang sama).
@@ -158,14 +174,15 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
           fxRates,
           referenceCandleMs: reference,
           openPositions,
+          pauseReason,
         }),
       ),
     );
-  }, [items, itemsBroker, brokerId, equity, fxRates, openPositions]);
+  }, [items, itemsBroker, brokerId, equity, fxRates, openPositions, pauseReason]);
 
   const counts = rows.reduce<Record<ScanStatus, number>>(
     (acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }),
-    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
+    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, DITAHAN_JEDA: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
   );
   const visible = showAll ? rows : rows.slice(0, COLLAPSED_ROWS);
   const loading =
@@ -184,6 +201,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
               {rows.length} simbol ber-CSV · {counts.LOLOS} lolos ·{" "}
               {counts.DITAHAN_BIAYA} biaya mahal · {counts.DITAHAN_RISIKO} risiko
               &gt; batas · {counts.DITAHAN_KORELASI} taruhan ganda ·{" "}
+              {counts.DITAHAN_JEDA} jeda ·{" "}
               {counts.TUNGGU} tunggu · {counts.PASAR_TUTUP} pasar
               tutup · {counts.DATA} data kurang
             </p>
@@ -211,6 +229,20 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
           berjalan dan simbol tampil di Market Watch.
         </p>
       )}
+
+      {/* Langkah F: jeda / hitungan rugi beruntun broker ini. */}
+      {lossPause.paused ? (
+        <p
+          data-testid="scan-loss-pause"
+          className="mb-3 rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-200"
+        >
+          {lossPause.reason}. Semua sinyal Lolos broker ini ditahan.
+        </p>
+      ) : lossPause.streak > 0 ? (
+        <p className="mb-3 text-xs text-slate-400">
+          Rugi beruntun: {lossPause.streak}/3 (jeda 24 jam bila mencapai 3).
+        </p>
+      ) : null}
 
       {rows.length > 0 && (
         <div className="overflow-x-auto">
