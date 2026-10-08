@@ -1,9 +1,9 @@
 # HANDOFF MDBKA — Mode Aman (8 Okt 2026)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir kode: **2887221** (branch `main`; sesi 8 Okt: 32a7299 → 2887221).
-Test terakhir: **549 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
-Nomor test terakhir: **553** → test baru mulai **554**.
+Commit terakhir kode: **5308b19** (branch `main`; sesi 8 Okt: 32a7299 → 5308b19).
+Test terakhir: **552 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
+Nomor test terakhir: **556** → test baru mulai **557**.
 
 ---
 
@@ -37,7 +37,7 @@ Nomor test terakhir: **553** → test baru mulai **554**.
   lalu `device_commit_files`. Jangan menyalin ulang isi file dari output tool (bisa terpotong).
 - **tsc tidak bisa jalan di VM** (TS7 binary Windows). ESLint bisa: `node node_modules/eslint/bin/eslint.js <file>`.
 - Test runner: `scripts/run-tests.ts` (CommonJS via `tsconfig.test.json`, **tidak bisa import .tsx** → logika
-  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **553**.
+  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **556**.
 - Uji cepat modul server/lib di VM bisa: Node 22 `--experimental-strip-types` + hook resolve `.ts` (lihat sesi 8 Okt);
   tulis hasil uji ke folder sementara, JANGAN ke `data/` asli.
 - `tsx` juga tidak jalan di VM (esbuild Windows) → test hanya bisa dijalankan pengguna. `scripts/run-tests.ts` CRLF:
@@ -104,6 +104,9 @@ Nomor test terakhir: **553** → test baru mulai **554**.
 | af71278 | **5c** `GET /api/evaluation` + `excursions` per akun (`excursionsForLogin`, per positionId; data trade lama tak berubah). Test 551 |
 | 923bf5f | **5d** panel Evaluasi: kolom **Untung terbaik / Rugi terdalam** di "Lihat trade terakhir" (`excursionCell`; ≈ sebagian, – tanpa rekaman, … sedang dihitung). Test 552 |
 | 2887221 | **5e** MFE/MAE dalam **Rupiah**: `grossProfit` di `tradeEvaluation.ts`; `usdPerPriceUnit` = profit kotor ÷ gerak harga (angka asli broker); tooltip USD + R. Perkiraan kurs hari ini. Terverifikasi di layar (US100 +Rp9.945.000 / −Rp6.755.000). Test 553 |
+| 8dcc5b8 | **4b-1** start hanya baca **ekor** file arsip (`readTailText`, 8 MB) untuk kunci dedup; sekaligus perbaiki bug lama (dulu mengingat 20.000 tick PERTAMA, kini TERBARU). Test 554 |
+| 76ee998 | **4b-2** `compact()` sekali per file: daftar `data/history/<broker>/compacted.json` (nama → ukuran), lewati file hari ini (UTC), baca per potongan 4 MB (`forEachLineSync`), tulis ulang via `.tmp` + rename hanya bila ada duplikat. Terverifikasi: 5 file/broker dicentang, 0 duplikat, start berikutnya cepat. Test 555 |
+| 5308b19 | **4b-3** `coverage()` per potongan + test penjaga: tidak ada lagi readFileSync file arsip (kecuali `compacted.json`). Endpoint `/api/history/coverage` tetap SINKRON (±1–2 mnt) — hanya diagnosa manual, jangan dipakai UI. Test 556 |
 
 ### Aturan Mode Aman yang aktif sekarang
 1. Default **TUNGGU**; sinyal hanya bila skor (MA50, CCI, MACD, RSI) kompak.
@@ -189,14 +192,13 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
    - Temuan: dari 6 trade OTB berekaman, 4 sempat untung lebih besar dari hasil akhir (GBPUSD JUAL 5 Okt sempat
      ≈+Rp586 rb, ditutup −Rp61 rb; US100 sempat +Rp9,9 jt, ditutup +Rp3,3 jt). 29 trade sebelum 5 Okt = tanpa rekaman.
    - Usulan lanjutan (perlu bukti ≥ 20 trade Mode Aman dulu): aturan ambil untung lebih cepat / BE berbasis MFE.
-4b. **Risiko arsip tick > 512 MB/hari**: `TickHistoryLogger.compact()` + `coverage()` + `loadSeenFromDisk()` memakai
-   `readFileSync` file utuh; batas string Node ±512 MB → file hari ramai bisa terlewat / server gagal start.
-   File terbesar sekarang 420 MB (Finex 6 Okt). Perbaiki dengan streaming (pola `excursionReader.ts`).
+4b. ~~Risiko arsip tick > 512 MB/hari~~ ✅ **selesai** (4b-1…4b-3, 8dcc5b8 → 5308b19). Koreksi audit: file > 512 MB dulu
+   *dilewati diam-diam* (bukan crash); masalah utama justru start lambat (compact baca semua arsip ±25 dtk/file).
 5. Opsional: biaya breakeven (SL = entry + biaya) agar BE tidak rugi kecil karena komisi/spread.
 6. Opsional: pencatat entry server ikut mencatat status jeda; akun ke-4 di header bila ada file History-nya.
 7. Opsional: kecilkan bundle JS (> 500 kB) dengan dynamic import.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **554**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **557**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -204,8 +206,8 @@ ESLint → pengguna build/test/commit → verifikasi.
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
 > Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, lihat git log,
-> 549 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
+> 552 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
-> lalu minus". Langkah berikutnya: perbaiki risiko arsip tick > 512 MB (langkah 4b, audit read-only dulu).
+> lalu minus". Langkah berikutnya: kumpulkan trade Mode Aman (langkah 1) atau opsional no. 5–7 (audit read-only dulu).
 > Setiap langkah selesai, jelaskan dulu dalam bahasa awam (GUARD no. 11) sebelum saya commit.
