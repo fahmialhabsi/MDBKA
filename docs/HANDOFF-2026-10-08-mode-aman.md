@@ -1,9 +1,9 @@
 # HANDOFF MDBKA — Mode Aman (8 Okt 2026)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir kode: **5fdc105** (branch `main`; sesi 8 Okt: 32a7299 → 5fdc105).
-Test terakhir: **557 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
-Nomor test terakhir: **561** → test baru mulai **562**.
+Commit terakhir kode: **c9de232** (branch `main`; sesi 8 Okt: 32a7299 → c9de232).
+Test terakhir: **559 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
+Nomor test terakhir: **563** → test baru mulai **564**.
 
 ---
 
@@ -37,7 +37,7 @@ Nomor test terakhir: **561** → test baru mulai **562**.
   lalu `device_commit_files`. Jangan menyalin ulang isi file dari output tool (bisa terpotong).
 - **tsc tidak bisa jalan di VM** (TS7 binary Windows). ESLint bisa: `node node_modules/eslint/bin/eslint.js <file>`.
 - Test runner: `scripts/run-tests.ts` (CommonJS via `tsconfig.test.json`, **tidak bisa import .tsx** → logika
-  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **561**.
+  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **563**.
 - Uji cepat modul server/lib di VM bisa: Node 22 `--experimental-strip-types` + hook resolve `.ts` (lihat sesi 8 Okt);
   tulis hasil uji ke folder sementara, JANGAN ke `data/` asli.
 - `tsx` juga tidak jalan di VM (esbuild Windows) → test hanya bisa dijalankan pengguna. `scripts/run-tests.ts` CRLF:
@@ -111,6 +111,8 @@ Nomor test terakhir: **561** → test baru mulai **562**.
 | f350ae3 | **6a-2** `server/index.ts`: jeda dari History MT5 broker yang sama (`collectAccountEvaluations` + `checkLossStreak`) pada **jam server entry**. Entry saat jeda → `DITAHAN_JEDA`, bukan `LOLOS`. Test 558 |
 | 1968ef6 | **5-1** `breakevenCostDistance(holding, convert)` di `exitMonitor.ts`: komisi USD ÷ (contract×lot dlm USD), dibulatkan NAIK ke tick; `checkBreakeven(..., costDistance)` opsional (tanpa = SL di entry seperti dulu). Biaya ≥ profit / tanpa kurs → SL di entry + catatan. Spread tidak ditambah, swap & slippage diabaikan. AUDUSD_ORB 0,10 @0,69811 → SL 0,69844. Test 559–560 |
 | 5fdc105 | **5-2** kotak BREAKEVEN (`HoldingsDashboard.tsx`) pakai SL + biaya; baris `breakeven-cost` "Biaya komisi RpX (Y USD) sudah ditutup oleh SL ini". Test 561 |
+| e8f4116 | Kotak "Salin order": tombol **Salin SL** (`copy-sl`) & **Salin TP** (`copy-tp`) — angka saja, siap tempel ke kolom MT5; tombol "Salin order" DIHAPUS atas permintaan Fahmi (teks order tetap tampil). Terverifikasi tempel di MT5 (US500, JP225). Test 562 |
+| c9de232 | **Format harga indeks bulat**: `tickSizeForSymbol` kini menerima `decimals: 0` (dulu jatuh ke 0.00001 → JP225 "68761.00000"). JP225/HK50 = 0 desimal seperti MT5; tick 1 (juga placeholder spread & pembulatan BE). Terverifikasi di layar. Test 563 |
 
 ### Aturan Mode Aman yang aktif sekarang
 1. Default **TUNGGU**; sinyal hanya bila skor (MA50, CCI, MACD, RSI) kompak.
@@ -170,12 +172,13 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 
 ## 4. Kondisi terbuka / perlu diperhatikan
 
-- **JEDA AKTIF Finex** sejak XTIUSD rugi (8 Okt): 3 rugi beruntun (CADJPY, EURCHF live + XTIUSD demo) → semua sinyal Finex
+- ~~**JEDA AKTIF Finex**~~ (berakhir 09:50, lihat bawah) sejak XTIUSD rugi (8 Okt): 3 rugi beruntun (CADJPY, EURCHF live + XTIUSD demo) → semua sinyal Finex
   ditahan sampai **2026.10.09 04:47 jam server**. OTB tidak jeda (trade terakhir US100 +$186,70).
 - Format SL/TP baru di Hasil analisa lolos test 541 tapi belum dilihat langsung (tunggu sinyal Lolos berikutnya).
 - Pindah akun demo↔live: chart/EA/service tidak perlu di-attach ulang; server MDBKA saja yang dijalankan ulang.
 - Rencana online: disarankan **VPS Windows** (MT5 + MDBKA satu mesin, wajib login + HTTPS). Belum diputuskan.
 - Finex demo punya posisi terbuka (GBPUSD/GBPCHF/XTIUSD SELL) → beberapa sinyal JUAL GBP/minyak berstatus Taruhan ganda.
+- Jeda Finex 8 Okt **sudah berakhir 09:50 jam server** (GBPUSD +$1,63 & GBPCHF +$1,51 memutus rantai); entry NZDUSD/XTIUSD/AUDCHF 10:11–10:17 benar tercatat LOLOS (dicek dari History, bukan bug).
 - Pencatat entry server kini ikut menilai jeda (6a). **Belum terlihat langsung**: baris log `✓ Entry finex #… → DITAHAN_JEDA` muncul hanya bila posisi baru dibuka saat jeda DAN pemindai menilai Lolos.
 - Kotak BREAKEVEN + biaya (5-2) **belum terlihat langsung** — tunggu posisi ber-SL yang profitnya ≥ 0,5R, lalu cek angka SL & baris Rupiah.
 
@@ -211,7 +214,7 @@ ESLint → pengguna build/test/commit → verifikasi.
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
 > Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, lihat git log,
-> 557 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
+> 559 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
 > lalu minus". Langkah berikutnya: kumpulkan trade Mode Aman (langkah 1); opsi 5 & 6a sudah selesai (cek layar BREAKEVEN + log DITAHAN_JEDA bila terjadi).
