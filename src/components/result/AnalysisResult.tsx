@@ -618,6 +618,28 @@ function Metric({ label, value }: { label: string; value: string }) {
  * target untung = take profit otomatis, lot = ukuran transaksi.
  */
 function BeginnerGuide({ result }: { result: ResultType }) {
+  // Langkah 1c: arah kompak, tapi searah posisi terbuka (taruhan ganda).
+  if (result.decision === "TUNGGU" && result.heldBy === "korelasi") {
+    return (
+      <div className="rounded-2xl border border-fuchsia-400/25 bg-fuchsia-400/5 p-5">
+        <p className="font-semibold text-fuchsia-200">
+          Artinya gampang: ini taruhan yang sama dengan posisi Anda yang masih
+          terbuka. JANGAN entry.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+          <li>{result.heldReason ?? "Ditahan: taruhan ganda"}.</li>
+          <li>
+            Bila arahnya salah, dua posisi rugi bersamaan. Tutup atau selesaikan
+            posisi lama dulu sebelum menambah yang searah.
+          </li>
+          <li>
+            Profit kecil yang aman lebih baik daripada risiko dobel.
+          </li>
+        </ul>
+      </div>
+    );
+  }
+
   // Mode Aman: arah sudah kompak, tapi biaya memakan terlalu banyak risiko.
   if (result.decision === "TUNGGU" && result.heldBy === "biaya") {
     const share =

@@ -227,7 +227,7 @@ import { isEquitySnapshot } from "../server/types/equity";
 import { autoCsvFileName, autoLoadKey, findCandleItem } from "../src/lib/autoCandle";
 import { summarizeAccountBalance } from "../server/services/accountBalance";
 import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
-import { exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
+import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -6402,6 +6402,23 @@ test("537. status pemindai = tombol: hanya LOLOS aktif, buka Hasil analisa (read
   assert(app.includes("onOpenAnalysis={handleOpenAnalysis}"), "App belum menyambung tombol");
   assert(app.includes("handleSymbolChange(symbol);") && app.includes('getElementById("hasil-analisa")'), "pilih simbol + gulir");
   assert(app.includes('id="hasil-analisa"'), "target gulir hilang");
+});
+
+test("538. Hasil analisa ikut menahan taruhan ganda (BELI/JUAL → TUNGGU, tanpa SL/TP/lot)", () => {
+  const base = analyzeMarket(modeAmanMarket, modeAmanBroker);
+  const beli: ReturnType<typeof analyzeMarket> = { ...base, decision: "BELI", stopLoss: 1, takeProfit: 2, suggestedLot: 0.01, warnings: ["w"] };
+  const held = applyDoubleBetHold(beli, "AUDJPY_ORB", [{ symbol: "AUDUSD_ORB", side: "BUY" }]);
+  assert(held.decision === "TUNGGU" && held.heldBy === "korelasi" && held.heldDecision === "BELI", JSON.stringify(held.decision));
+  assert(held.stopLoss === null && held.takeProfit === null && held.suggestedLot === null, "angka eksekusi harus kosong");
+  assert((held.heldReason ?? "").includes("AUDUSD_ORB") && held.warnings[0].includes("taruhan ganda"), String(held.heldReason));
+  assert(signalReason(held) === held.heldReason, "alasan header");
+  const lindung = applyDoubleBetHold(beli, "AUDJPY_ORB", [{ symbol: "AUDUSD_ORB", side: "SELL" }]);
+  assert(lindung === beli, "berlawanan tidak boleh diubah");
+  const tunggu: ReturnType<typeof analyzeMarket> = { ...base, decision: "TUNGGU" };
+  assert(applyDoubleBetHold(tunggu, "AUDJPY_ORB", [{ symbol: "AUDUSD_ORB", side: "BUY" }]) === tunggu, "TUNGGU tetap");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("applyDoubleBetHold(result, market.symbol, openPositionsAll)") && app.includes("result={shownResult}"), "App belum memakai hasil tertahan");
+  assert(readSrc("src/components/result/AnalysisResult.tsx").includes('result.heldBy === "korelasi"'), "panduan taruhan ganda hilang");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

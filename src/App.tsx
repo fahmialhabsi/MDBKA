@@ -24,6 +24,8 @@ import AnalysisResult from "./components/result/AnalysisResult";
 import { LiveEquityView } from "./components/result/LiveEquity";
 import { KursProfitBar } from "./components/layout/KursProfitBar";
 import { AccountBalancesBar } from "./components/layout/AccountBalancesBar";
+import { useBrokerPositions } from "./hooks/useBrokerPositions";
+import { applyDoubleBetHold } from "./lib/correlationGuard";
 import { useEquityStream } from "./hooks/useEquityStream";
 import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
 import { SwapLogPanel } from "./components/swaplog/SwapLogPanel";
@@ -465,6 +467,17 @@ export default function App() {
     [market.symbol, activeBrokerId],
   );
 
+  // Langkah 1c: hasil BELI/JUAL yang searah posisi terbuka broker aktif
+  // ditahan (taruhan ganda) — juga saat simbol dipilih manual.
+  const { positions: openPositionsAll } = useBrokerPositions(activeBrokerId);
+  const shownResult = useMemo(
+    () =>
+      result === null
+        ? null
+        : applyDoubleBetHold(result, market.symbol, openPositionsAll),
+    [result, market.symbol, openPositionsAll],
+  );
+
   // Langkah E: klik status LOLOS di pemindai → pilih simbol (data dimuat
   // otomatis oleh Langkah A) lalu gulir ke Hasil analisa.
   const handleOpenAnalysis = useCallback(
@@ -838,10 +851,10 @@ export default function App() {
               profitUsd={autoProfitUsd ?? equityStream.equity?.profit ?? null}
               fxRates={fxRates}
             />
-            {result !== null && market.symbol !== "" && (
+            {shownResult !== null && market.symbol !== "" && (
               <LiveSignalsPanel
                 symbol={market.symbol}
-                result={result}
+                result={shownResult}
                 bid={liveQuote?.bid ?? null}
               />
             )}
@@ -1047,7 +1060,7 @@ export default function App() {
                 }
               >
                 <AnalysisResult
-                  result={result}
+                  result={shownResult}
                   market={market}
                   viewState={viewState}
                   blockedReasons={blockedReasons}

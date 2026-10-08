@@ -11,6 +11,8 @@
  * - Minyak (XTIUSD, CLU): kelompok "Minyak". Lainnya: simbolnya sendiri.
  * Hanya tampilan; MDBKA tidak pernah menempatkan/menutup order. Murni.
  */
+import type { AnalysisResult } from "../types/analysis";
+
 export type Direction = "BELI" | "JUAL";
 
 export interface OpenPositionLike {
@@ -108,4 +110,31 @@ export function findDoubleBet(
     }
   }
   return null;
+}
+
+/**
+ * Langkah 1c: tahan hasil analisa BELI/JUAL yang searah posisi terbuka.
+ * Sama seperti tahanan biaya/risiko: keputusan TUNGGU, SL/TP/lot kosong.
+ */
+export function applyDoubleBetHold<T extends AnalysisResult>(
+  result: T,
+  symbol: string,
+  positions: readonly OpenPositionLike[],
+): T {
+  if (result.decision !== "BELI" && result.decision !== "JUAL") return result;
+  const dobel = findDoubleBet(symbol, result.decision, positions);
+  if (dobel === null) return result;
+  return {
+    ...result,
+    decision: "TUNGGU",
+    heldBy: "korelasi",
+    heldDecision: result.decision,
+    heldReason: dobel.reason,
+    stopLoss: null,
+    takeProfit: null,
+    suggestedLot: null,
+    warnings: [`Mode Aman: ${dobel.reason}. Setup ditahan.`, ...result.warnings],
+    explanation:
+      "Mode Aman: arah sudah kompak, tetapi searah dengan posisi yang masih terbuka (taruhan ganda). Menjaga modal lebih penting daripada menggandakan risiko.",
+  };
 }

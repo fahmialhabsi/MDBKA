@@ -57,7 +57,9 @@ export interface AnalysisResult {
   /** Mode Aman: porsi biaya terhadap risiko per lot (0..1); null bila tanpa setup. */
   costShareOfRisk?: number | null;
   /** Mode Aman: alasan setup BELI/JUAL ditahan menjadi TUNGGU (null = tidak ditahan). */
-  heldBy?: "biaya" | "risiko" | null;
+  heldBy?: "biaya" | "risiko" | "korelasi" | null;
+  /** Langkah D: alasan tahanan korelasi (taruhan ganda) untuk ditampilkan. */
+  heldReason?: string | null;
   /** Arah asli (BELI/JUAL) sebelum ditahan Mode Aman; null bila tidak ditahan. */
   heldDecision?: Decision | null;
 }

@@ -283,8 +283,8 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         &quot;Lolos&quot; = biaya &amp; risiko aman. Win rate baru ditampilkan setelah
         minimal 20 trade berstatus Lolos tertutup di History MT5 broker ini (demo +
         live); sebelum itu tertulis &quot;belum terbukti (n/20)&quot;. Memakai default Mode Aman (risiko 1%,
-        gerbang biaya 10%) dan equity live broker aktif. Sebelum entry, muat CSV simbol itu dan pastikan Hasil
-        Analisa menunjukkan hal yang sama. Bukan nasihat keuangan.
+        gerbang biaya 10%) dan equity live broker aktif. Klik status Lolos untuk membuka Hasil
+        Analisa simbol itu (data otomatis dari MT5). Bukan nasihat keuangan.
       </p>
     </section>
   );
