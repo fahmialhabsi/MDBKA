@@ -11,7 +11,8 @@ export function tickSizeForSymbol(symbol: string): number {
   const otb = getOtbInstrumentProfile(symbol.trim().toUpperCase());
   if (otb !== null && otb.tickSize > 0) return otb.tickSize;
   const profile = getInstrumentProfile(symbol);
-  if (profile.category !== "unknown" && profile.decimals > 0) {
+  // decimals 0 (JP225, HK50 = harga bulat) → tick 1, bukan jatuh ke 0.00001.
+  if (profile.category !== "unknown" && profile.decimals >= 0) {
     return Math.pow(10, -profile.decimals);
   }
   return 0.00001;

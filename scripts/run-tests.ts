@@ -6803,6 +6803,13 @@ test("562. Salin order: hanya tombol Salin SL & Salin TP (angka saja, siap tempe
   assert(formatPrice(7785.18, "US500") === "7785.18" && formatPrice(0.69844, "AUDUSD_ORB") === "0.69844", "format angka salin");
 });
 
+test("563. format harga indeks tanpa desimal: JP225/HK50 = 0 desimal seperti MT5", () => {
+  assert(priceDigits("JP225") === 0 && priceDigits("HK50") === 0, `JP225 ${priceDigits("JP225")} HK50 ${priceDigits("HK50")}`);
+  assert(formatPrice(69126, "JP225") === "69126" && formatPrice(23801, "HK50") === "23801", formatPrice(69126, "JP225"));
+  assert(priceDigits("US500") === 2 && priceDigits("GBPUSD") === 5 && priceDigits("USDJPY") === 3, "simbol lain tidak boleh berubah");
+  assert(priceDigits("TIDAKADA") === 5, "simbol tak dikenal tetap 5 desimal");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
