@@ -19,6 +19,7 @@ import { createPajakRoutes } from "./routes/pajakRoutes";
 import { createCandlesRoutes } from "./routes/candlesRoutes";
 import { createBackupRoutes } from "./routes/backupRoutes";
 import { createEvaluationRoutes } from "./routes/evaluationRoutes";
+import { createCalendarRoutes } from "./routes/calendarRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
 import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
 
@@ -74,6 +75,8 @@ export function createApp(
   app.use("/api/backup", createBackupRoutes());
   // Langkah 4c: evaluasi trade tertutup (History MT5 + catatan entry).
   app.use("/api/evaluation", createEvaluationRoutes());
+  // Satpam Kalender K2b: kalender ekonomi MT5 per broker (jam server).
+  app.use("/api/calendar", createCalendarRoutes());
   app.use(
     "/api/positions",
     createPositionsRoutes(positionsReader, positionsReaderFinex),

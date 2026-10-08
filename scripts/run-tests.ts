@@ -43,6 +43,7 @@ import {
 } from "../server/routes/evaluationRoutes";
 import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
+import { calendarResponse } from "../server/routes/calendarRoutes";
 import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
@@ -6921,6 +6922,23 @@ test("570. kalender: parse CSV MT5 & pilih file per broker (K2a)", () => {
   assert(f !== null && f.file === "MDBKA_Calendar_61823011.csv" && f.events[0].serverTime === "2026.10.08 15:30:00", "file Finex");
   assert(o !== null && o.file === "MDBKA_Calendar_70930952.csv" && o.events[0].serverTime === "2026.10.08 14:30:00", "file OTB jam sendiri");
   assert(readCalendarForBroker(path.join(dir, "tidak-ada"), "finex") === null, "folder hilang = null");
+});
+
+test("571. endpoint /api/calendar: tersedia & tidak tersedia (K2b)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kalender-api-"));
+  const kosong = calendarResponse(dir, "finex");
+  assert(!kosong.available && kosong.events.length === 0 && kosong.file === null, "tanpa file = available false");
+  fs.writeFileSync(path.join(dir, "MDBKA_Calendar_61823011.csv"),
+    "ServerTime,Currency,Country,Importance,Event,Actual,Forecast,Previous,Impact,ValueId,Company,Generated\r\n" +
+    "2026.10.14 15:30:00,USD,US,HIGH,CPI m/m,,0.6000,0.4000,NA,9,PT. Finex Bisnis Solusi Futures,2026.10.09 01:50:45");
+  const ada = calendarResponse(dir, "finex");
+  assert(ada.available && ada.events.length === 1 && ada.generated === "2026.10.09 01:50:45", JSON.stringify(ada));
+  assert(!calendarResponse(dir, "orbitraderberjangka").available, "file Finex tidak boleh dipakai OTB");
+  const app = readSrc("server/app.ts");
+  assert(app.includes('app.use("/api/calendar", createCalendarRoutes());'), "route belum dipasang");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

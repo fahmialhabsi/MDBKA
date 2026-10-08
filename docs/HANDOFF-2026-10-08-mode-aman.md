@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **569** → test baru mulai **570**.
+Nomor test terakhir: **571** → test baru mulai **572**.
 
 ---
 
@@ -119,7 +119,9 @@ Nomor test terakhir: **569** → test baru mulai **570**.
 | 597c8e4 | **Fix pointValue Finex non-USD**: `withUsdPointValue` kini juga konversi Finex (mata uang kuotasi dari spec32). Dulu USDJPY terbaca Rp3,6 jt (yen dianggap USD), kini ±Rp24 rb; CHF/CAD/GBP/NZD/AUD meleset 0,6–1,3× ikut benar. Test 496 lama ("Finex tetap" = bug) diganti. Terverifikasi di layar |
 | faabdb4 | **R3b** analisa diulang otomatis sekali begitu kurs USD→Rp termuat (`kursRetryRef`); pesan "kurs belum tersedia" saat start hilang. Terverifikasi. Test 567 |
 | 51eae63 | **R4 panel "Batas risiko per golongan"** (`RiskGroupsPanel.tsx`, `<details>` di bawah pemindai): golongan, batas Rp (≈ $), daftar simbol + catatan; isi dari `riskGroupTable()` (sumber sama dengan aturan, test cek tiap simbol). Terverifikasi di layar. Test 568 |
-| (9 Okt) | **Time-stop khusus Forex**: `timeStopApplies(symbol)` + `TIME_STOP_GROUPS = ["FOREX","FOREX_JPY"]` di `exitMonitor.ts` (pakai `riskGroupOf`). `checkTimeStop` kini butuh `symbol`; logam, minyak, indeks, saham = tanpa batas waktu. Test 530 disesuaikan + test 569 |
+| d3f4d29 | **Time-stop khusus Forex**: `timeStopApplies(symbol)` + `TIME_STOP_GROUPS = ["FOREX","FOREX_JPY"]` di `exitMonitor.ts` (pakai `riskGroupOf`). `checkTimeStop` kini butuh `symbol`; logam, minyak, indeks, saham = tanpa batas waktu. Test 530 disesuaikan + test 569 |
+| 7e1ead4 | **Satpam Kalender K1**: service `ea/MDBKACalendarService.mq5` → `Common\Files\MDBKA_Calendar_<login>.csv` (12 kolom: ServerTime, Currency, Country, Importance, Event, Actual, Forecast, Previous, Impact, ValueId, Company, Generated). Event Tinggi + Sedang, kemarin s/d +7 hari, tiap 300 dtk, jam server. Terpasang & jalan di Finex + OTB (103 event, jam OTB = Finex − 1 jam ✓) |
+| 4673b88 | **K2a** `server/services/calendarReader.ts`: `parseCalendarCsv`, `readCalendarForBroker(commonDir, broker)` (file terbaru per broker via Company; gagal = null). Diuji pada file asli: 17 event Tinggi/broker. Test 570 |
 
 ### Aturan Mode Aman yang aktif sekarang
 1. Default **TUNGGU**; sinyal hanya bila skor (MA50, CCI, MACD, RSI) kompak.
@@ -258,8 +260,32 @@ mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: N
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **570**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **572**) →
 ESLint → pengguna build/test/commit → verifikasi.
+
+---
+
+## 5b. Satpam Kalender — keputusan Fahmi (9 Okt 2026)
+- Hanya berita **Tinggi** (HIGH) yang menahan sinyal (Sedang ikut diekspor untuk tampilan/masa depan).
+- Jendela **±30 menit** (30 mnt sebelum s/d 30 mnt sesudah jam rilis) untuk **semua golongan**.
+- Pemetaan mata uang ikut mata uang harga: forex = base & quote; XAU/XAG, minyak, indeks AS, saham AS → USD;
+  JP225 → JPY; DE30 → EUR; UK100 → GBP; HK50 → HKD/CNY.
+- File kalender tidak ada / basi → **satpam diabaikan** (analisa tetap jalan + catatan "kalender belum tersedia").
+- Rencana langkah: K1 ✅ service · K2a ✅ pembaca · K2b ✅ endpoint `GET /api/calendar?broker=` (`server/routes/calendarRoutes.ts`, test 571) · K3 modul murni
+  `newsGuard` (mata uang simbol + cek jendela) · K4 pemindai status `DITAHAN_BERITA` · K5 Hasil analisa `heldBy: "berita"`
+  · K6 daftar berita Tinggi mendatang di layar.
+
+## 5c. BACKLOG tambahan (permintaan Fahmi 9 Okt) — dikerjakan SETELAH tahap inti (Satpam Kalender) selesai
+1. **Halaman per golongan** (Forex, Forex JPY, Logam, Minyak, Saham AS, Indeks, + Saham): tiap golongan punya tombol
+   yang membuka **halaman sendiri**. Di dalamnya **tab per simbol ala MT5**, tiap tab berisi **chart naik-turun** dan info
+   akun **Balance, Equity, Margin, Free Margin, Margin Level** — semua dalam **USD dan Rupiah**.
+   Catatan: rencana grafik per simbol pernah dibatalkan 8 Okt (mockup: https://claude.ai/artifact/Hv6o51xhKruFGUTu2x8sqG);
+   kini diminta lagi sebagai backlog → rancang ulang dari mockup itu.
+2. **Portofolio saham**: berapa lot/lembar saham sudah dibeli, harga beli, dari simbol apa, berapa yang sudah dijual,
+   dan **saldo saham sekarang** (sumber: History MT5 per simbol saham `.US`/`#`). Masuk halaman golongan Saham.
+3. **Pemindai → halaman detail**: tombol status di "Pemindai simbol — Mode Aman" membuka **halaman baru** berisi
+   tombol **Salin SL** dan **Salin TP** (pola `copy-sl`/`copy-tp` yang sudah ada di kotak "Salin order").
+Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi build/test/commit.
 
 ---
 
@@ -270,5 +296,5 @@ ESLint → pengguna build/test/commit → verifikasi.
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
 > lalu minus". Time-stop 3 jam hanya Forex & Forex JPY. Langkah berikutnya: kumpulkan trade Mode Aman (langkah 1) dan
-> diskusi bahan analisa baru (bagian 4b, mulai Satpam Kalender).
+> lanjutkan Satpam Kalender (bagian 5b, mulai K3). Backlog halaman golongan/portofolio saham/halaman pemindai di 5c.
 > Setiap langkah selesai, jelaskan dulu dalam bahasa awam (GUARD no. 11) sebelum saya commit.
