@@ -3,6 +3,7 @@ import { ClipboardCheck, RefreshCw } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import {
   excursionCell,
+  usdPerPriceUnit,
   formatDuration,
   formatRupiah,
   formatUsd,
@@ -213,7 +214,13 @@ function AccountCard({ account, kurs }: { account: EvalAccount; kurs: number | n
                         {t.rMultiple === null ? "-" : t.rMultiple.toFixed(2)}
                       </td>
                       {(["mfe", "mae"] as const).map((which) => {
-                        const cell = excursionCell(account.excursions?.[t.positionId], t.symbol, which);
+                        const cell = excursionCell(
+                          account.excursions?.[t.positionId],
+                          t.symbol,
+                          which,
+                          usdPerPriceUnit(t),
+                          kurs,
+                        );
                         return (
                           <td key={which} className={`py-1.5 pr-3 text-right ${EXCURSION_TONE[cell.tone]}`} title={cell.title}>
                             {cell.text}
@@ -229,7 +236,7 @@ function AccountCard({ account, kurs }: { account: EvalAccount; kurs: number | n
               </table>
               <p className="mt-2 text-[11px] text-slate-500">
                 Untung terbaik / Rugi terdalam = gerak harga terbaik &amp; terburuk selama posisi terbuka.
-                R = kelipatan risiko SL. ≈ rekaman sebagian · – tanpa rekaman (sebelum 5 Okt) · … sedang dihitung.
+                Rupiah = perkiraan (kurs hari ini). R = kelipatan risiko SL. ≈ rekaman sebagian · – tanpa rekaman (sebelum 5 Okt) · … sedang dihitung.
               </p>
             </div>
           )}

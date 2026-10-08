@@ -26,6 +26,8 @@ export interface EvaluatedTrade {
   readonly openPrice: number;
   readonly closePrice: number;
   readonly net: number;
+  /** Langkah 5e: profit kotor MT5 (tanpa komisi/swap/fee) → USD per gerak harga untuk MFE/MAE Rupiah. */
+  readonly grossProfit: number;
   readonly commission: number;
   readonly swap: number;
   readonly durationMin: number | null;
@@ -165,6 +167,7 @@ export function evaluateTrades(
       openPrice,
       closePrice,
       net: round2(net),
+      grossProfit: round2(total("profit")),
       commission: round2(total("commission")),
       swap: round2(total("swap")),
       durationMin:

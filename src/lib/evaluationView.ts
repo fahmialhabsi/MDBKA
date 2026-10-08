@@ -29,6 +29,10 @@ export interface EvalTrade {
   readonly openTime: string;
   readonly closeTime: string;
   readonly net: number;
+  /** Langkah 5e (opsional: server lama tidak mengirim). */
+  readonly openPrice?: number;
+  readonly closePrice?: number;
+  readonly grossProfit?: number;
   readonly durationMin: number | null;
   readonly exit: "TP" | "SL" | "MANUAL";
   readonly rMultiple: number | null;
@@ -200,10 +204,27 @@ export interface ExcursionCell {
   readonly tone: "untung" | "rugi" | "netral";
 }
 
+/**
+ * Langkah 5e — USD per 1,00 gerak harga, dari angka asli broker:
+ * profit kotor ÷ gerak harga trade (searah posisi). Null bila tidak bisa
+ * (data lama, atau ditutup tepat di harga entry → gerak 0).
+ */
+export function usdPerPriceUnit(t: EvalTrade): number | null {
+  if (t.openPrice === undefined || t.closePrice === undefined || t.grossProfit === undefined) {
+    return null;
+  }
+  const move = t.side === "BUY" ? t.closePrice - t.openPrice : t.openPrice - t.closePrice;
+  if (!Number.isFinite(move) || Math.abs(move) < 1e-9) return null;
+  const perUnit = t.grossProfit / move;
+  return Number.isFinite(perUnit) && perUnit > 0 ? perUnit : null;
+}
+
 export function excursionCell(
   e: EvalExcursion | undefined,
   symbol: string,
   which: "mfe" | "mae",
+  usdPerUnit: number | null = null,
+  kurs: number | null = null,
 ): ExcursionCell {
   if (e === undefined) {
     return { text: "…", title: "Sedang dihitung (paling lambat 10 menit)", tone: "netral" };
@@ -214,16 +235,21 @@ export function excursionCell(
     return { text: "–", title: "Tanpa rekaman harga (arsip tick mulai 5 Okt 2026)", tone: "netral" };
   }
   const sign = value > 0 ? "+" : value < 0 ? "−" : "";
-  const body =
-    r !== null
-      ? `${sign}${numberId(Math.abs(r), 2)}R`
-      : `${sign}${numberId(Math.abs(value), priceDigits(symbol))}`;
+  const rText = r !== null ? `${sign}${numberId(Math.abs(r), 2)}R` : null;
+  const priceText = `${sign}${numberId(Math.abs(value), priceDigits(symbol))}`;
+  const usd = usdPerUnit !== null ? value * usdPerUnit : null;
+  const rupiah = formatRupiah(usd, kurs);
+  const body = rupiah ?? rText ?? priceText;
   const partial = e.coverage === "PARSIAL";
   return {
     text: partial ? `≈${body}` : body,
     title:
       (which === "mfe" ? "Untung terbaik yang sempat tersedia" : "Rugi terdalam yang sempat dialami") +
-      (r !== null ? " (dalam R = kelipatan risiko SL)" : " (selisih harga)") +
+      (rupiah !== null
+        ? ` ≈ ${formatUsd(Math.round((usd ?? 0) * 100) / 100)} (perkiraan, kurs hari ini) · ${rText ?? priceText}`
+        : r !== null
+          ? " (dalam R = kelipatan risiko SL)"
+          : " (selisih harga)") +
       (partial ? ` · rekaman sebagian (${e.ticks} harga)` : ` · rekaman lengkap (${e.ticks} harga)`),
     tone: value > 0 ? "untung" : value < 0 ? "rugi" : "netral",
   };

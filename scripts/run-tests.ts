@@ -272,6 +272,7 @@ import {
 
 import {
   excursionCell,
+  usdPerPriceUnit,
   formatDuration,
   formatRupiah,
   formatUsd,
@@ -6607,7 +6608,23 @@ test("552. panel Evaluasi: sel Untung terbaik / Rugi terdalam (R, harga, ≈, �
   const kosong = excursionCell({ coverage: "TANPA_DATA", ticks: 0, mfe: null, mae: null, mfeR: null, maeR: null }, "GBPUSD", "mae");
   assert(kosong.text === "–" && kosong.tone === "netral", "tanpa data");
   const panel = readSrc("src/components/analysis/TradeEvaluationPanel.tsx");
-  assert(panel.includes("excursionCell(account.excursions?.[t.positionId], t.symbol, which)") && panel.includes("Rugi terdalam"), "kolom belum dipasang di panel");
+  assert(panel.includes("account.excursions?.[t.positionId],") && panel.includes("usdPerPriceUnit(t),") && panel.includes("Rugi terdalam"), "kolom belum dipasang di panel");
+});
+
+test("553. MFE/MAE dalam Rupiah: USD per gerak dari profit kotor broker × kurs", () => {
+  const xti = { positionId: "1", symbol: "XTIUSD", side: "SELL" as const, volume: 0.01, openTime: "a", closeTime: "b", net: -8.01, durationMin: 143, exit: "SL" as const, rMultiple: -1, group: "LOLOS", openPrice: 88.2, closePrice: 89, grossProfit: -8 };
+  const u = usdPerPriceUnit(xti);
+  assert(u !== null && Math.abs(u - 10) < 1e-9, `XTIUSD $10 per 1,00: ${u}`);
+  const e = { coverage: "PENUH" as const, ticks: 3980, mfe: 0.06, mae: -0.8, mfeR: 0.08, maeR: -1 };
+  const mfe = excursionCell(e, "XTIUSD", "mfe", u, 17870.85);
+  assert(mfe.text === "+Rp11.000" && mfe.title.includes("+$0,60") && mfe.title.includes("+0,08R"), JSON.stringify(mfe));
+  assert(excursionCell(e, "XTIUSD", "mae", u, 17870.85).text === "−Rp143.000", "MAE −$8,00");
+  assert(excursionCell(e, "XTIUSD", "mfe", u, null).text === "+0,08R", "kurs belum ada → R");
+  assert(usdPerPriceUnit({ ...xti, closePrice: 88.2, grossProfit: 0 }) === null, "tutup di entry → null");
+  assert(usdPerPriceUnit({ ...xti, grossProfit: undefined }) === null, "server lama → null");
+  const gbp = { ...xti, symbol: "GBPUSD_ORB", side: "BUY" as const, volume: 0.1, openPrice: 1.32172, closePrice: 1.32087, grossProfit: -8.5 };
+  assert(Math.abs((usdPerPriceUnit(gbp) ?? 0) - 10000) < 1e-6, `GBPUSD 0,1 lot $10/pip: ${usdPerPriceUnit(gbp)}`);
+  assert(readSrc("server/services/tradeEvaluation.ts").includes('grossProfit: round2(total("profit"))'), "server belum kirim grossProfit");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
