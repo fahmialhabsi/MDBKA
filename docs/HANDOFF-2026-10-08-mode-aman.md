@@ -1,9 +1,9 @@
 # HANDOFF MDBKA — Mode Aman (8 Okt 2026)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir kode: **616f1da** (branch `main`; sesi 8 Okt: 32a7299 → 616f1da).
-Test terakhir: **541 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
-Nomor test terakhir: **545** → test baru mulai **546**.
+Commit terakhir kode: **2887221** (branch `main`; sesi 8 Okt: 32a7299 → 2887221).
+Test terakhir: **549 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
+Nomor test terakhir: **553** → test baru mulai **554**.
 
 ---
 
@@ -37,7 +37,9 @@ Nomor test terakhir: **545** → test baru mulai **546**.
   lalu `device_commit_files`. Jangan menyalin ulang isi file dari output tool (bisa terpotong).
 - **tsc tidak bisa jalan di VM** (TS7 binary Windows). ESLint bisa: `node node_modules/eslint/bin/eslint.js <file>`.
 - Test runner: `scripts/run-tests.ts` (CommonJS via `tsconfig.test.json`, **tidak bisa import .tsx** → logika
-  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **545**.
+  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **553**.
+- Uji cepat modul server/lib di VM bisa: Node 22 `--experimental-strip-types` + hook resolve `.ts` (lihat sesi 8 Okt);
+  tulis hasil uji ke folder sementara, JANGAN ke `data/` asli.
 - `tsx` juga tidak jalan di VM (esbuild Windows) → test hanya bisa dijalankan pengguna. `scripts/run-tests.ts` CRLF:
   sisipkan teks dengan `\r\n`. File CRLF lain: `src/types/analysis.ts`, `AnalysisResult.tsx`.
 - Test `readSrc` mengecek teks sumber: bila kalimat kode diubah, sesuaikan test lamanya (pernah gagal di 538).
@@ -95,6 +97,13 @@ Nomor test terakhir: **545** → test baru mulai **546**.
 | 25edb19 | **MDBKAHistoryService** tulis ulang History saat ganti akun (`lastLogin`), walau jumlah deal sama. Sudah di-compile & restart di Finex + OTB (0 errors) |
 | 6fec2ae | **Zona jam OTB**: server OTB ternyata UTC+2 (bukan +3) → `.env` `MT5_TZ_OFFSET_OTB=2` (+ `.env.example`). Terverifikasi: selisih `received_at`−`ts_utc` tick OTB baru ±1 dtk (dulu 1 jam). Tick lama tidak ditulis ulang; `ts_raw` tetap benar. Cek ulang offset saat pergantian jam musim (akhir Okt/awal Nov) |
 | 616f1da | **5a MFE/MAE** — `server/services/tradeExcursion.ts` `computeExcursion(trade, ticks)`: untung terbaik (MFE) & rugi terdalam (MAE) selama trade terbuka; BUY pakai bid, SELL pakai ask; cocok lewat jam server (`ts_raw`); R bila SL diketahui; cakupan PENUH / PARSIAL (celah > 60 dtk) / TANPA_DATA. Belum tersambung ke UI. Test 543–545 |
+| 23a5a6a | **5b1** `server/services/excursionReader.ts` — baca arsip tick **streaming** (baris demi baris; jangan readFileSync file 300–420 MB), tiap file dibaca sekali untuk semua trade, file tanggal ±1 hari, saring `ts_raw`. ±18 dtk untuk 3 file OTB. Test 546 |
+| 95faeb9 | **5b2** `server/services/excursionCache.ts` — buku `data/trades/excursion-<broker>.jsonl` (kunci `<login>:<positionId>`, baris terakhir menang). Final bila PENUH atau tutup > 1 jam sebelum tick terbaru; selain itu dihitung ulang. Test 547–548 |
+| 84239db | **5b3** `server/services/excursionJob.ts` `runExcursionPass` (trade belum tercatat → hitung → catat yang final) + `newestTickRaw` (baca 8 KB ekor). Test 549 |
+| 86bb43b | **5b4** `startExcursionSchedule` dipasang di `server/index.ts`: 5 dtk setelah start lalu tiap 10 menit, tidak bertumpuk, gagal hanya dilog. Terverifikasi: 36 trade tercatat 13:03 WIT. Test 550 |
+| af71278 | **5c** `GET /api/evaluation` + `excursions` per akun (`excursionsForLogin`, per positionId; data trade lama tak berubah). Test 551 |
+| 923bf5f | **5d** panel Evaluasi: kolom **Untung terbaik / Rugi terdalam** di "Lihat trade terakhir" (`excursionCell`; ≈ sebagian, – tanpa rekaman, … sedang dihitung). Test 552 |
+| 2887221 | **5e** MFE/MAE dalam **Rupiah**: `grossProfit` di `tradeEvaluation.ts`; `usdPerPriceUnit` = profit kotor ÷ gerak harga (angka asli broker); tooltip USD + R. Perkiraan kurs hari ini. Terverifikasi di layar (US100 +Rp9.945.000 / −Rp6.755.000). Test 553 |
 
 ### Aturan Mode Aman yang aktif sekarang
 1. Default **TUNGGU**; sinyal hanya bila skor (MA50, CCI, MACD, RSI) kompak.
@@ -167,6 +176,7 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 - OTB Experts log 03:28: `ExportPositions: FileOpen gagal: 5004` (sekali; kemungkinan file sedang dibaca). Pantau bila berulang.
 - Belum ada trade Mode Aman tercatat → label pemindai masih "belum terbukti (0/20)".
 - Backup pertama sudah sukses; banner muncul lagi bila data penting berubah.
+- Buku MFE/MAE (`data/trades/excursion-*.jsonl`) di-gitignore seperti `data/` lain → ikut tombol **Backup sekarang**.
 
 ---
 
@@ -175,18 +185,18 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 1. **Kumpulkan ≥ 20 trade Mode Aman berstatus Lolos**, lalu nilai ulang di panel Evaluasi trade (win rate, ekspektansi, R).
 2. ~~Peringatan korelasi~~ ✅ selesai (diblok, bukan sekadar peringatan).
 3. ~~Pause setelah 3 kali rugi berturut-turut~~ ✅ selesai (jeda 24 jam).
-4. Gerak terbaik/terburuk (MFE/MAE) tiap trade dari arsip tick — **sedang dikerjakan**:
-   - ✅ (a) mesin hitung `computeExcursion` (616f1da).
-   - ⏳ (b) pembaca tick per simbol + rentang jam server, hasil disimpan sekali di `data/trades/excursion-<broker>.jsonl`
-     (file tick 300–420 MB/hari terlalu berat dibaca tiap request). Baca file tanggal ±1 hari (file lama OTB dinamai offset +3), saring `ts_raw`.
-   - ⏳ (c) field `excursion` di `GET /api/evaluation`. ⏳ (d) kolom MFE/MAE di panel Evaluasi trade.
-   - Catatan audit: arsip tick mulai 5 Okt → dari 35 trade tertutup hanya ±6 yang tercakup (29 TANPA_DATA).
-     Contoh: GBPUSD_ORB BUY 6 Okt MFE +0,7 pip / MAE −9,4 pip; US100 MAE −189 poin sebelum ditutup +$186,70.
+4. ~~Gerak terbaik/terburuk (MFE/MAE) tiap trade dari arsip tick~~ ✅ **selesai** (5a–5e, 616f1da → 2887221).
+   - Temuan: dari 6 trade OTB berekaman, 4 sempat untung lebih besar dari hasil akhir (GBPUSD JUAL 5 Okt sempat
+     ≈+Rp586 rb, ditutup −Rp61 rb; US100 sempat +Rp9,9 jt, ditutup +Rp3,3 jt). 29 trade sebelum 5 Okt = tanpa rekaman.
+   - Usulan lanjutan (perlu bukti ≥ 20 trade Mode Aman dulu): aturan ambil untung lebih cepat / BE berbasis MFE.
+4b. **Risiko arsip tick > 512 MB/hari**: `TickHistoryLogger.compact()` + `coverage()` + `loadSeenFromDisk()` memakai
+   `readFileSync` file utuh; batas string Node ±512 MB → file hari ramai bisa terlewat / server gagal start.
+   File terbesar sekarang 420 MB (Finex 6 Okt). Perbaiki dengan streaming (pola `excursionReader.ts`).
 5. Opsional: biaya breakeven (SL = entry + biaya) agar BE tidak rugi kecil karena komisi/spread.
 6. Opsional: pencatat entry server ikut mencatat status jeda; akun ke-4 di header bila ada file History-nya.
 7. Opsional: kecilkan bundle JS (> 500 kB) dengan dynamic import.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **543**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **554**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -194,8 +204,8 @@ ESLint → pengguna build/test/commit → verifikasi.
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
 > Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, lihat git log,
-> 541 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
+> 549 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
-> lalu minus". Langkah berikutnya: MFE/MAE langkah (b) pembaca tick + cache (mulai dengan audit read-only).
+> lalu minus". Langkah berikutnya: perbaiki risiko arsip tick > 512 MB (langkah 4b, audit read-only dulu).
 > Setiap langkah selesai, jelaskan dulu dalam bahasa awam (GUARD no. 11) sebelum saya commit.
