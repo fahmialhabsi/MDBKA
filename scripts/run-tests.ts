@@ -239,6 +239,7 @@ import {
   isFinalExcursion,
   readExcursionCache,
 } from "../server/services/excursionCache";
+import { newestTickRaw, runExcursionPass } from "../server/services/excursionJob";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -9981,6 +9982,53 @@ test("472. kanonis + profil preservasi nama bertitik/bertanda", () => {
   } catch (e) {
     failed += 1;
     console.log(`FAIL - 546. pembaca arsip tick: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // 549: satu putaran pengisi buku MFE/MAE (async: baca/tulis berkas).
+  try {
+    const os = require("node:os") as unknown as { tmpdir(): string };
+    const nfs = require("node:fs") as unknown as typeof import("node:fs");
+    const npath = require("node:path") as unknown as typeof import("node:path");
+    const root = nfs.mkdtempSync(npath.join(os.tmpdir(), "excjob-"));
+    const common = npath.join(root, "common");
+    const trades = npath.join(root, "trades");
+    const otbDir = npath.join(root, "history", "otb");
+    nfs.mkdirSync(common, { recursive: true });
+    nfs.mkdirSync(otbDir, { recursive: true });
+    const co = "PT. Orbi Trade Berjangka";
+    const deal = (t: string, pos: string, time: string, type: string, entry: string, price: number): string =>
+      `${t},${pos},${t},${time},GBPUSD_ORB,${type},${entry},0.10,${price},0,0,0,0,0,,70930952,${co},USD`;
+    nfs.writeFileSync(
+      npath.join(common, "MDBKA_History_70930952.csv"),
+      [
+        "DealTicket,PositionId,OrderTicket,ServerTime,Symbol,Type,Entry,Volume,Price,Commission,Swap,Profit,Fee,Magic,Comment,Login,Company,AccountCurrency",
+        deal("1", "10", "2026.10.06 06:00:00", "BUY", "IN", 1.3),
+        deal("2", "10", "2026.10.06 06:10:00", "SELL", "OUT", 1.3005),
+        deal("3", "11", "2026.10.06 06:20:00", "BUY", "IN", 1.3),
+        deal("4", "11", "2026.10.06 06:30:00", "SELL", "OUT", 1.3),
+      ].join("\n") + "\n",
+    );
+    const row = (ts: string, bid: number): string =>
+      JSON.stringify({ ts_utc: "x", ts_raw: ts, broker: "otb", symbol: "GBPUSD_ORB", bid, ask: bid + 0.0001, received_at: "x" });
+    nfs.writeFileSync(
+      npath.join(otbDir, "ticks-2026-10-06.jsonl"),
+      [row("2026.10.06 06:00:00", 1.3), row("2026.10.06 06:05:00", 1.301), row("2026.10.06 06:10:00", 1.3005), row("2026.10.06 06:25:00", 1.2995)].join("\n") + "\n" + '{"terpotong',
+    );
+    assert(newestTickRaw(otbDir) === "2026.10.06 06:25:00", `tick terbaru dari ekor: ${newestTickRaw(otbDir)}`);
+    const opts = { commonDir: common, tradesDir: trades, historyDir: npath.join(root, "history"), now: () => new Date("2026-10-08T00:00:00Z") };
+    const s1 = (await runExcursionPass(opts)).find((x) => x.broker === "orbitraderberjangka");
+    assert(s1 !== undefined && s1.pending === 2 && s1.saved === 1 && s1.notFinal === 1, `putaran 1: ${JSON.stringify(s1)}`);
+    const book = readExcursionCache(npath.join(trades, "excursion-orbitraderberjangka.jsonl"));
+    const t10 = book.get("70930952:10");
+    assert(t10 !== undefined && t10.coverage === "PENUH" && t10.mfe === 0.001 && t10.computedAt === "2026-10-08T00:00:00.000Z", `trade 10: ${JSON.stringify(t10)}`);
+    assert(!book.has("70930952:11"), "trade 11 baru ditutup & parsial: jangan dikunci");
+    const s2 = (await runExcursionPass(opts)).find((x) => x.broker === "orbitraderberjangka");
+    assert(s2 !== undefined && s2.pending === 1 && s2.saved === 0, `putaran 2 hanya mencoba ulang trade 11: ${JSON.stringify(s2)}`);
+    passed += 1;
+    console.log("ok - 549. putaran pengisi buku MFE/MAE: catat yang final, ulangi yang belum");
+  } catch (e) {
+    failed += 1;
+    console.log(`FAIL - 549. putaran pengisi buku MFE/MAE: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   console.log(
