@@ -44,6 +44,7 @@ import {
 import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
+import { findNewsHold, newsCurrenciesOf, NEWS_WINDOW_MINUTES } from "../src/lib/newsGuard";
 import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
@@ -6939,6 +6940,29 @@ test("571. endpoint /api/calendar: tersedia & tidak tersedia (K2b)", () => {
   assert(!calendarResponse(dir, "orbitraderberjangka").available, "file Finex tidak boleh dipakai OTB");
   const app = readSrc("server/app.ts");
   assert(app.includes('app.use("/api/calendar", createCalendarRoutes());'), "route belum dipasang");
+});
+
+test("572. satpam berita: mata uang simbol & jendela ±30 menit berita Tinggi (K3)", () => {
+  assert(NEWS_WINDOW_MINUTES === 30, "jendela bukan 30 menit");
+  assert(newsCurrenciesOf("EURUSD").join() === "EUR,USD" && newsCurrenciesOf("CADJPY_ORB").join() === "CAD,JPY", "forex");
+  assert(newsCurrenciesOf("XAUUSD_ORB").join() === "USD" && newsCurrenciesOf("XTIUSD").join() === "USD", "logam/minyak");
+  assert(newsCurrenciesOf("US100").join() === "USD" && newsCurrenciesOf("META.US").join() === "USD" && newsCurrenciesOf("#AAPL").join() === "USD", "AS");
+  assert(newsCurrenciesOf("JP225").join() === "JPY" && newsCurrenciesOf("DE30").join() === "EUR" && newsCurrenciesOf("HK50").join() === "HKD,CNY", "indeks lain");
+  assert(newsCurrenciesOf("#HSBA").length === 0 && newsCurrenciesOf("ABCXYZ").length === 0, "ditahan/tak dikenal tidak dicek");
+  const ev = [
+    { serverTime: "2026.10.14 15:30:00", currency: "USD", importance: "HIGH", event: "CPI m/m" },
+    { serverTime: "2026.10.14 15:00:00", currency: "USD", importance: "MODERATE", event: "Sedang" },
+    { serverTime: "2026.10.15 09:00:00", currency: "GBP", importance: "HIGH", event: "GDP m/m" },
+  ];
+  const a = findNewsHold("EURUSD", "2026.10.14 15:00:00", ev);
+  assert(a !== null && a.minutesTo === 30 && a.reason.includes("CPI m/m") && a.reason.includes("30 menit lagi"), JSON.stringify(a));
+  assert(findNewsHold("EURUSD", "2026.10.14 14:59:59", ev) === null, "lebih dari 30 menit sebelum ikut ditahan");
+  const b = findNewsHold("XAUUSD", "2026.10.14 15:45:00", ev);
+  assert(b !== null && b.reason.includes("15 menit lalu"), JSON.stringify(b));
+  assert(findNewsHold("XAUUSD", "2026.10.14 16:00:01", ev) === null, "lewat 30 menit sesudah");
+  assert(findNewsHold("AUDJPY", "2026.10.14 15:30:00", ev) === null, "mata uang lain ikut ditahan");
+  assert(findNewsHold("GBPJPY", "2026.10.15 08:40:00", ev) !== null, "GBP pagi");
+  assert(findNewsHold("EURUSD", "2026.10.14 15:00:00", null) === null && findNewsHold("EURUSD", "", ev) === null, "tanpa kalender/jam = tidak ditahan");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
