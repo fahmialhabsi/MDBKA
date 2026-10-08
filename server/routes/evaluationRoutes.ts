@@ -5,6 +5,8 @@ import type { BrokerId } from "../../src/types/broker";
 import { evaluateTrades, type TradeEvaluation } from "../services/tradeEvaluation";
 import { summarizeAccountBalance, type AccountBalance } from "../services/accountBalance";
 import { readTradeEntries } from "../services/tradeEntryLog";
+import { excursionCacheFile, readExcursionCache } from "../services/excursionCache";
+import type { TradeExcursion } from "../services/tradeExcursion";
 import { parseHistoryCsv } from "../types/historyCsv";
 import { resolveCommonFilesDir } from "./marginRoutes";
 
@@ -25,6 +27,12 @@ export interface AccountEvaluation {
   readonly evaluation: TradeEvaluation;
   /** Langkah B: saldo & setoran dari History (akun login maupun tidak). */
   readonly balance: AccountBalance;
+  /**
+   * Langkah 5c: MFE/MAE per positionId dari buku `excursion-<broker>.jsonl`
+   * (diisi latar belakang, langkah 5b4). Trade yang belum tercatat tidak
+   * ada di sini → UI menampilkan "sedang dihitung".
+   */
+  readonly excursions: Readonly<Record<string, TradeExcursion>>;
 }
 
 export function parseAccountLabels(raw: string | undefined): Record<string, string> {
@@ -46,6 +54,32 @@ export function brokerFromCompany(company: string): BrokerId | null {
 function companyOf(csv: string): string {
   const firstData = csv.replace(/^\uFEFF/, "").split(/\r?\n/)[1] ?? "";
   return (firstData.split(",")[16] ?? "").trim();
+}
+
+/** Ambil catatan MFE/MAE milik satu akun (kunci `<login>:<positionId>`). */
+export function excursionsForLogin(
+  tradesDir: string,
+  broker: string,
+  login: string,
+): Record<string, TradeExcursion> {
+  const out: Record<string, TradeExcursion> = {};
+  const prefix = `${login}:`;
+  for (const [key, rec] of readExcursionCache(excursionCacheFile(tradesDir, broker))) {
+    if (!key.startsWith(prefix)) continue;
+    out[key.slice(prefix.length)] = {
+      coverage: rec.coverage,
+      ticks: rec.ticks,
+      firstTick: rec.firstTick,
+      lastTick: rec.lastTick,
+      mfe: rec.mfe,
+      mae: rec.mae,
+      mfeAt: rec.mfeAt,
+      maeAt: rec.maeAt,
+      mfeR: rec.mfeR,
+      maeR: rec.maeR,
+    };
+  }
+  return out;
 }
 
 export function collectAccountEvaluations(
@@ -77,6 +111,7 @@ export function collectAccountEvaluations(
       broker,
       evaluation: evaluateTrades(deals, entries),
       balance: summarizeAccountBalance(deals),
+      excursions: broker === null ? {} : excursionsForLogin(tradesDir, broker, login),
     });
   }
   return out;

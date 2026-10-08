@@ -35,7 +35,12 @@ import { collectCandleItems } from "../server/routes/candlesRoutes";
 import { createTradeEntryLog } from "../server/services/tradeEntryLog";
 import { getBackupStatus, runBackup } from "../server/services/dataBackup";
 import { evaluateTrades, GROUP_BEFORE_LOG, GROUP_NO_LOG } from "../server/services/tradeEvaluation";
-import { brokerFromCompany, parseAccountLabels } from "../server/routes/evaluationRoutes";
+import {
+  brokerFromCompany,
+  collectAccountEvaluations,
+  excursionsForLogin,
+  parseAccountLabels,
+} from "../server/routes/evaluationRoutes";
 import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
 import {
   SUPPORTED_SYMBOLS,
@@ -6555,6 +6560,37 @@ test("548. catatan MFE/MAE: tulis-baca, baris rusak dilewati, baris terakhir men
   const map = readExcursionCache(file);
   assert(map.size === 2, `jumlah kunci ${map.size}`);
   assert(map.get("1:10")?.computedAt === "b" && map.get("1:10")?.mfe === 0.001, "baris terakhir harus menang");
+});
+
+test("551. /api/evaluation membawa MFE/MAE per posisi (hanya akun sendiri, tanpa kunci internal)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const root = nfs.mkdtempSync(npath.join(os.tmpdir(), "evalexc-"));
+  const common = npath.join(root, "common");
+  const trades = npath.join(root, "trades");
+  nfs.mkdirSync(common, { recursive: true });
+  const co = "PT. Finex Bisnis Solusi Futures";
+  nfs.writeFileSync(
+    npath.join(common, "MDBKA_History_61823011.csv"),
+    "DealTicket,PositionId,OrderTicket,ServerTime,Symbol,Type,Entry,Volume,Price,Commission,Swap,Profit,Fee,Magic,Comment,Login,Company,AccountCurrency\n" +
+      `1,500,1,2026.10.08 02:24:00,XTIUSD,SELL,IN,0.01,88.2,0,0,0,0,0,,61823011,${co},USD\n` +
+      `2,500,2,2026.10.08 04:47:04,XTIUSD,BUY,OUT,0.01,89,0,0,-8,0,0,[sl 89.00],61823011,${co},USD\n`,
+  );
+  const x = computeExcursion({ side: "SELL", openTime: "2026.10.08 02:24:00", closeTime: "2026.10.08 04:47:04", openPrice: 88.2, sl: 89 }, [{ ts_raw: "2026.10.08 02:24:00", bid: 88.1, ask: 88.14 }, { ts_raw: "2026.10.08 04:47:04", bid: 88.98, ask: 89 }]);
+  appendExcursionCache(excursionCacheFile(trades, "finex"), [
+    { ...x, key: "61823011:500", computedAt: "t" },
+    { ...x, key: "91811209:500", computedAt: "t" }, // akun lain, posisi sama: jangan tercampur
+  ]);
+  const own = excursionsForLogin(trades, "finex", "61823011");
+  assert(Object.keys(own).join(",") === "500", `kunci: ${Object.keys(own).join(",")}`);
+  assert(!("key" in own["500"]) && !("computedAt" in own["500"]), "kunci internal tidak boleh ikut");
+  const acc = collectAccountEvaluations(common, trades, {})[0];
+  assert(acc.broker === "finex" && acc.evaluation.trades[0].positionId === "500", "evaluasi tetap utuh");
+  const e = acc.excursions["500"];
+  assert(e !== undefined && e.coverage === "PENUH" && e.mfe === 0.06 && e.maeR === -1, `MFE/MAE: ${JSON.stringify(e)}`);
+  const kosong = collectAccountEvaluations(common, npath.join(root, "tanpa-buku"), {})[0];
+  assert(Object.keys(kosong.excursions).length === 0, "buku belum ada → excursions kosong");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
