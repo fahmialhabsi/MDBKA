@@ -6473,6 +6473,12 @@ test("541. format harga mengikuti desimal simbol (sama dengan MT5)", () => {
   assert(readSrc("src/components/analysis/LiveQuotes.tsx").includes("formatPrice(quote.bid, symbol)"), "live quotes");
 });
 
+test("542. MDBKAHistoryService menulis ulang saat ganti akun walau jumlah deal sama (readSrc)", () => {
+  const src = readSrc("ea/MDBKAHistoryService.mq5");
+  assert(src.includes("if(total != lastTotal || login != lastLogin)"), "ganti akun tidak memicu tulis ulang");
+  assert(src.includes("lastLogin = login;"), "akun terakhir tidak diingat");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

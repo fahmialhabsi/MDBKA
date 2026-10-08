@@ -114,22 +114,25 @@ int WriteHistory(const string fileName)
 
 void OnStart()
   {
-   int lastTotal = -1;
+   int  lastTotal = -1;
+   long lastLogin = -1;   // ganti akun (demo<->live) = tulis ulang walau jumlah deal sama
    Print("=== MDBKAHistoryService START (cek tiap ", CheckSeconds, " dtk) ===");
    while(!IsStopped())
      {
       if(TerminalInfoInteger(TERMINAL_CONNECTED) && AccountInfoInteger(ACCOUNT_LOGIN) > 0)
         {
-         string fileName = FilePrefix + "_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".csv";
+         long   login    = AccountInfoInteger(ACCOUNT_LOGIN);
+         string fileName = FilePrefix + "_" + IntegerToString(login) + ".csv";
          if(HistorySelect(FromDate, TimeCurrent() + 86400))
            {
             int total = HistoryDealsTotal();
-            if(total != lastTotal)
+            if(total != lastTotal || login != lastLogin)
               {
                int n = WriteHistory(fileName);
                if(n >= 0)
                  {
                   lastTotal = total;
+                  lastLogin = login;
                   Print("MDBKAHistoryService: ", n, " deal -> ", fileName);
                  }
               }
