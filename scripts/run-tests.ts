@@ -6394,6 +6394,16 @@ test("536. wiring taruhan ganda: pemindai, panel, pencatat entry (readSrc)", () 
   assert(log.includes("positions.filter((o) => o.ticket !== p.ticket)"), "entry harus dinilai terhadap posisi lain");
 });
 
+test("537. status pemindai = tombol: hanya LOLOS aktif, buka Hasil analisa (readSrc)", () => {
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes('disabled={row.status !== "LOLOS" || onOpenAnalysis === undefined}'), "selain LOLOS harus disabled");
+  assert(panel.includes("onClick={() => onOpenAnalysis?.(row.symbol)}"), "klik tidak membuka analisa");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("onOpenAnalysis={handleOpenAnalysis}"), "App belum menyambung tombol");
+  assert(app.includes("handleSymbolChange(symbol);") && app.includes('getElementById("hasil-analisa")'), "pilih simbol + gulir");
+  assert(app.includes('id="hasil-analisa"'), "target gulir hilang");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

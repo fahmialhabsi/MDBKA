@@ -38,6 +38,8 @@ interface Props {
   readonly brokerId: BrokerId;
   readonly equity: number;
   readonly fxRates: ExchangeRates | null;
+  /** Klik status LOLOS → buka Hasil analisa simbol itu (tanpa upload). */
+  readonly onOpenAnalysis?: (symbol: string) => void;
 }
 
 const REFRESH_MS = 60_000;
@@ -54,7 +56,7 @@ const STATUS_VIEW: Record<ScanStatus, { label: string; className: string }> = {
   DATA: { label: "Data kurang", className: "bg-white/5 text-slate-500" },
 };
 
-export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
+export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }: Props) {
   const [items, setItems] = useState<readonly CandleItem[]>([]);
   // Broker asal `items`: hasil hanya dipakai untuk broker yang sama.
   const [itemsBroker, setItemsBroker] = useState<BrokerId | null>(null);
@@ -228,11 +230,25 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates }: Props) {
                 <tr key={row.symbol}>
                   <td className="py-2 pr-3 font-semibold text-white">{row.symbol}</td>
                   <td className="py-2 pr-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${(row.status === "LOLOS" ? lolosView : STATUS_VIEW[row.status]).className}`}
+                    {/* Status = tombol. Hanya LOLOS yang aktif; selain itu disabled. */}
+                    <button
+                      type="button"
+                      data-testid={`scan-open-${row.symbol}`}
+                      disabled={row.status !== "LOLOS" || onOpenAnalysis === undefined}
+                      onClick={() => onOpenAnalysis?.(row.symbol)}
+                      title={
+                        row.status === "LOLOS"
+                          ? `Buka Hasil analisa ${row.symbol}`
+                          : row.reason
+                      }
+                      className={`rounded-full border px-2 py-0.5 text-xs ${(row.status === "LOLOS" ? lolosView : STATUS_VIEW[row.status]).className} ${
+                        row.status === "LOLOS"
+                          ? "cursor-pointer border-current/40 hover:brightness-125 hover:ring-1 hover:ring-current"
+                          : "cursor-not-allowed border-transparent opacity-60"
+                      }`}
                     >
                       {(row.status === "LOLOS" ? lolosView : STATUS_VIEW[row.status]).label}
-                    </span>
+                    </button>
                   </td>
                   <td className="py-2 pr-3 text-slate-300">
                     {row.direction ?? "-"}

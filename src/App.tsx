@@ -465,6 +465,20 @@ export default function App() {
     [market.symbol, activeBrokerId],
   );
 
+  // Langkah E: klik status LOLOS di pemindai → pilih simbol (data dimuat
+  // otomatis oleh Langkah A) lalu gulir ke Hasil analisa.
+  const handleOpenAnalysis = useCallback(
+    (symbol: string) => {
+      handleSymbolChange(symbol);
+      window.setTimeout(() => {
+        document
+          .getElementById("hasil-analisa")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 50);
+    },
+    [handleSymbolChange],
+  );
+
   // Propagasi S/R CSV + analisa ulang otomatis (bukan clear): S/R adalah
   // input analisa, sehingga level baru = hasil baru. Equity mengikuti live
   // bila kosong (ketikan manual dilindungi via appliedLiveEquityRef).
@@ -963,6 +977,7 @@ export default function App() {
           brokerId={activeBrokerId}
           equity={liveEquityValue ?? broker.equity}
           fxRates={fxRates}
+          onOpenAnalysis={handleOpenAnalysis}
         />
 
         {/* Langkah 4c-2: hasil nyata dari History MT5, trade lama vs Mode Aman. */}
@@ -1020,6 +1035,8 @@ export default function App() {
                 Sumber broker: {activeBrokerLabel}
               </p>
 
+              {/* Langkah E: target gulir dari tombol status pemindai. */}
+              <div id="hasil-analisa" className="scroll-mt-64" />
               <Panel
                 icon={<Activity size={20} />}
                 title="3. Hasil analisa"
