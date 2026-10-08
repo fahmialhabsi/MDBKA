@@ -42,6 +42,7 @@ import {
   parseAccountLabels,
 } from "../server/routes/evaluationRoutes";
 import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
+import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
@@ -6896,6 +6897,30 @@ test("569. time-stop 3 jam hanya Forex & Forex JPY (penetapan 9 Okt)", () => {
   assert(checkTimeStop({ entryTime: lama, symbol: "META.US" }, now) === null, "META.US tanpa batas waktu");
   assert(checkTimeStop({ entryTime: lama, symbol: "XTIUSD" }, now) === null, "minyak tanpa batas waktu");
   assert(checkTimeStop({ entryTime: lama, symbol: "US500" }, now) === null, "indeks tanpa batas waktu");
+});
+
+test("570. kalender: parse CSV MT5 & pilih file per broker (K2a)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const head = "ServerTime,Currency,Country,Importance,Event,Actual,Forecast,Previous,Impact,ValueId,Company,Generated";
+  const finex = [head,
+    "2026.10.14 15:30:00,USD,US,HIGH,CPI m/m,,0.6000,0.4000,NA,9,PT. Finex Bisnis Solusi Futures,2026.10.09 01:50:45",
+    "2026.10.08 15:30:00,USD,US,HIGH,Initial Jobless Claims,197.0000,190.0000,197.0000,NEGATIVE,8,PT. Finex Bisnis Solusi Futures,2026.10.09 01:50:45",
+    "rusak,baris",
+  ].join("\r\n");
+  const p = parseCalendarCsv(finex);
+  assert(p.events.length === 2 && p.events[0].event === "Initial Jobless Claims", "urut jam & lewati baris rusak");
+  assert(p.events[0].actual === 197 && p.events[1].actual === null && p.events[1].forecast === 0.6, "nilai kosong = null");
+  assert(p.events[0].impact === "NEGATIVE" && p.company.includes("Finex") && p.generated === "2026.10.09 01:50:45", "kolom");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kalender-"));
+  fs.writeFileSync(path.join(dir, "MDBKA_Calendar_61823011.csv"), finex);
+  fs.writeFileSync(path.join(dir, "MDBKA_Calendar_70930952.csv"), finex.replace(/PT\. Finex Bisnis Solusi Futures/g, "PT. Orbi Trade Berjangka").replace("15:30:00,USD,US,HIGH,Initial", "14:30:00,USD,US,HIGH,Initial"));
+  const f = readCalendarForBroker(dir, "finex");
+  const o = readCalendarForBroker(dir, "orbitraderberjangka");
+  assert(f !== null && f.file === "MDBKA_Calendar_61823011.csv" && f.events[0].serverTime === "2026.10.08 15:30:00", "file Finex");
+  assert(o !== null && o.file === "MDBKA_Calendar_70930952.csv" && o.events[0].serverTime === "2026.10.08 14:30:00", "file OTB jam sendiri");
+  assert(readCalendarForBroker(path.join(dir, "tidak-ada"), "finex") === null, "folder hilang = null");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
