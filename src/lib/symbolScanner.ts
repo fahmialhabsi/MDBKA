@@ -3,13 +3,14 @@ import { computeIndicators } from "../calculations/indicators";
 import { validateAnalysisInputs } from "../calculations/inputValidator";
 import { detectScaleMismatch } from "../calculations/scaleValidator";
 import { resolveSwingLevels } from "../calculations/swingDetector";
-import type { ExchangeRates } from "../services/fxRateService";
+import { usdIdrRate, type ExchangeRates } from "../services/fxRateService";
 import type { AnalysisResult, BrokerSettings, MarketData } from "../types/analysis";
 import type { BrokerId } from "../types/broker";
 import { canonicalSymbolForBroker } from "./brokerSymbols";
 import { findDoubleBet, type OpenPositionLike } from "./correlationGuard";
 import { parseCsvCandles } from "./csvCandleParser";
 import { resolveCsvBidAsk, type LiveQuoteLike } from "./csvQuote";
+import { riskCapFor } from "./riskGroup";
 import { applyBrokerPreset, createEmptyMarketForSymbol } from "./marketReset";
 import { signalReason } from "./signalReason";
 import { tickSizeForSymbol } from "./tickSize";
@@ -162,7 +163,11 @@ export function scanSymbol(input: ScanInput): ScanRow {
     symbol,
     input.brokerId,
   );
-  const broker = withUsdPointValue(preset, symbol, input.brokerId, input.fxRates);
+  // Mode Aman R3: batas risiko golongan (Rupiah) ikut dinilai pemindai.
+  const broker: BrokerSettings = {
+    ...withUsdPointValue(preset, symbol, input.brokerId, input.fxRates),
+    riskCap: riskCapFor(symbol, usdIdrRate(input.fxRates)),
+  };
   const reasons = buildBlockedReasons({
     market,
     broker: preset,

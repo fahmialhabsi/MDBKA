@@ -83,8 +83,10 @@ import {
 import {
   fetchBackendRates,
   fetchECBRates,
+  usdIdrRate,
   type ExchangeRates,
 } from "./services/fxRateService";
+import { riskCapFor } from "./lib/riskGroup";
 import { API_BASE_URL } from "./lib/apiBaseUrl";
 import {
   autoCsvFileName,
@@ -252,12 +254,16 @@ export default function App() {
         equity: brokerData.equity,
       });
 
-      const effectiveBroker = withUsdPointValue(
-        brokerData,
-        marketData.symbol,
-        activeBrokerId,
-        fxRates,
-      );
+      // Mode Aman R3: batas risiko golongan (Rupiah) ikut dinilai.
+      const effectiveBroker = {
+        ...withUsdPointValue(
+          brokerData,
+          marketData.symbol,
+          activeBrokerId,
+          fxRates,
+        ),
+        riskCap: riskCapFor(marketData.symbol, usdIdrRate(fxRates)),
+      };
       const nextValidation = validateAnalysisInputs(
         marketData,
         effectiveBroker,

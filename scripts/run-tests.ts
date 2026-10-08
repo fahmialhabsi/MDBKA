@@ -6843,6 +6843,14 @@ test("565. mesin analisa: batas golongan Rupiah (R2) — lebih kecil dari 1% dip
   assert(signalReason(analyzeMarket(modeAmanMarket, { ...modeAmanBroker, equity: 50 })) === "Ditahan: risiko lot minimum", "tahanan 1% lama tetap teks lama");
 });
 
+test("566. batas golongan terpasang di Hasil analisa & pemindai (R3, readSrc)", () => {
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("riskCap: riskCapFor(marketData.symbol, usdIdrRate(fxRates)),"), "App belum memasang batas golongan");
+  const scan = readSrc("src/lib/symbolScanner.ts");
+  assert(scan.includes("riskCap: riskCapFor(symbol, usdIdrRate(input.fxRates)),"), "pemindai belum memasang batas golongan");
+  assert(scan.includes("reason: signalReason(result),"), "alasan pemindai harus dari signalReason (memuat Rupiah)");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
