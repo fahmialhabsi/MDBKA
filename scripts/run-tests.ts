@@ -239,7 +239,7 @@ import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
 import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
 import { applyLossPauseHold, checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
 import { formatPrice, priceDigits } from "../src/lib/tickSize";
-import { RISK_GROUPS, riskCapFor, riskGroupOf } from "../src/lib/riskGroup";
+import { RISK_GROUPS, riskCapFor, riskGroupOf, riskGroupTable } from "../src/lib/riskGroup";
 import { computeExcursion } from "../server/services/tradeExcursion";
 import { computeExcursionsFromArchive, excursionFileNames } from "../server/services/excursionReader";
 import {
@@ -6864,6 +6864,24 @@ test("567. analisa diulang otomatis begitu kurs Rupiah termuat (R3b, readSrc)", 
   assert(blok.includes("kursRetryRef.current = result;"), "pengaman sekali per hasil hilang");
   const mesin = readSrc("src/calculations/decisionEngine.ts");
   assert(mesin.includes("kurs Rupiah belum tersedia (batas"), "teks alasan mesin harus cocok dengan efek App");
+});
+
+test("568. panel golongan: daftar tampil = aturan yang dipakai (R4)", () => {
+  const rows = riskGroupTable();
+  assert(rows.length === 9, `9 golongan, dapat ${rows.length}`);
+  for (const row of rows) {
+    for (const sym of row.symbols) {
+      assert(riskGroupOf(sym).id === row.group.id, `${sym} tampil di ${row.group.id} tapi aturan ${riskGroupOf(sym).id}`);
+    }
+  }
+  const minyak = rows.find((r) => r.group.id === "MINYAK");
+  assert(minyak !== undefined && minyak.symbols.join() === "XTIUSD,CLU" && minyak.group.capIdr === 150000, "minyak");
+  const total = rows.reduce((n, r) => n + r.symbols.length, 0);
+  assert(total === 20 + 7 + 2 + 2 + 7 + 28 + 4 + 13, `jumlah simbol tampil ${total}`);
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("<RiskGroupsPanel usdIdr={usdIdrRate(fxRates)} />"), "panel belum dipasang di App");
+  const panel = readSrc("src/components/analysis/RiskGroupsPanel.tsx");
+  assert(panel.includes("riskGroupTable()") && panel.includes("<details"), "panel harus dari buku & bisa dilipat");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

@@ -66,6 +66,7 @@ import type { BrokerSettings, MarketData } from "./types/analysis";
 import type { BrokerId } from "./types/broker";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
 import { SymbolScannerPanel } from "./components/analysis/SymbolScannerPanel";
+import { RiskGroupsPanel } from "./components/analysis/RiskGroupsPanel";
 import { BackupBanner } from "./components/layout/BackupBanner";
 import { TradeEvaluationPanel } from "./components/analysis/TradeEvaluationPanel";
 import { AutoPositionsSection } from "./components/holdings/AutoPositionsSection";
@@ -1019,6 +1020,9 @@ export default function App() {
           fxRates={fxRates}
           onOpenAnalysis={handleOpenAnalysis}
         />
+
+        {/* R4: daftar golongan simbol + batas risiko Rupiah (baca-saja). */}
+        <RiskGroupsPanel usdIdr={usdIdrRate(fxRates)} />
 
         {/* Langkah 4c-2: hasil nyata dari History MT5, trade lama vs Mode Aman. */}
         <TradeEvaluationPanel fxRates={fxRates} />

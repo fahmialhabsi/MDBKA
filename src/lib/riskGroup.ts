@@ -59,6 +59,36 @@ const SAHAM_AS_FINEX = new Set([
   "#RL",
 ]);
 
+/** Saham "#" Eropa & Hong Kong yang dikenal (untuk tampilan daftar). */
+const SAHAM_LAIN_DIKENAL = [
+  "#ADS", "#ALV", "#BMW", "#SAP", "#VOW", "#BP", "#GSK", "#HSBA", "#VOD",
+  "#168", "#388", "#700", "#763",
+];
+
+export interface RiskGroupRow {
+  readonly group: RiskGroup;
+  readonly symbols: readonly string[];
+  readonly note: string;
+}
+
+/**
+ * Daftar golongan → simbol untuk panel "Batas risiko per golongan"
+ * (sumber sama dengan riskGroupOf, jadi tampilan = aturan yang dipakai).
+ */
+export function riskGroupTable(): RiskGroupRow[] {
+  return [
+    { group: RISK_GROUPS.FOREX, symbols: [...FOREX], note: "OTB: nama sama + akhiran _ORB" },
+    { group: RISK_GROUPS.FOREX_JPY, symbols: [...FOREX_JPY], note: "OTB: nama sama + akhiran _ORB" },
+    { group: RISK_GROUPS.LOGAM, symbols: [...LOGAM], note: "XAU = emas, XAG = perak; OTB + _ORB" },
+    { group: RISK_GROUPS.MINYAK, symbols: [...MINYAK], note: "" },
+    { group: RISK_GROUPS.INDEKS, symbols: [...INDEKS], note: "OTB: US30/US100/US500 juga .DEC" },
+    { group: RISK_GROUPS.SAHAM_AS, symbols: [...SAHAM_AS_FINEX], note: "Finex (#); OTB: semua simbol berakhiran .US" },
+    { group: RISK_GROUPS.FOREX_TIDAK_LAZIM, symbols: [...FOREX_TIDAK_LAZIM], note: "" },
+    { group: RISK_GROUPS.SAHAM_LAIN, symbols: SAHAM_LAIN_DIKENAL, note: "Juga saham # lain yang belum terdaftar" },
+    { group: RISK_GROUPS.LAINNYA, symbols: [], note: "Simbol yang belum ada di buku ini (mis. BTCUSD)" },
+  ];
+}
+
 /** Buang akhiran broker: _ORB (OTB), .DEC (kontrak OTB). Huruf besar. */
 export function baseRiskSymbol(symbol: string): string {
   return symbol.trim().toUpperCase().replace(/_ORB$/, "").replace(/\.DEC$/, "");
