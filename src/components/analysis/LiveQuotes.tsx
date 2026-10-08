@@ -8,6 +8,7 @@ import {
 } from "../../lib/dataFreshness";
 import styles from "../../styles/liveQuotes.module.css";
 import type { BrokerId } from "../../types/broker";
+import { formatPrice } from "../../lib/tickSize";
 
 interface LiveQuotesProps {
   symbol: string;
@@ -81,13 +82,13 @@ export function LiveQuotes({ symbol, brokerId }: LiveQuotesProps) {
             <div className={`${styles.cell} ${styles.cellBid}`}>
               <span className={`${styles.label} ${styles.labelBid}`}>Bid</span>
               <span className={`${styles.value} ${styles.valueBid}`}>
-                {quote.bid ? quote.bid.toFixed(5) : "-"}
+                {quote.bid ? formatPrice(quote.bid, symbol) : "-"}
               </span>
             </div>
             <div className={`${styles.cell} ${styles.cellAsk}`}>
               <span className={`${styles.label} ${styles.labelAsk}`}>Ask</span>
               <span className={`${styles.value} ${styles.valueAsk}`}>
-                {quote.ask ? quote.ask.toFixed(5) : "-"}
+                {quote.ask ? formatPrice(quote.ask, symbol) : "-"}
               </span>
             </div>
           </div>

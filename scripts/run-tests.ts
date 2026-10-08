@@ -229,6 +229,7 @@ import { summarizeAccountBalance } from "../server/services/accountBalance";
 import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
 import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
 import { applyLossPauseHold, checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
+import { formatPrice, priceDigits } from "../src/lib/tickSize";
 import { runQuotesLogReaderTests } from "../src/services/quotesLogReader.test";
 import {
   FINEX_SPECS_32,
@@ -6458,6 +6459,18 @@ test("540. jeda menahan Hasil analisa & pemindai (TUNGGU, tanpa SL/TP/lot)", () 
   assert(panel.includes("pauseReason,") && panel.includes('label: "Jeda rugi"') && panel.includes("scan-loss-pause"), "panel jeda");
   const app = readSrc("src/App.tsx");
   assert(app.includes("applyLossPauseHold(result, lossPause)") && app.includes("useLossPause(activeBrokerId"), "App belum memakai jeda");
+});
+
+test("541. format harga mengikuti desimal simbol (sama dengan MT5)", () => {
+  assert(priceDigits("US30") === 2, `US30 ${priceDigits("US30")}`);
+  assert(priceDigits("GBPUSD") === 5 && priceDigits("USDJPY") === 3, "forex");
+  assert(priceDigits("GBPUSD_ORB") === 5, "OTB forex");
+  assert(formatPrice(51166.2, "US30") === "51166.20", formatPrice(51166.2, "US30"));
+  assert(formatPrice(51007.25, "US30") === "51007.25" && formatPrice(1.3216, "GBPUSD") === "1.32160", "nol di belakang");
+  assert(formatPrice(null, "US30") === "-", "null");
+  const res = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(res.includes("formatPrice(result.entry, market.symbol)") && !res.includes("number(result.stopLoss, 5)"), "kartu & salin order");
+  assert(readSrc("src/components/analysis/LiveQuotes.tsx").includes("formatPrice(quote.bid, symbol)"), "live quotes");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

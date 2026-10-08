@@ -16,3 +16,23 @@ export function tickSizeForSymbol(symbol: string): number {
   }
   return 0.00001;
 }
+
+/**
+ * Jumlah desimal harga simbol, diturunkan dari ukuran tick (sama seperti
+ * tampilan MT5): GBPUSD 0.00001 → 5, USDJPY 0.001 → 3, US30 0.01 → 2,
+ * tick 0.25 → 2. Dibatasi 0..8.
+ */
+export function priceDigits(symbol: string): number {
+  const tick = tickSizeForSymbol(symbol);
+  for (let d = 0; d <= 8; d += 1) {
+    const scaled = tick * Math.pow(10, d);
+    if (Math.abs(scaled - Math.round(scaled)) < 1e-6) return d;
+  }
+  return 5;
+}
+
+/** Harga dengan desimal simbol, titik desimal (siap tempel ke MT5). */
+export function formatPrice(value: number | null, symbol: string): string {
+  if (value === null || !Number.isFinite(value)) return "-";
+  return value.toFixed(priceDigits(symbol));
+}

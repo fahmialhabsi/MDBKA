@@ -22,6 +22,7 @@ import { useHoldingsQuotes } from "../../hooks/useHoldingsQuotes";
 import { useEquityStream } from "../../hooks/useEquityStream";
 import { useSymbolMargin } from "../../hooks/useSymbolMargin";
 import { checkMarginCap } from "../../lib/marginGuard";
+import { formatPrice } from "../../lib/tickSize";
 import type { ExchangeRates } from "../../services/fxRateService";
 
 interface Props {
@@ -318,7 +319,7 @@ export default function AnalysisResult({
     orderLot !== null &&
     result.stopLoss !== null &&
     result.takeProfit !== null
-      ? `${market.symbol} ${result.decision} ${orderLot} @ ${result.entry}\nSL ${result.stopLoss} TP ${result.takeProfit}`
+      ? `${market.symbol} ${result.decision} ${orderLot} @ ${formatPrice(result.entry, market.symbol)}\nSL ${formatPrice(result.stopLoss, market.symbol)} TP ${formatPrice(result.takeProfit, market.symbol)}`
       : null;
 
   const copyOrder = (): void => {
@@ -380,7 +381,7 @@ export default function AnalysisResult({
               Entry
             </p>
             <p className="mt-1 text-2xl font-bold text-white">
-              {number(result.entry, 5)}
+              {formatPrice(result.entry, market.symbol)}
             </p>
           </div>
 
@@ -389,7 +390,7 @@ export default function AnalysisResult({
               Stop Loss
             </p>
             <p className="mt-1 text-2xl font-bold text-red-200">
-              {number(result.stopLoss, 5)}
+              {formatPrice(result.stopLoss, market.symbol)}
             </p>
           </div>
 
@@ -398,7 +399,7 @@ export default function AnalysisResult({
               Take Profit
             </p>
             <p className="mt-1 text-2xl font-bold text-emerald-200">
-              {number(result.takeProfit, 5)}
+              {formatPrice(result.takeProfit, market.symbol)}
             </p>
           </div>
 
