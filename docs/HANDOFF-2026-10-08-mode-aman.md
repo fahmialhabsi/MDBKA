@@ -1,9 +1,9 @@
 # HANDOFF MDBKA — Mode Aman (8 Okt 2026)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir kode: **25edb19** (branch `main`; sesi 8 Okt: 32a7299 → 25edb19).
-Test terakhir: **538 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
-Nomor test terakhir: **542** → test baru mulai **543**.
+Commit terakhir kode: **616f1da** (branch `main`; sesi 8 Okt: 32a7299 → 616f1da).
+Test terakhir: **541 lolos, 0 gagal**, build sukses (peringatan chunk > 500 kB hanya peringatan).
+Nomor test terakhir: **545** → test baru mulai **546**.
 
 ---
 
@@ -23,6 +23,13 @@ Nomor test terakhir: **542** → test baru mulai **543**.
    Bila ragu, audit dulu, tanya pengguna.
 9. MDBKA **tidak pernah menempatkan/menutup order**. Semua sinyal (breakeven, time-stop) hanya tampilan; eksekusi manual di MT5.
 10. Bukan nasihat keuangan — keputusan trade tetap di tangan Fahmi.
+11. **Setiap langkah selesai WAJIB disertai penjelasan bahasa awam (tidak teknis)**, sebelum pengguna commit:
+    - **Apa yang dibuat** — diibaratkan benda/alat sehari-hari (mis. "kalkulator rekaman ulang").
+    - **Contoh nyata dari trade Fahmi sendiri** (simbol, angka, Rupiah) agar langsung terbayang.
+    - **Kegunaannya** — pertanyaan trading apa yang jadi bisa dijawab, dikaitkan ke prinsip "profit kecil lebih baik".
+    - **Keterbatasan / kejujuran data** (mis. data hanya sejak tanggal X).
+    - **Yang berubah di layar saat ini** (atau "belum ada, baru mesin hitung") + langkah berikutnya.
+    Detail teknis (nama file, fungsi, test) boleh menyusul secara singkat, bukan di depan.
 
 ### Cara kerja teknis (dari chat lama, lewat jembatan perangkat / Claude desktop)
 - Repo di Windows: `E:\MDBKA` (di VM: `$HOME/mnt/MDBKA`). Terminal MT5 di VM: `$HOME/mnt/Terminal`.
@@ -30,7 +37,7 @@ Nomor test terakhir: **542** → test baru mulai **543**.
   lalu `device_commit_files`. Jangan menyalin ulang isi file dari output tool (bisa terpotong).
 - **tsc tidak bisa jalan di VM** (TS7 binary Windows). ESLint bisa: `node node_modules/eslint/bin/eslint.js <file>`.
 - Test runner: `scripts/run-tests.ts` (CommonJS via `tsconfig.test.json`, **tidak bisa import .tsx** → logika
-  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **542**.
+  yang dites taruh di modul `.ts`). Test async taruh di IIFE terakhir sebelum baris ringkasan. Tes terakhir: **545**.
 - `tsx` juga tidak jalan di VM (esbuild Windows) → test hanya bisa dijalankan pengguna. `scripts/run-tests.ts` CRLF:
   sisipkan teks dengan `\r\n`. File CRLF lain: `src/types/analysis.ts`, `AnalysisResult.tsx`.
 - Test `readSrc` mengecek teks sumber: bila kalimat kode diubah, sesuaikan test lamanya (pernah gagal di 538).
@@ -86,6 +93,8 @@ Nomor test terakhir: **542** → test baru mulai **543**.
 | e0168a2 / 9385c5e | **Jeda 3 rugi beruntun**: `src/lib/lossStreakGuard.ts` (24 jam jam server, demo+live per broker, fail-safe tanpa jam server), `useLossPause`, pemindai `DITAHAN_JEDA` + baris "Rugi beruntun n/3", Hasil analisa `heldBy: "jeda"` (kotak merah) |
 | e8ede7d | **Format harga ikut desimal simbol** (`priceDigits`/`formatPrice` di `tickSize.ts`): kartu Entry/SL/TP, kotak "Salin order" (titik desimal, siap tempel MT5), Live Quotes. US30 = 2, forex = 5, JPY = 3 |
 | 25edb19 | **MDBKAHistoryService** tulis ulang History saat ganti akun (`lastLogin`), walau jumlah deal sama. Sudah di-compile & restart di Finex + OTB (0 errors) |
+| 6fec2ae | **Zona jam OTB**: server OTB ternyata UTC+2 (bukan +3) → `.env` `MT5_TZ_OFFSET_OTB=2` (+ `.env.example`). Terverifikasi: selisih `received_at`−`ts_utc` tick OTB baru ±1 dtk (dulu 1 jam). Tick lama tidak ditulis ulang; `ts_raw` tetap benar. Cek ulang offset saat pergantian jam musim (akhir Okt/awal Nov) |
+| 616f1da | **5a MFE/MAE** — `server/services/tradeExcursion.ts` `computeExcursion(trade, ticks)`: untung terbaik (MFE) & rugi terdalam (MAE) selama trade terbuka; BUY pakai bid, SELL pakai ask; cocok lewat jam server (`ts_raw`); R bila SL diketahui; cakupan PENUH / PARSIAL (celah > 60 dtk) / TANPA_DATA. Belum tersambung ke UI. Test 543–545 |
 
 ### Aturan Mode Aman yang aktif sekarang
 1. Default **TUNGGU**; sinyal hanya bila skor (MA50, CCI, MACD, RSI) kompak.
@@ -166,7 +175,13 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 1. **Kumpulkan ≥ 20 trade Mode Aman berstatus Lolos**, lalu nilai ulang di panel Evaluasi trade (win rate, ekspektansi, R).
 2. ~~Peringatan korelasi~~ ✅ selesai (diblok, bukan sekadar peringatan).
 3. ~~Pause setelah 3 kali rugi berturut-turut~~ ✅ selesai (jeda 24 jam).
-4. Gerak terbaik/terburuk (MFE/MAE) tiap trade dari arsip tick.
+4. Gerak terbaik/terburuk (MFE/MAE) tiap trade dari arsip tick — **sedang dikerjakan**:
+   - ✅ (a) mesin hitung `computeExcursion` (616f1da).
+   - ⏳ (b) pembaca tick per simbol + rentang jam server, hasil disimpan sekali di `data/trades/excursion-<broker>.jsonl`
+     (file tick 300–420 MB/hari terlalu berat dibaca tiap request). Baca file tanggal ±1 hari (file lama OTB dinamai offset +3), saring `ts_raw`.
+   - ⏳ (c) field `excursion` di `GET /api/evaluation`. ⏳ (d) kolom MFE/MAE di panel Evaluasi trade.
+   - Catatan audit: arsip tick mulai 5 Okt → dari 35 trade tertutup hanya ±6 yang tercakup (29 TANPA_DATA).
+     Contoh: GBPUSD_ORB BUY 6 Okt MFE +0,7 pip / MAE −9,4 pip; US100 MAE −189 poin sebelum ditutup +$186,70.
 5. Opsional: biaya breakeven (SL = entry + biaya) agar BE tidak rugi kecil karena komisi/spread.
 6. Opsional: pencatat entry server ikut mencatat status jeda; akun ke-4 di header bila ada file History-nya.
 7. Opsional: kecilkan bundle JS (> 500 kB) dengan dynamic import.
@@ -179,7 +194,8 @@ ESLint → pengguna build/test/commit → verifikasi.
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
 > Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, lihat git log,
-> 538 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
+> 541 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
-> lalu minus". Langkah berikutnya: MFE/MAE dari arsip tick (mulai dengan audit read-only).
+> lalu minus". Langkah berikutnya: MFE/MAE langkah (b) pembaca tick + cache (mulai dengan audit read-only).
+> Setiap langkah selesai, jelaskan dulu dalam bahasa awam (GUARD no. 11) sebelum saya commit.
