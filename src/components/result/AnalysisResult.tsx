@@ -71,7 +71,8 @@ export default function AnalysisResult({
   // Tanpa hasil/lot → null.
   const [holdingDays, setHoldingDays] = useState(0);
   // Tahap NS: status salin order (hook di atas semua early return).
-  const [copied, setCopied] = useState(false);
+  // Kunci tombol yang baru disalin: "sl" | "tp" | null.
+  const [copied, setCopied] = useState<string | null>(null);
   // Tahap STP: harga live untuk guard jarak SL/TP (hook pula).
   const { quotes } = useHoldingsQuotes(
     market.symbol !== "" ? [market.symbol] : [],
@@ -322,11 +323,21 @@ export default function AnalysisResult({
       ? `${market.symbol} ${result.decision} ${orderLot} @ ${formatPrice(result.entry, market.symbol)}\nSL ${formatPrice(result.stopLoss, market.symbol)} TP ${formatPrice(result.takeProfit, market.symbol)}`
       : null;
 
-  const copyOrder = (): void => {
-    if (orderText === null) return;
+  const slText =
+    orderText !== null && result !== null
+      ? formatPrice(result.stopLoss, market.symbol)
+      : null;
+  const tpText =
+    orderText !== null && result !== null
+      ? formatPrice(result.takeProfit, market.symbol)
+      : null;
+
+  // Salin teks ke clipboard; key = tombol yang menampilkan "Disalin ✓".
+  const copyText = (text: string | null, key: string): void => {
+    if (text === null) return;
     const done = (): void => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      setCopied(key);
+      window.setTimeout(() => setCopied(null), 2000);
     };
     try {
       const clipboard = (
@@ -335,21 +346,21 @@ export default function AnalysisResult({
         }
       ).clipboard;
       if (clipboard !== undefined) {
-        clipboard.writeText(orderText).then(done, () => setCopied(false));
+        clipboard.writeText(text).then(done, () => setCopied(null));
         return;
       }
     } catch {
       // Fallback di bawah.
     }
     const area = window.document.createElement("textarea");
-    area.value = orderText;
+    area.value = text;
     window.document.body.appendChild(area);
     area.select();
     try {
       window.document.execCommand("copy");
       done();
     } catch {
-      setCopied(false);
+      setCopied(null);
     }
     window.document.body.removeChild(area);
   };
@@ -459,13 +470,25 @@ export default function AnalysisResult({
               sebelum order (analisa ulang bila market bergerak).
             </p>
           )}
-          <button
-            type="button"
-            onClick={copyOrder}
-            className="mt-3 rounded-xl bg-emerald-400/15 px-4 py-2 text-sm font-bold text-emerald-200 hover:bg-emerald-400/25"
-          >
-            {copied ? "Disalin ✓" : "Salin order"}
-          </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {/* Angka saja, untuk ditempel ke kolom Stop Loss / Take Profit MT5. */}
+            <button
+              type="button"
+              data-testid="copy-sl"
+              onClick={() => copyText(slText, "sl")}
+              className="rounded-xl bg-rose-400/15 px-4 py-2 text-sm font-bold text-rose-200 hover:bg-rose-400/25"
+            >
+              {copied === "sl" ? "SL disalin ✓" : `Salin SL ${slText ?? ""}`}
+            </button>
+            <button
+              type="button"
+              data-testid="copy-tp"
+              onClick={() => copyText(tpText, "tp")}
+              className="rounded-xl bg-sky-400/15 px-4 py-2 text-sm font-bold text-sky-200 hover:bg-sky-400/25"
+            >
+              {copied === "tp" ? "TP disalin ✓" : `Salin TP ${tpText ?? ""}`}
+            </button>
+          </div>
         </div>
       )}
 

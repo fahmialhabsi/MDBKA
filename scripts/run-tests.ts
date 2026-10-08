@@ -6794,6 +6794,15 @@ test("561. monitor posisi: kotak BREAKEVEN memakai SL + biaya komisi (opsi 5-2, 
   assert(dash.includes("breakeven.costDistance > 0"), "baris biaya harus hanya muncul bila biaya dipakai");
 });
 
+test("562. Salin order: hanya tombol Salin SL & Salin TP (angka saja, siap tempel MT5)", () => {
+  const src = readSrc("src/components/result/AnalysisResult.tsx");
+  assert(src.includes('data-testid="copy-sl"') && src.includes('data-testid="copy-tp"'), "tombol SL/TP hilang");
+  assert(src.includes("formatPrice(result.stopLoss, market.symbol)") && src.includes("formatPrice(result.takeProfit, market.symbol)"), "SL/TP harus pakai desimal simbol");
+  assert(src.includes('copyText(slText, "sl")') && src.includes('copyText(tpText, "tp")'), "tombol harus menyalin angka saja");
+  assert(!src.includes('copyText(orderText, "order")') && !src.includes('"Salin order"'), "tombol Salin order sudah dihapus (permintaan Fahmi)");
+  assert(formatPrice(7785.18, "US500") === "7785.18" && formatPrice(0.69844, "AUDUSD_ORB") === "0.69844", "format angka salin");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
@@ -9797,7 +9806,7 @@ test("460. wiring tanpa-screenshot: isi CSV + blok salin (readSrc)", () => {
   const result = readSrc("src/components/result/AnalysisResult.tsx");
   assert(result.includes("order-copy-block"), "testid blok salin hilang");
   assert(result.includes("Salin order"), "tombol salin hilang");
-  assert(result.includes("Disalin"), "umpan balik salin hilang");
+  assert(result.includes("disalin ✓"), "umpan balik salin hilang");
   assert(result.includes("orderText"), "teks order hilang");
   const lib = readSrc("src/calculations/indicators.ts");
   assert(lib.includes("INDICATOR_MIN_CANDLES"), "ambang hilang");
