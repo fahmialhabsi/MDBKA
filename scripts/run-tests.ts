@@ -7216,6 +7216,15 @@ test("586. History CSV kolom 19-20 S/L & T/P (H4a), CSV lama 18 kolom tetap terb
   assert(ea.includes('"SL", "TP")') && ea.includes("DEAL_SL") && ea.includes("DEAL_TP"), "service belum ekspor SL/TP");
 });
 
+test("587. pemindai menyimpan angka order (plan) hanya untuk LOLOS (butir 3, P1)", () => {
+  const sc = readSrc("src/lib/symbolScanner.ts");
+  assert(sc.includes('status === "LOLOS" &&') && sc.includes("stopLoss: result.stopLoss,") && sc.includes("takeProfit: result.takeProfit,"), "plan belum dibangun dari hasil analisa");
+  const held = sc.slice(sc.indexOf('status: "DITAHAN_JEDA"'), sc.indexOf("const plan: ScanPlan"));
+  assert(!held.includes("plan"), "baris ditahan tidak boleh membawa angka order");
+  const page = readSrc("src/components/history/HistoryPage.tsx");
+  assert(page.includes('const TIGHT = new Set(["Deal", "Type", "Direction", "Volume", "Commission"]);') && page.includes("min-w-[1100px]"), "kolom History dirapatkan");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

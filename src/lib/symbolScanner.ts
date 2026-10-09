@@ -76,6 +76,24 @@ export interface ScanRow {
   readonly reason: string;
   readonly costShareOfRisk: number | null;
   readonly candles: number;
+  /**
+   * Butir 3 (9 Okt): angka order untuk halaman detail (Salin SL/TP). Hanya
+   * diisi bila status LOLOS; selain itu absen/null (tidak ada angka order).
+   */
+  readonly plan?: ScanPlan | null;
+}
+
+export interface ScanPlan {
+  readonly direction: "BELI" | "JUAL";
+  readonly entry: number;
+  readonly stopLoss: number;
+  readonly takeProfit: number;
+  readonly suggestedLot: number | null;
+  /** Risiko pada lot minimum & batas risiko yang dipakai (USD). */
+  readonly riskAtMinLot: number | null;
+  readonly maxRiskUsd: number;
+  readonly riskDistance: number | null;
+  readonly targetDistance: number | null;
 }
 
 const ZERO_MARKET: MarketData = {
@@ -260,6 +278,23 @@ export function scanSymbol(input: ScanInput): ScanRow {
       };
     }
   }
+  const plan: ScanPlan | null =
+    status === "LOLOS" &&
+    (result.decision === "BELI" || result.decision === "JUAL") &&
+    result.stopLoss !== null &&
+    result.takeProfit !== null
+      ? {
+          direction: result.decision,
+          entry: result.entry,
+          stopLoss: result.stopLoss,
+          takeProfit: result.takeProfit,
+          suggestedLot: result.suggestedLot,
+          riskAtMinLot: result.riskAtMinLot,
+          maxRiskUsd: result.maxRiskUsd,
+          riskDistance: result.riskDistance,
+          targetDistance: result.targetDistance,
+        }
+      : null;
   return {
     symbol,
     status,
@@ -270,6 +305,7 @@ export function scanSymbol(input: ScanInput): ScanRow {
     reason: signalReason(result),
     costShareOfRisk: result.costShareOfRisk ?? null,
     candles: count,
+    plan,
   };
 }
 

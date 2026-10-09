@@ -60,6 +60,9 @@ const BROKER_NAME: Record<BrokerId, string> = {
   orbitraderberjangka: "OTB (Orbi Trade Berjangka)",
 };
 
+/** Kolom yang dirapatkan (permintaan Fahmi 9 Okt) agar tabel muat satu layar. */
+const TIGHT = new Set(["Deal", "Type", "Direction", "Volume", "Commission"]);
+
 function color(n: number | null): string {
   if (n === null || n === 0) return "text-slate-300";
   return n > 0 ? "text-sky-300" : "text-rose-300";
@@ -137,11 +140,16 @@ export function HistoryPage({ broker }: { broker: BrokerId }) {
         {view !== null && t !== undefined && (
           <>
             <div className="overflow-x-auto rounded-2xl border border-white/10">
-              <table className="w-full min-w-[1380px] text-left text-sm" data-testid="history-table">
+              <table className="w-full min-w-[1100px] text-left text-sm" data-testid="history-table">
                 <thead className="bg-white/5 text-xs uppercase text-slate-400">
                   <tr>
                     {["Time", "Symbol", "Deal", "Type", "Direction", "Volume", "Price", "S / L", "T / P", "Commission", "Profit", "Change", "Komisi (Rp)", "Profit (Rp)"].map((h) => (
-                      <th key={h} className={`px-3 py-2 ${h === "Time" || h === "Symbol" || h === "Type" || h === "Direction" ? "" : "text-right"}`}>{h}</th>
+                      <th
+                        key={h}
+                        className={`${TIGHT.has(h) ? "w-px whitespace-nowrap px-1.5" : "px-3"} py-2 ${h === "Time" || h === "Symbol" || h === "Type" || h === "Direction" ? "" : "text-right"}`}
+                      >
+                        {h === "Commission" ? "Komisi" : h === "Direction" ? "Arah" : h}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -150,14 +158,14 @@ export function HistoryPage({ broker }: { broker: BrokerId }) {
                     <tr key={r.dealTicket} className="border-t border-white/5">
                       <td className="px-3 py-1.5 font-mono text-xs text-slate-300">{r.serverTime}</td>
                       <td className="px-3 py-1.5">{r.symbol.toLowerCase()}</td>
-                      <td className="px-3 py-1.5 text-right font-mono text-xs text-slate-400">{r.dealTicket}</td>
-                      <td className="px-3 py-1.5">{mt5TypeText(r.type)}</td>
-                      <td className="px-3 py-1.5">{mt5DirectionText(r.type, r.entry)}</td>
-                      <td className="px-3 py-1.5 text-right">{r.type === "BALANCE" ? "" : r.volume.toFixed(2)}</td>
+                      <td className="w-px whitespace-nowrap px-1.5 py-1.5 text-right font-mono text-xs text-slate-400">{r.dealTicket}</td>
+                      <td className="w-px whitespace-nowrap px-1.5 py-1.5">{mt5TypeText(r.type)}</td>
+                      <td className="w-px whitespace-nowrap px-1.5 py-1.5">{mt5DirectionText(r.type, r.entry)}</td>
+                      <td className="w-px whitespace-nowrap px-1.5 py-1.5 text-right">{r.type === "BALANCE" ? "" : r.volume.toFixed(2)}</td>
                       <td className="px-3 py-1.5 text-right">{r.type === "BALANCE" ? "" : formatPrice(r.price, r.symbol)}</td>
                       <td className="px-3 py-1.5 text-right text-rose-200/80">{r.sl === null ? "" : formatPrice(r.sl, r.symbol)}</td>
                       <td className="px-3 py-1.5 text-right text-sky-200/80">{r.tp === null ? "" : formatPrice(r.tp, r.symbol)}</td>
-                      <td className={`px-3 py-1.5 text-right ${color(r.commission)}`}>{r.commission === 0 ? "" : formatUsd(r.commission)}</td>
+                      <td className={`w-px whitespace-nowrap px-1.5 py-1.5 text-right ${color(r.commission)}`}>{r.commission === 0 ? "" : formatUsd(r.commission)}</td>
                       <td className={`px-3 py-1.5 text-right ${color(r.profit)}`}>{r.profit === 0 && r.entry === "IN" && r.type !== "BALANCE" ? "" : formatUsd(r.profit)}</td>
                       <td className={`px-3 py-1.5 text-right ${color(r.changePct)}`}>{r.changePct === null ? "" : `${formatUsd(r.changePct)} %`}</td>
                       <td className={`px-3 py-1.5 text-right ${color(r.commissionIdr)}`} title={r.kurs === null ? "kurs tidak ada" : `kurs ${r.kurs.date}: Rp${r.kurs.rate}`}>
