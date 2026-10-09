@@ -48,6 +48,7 @@ import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, us
 import { buildHistoryView } from "../server/services/historyView";
 import { accountKind, historyForLogin, listHistoryAccounts } from "../server/routes/historyRoutes";
 import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
+import { calculateTargets } from "../src/lib/targetCalculator";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
 import { formatClock12, serverUtcOffsetHours, WIT_UTC_OFFSET } from "../src/lib/serverClock";
@@ -7246,6 +7247,27 @@ test("589. tombol Lolos membuka detail di tab baru (P3) + header tabel History t
   assert(panel.includes('window.open(signalPageUrl(brokerId, row.symbol, equity), "_blank", "noopener");'), "tombol Lolos belum membuka detail");
   const page = readSrc("src/components/history/HistoryPage.tsx");
   assert(page.includes("overflow-x-clip rounded-2xl") && !page.includes("max-h-[75vh]") && page.includes("<thead className=\"sticky top-0 z-10"), "header History belum tetap");
+});
+
+test("590. kalkulator target harga: contoh nyata US100 SELL, tangga harga, validasi sisi (butir 4, C1)", () => {
+  const usd = (a: number, c: string) => (c === "USD" ? a : null);
+  const r = calculateTargets({ symbol: "US100", direction: "JUAL", lot: 0.01, entry: 30748.33, sl: 30878.43, tp: 30544.73 }, usd, 17920);
+  assert(r.ok, JSON.stringify(r));
+  if (!r.ok) return;
+  assert(r.usdPerUnit === 0.2 && r.commissionUsd === 0.01 && r.tpDistance === 203.6 && r.slDistance === 130.1, JSON.stringify(r));
+  assert(r.tpNetUsd === 40.71 && r.slNetUsd === -26.03 && r.tpNetIdr === 729523 && r.slNetIdr === -466458, `${r.tpNetUsd}/${r.slNetUsd}/${r.tpNetIdr}/${r.slNetIdr}`);
+  assert(r.breakeven === 30748.28 && r.rr === 1.56 && r.closeSide === "Ask", `BE ${r.breakeven} rr ${r.rr}`);
+  assert(r.ladder.length === 7 && r.ladder[0].price === 30544.73 && r.ladder[6].price === 30878.43, JSON.stringify(r.ladder.map((x) => x.price)));
+  const be = r.ladder.find((x) => x.label.startsWith("Titik impas"));
+  assert(be !== undefined && Math.abs(be.netUsd) <= 0.01, `impas harus ±0: ${JSON.stringify(be)}`);
+  assert(r.group === "Indeks" && r.capIdr === 500000 && !r.overCap && r.capSl === 30887.78, `cap ${r.overCap} ${r.capSl}`);
+  const salah = calculateTargets({ symbol: "US100", direction: "JUAL", lot: 0.01, entry: 30748.33, sl: 51113.17, tp: 51512.26 }, usd, 17920);
+  assert(!salah.ok && salah.error.includes("JUAL"), JSON.stringify(salah));
+  const jauh = calculateTargets({ symbol: "US100", direction: "BELI", lot: 0.01, entry: 30748.33, sl: 30000, tp: 51512.26 }, usd, 17920);
+  assert(!jauh.ok && jauh.error.includes("terlalu jauh"), JSON.stringify(jauh));
+  const beli = calculateTargets({ symbol: "EURUSD", direction: "BELI", lot: 0.01, entry: 1.1, sl: 1.099, tp: 1.1015 }, usd, 17920);
+  assert(beli.ok && beli.tpNetUsd === 1.49 && beli.slNetUsd === -1.01 && beli.closeSide === "Bid", JSON.stringify(beli));
+  assert(!calculateTargets({ symbol: "ZZZ", direction: "BELI", lot: 0.01, entry: 1, sl: 0.99, tp: 1.01 }, usd, 17920).ok, "simbol tak dikenal");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
