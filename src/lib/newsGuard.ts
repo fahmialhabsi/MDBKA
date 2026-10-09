@@ -10,9 +10,26 @@
 import type { AnalysisResult } from "../types/analysis";
 import { parseSnapshotTime } from "./dataFreshness";
 import { baseRiskSymbol, riskGroupOf } from "./riskGroup";
+import { TIME_STOP_HOURS, timeStopApplies } from "./exitMonitor";
 
 /** Menit sebelum & sesudah jam rilis berita Tinggi (penetapan 9 Okt). */
 export const NEWS_WINDOW_MINUTES = 30;
+
+/**
+ * Penetapan Fahmi 9 Okt (siang): golongan ber-time-stop (Forex & Forex JPY,
+ * horizon 3 jam) ditahan bila ada berita Tinggi dalam 3 jam KE DEPAN —
+ * posisi yang dibuka sekarang masih terbuka saat berita rilis. Sesudah
+ * rilis tetap 30 menit. Golongan lain: 30 menit sebelum.
+ */
+export function newsMinutesBefore(symbol: string): number {
+  return timeStopApplies(symbol) ? TIME_STOP_HOURS * 60 : NEWS_WINDOW_MINUTES;
+}
+
+function windowText(before: number, after: number): string {
+  if (before === after) return `jeda ±${after} menit`;
+  const b = before % 60 === 0 ? `${before / 60} jam` : `${before} menit`;
+  return `jeda ${b} sebelum s/d ${after} menit sesudah`;
+}
 
 export interface NewsEventLike {
   readonly serverTime: string;
@@ -66,9 +83,12 @@ export function findNewsHold(
   symbol: string,
   serverNow: string,
   events: readonly NewsEventLike[] | null | undefined,
-  windowMinutes: number = NEWS_WINDOW_MINUTES,
+  windowMinutes?: number,
 ): NewsHold | null {
   if (events === null || events === undefined || events.length === 0) return null;
+  // windowMinutes eksplisit = jendela simetris; tanpa itu ikut golongan simbol.
+  const after = windowMinutes ?? NEWS_WINDOW_MINUTES;
+  const before = windowMinutes ?? newsMinutesBefore(symbol);
   const nowMs = parseSnapshotTime(serverNow);
   if (nowMs === null) return null;
   const currencies = new Set(newsCurrenciesOf(symbol));
@@ -80,16 +100,21 @@ export function findNewsHold(
     const evMs = parseSnapshotTime(ev.serverTime);
     if (evMs === null) continue;
     const minutesTo = (evMs - nowMs) / 60_000;
-    if (Math.abs(minutesTo) > windowMinutes) continue;
+    if (minutesTo > before || minutesTo < -after) continue;
     if (best !== null && Math.abs(best.minutesTo) <= Math.abs(minutesTo)) continue;
     const m = Math.round(Math.abs(minutesTo));
-    const when = minutesTo >= 0 ? `${m} menit lagi` : `${m} menit lalu`;
+    const when =
+      minutesTo < 0
+        ? `${m} menit lalu`
+        : m >= 60
+          ? `${Math.floor(m / 60)} jam ${m % 60} menit lagi`
+          : `${m} menit lagi`;
     best = {
       event: ev,
       minutesTo,
       reason:
         `Ditahan: berita ${ev.currency.trim().toUpperCase()} (Tinggi) "${ev.event}" ` +
-        `jam ${hhmm(ev.serverTime)} server (${when}; jeda ±${windowMinutes} menit)`,
+        `jam ${hhmm(ev.serverTime)} server (${when}; ${windowText(before, after)})`,
     };
   }
   return best;

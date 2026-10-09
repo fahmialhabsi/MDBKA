@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **578** → test baru mulai **579**.
+Nomor test terakhir: **579** → test baru mulai **580**.
 
 ---
 
@@ -263,14 +263,16 @@ mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: N
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **579**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **580**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
 
 ## 5b. Satpam Kalender — keputusan Fahmi (9 Okt 2026)
 - Hanya berita **Tinggi** (HIGH) yang menahan sinyal (Sedang ikut diekspor untuk tampilan/masa depan).
-- Jendela **±30 menit** (30 mnt sebelum s/d 30 mnt sesudah jam rilis) untuk **semua golongan**.
+- Jendela **±30 menit** (30 mnt sebelum s/d 30 mnt sesudah jam rilis) untuk golongan non-forex.
+  **Revisi 9 Okt siang**: Forex & Forex JPY (horizon 3 jam) ditahan **3 jam sebelum** s/d 30 menit sesudah rilis
+  (`newsMinutesBefore`, ikut `TIME_STOP_HOURS`/`timeStopApplies`; test 579).
 - Pemetaan mata uang ikut mata uang harga: forex = base & quote; XAU/XAG, minyak, indeks AS, saham AS → USD;
   JP225 → JPY; DE30 → EUR; UK100 → GBP; HK50 → HKD/CNY.
 - File kalender tidak ada / basi → **satpam diabaikan** (analisa tetap jalan + catatan "kalender belum tersedia").

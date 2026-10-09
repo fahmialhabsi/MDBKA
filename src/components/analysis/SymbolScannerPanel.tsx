@@ -265,7 +265,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
       {newsEvents !== null && (
         <details data-testid="scan-news-upcoming" className="mb-3 rounded-xl border border-orange-400/20 bg-orange-400/5 p-3 text-sm">
           <summary className="cursor-pointer font-semibold text-orange-200">
-            Berita Tinggi mendatang ({upcoming.length}) · sinyal ditahan ±{NEWS_WINDOW_MINUTES} menit dari jam rilis
+            Berita Tinggi mendatang ({upcoming.length}) · sinyal ditahan otomatis: Forex 3 jam sebelum, lainnya {NEWS_WINDOW_MINUTES} menit sebelum, s/d {NEWS_WINDOW_MINUTES} menit sesudah rilis
           </summary>
           {upcoming.length === 0 ? (
             <p className="mt-2 text-slate-400">Tidak ada berita Tinggi dalam 7 hari ke depan.</p>

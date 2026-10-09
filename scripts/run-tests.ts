@@ -44,7 +44,7 @@ import {
 import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
-import { applyNewsHold, findNewsHold, newsCurrenciesOf, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
+import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
 import { formatClock12, serverUtcOffsetHours, WIT_UTC_OFFSET } from "../src/lib/serverClock";
 import {
   SUPPORTED_SYMBOLS,
@@ -6956,8 +6956,8 @@ test("572. satpam berita: mata uang simbol & jendela ±30 menit berita Tinggi (K
     { serverTime: "2026.10.15 09:00:00", currency: "GBP", importance: "HIGH", event: "GDP m/m" },
   ];
   const a = findNewsHold("EURUSD", "2026.10.14 15:00:00", ev);
-  assert(a !== null && a.minutesTo === 30 && a.reason.includes("CPI m/m") && a.reason.includes("30 menit lagi"), JSON.stringify(a));
-  assert(findNewsHold("EURUSD", "2026.10.14 14:59:59", ev) === null, "lebih dari 30 menit sebelum ikut ditahan");
+  assert(a !== null && a.minutesTo === 30 && a.reason.includes("CPI m/m") && a.reason.includes("30 menit lagi") && a.reason.includes("jeda 3 jam sebelum s/d 30 menit sesudah"), JSON.stringify(a));
+  assert(findNewsHold("XAUUSD", "2026.10.14 14:59:59", ev) === null, "non-forex: lebih dari 30 menit sebelum ikut ditahan");
   const b = findNewsHold("XAUUSD", "2026.10.14 15:45:00", ev);
   assert(b !== null && b.reason.includes("15 menit lalu"), JSON.stringify(b));
   assert(findNewsHold("XAUUSD", "2026.10.14 16:00:01", ev) === null, "lewat 30 menit sesudah");
@@ -7069,6 +7069,19 @@ test("578. jam server MT5 & WIT 12 jam di header", () => {
   assert(serverUtcOffsetHours("finex", "2026.10.09 21:40:00", utc) === 3, "quote basi → bawaan");
   assert(serverUtcOffsetHours("orbitraderberjangka", null, utc) === 2 && serverUtcOffsetHours("finex", "2026.10.07 22:00:15", utc) === 3, "tanpa/lama → bawaan");
   assert(readSrc("src/App.tsx").includes("<ServerClock"), "jam belum di header");
+});
+
+test("579. forex ditahan bila berita Tinggi dalam 3 jam ke depan (penetapan 9 Okt)", () => {
+  const ev = [{ serverTime: "2026.10.14 15:30:00", currency: "USD", importance: "HIGH", event: "CPI m/m" }];
+  assert(newsMinutesBefore("EURUSD") === 180 && newsMinutesBefore("USDJPY") === 180, "forex 3 jam");
+  assert(newsMinutesBefore("XAUUSD") === 30 && newsMinutesBefore("US100") === 30, "non-forex 30 menit");
+  const a = findNewsHold("EURUSD", "2026.10.14 12:30:00", ev);
+  assert(a !== null && a.reason.includes("3 jam 0 menit lagi"), JSON.stringify(a));
+  assert(findNewsHold("EURUSD", "2026.10.14 12:29:59", ev) === null, "lebih dari 3 jam sebelum ikut ditahan");
+  assert(findNewsHold("XAUUSD", "2026.10.14 12:30:00", ev) === null, "emas 3 jam sebelum tidak boleh ditahan");
+  assert(findNewsHold("EURUSD", "2026.10.14 16:00:00", ev) !== null && findNewsHold("EURUSD", "2026.10.14 16:00:01", ev) === null, "sesudah tetap 30 menit");
+  const sim = findNewsHold("EURUSD", "2026.10.14 14:00:00", ev, 30);
+  assert(sim === null, "windowMinutes eksplisit = simetris");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
