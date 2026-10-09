@@ -304,6 +304,18 @@ ESLint → pengguna build/test/commit → verifikasi.
    30878.43 → −Rp466 rb. Rumus SELL: (entry − harga) × nilai poin; BELI: (harga − entry) × nilai poin.
    Catatan wajib: SELL ditutup di **Ask**, BELI di **Bid** (garis chart MT5 = Bid → spread memengaruhi kapan TP/SL kena);
    tampilkan juga **SL yang sesuai batas golongan** (mis. Indeks Rp150 rb → ±41,9 poin → SL ≈ 30790.18).
+5. **[PRIORITAS PERTAMA setelah Satpam Kalender] Halaman History per broker (penetapan Fahmi 9 Okt)**: 2 tombol
+   **Finex** & **OTB** → halaman baru; tiap halaman punya tab **Live** & **Demo** (OTB live belum ada → tab kosong
+   "belum ada akun"). Isi = tab **History MT5** akun itu (sumber `MDBKA_History_<login>.csv`, sudah dibaca
+   `/api/evaluation`): kolom seperti MT5 (Time, Symbol, Deal, Type, Direction, Volume, Price, S/L, T/P, Commission,
+   Profit, Change) + **Komisi (Rp)** & **Profit (Rp)** di samping Change. Di bawah baris ringkasan MT5
+   ("Profit · Credit · Deposit · Withdrawal · Balance · Komisi · Profit") tambah **baris yang sama dalam Rupiah**.
+   **Kurs = kurs ECB TANGGAL TRANSAKSI** per baris (keputusan Fahmi); ringkasan Rupiah = jumlah Rupiah per baris
+   (Balance Rp = jumlah semua baris, bukan saldo USD × kurs hari ini — beri catatan beda keduanya). Perlu sumber kurs
+   historis ECB (mis. `eurofxref-hist.xml` / per hari) — `fxRoutes.ts` sekarang hanya kurs harian terbaru.
+   Setoran Finex live yang aslinya Rupiah (komentar deal "D-1: IDR 200000.00") tampilkan nilai Rupiah asli.
+   Contoh uji Finex demo 61823011: Deposit $5.000 (bonus 27 Sep), Profit −$10,04, Komisi −$0,09, Balance $4.989,96;
+   AUDCHF 8 Okt: komisi −$0,01, profit −$0,65 → kolom Rp per kurs 8 Okt.
 Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi build/test/commit.
 
 ---
