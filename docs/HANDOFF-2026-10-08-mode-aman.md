@@ -340,7 +340,8 @@ ESLint → pengguna build/test/commit → verifikasi.
      tombol "History Finex ↗ / History OTB ↗" di baris saldo `AccountBalancesBar`); tab Live/Demo, tabel ala MT5 +
      Komisi (Rp)/Profit (Rp) (tooltip kurs), 2 baris ringkasan USD & Rp, kotak Sisa setoran; helper `src/lib/historyPageView.ts`; test 585
    · H4a ✅ `MDBKAHistoryService.mq5` kolom 19-20 SL/TP (DEAL_SL/DEAL_TP), `parseHistoryCsv` sl/tp (0/kosong/CSV lama → null),
-     `historyView` membawa sl/tp; test 586. **Wajib compile ulang service di Finex & OTB.** · H4b kolom S/L & T/P di HistoryPage.
+     `historyView` membawa sl/tp; test 586. **Wajib compile ulang service di Finex & OTB.** Terpasang & terverifikasi di Finex (22 deal) + OTB (36 deal).
+   · H4b ✅ kolom "S / L", "T / P" di HistoryPage (urutan seperti MT5, desimal simbol). **Halaman History (butir 5) SELESAI.**
    Contoh uji Finex demo 61823011: Deposit $5.000 (bonus 27 Sep), Profit −$10,04, Komisi −$0,09, Balance $4.989,96;
    AUDCHF 8 Okt: komisi −$0,01, profit −$0,65 → kolom Rp per kurs 8 Okt.
    **Kotak "Sisa setoran" (permintaan 9 Okt)**: Sisa setoran (Rp) = Setoran (Rp) **+** Hasil bersih (Rp), dengan

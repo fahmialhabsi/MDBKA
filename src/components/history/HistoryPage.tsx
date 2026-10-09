@@ -21,6 +21,8 @@ interface Row {
   readonly entry: string;
   readonly volume: number;
   readonly price: number;
+  readonly sl: number | null;
+  readonly tp: number | null;
   readonly commission: number;
   readonly profit: number;
   readonly swap: number;
@@ -135,10 +137,10 @@ export function HistoryPage({ broker }: { broker: BrokerId }) {
         {view !== null && t !== undefined && (
           <>
             <div className="overflow-x-auto rounded-2xl border border-white/10">
-              <table className="w-full min-w-[1200px] text-left text-sm" data-testid="history-table">
+              <table className="w-full min-w-[1380px] text-left text-sm" data-testid="history-table">
                 <thead className="bg-white/5 text-xs uppercase text-slate-400">
                   <tr>
-                    {["Time", "Symbol", "Deal", "Type", "Direction", "Volume", "Price", "Commission", "Profit", "Change", "Komisi (Rp)", "Profit (Rp)"].map((h) => (
+                    {["Time", "Symbol", "Deal", "Type", "Direction", "Volume", "Price", "S / L", "T / P", "Commission", "Profit", "Change", "Komisi (Rp)", "Profit (Rp)"].map((h) => (
                       <th key={h} className={`px-3 py-2 ${h === "Time" || h === "Symbol" || h === "Type" || h === "Direction" ? "" : "text-right"}`}>{h}</th>
                     ))}
                   </tr>
@@ -153,6 +155,8 @@ export function HistoryPage({ broker }: { broker: BrokerId }) {
                       <td className="px-3 py-1.5">{mt5DirectionText(r.type, r.entry)}</td>
                       <td className="px-3 py-1.5 text-right">{r.type === "BALANCE" ? "" : r.volume.toFixed(2)}</td>
                       <td className="px-3 py-1.5 text-right">{r.type === "BALANCE" ? "" : formatPrice(r.price, r.symbol)}</td>
+                      <td className="px-3 py-1.5 text-right text-rose-200/80">{r.sl === null ? "" : formatPrice(r.sl, r.symbol)}</td>
+                      <td className="px-3 py-1.5 text-right text-sky-200/80">{r.tp === null ? "" : formatPrice(r.tp, r.symbol)}</td>
                       <td className={`px-3 py-1.5 text-right ${color(r.commission)}`}>{r.commission === 0 ? "" : formatUsd(r.commission)}</td>
                       <td className={`px-3 py-1.5 text-right ${color(r.profit)}`}>{r.profit === 0 && r.entry === "IN" && r.type !== "BALANCE" ? "" : formatUsd(r.profit)}</td>
                       <td className={`px-3 py-1.5 text-right ${color(r.changePct)}`}>{r.changePct === null ? "" : `${formatUsd(r.changePct)} %`}</td>
@@ -167,7 +171,7 @@ export function HistoryPage({ broker }: { broker: BrokerId }) {
                 </tbody>
                 <tfoot className="text-sm font-semibold" data-testid="history-summary">
                   <tr className="border-t border-white/10 bg-white/5">
-                    <td colSpan={7} className="px-3 py-2">
+                    <td colSpan={9} className="px-3 py-2">
                       Profit: {formatUsd(t.net)} · Credit: {formatUsd(t.credit)} · Deposit: {formatUsd(t.deposit)} · Withdrawal: {formatUsd(t.withdrawal)} · Balance: {formatUsd(t.balance)} {view.currency}
                     </td>
                     <td className="px-3 py-2 text-right">{formatUsd(t.commission)}</td>
@@ -175,7 +179,7 @@ export function HistoryPage({ broker }: { broker: BrokerId }) {
                     <td colSpan={3} />
                   </tr>
                   <tr className="border-t border-white/10 bg-emerald-400/5 text-emerald-100">
-                    <td colSpan={7} className="px-3 py-2">
+                    <td colSpan={9} className="px-3 py-2">
                       {ti === null
                         ? `Rupiah belum lengkap: ${view.missingRates} baris tanpa kurs ECB.`
                         : `Profit: ${formatIdr(ti.net)} · Credit: ${formatIdr(ti.credit)} · Deposit: ${formatIdr(ti.deposit)} · Withdrawal: ${formatIdr(ti.withdrawal)} · Balance: ${formatIdr(ti.balance)}`}

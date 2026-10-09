@@ -7201,6 +7201,7 @@ test("585. halaman History: tautan, tab Live/Demo, format USD/Rp (H3)", () => {
   const page = readSrc("src/components/history/HistoryPage.tsx");
   assert(page.includes('"Komisi (Rp)", "Profit (Rp)"') && page.includes('data-testid="history-sisa"') && page.includes("API_BASE_URL"), "kolom Rupiah / Sisa setoran");
   assert(page.includes("formatPrice(r.price, r.symbol)"), "harga harus ikut desimal simbol seperti MT5 (1.32160, 89.00)");
+  assert(page.includes('"Price", "S / L", "T / P", "Commission"') && page.includes("formatPrice(r.sl, r.symbol)") && page.includes("formatPrice(r.tp, r.symbol)"), "kolom S/L & T/P (H4b)");
 });
 
 test("586. History CSV kolom 19-20 S/L & T/P (H4a), CSV lama 18 kolom tetap terbaca", () => {
