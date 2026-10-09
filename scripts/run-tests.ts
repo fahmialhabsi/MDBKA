@@ -48,7 +48,7 @@ import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, us
 import { buildHistoryView } from "../server/services/historyView";
 import { accountKind, historyForLogin, listHistoryAccounts } from "../server/routes/historyRoutes";
 import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
-import { calculateTargets } from "../src/lib/targetCalculator";
+import { calculateTargets, secureReadiness } from "../src/lib/targetCalculator";
 import { calculatorPageUrl, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
@@ -7258,7 +7258,7 @@ test("590. kalkulator target harga: contoh nyata US100 SELL, tangga harga, valid
   assert(r.usdPerUnit === 0.2 && r.commissionUsd === 0.01 && r.tpDistance === 203.6 && r.slDistance === 130.1, JSON.stringify(r));
   assert(r.tpNetUsd === 40.71 && r.slNetUsd === -26.03 && r.tpNetIdr === 729523 && r.slNetIdr === -466458, `${r.tpNetUsd}/${r.slNetUsd}/${r.tpNetIdr}/${r.slNetIdr}`);
   assert(r.breakeven === 30748.28 && r.rr === 1.56 && r.closeSide === "Ask", `BE ${r.breakeven} rr ${r.rr}`);
-  assert(r.ladder.length === 7 && r.ladder[0].price === 30544.73 && r.ladder[6].price === 30878.43, JSON.stringify(r.ladder.map((x) => x.price)));
+  assert(r.ladder.length === 8 && r.ladder[0].price === 30544.73 && r.ladder[7].price === 30878.43, JSON.stringify(r.ladder.map((x) => x.price)));
   const be = r.ladder.find((x) => x.label.startsWith("Titik impas"));
   assert(be !== undefined && Math.abs(be.netUsd) <= 0.01, `impas harus ±0: ${JSON.stringify(be)}`);
   assert(r.group === "Indeks" && r.capIdr === 500000 && !r.overCap && r.capSl === 30887.78, `cap ${r.overCap} ${r.capSl}`);
@@ -7296,6 +7296,38 @@ test("592. kalkulator C3: dropdown simbol per broker + isi dari posisi terbuka M
   assert(symbolOptions(["EURUSD"], "US100").includes("US100"), "simbol terpilih tetap ada");
   const page = readSrc("src/components/analysis/CalculatorPage.tsx");
   assert(page.includes("/api/quotes?broker=${broker}") && page.includes('data-testid="calc-symbol"') && page.includes('data-testid="calc-position"') && page.includes("useBrokerPositions(broker"), "halaman belum memakai dropdown/posisi");
+});
+
+test("593. kalkulator: baris pemicu amankan = aturan breakeven monitor (0,5R), contoh GBPUSD", () => {
+  const usd = (a: number, c: string) => (c === "USD" ? a : null);
+  const r = calculateTargets({ symbol: "GBPUSD", direction: "BELI", lot: 0.01, entry: 1.32429, sl: 1.32267, tp: 1.32677 }, usd, 17920);
+  assert(r.ok, JSON.stringify(r));
+  if (!r.ok) return;
+  const sec = r.ladder.filter((x) => x.secure === true);
+  assert(sec.length === 1 && sec[0].price === 1.3251 && sec[0].move === 0.00081, JSON.stringify(sec));
+  assert(sec[0].label.includes("1.32430"), sec[0].label);
+  assert(sec[0].secureSl === "1.32430", `secureSl ${sec[0].secureSl}`);
+  const moves = r.ladder.map((x) => x.move);
+  assert(moves.every((m, i) => i === 0 || moves[i - 1] >= m), `urut: ${moves.join(",")}`);
+  const sell = calculateTargets({ symbol: "US100", direction: "JUAL", lot: 0.01, entry: 30748.33, sl: 30878.43, tp: 30544.73 }, usd, 17920);
+  const s2 = sell.ok ? sell.ladder.find((x) => x.secure === true) : undefined;
+  assert(s2 !== undefined && s2.price === 30683.28, JSON.stringify(s2));
+  assert(readSrc("src/components/analysis/CalculatorPage.tsx").includes('data-testid={r.secure ? "calc-secure" : undefined}'), "baris amankan belum disorot");
+  assert(readSrc("src/components/analysis/CalculatorPage.tsx").includes('data-testid="calc-copy-secure-sl"'), "tombol Salin SL amankan belum ada");
+});
+
+test("594. kalkulator: tombol Salin SL amankan aktif hanya bila harga sudah sampai pemicu", () => {
+  const belum = secureReadiness("BELI", 1.3251, 1.32402, 1.32409, 5);
+  assert(belum !== null && !belum.ready && belum.remaining === 0.00108 && belum.ref === 1.32402, JSON.stringify(belum));
+  const sudah = secureReadiness("BELI", 1.3251, 1.3251, 1.32517, 5);
+  assert(sudah !== null && sudah.ready && sudah.remaining === 0, JSON.stringify(sudah));
+  const jual = secureReadiness("JUAL", 30683.28, 30680, 30683.28, 2);
+  assert(jual !== null && jual.ready && jual.ref === 30683.28, "JUAL pakai Ask");
+  const jualBelum = secureReadiness("JUAL", 30683.28, 30690, 30695.5, 2);
+  assert(jualBelum !== null && !jualBelum.ready && jualBelum.remaining === 12.22, JSON.stringify(jualBelum));
+  assert(secureReadiness("BELI", 1.3251, 0, 1.3, 5) === null, "harga tak valid");
+  const page = readSrc("src/components/analysis/CalculatorPage.tsx");
+  assert(page.includes("disabled={!ready}") && page.includes("bg-emerald-700") && page.includes('data-testid="calc-secure-status"'), "tombol belum bergantung harga live");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

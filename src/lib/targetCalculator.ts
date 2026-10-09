@@ -9,7 +9,7 @@
  * kuotasi → USD). Contoh uji US100 Finex SELL 0,01 @30748.33.
  * Validasi sisi: BELI → SL < entry < TP; JUAL → TP < entry < SL.
  */
-import { breakevenCostDistance, commissionForHolding } from "./exitMonitor";
+import { BREAKEVEN_R_MULTIPLE, breakevenCostDistance, commissionForHolding } from "./exitMonitor";
 import { getInstrumentSpec32 } from "./instrumentSpecs32";
 import { riskGroupOf } from "./riskGroup";
 import { priceDigits, tickSizeForSymbol } from "./tickSize";
@@ -32,6 +32,10 @@ export interface LadderRow {
   readonly move: number;
   readonly netUsd: number;
   readonly netIdr: number | null;
+  /** Baris pemicu "amankan" (aturan breakeven monitor posisi). */
+  readonly secure?: boolean;
+  /** C4b: SL baru (teks ber-desimal penuh, mis. "1.32430") untuk disalin ke MT5. */
+  readonly secureSl?: string;
 }
 
 export interface TargetResult {
@@ -131,6 +135,17 @@ export function calculateTargets(
     row("½ jalan ke SL", toward(sl, 0.5)),
     row("SL (batas rugi)", sl),
   ];
+  // C4 (9 Okt 2026): pemicu breakeven = aturan yang sama dgn monitor posisi
+  // (checkBreakeven, untung ≥ BREAKEVEN_R_MULTIPLE × jarak SL). Dibulatkan
+  // NAIK ke tick agar tidak lebih awal dari pemicu monitor.
+  const secureMove = Math.ceil((slDistance * BREAKEVEN_R_MULTIPLE) / tick - 1e-9) * tick;
+  if (slDistance > 0 && secureMove < tpDistance) {
+    const r = String(BREAKEVEN_R_MULTIPLE).replace(".", ",");
+    const secureSl = (breakeven ?? fix(entry)).toFixed(digits);
+    const label = `Amankan: geser SL ke ${secureSl} (untung ${r}× jarak SL)`;
+    ladder.push({ ...row(label, entry + sign * secureMove), secure: true, secureSl });
+    ladder.sort((a, b) => b.move - a.move);
+  }
 
   const tpNetUsd = netAt(tp);
   const slNetUsd = netAt(sl);
@@ -164,4 +179,30 @@ export function calculateTargets(
     capSl,
     closeSide: buy ? "Bid" : "Ask",
   };
+}
+
+/**
+ * C4c (9 Okt 2026): kapan tombol "Salin SL" amankan boleh aktif. Aktif
+ * hanya bila harga penutupan (BELI→Bid, JUAL→Ask) SUDAH menyentuh harga
+ * pemicu — lebih awal, SL baru berada di sisi salah harga dan MT5 menolak
+ * (invalid stops). `remaining` = jarak harga yang masih kurang (≥0). MURNI.
+ */
+export interface SecureReadiness {
+  readonly ready: boolean;
+  readonly ref: number;
+  readonly remaining: number;
+}
+
+export function secureReadiness(
+  direction: CalcDirection,
+  trigger: number,
+  bid: number,
+  ask: number,
+  digits: number,
+): SecureReadiness | null {
+  if (![trigger, bid, ask].every((v) => Number.isFinite(v) && v > 0)) return null;
+  const ref = direction === "BELI" ? bid : ask;
+  const gap = direction === "BELI" ? trigger - ref : ref - trigger;
+  const remaining = Math.max(0, Number(gap.toFixed(digits)));
+  return { ready: remaining <= 0, ref, remaining };
 }

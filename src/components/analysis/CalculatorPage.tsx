@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Calculator } from "lucide-react";
+import { ArrowLeft, Calculator, Copy } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import {
   parseInputNumber,
@@ -10,7 +10,7 @@ import {
 } from "../../lib/calculatorPageView";
 import { useBrokerPositions } from "../../hooks/useBrokerPositions";
 import { formatIdr, formatUsd } from "../../lib/historyPageView";
-import { calculateTargets, type CalcDirection } from "../../lib/targetCalculator";
+import { calculateTargets, secureReadiness, type CalcDirection } from "../../lib/targetCalculator";
 import {
   buildUsdConverter,
   fetchBackendRates,
@@ -35,6 +35,40 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
   const [fx, setFx] = useState<ExchangeRates | null>(null);
   const [symbolBook, setSymbolBook] = useState<{ broker: BrokerId; symbols: string[] } | null>(null);
   const [pickedTicket, setPickedTicket] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [live, setLive] = useState<{ key: string; bid: number; ask: number } | null>(null);
+  const liveKey = `${broker}|${symbol.trim().toUpperCase()}`;
+
+  // C4c: harga live simbol terpilih (GET /api/quotes/:symbol?broker=&limit=1), tiap 3 detik.
+  useEffect(() => {
+    const sym = symbol.trim().toUpperCase();
+    if (sym === "") return;
+    let cancelled = false;
+    const load = (): void => {
+      fetch(`${API_BASE_URL}/api/quotes/${encodeURIComponent(sym)}?broker=${broker}&limit=1`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j: { data?: { bid?: unknown; ask?: unknown }[] } | null) => {
+          const q = j?.data?.[j.data.length - 1];
+          if (cancelled || q === undefined || typeof q.bid !== "number" || typeof q.ask !== "number") return;
+          setLive({ key: `${broker}|${sym}`, bid: q.bid, ask: q.ask });
+        })
+        .catch(() => undefined);
+    };
+    load();
+    const id = window.setInterval(load, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [broker, symbol]);
+  const liveNow = live !== null && live.key === liveKey ? live : null;
+
+  const copySl = (text: string): void => {
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    });
+  };
   const { positions } = useBrokerPositions(broker, 10_000);
 
   useEffect(() => {
@@ -204,8 +238,34 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
                 </thead>
                 <tbody>
                   {result.ladder.map((r) => (
-                    <tr key={r.label} className="border-t border-white/5">
-                      <td className="px-3 py-2">{r.label}</td>
+                    <tr key={r.label} className={`border-t border-white/5 ${r.secure ? "bg-emerald-400/10 font-semibold text-emerald-100" : ""}`} data-testid={r.secure ? "calc-secure" : undefined}>
+                      <td className="px-3 py-2">
+                        {r.label}
+                        {r.secureSl !== undefined && (() => {
+                          const st = liveNow === null ? null : secureReadiness(direction, r.price, liveNow.bid, liveNow.ask, result.digits);
+                          const ready = st !== null && st.ready;
+                          return (
+                            <>
+                              <button
+                                type="button"
+                                data-testid="calc-copy-secure-sl"
+                                disabled={!ready}
+                                onClick={() => copySl(r.secureSl ?? "")}
+                                className={`ml-3 inline-flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-bold ${ready ? "bg-emerald-700 text-white hover:bg-emerald-600" : "cursor-not-allowed bg-slate-700/50 text-slate-400"}`}
+                              >
+                                <Copy size={14} /> {copied ? "SL disalin ✓" : `Salin SL ${r.secureSl}`}
+                              </button>
+                              <span className="ml-2 text-xs font-normal text-slate-400" data-testid="calc-secure-status">
+                                {st === null
+                                  ? "harga live belum ada"
+                                  : ready
+                                    ? `${result.closeSide} ${st.ref.toFixed(result.digits)} sudah sampai — siap ditempel ke MT5`
+                                    : `${result.closeSide} ${st.ref.toFixed(result.digits)} · kurang ${st.remaining.toFixed(result.digits)} lagi`}
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </td>
                       <td className="px-3 py-2 text-right font-mono">{r.price.toFixed(result.digits)}</td>
                       <td className={`px-3 py-2 text-right ${tone(r.move)}`}>{r.move > 0 ? "+" : ""}{r.move}</td>
                       <td className={`px-3 py-2 text-right ${tone(r.netUsd)}`}>{formatUsd(r.netUsd)}</td>
