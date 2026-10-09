@@ -23,6 +23,9 @@ import {
 } from "../../lib/exitMonitor";
 import type { BrokerId } from "../../types/broker";
 import { calculatorUrlFromHolding } from "../../lib/calculatorPageView";
+import { serverNowText, sessionNotice, sessionState, type TradeSession } from "../../lib/sessionGuard";
+import { serverUtcOffsetHours } from "../../lib/serverClock";
+import { useTradeSessions } from "../../hooks/useTradeSessions";
 
 const SIGNAL_STYLE: Record<ExitSignal, { label: string; className: string }> = {
   EXIT_TAKE_PROFIT: {
@@ -97,7 +100,13 @@ function HoldingCard({
   onExit,
   onRemove,
   readOnly,
+  sessions,
+  serverNow,
+  serverOffset,
 }: {
+  readonly sessions: readonly TradeSession[];
+  readonly serverNow: string;
+  readonly serverOffset: number;
   readonly holding: Holding;
   readonly live: HoldingsQuote | undefined;
   readonly convert: (amount: number, currency: string) => number | null;
@@ -133,6 +142,10 @@ function HoldingCard({
   const timeStop =
     exited || live === undefined ? null : checkTimeStop(holding, live.timestamp);
   const marginWarning = exited ? null : checkMarginGuard(holding, convert);
+  // S4 Satpam Sesi: pasar tutup / segera tutup (jam resmi broker).
+  const marketNotice = exited
+    ? null
+    : sessionNotice(holding.symbol, sessionState(holding.symbol, serverNow, sessions), serverOffset);
   const rrWarning = checkRewardRisk(holding.entryPrice, holding.sl, holding.tp);
   const badge = exited
     ? "KELUAR — konfirmasi di MT5"
@@ -246,6 +259,18 @@ function HoldingCard({
           </span>
         </div>
       </div>
+
+      {marketNotice !== null && (
+        <div
+          data-testid={`holding-session-${holding.id}`}
+          className={`mt-2 rounded-xl border p-3 ${marketNotice.level === "closed" ? "border-rose-400/40 bg-rose-400/10" : "border-amber-400/40 bg-amber-400/10"}`}
+        >
+          <p className={`text-sm font-bold ${marketNotice.level === "closed" ? "text-rose-200" : "text-amber-200"}`}>
+            {marketNotice.level === "closed" ? "PASAR TUTUP" : "PASAR SEGERA TUTUP"}
+          </p>
+          <p className="mt-1 text-sm leading-6 text-slate-100">{marketNotice.text}</p>
+        </div>
+      )}
 
       {timeStop !== null && (
         <div className="mt-2 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3">
@@ -429,6 +454,19 @@ export function HoldingsDashboard({
 }): JSX.Element {
   const symbols = [...new Set(holdings.map((h) => h.symbol))];
   const { quotes, isConnected } = useHoldingsQuotes(symbols, brokerId);
+  const sessions = useTradeSessions(brokerId);
+  // Jam server dari quote TERSEGAR (quote simbol yang pasarnya tutup basi).
+  const freshestTs = Object.values(quotes).reduce<string | null>(
+    (best, q) => (q !== undefined && (best === null || q.timestamp > best) ? q.timestamp : best),
+    null,
+  );
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const serverOffset = serverUtcOffsetHours(brokerId ?? "finex", freshestTs, nowMs);
+  const serverNow = serverNowText(nowMs, serverOffset);
   const convert = buildUsdConverter(fxRates);
   const kurs = usdIdrRate(fxRates);
   // Total P&L per simbol (hanya posisi OPEN dengan P&L USD yang tersedia).
@@ -516,6 +554,9 @@ export function HoldingsDashboard({
           onExit={onExit ?? noopExit}
           onRemove={onRemove ?? noopRemove}
           readOnly={readOnly}
+          sessions={sessions}
+          serverNow={serverNow}
+          serverOffset={serverOffset}
         />
       ))}
     </div>

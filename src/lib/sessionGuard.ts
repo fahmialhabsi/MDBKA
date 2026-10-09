@@ -87,3 +87,57 @@ export function sessionState(
   if (!Number.isFinite(best)) return unknown;
   return { known: true, open: false, closesInMin: null, opensInMin: best, nextOpenServer: fmt(now.ms + best * 60_000) };
 }
+
+/** Jam server sekarang "YYYY.MM.DD HH:MM:SS" dari jam UTC + selisih server. */
+export function serverNowText(nowUtcMs: number, serverOffsetHours: number): string {
+  const d = new Date(nowUtcMs + serverOffsetHours * 3_600_000);
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}.${p(d.getUTCMonth() + 1)}.${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+}
+
+const HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+
+/** "2026.10.09 15:30" (jam server) → "Jumat 22:30 WIT". */
+export function serverToWitLabel(serverText: string, serverOffsetHours: number): string | null {
+  const m = MT5_TIME.exec(serverText.trim());
+  if (m === null) return null;
+  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5])) + (9 - serverOffsetHours) * 3_600_000;
+  const d = new Date(ms);
+  return `${HARI[d.getUTCDay()]} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} WIT`;
+}
+
+function durasi(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h === 0 ? `${m} menit` : m === 0 ? `${h} jam` : `${h} jam ${m} menit`;
+}
+
+/** Ambang peringatan "pasar segera tutup" (menit). */
+export const SESSION_WARN_MIN = 60;
+
+/**
+ * S4: pesan kartu posisi. null = pasar buka normal / sesi tak diketahui.
+ * closed = tidak bisa ditutup/diubah sekarang; soon = tutup ≤ 60 menit lagi.
+ */
+export function sessionNotice(
+  symbol: string,
+  state: SessionState,
+  serverOffsetHours: number,
+): { level: "closed" | "soon"; text: string } | null {
+  if (!state.known) return null;
+  if (!state.open && state.nextOpenServer !== null && state.opensInMin !== null) {
+    const wit = serverToWitLabel(state.nextOpenServer, serverOffsetHours) ?? state.nextOpenServer;
+    return {
+      level: "closed",
+      text: `Pasar ${symbol} sedang TUTUP — posisi belum bisa ditutup/diubah di MT5 ("Market closed"). Bisa lagi mulai ${wit} (${durasi(state.opensInMin)} lagi).`,
+    };
+  }
+  if (state.open && state.closesInMin !== null && state.closesInMin <= SESSION_WARN_MIN) {
+    return {
+      level: "soon",
+      text: `Pasar ${symbol} tutup ${durasi(state.closesInMin)} lagi. Setelah itu posisi tidak bisa ditutup/diubah sampai pasar buka lagi — putuskan sebelum tutup.`,
+    };
+  }
+  return null;
+}
+

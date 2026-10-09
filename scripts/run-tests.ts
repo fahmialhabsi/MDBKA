@@ -52,7 +52,7 @@ import { calculateTargets, secureReadiness } from "../src/lib/targetCalculator";
 import { accountMetrics, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage } from "../src/lib/groupPageView";
 import { candleChartModel, hourKey, LINE_COLOR, positionLines, spreadLabels, withLiveCandles } from "../src/lib/candleChart";
 import { readCandleCsv } from "../server/routes/candlesRoutes";
-import { sessionState, weeklyIntervals } from "../src/lib/sessionGuard";
+import { serverNowText, serverToWitLabel, sessionNotice, sessionState, weeklyIntervals } from "../src/lib/sessionGuard";
 import { parseSessionsCsv } from "../server/services/sessionReader";
 import { calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
@@ -7476,6 +7476,23 @@ test("601. Satpam Sesi S2: jam trading resmi broker (META.US OTB, EURUSD_ORB)", 
   assert(iv[0] === 1385 && iv[1] === 2820, `Minggu 23:05 bersambung s/d Senin 23:00: ${JSON.stringify(iv)}`);
   assert(!sessionState("XAUUSD", "2026.10.09 14:00:00", p.sessions).known, "simbol tanpa sesi = tidak diketahui");
   assert(readSrc("server/app.ts").includes('app.use("/api/sessions", createSessionRoutes())'), "route belum dipasang");
+});
+
+test("602. Satpam Sesi S4: kartu posisi — pasar tutup / segera tutup (META.US)", () => {
+  const ses = [1, 2, 3, 4, 5].map((day) => ({ symbol: "META.US", day, fromMin: 930, toMin: 1315 }));
+  assert(serverNowText(Date.UTC(2026, 9, 9, 12, 20, 5), 2) === "2026.10.09 14:20:05", serverNowText(Date.UTC(2026, 9, 9, 12, 20, 5), 2));
+  assert(serverToWitLabel("2026.10.09 15:30", 2) === "Jumat 22:30 WIT", String(serverToWitLabel("2026.10.09 15:30", 2)));
+  assert(serverToWitLabel("2026.10.12 15:30", 2) === "Senin 22:30 WIT", "Senin");
+  const tutup = sessionNotice("META.US", sessionState("META.US", "2026.10.09 14:20:00", ses), 2);
+  assert(tutup !== null && tutup.level === "closed" && tutup.text.includes("Jumat 22:30 WIT") && tutup.text.includes("1 jam 10 menit lagi"), JSON.stringify(tutup));
+  const segera = sessionNotice("META.US", sessionState("META.US", "2026.10.09 21:15:00", ses), 2);
+  assert(segera !== null && segera.level === "soon" && segera.text.includes("40 menit lagi"), JSON.stringify(segera));
+  assert(sessionNotice("META.US", sessionState("META.US", "2026.10.09 17:00:00", ses), 2) === null, "buka normal = tanpa pesan");
+  assert(sessionNotice("XAUUSD", sessionState("XAUUSD", "2026.10.09 17:00:00", ses), 2) === null, "sesi tak diketahui = tanpa pesan");
+  const libur = sessionNotice("META.US", sessionState("META.US", "2026.10.10 10:00:00", ses), 2);
+  assert(libur !== null && libur.text.includes("Senin 22:30 WIT"), JSON.stringify(libur));
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes("useTradeSessions(brokerId)") && dash.includes("holding-session-"), "kartu posisi belum memakai sesi");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

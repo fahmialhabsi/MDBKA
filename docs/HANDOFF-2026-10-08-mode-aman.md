@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **601** → test baru mulai **602**.
+Nomor test terakhir: **602** → test baru mulai **603**.
 
 ---
 
@@ -298,7 +298,9 @@ ESLint → pengguna build/test/commit → verifikasi.
 - S2 ✅ `server/services/sessionReader.ts` + `GET /api/sessions?broker=` + `src/lib/sessionGuard.ts` (`sessionState`: buka/tutup,
   tutup N menit lagi, buka lagi jam server; interval bersambung digabung; simbol tanpa sesi = tidak diketahui; test 601).
 - S3 (belum) satpam pemindai/analisa: tahan BELI/JUAL bila pasar tutup / tutup < N menit / saham menjelang akhir pekan.
-- S4 (belum) kartu posisi: "Pasar tutup — bisa ditutup mulai … WIT". S5 (belum) saham wajib ber-SL.
+- S4 ✅ kartu posisi monitor: kotak merah "PASAR TUTUP — bisa lagi mulai Jumat 22:30 WIT (… lagi)" / kuning "PASAR SEGERA TUTUP"
+  (≤60 mnt). Jam server dari quote TERSEGAR (quote simbol tutup basi). `sessionNotice`, `serverToWitLabel`, `useTradeSessions`; test 602.
+  (Dikerjakan sebelum S3 karena langsung membantu META.US.) S5 (belum) saham wajib ber-SL.
 
 ## 5c. BACKLOG tambahan (permintaan Fahmi 9 Okt) — dikerjakan SETELAH tahap inti (Satpam Kalender) selesai
 1. **Halaman per golongan** (Forex, Forex JPY, Logam, Minyak, Saham AS, Indeks, + Saham): tiap golongan punya tombol
