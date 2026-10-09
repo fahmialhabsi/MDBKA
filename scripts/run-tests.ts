@@ -6989,6 +6989,36 @@ test("574. pemindai memakai kalender broker aktif (K4b, readSrc)", () => {
   assert(panel.includes("API_BASE_URL"), "wajib API_BASE_URL");
 });
 
+test("575. catatan entry server ikut satpam berita pada jam entry (K4c)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "entries-berita-"));
+  try {
+    nfs.writeFileSync(npath.join(dir, "MDBKA_GBPUSD_H1.csv"), scanCsv(80));
+    const quotes = { getSymbols: () => ["GBPUSD"], getLatestBySymbol: () => [] };
+    const pos = (ticket: string) => ({
+      ticket, symbol: "GBPUSD", side: "BUY" as const, volume: 0.01,
+      priceOpen: 1.3, sl: 1.29, tp: 1.31, timeOpen: "2026.10.08 09:15:00",
+    });
+    let calls = 0;
+    const rusak = createTradeEntryLog({
+      file: npath.join(dir, "a.jsonl"), broker: "finex", commonDir: dir, quotes,
+      getEquity: () => 10000, getFxRates: () => null,
+      getNewsEvents: () => { calls++; throw new Error("kalender terkunci"); },
+    });
+    rusak.ingest([]);
+    const r = rusak.ingest([pos("1")]);
+    assert(calls === 1 && r.length === 1 && r[0].scan !== null && r[0].scan.status !== "DATA", `gagal baca kalender tidak boleh blok: ${JSON.stringify(r[0]?.scan)}`);
+    const src = readSrc("server/services/tradeEntryLog.ts");
+    assert(src.includes("newsEvents: newsEvents(),") && src.includes("newsNow: timeOpen,"), "berita belum diteruskan ke pemindai");
+    const idx = readSrc("server/index.ts");
+    assert(idx.includes("getNewsEvents: () => readCalendarForBroker(resolveCommonFilesDir(), src.broker)?.events ?? null,"), "kalender belum dipasang di server/index.ts");
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

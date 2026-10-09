@@ -9,6 +9,7 @@ import type { ExchangeRates } from "../../src/services/fxRateService";
 import type { BrokerId } from "../../src/types/broker";
 import { collectCandleItems, type CandleSource } from "../routes/candlesRoutes";
 import type { BrokerPosition } from "../types/positions";
+import type { NewsEventLike } from "../../src/lib/newsGuard";
 
 /**
  * Langkah 4b (Mode Aman, 8 Okt 2026) — catatan entry posisi.
@@ -59,6 +60,11 @@ export interface TradeEntryLogOptions {
    * saat jeda tercatat "LOLOS" dan mencemari bukti n>=20.
    */
   readonly getPauseReason?: (serverTime: string) => string | null;
+  /**
+   * Satpam Kalender K4c (9 Okt 2026): event kalender broker ini (jam
+   * server); dinilai pada jam entry (timeOpen). null / gagal = tanpa satpam.
+   */
+  readonly getNewsEvents?: () => readonly NewsEventLike[] | null;
   readonly now?: () => Date;
 }
 
@@ -100,6 +106,16 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
     }
   };
 
+  // Gagal baca kalender → tanpa satpam berita (catatan tetap ditulis).
+  const newsEvents = (): readonly NewsEventLike[] | null => {
+    if (opts.getNewsEvents === undefined) return null;
+    try {
+      return opts.getNewsEvents();
+    } catch {
+      return null;
+    }
+  };
+
   const scanFor = (
     symbol: string,
     equity: number | null,
@@ -135,6 +151,9 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       // Langkah D: dinilai terhadap posisi LAIN yang sudah terbuka.
       openPositions: others,
       pauseReason: pauseAt(timeOpen),
+      // K4c: berita Tinggi ±30 mnt dinilai pada jam server entry.
+      newsEvents: newsEvents(),
+      newsNow: timeOpen,
     });
     return {
       status: row.status,
