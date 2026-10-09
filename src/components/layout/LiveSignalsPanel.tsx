@@ -26,7 +26,7 @@ export function LiveSignalsPanel({ symbol, result, bid }: LiveSignalsPanelProps)
         : "text-amber-400";
 
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs whitespace-nowrap">
+    <div className="flex max-w-[300px] shrink-0 flex-col gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs whitespace-nowrap">
       <div className="flex items-center justify-between gap-3">
         <span className="font-semibold text-white">{symbol}</span>
         <span className={`flex items-center gap-1 font-bold ${color}`}>
@@ -44,7 +44,7 @@ export function LiveSignalsPanel({ symbol, result, bid }: LiveSignalsPanelProps)
         <span>B: {bid === null ? "-" : bid}</span>
         <span>Skor {score}/5</span>
       </div>
-      <div className="text-[10px] text-slate-400">{signalReason(result)}</div>
+      <div className="whitespace-normal text-[10px] leading-4 text-slate-400">{signalReason(result)}</div>
     </div>
   );
 }

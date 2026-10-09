@@ -6825,8 +6825,8 @@ test("564. golongan risiko: penetapan Fahmi per golongan, akhiran _ORB/.DEC, tak
   assert(cap("GBPUSD") === 35000 && cap("AUDCHF_ORB") === 35000, "forex Rp35 rb");
   assert(riskGroupOf("CADJPY_ORB").id === "FOREX_JPY" && cap("USDJPY") === 35000, "JPY Rp35 rb");
   assert(cap("XTIUSD") === 150000 && cap("CLU") === 150000, "minyak Rp150 rb");
-  assert(cap("XAUUSD_ORB") === 150000 && riskGroupOf("XAGUSD").id === "LOGAM", "logam Rp150 rb");
-  assert(cap("JP225") === 150000 && riskGroupOf("US100.DEC").id === "INDEKS", "indeks Rp150 rb");
+  assert(cap("XAUUSD_ORB") === 500000 && riskGroupOf("XAGUSD").id === "LOGAM", "logam Rp500 rb (9 Okt)");
+  assert(cap("JP225") === 500000 && riskGroupOf("US100.DEC").id === "INDEKS", "indeks Rp500 rb (9 Okt)");
   assert(cap("#NVDA") === 50000 && cap("META.US") === 50000, "saham AS Rp50 rb");
   assert(cap("#BMW") === null && cap("#700") === null && cap("#XYZ") === null, "saham lain ditahan");
   assert(cap("USDHKD") === null && cap("GBXUSD") === null, "forex tidak lazim ditahan");

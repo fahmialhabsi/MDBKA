@@ -885,7 +885,7 @@ export default function App() {
               Merangkak Dari Bawah Ke Atas
             </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3">
             <ServerClock
               brokerId={activeBrokerId}
               quoteServerTime={liveQuote?.timestamp ?? null}

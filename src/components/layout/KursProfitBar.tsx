@@ -25,7 +25,7 @@ export function KursProfitBar({
   return (
     <div
       data-testid="kurs-profit-bar"
-      className="hidden min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-400 md:mx-4 md:block"
+      className="hidden min-w-[280px] max-w-[460px] flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-400 md:block"
     >
       <p>
         Kurs USD→Rp:{" "}

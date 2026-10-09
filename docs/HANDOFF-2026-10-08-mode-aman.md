@@ -143,9 +143,9 @@ Nomor test terakhir: **583** → test baru mulai **584**.
 11. **Batas risiko per golongan (penetapan Fahmi 8 Okt)** — dipakai yang lebih kecil dengan 1% equity; tanpa kurs = ditahan:
     | Golongan | Batas | | Golongan | Batas |
     |---|---|---|---|---|
-    | Forex (tanpa JPY) | Rp35 rb | | Indeks (US30/100/500, DE30, UK100, HK50, JP225) | Rp150 rb |
+    | Forex (tanpa JPY) | Rp35 rb | | Indeks (US30/100/500, DE30, UK100, HK50, JP225) | **Rp500 rb** (sejak 9 Okt; dulu 150 rb) |
     | Forex JPY | Rp35 rb | | Saham AS (# Finex, .US OTB) | Rp50 rb |
-    | Logam (XAU, XAG) | Rp150 rb | | Forex tidak lazim (USDEUR, USDGBP, USDHKD, GBXUSD) | ditahan |
+    | Logam (XAU, XAG) | **Rp500 rb** (sejak 9 Okt; dulu 150 rb) | | Forex tidak lazim (USDEUR, USDGBP, USDHKD, GBXUSD) | ditahan |
     | Minyak (XTIUSD, CLU) | Rp150 rb | | Saham Eropa & HK (#ADS…#763) | ditahan |
     Ubah angka hanya di `RISK_GROUPS` (`src/lib/riskGroup.ts`). Tampil di layar: panel "Batas risiko per golongan" di bawah pemindai.
 

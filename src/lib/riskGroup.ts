@@ -32,9 +32,10 @@ export const RISK_GROUPS: Readonly<Record<RiskGroupId, RiskGroup>> = {
   FOREX: { id: "FOREX", label: "Forex", capIdr: 35_000 },
   FOREX_JPY: { id: "FOREX_JPY", label: "Forex JPY", capIdr: 35_000 },
   FOREX_TIDAK_LAZIM: { id: "FOREX_TIDAK_LAZIM", label: "Forex tidak lazim", capIdr: null },
-  LOGAM: { id: "LOGAM", label: "Logam", capIdr: 150_000 },
+  // 9 Okt 2026: Logam & Indeks Rp150 rb → Rp500 rb (penetapan Fahmi; lot 0,01 risikonya ±Rp325–442 rb).
+  LOGAM: { id: "LOGAM", label: "Logam", capIdr: 500_000 },
   MINYAK: { id: "MINYAK", label: "Minyak", capIdr: 150_000 },
-  INDEKS: { id: "INDEKS", label: "Indeks", capIdr: 150_000 },
+  INDEKS: { id: "INDEKS", label: "Indeks", capIdr: 500_000 },
   SAHAM_AS: { id: "SAHAM_AS", label: "Saham AS", capIdr: 50_000 },
   SAHAM_LAIN: { id: "SAHAM_LAIN", label: "Saham Eropa & Hong Kong", capIdr: null },
   LAINNYA: { id: "LAINNYA", label: "Belum digolongkan", capIdr: null },
