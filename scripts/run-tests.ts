@@ -47,6 +47,7 @@ import { calendarResponse } from "../server/routes/calendarRoutes";
 import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
 import { buildHistoryView } from "../server/services/historyView";
 import { accountKind, historyForLogin, listHistoryAccounts } from "../server/routes/historyRoutes";
+import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
 import { formatClock12, serverUtcOffsetHours, WIT_UTC_OFFSET } from "../src/lib/serverClock";
@@ -7223,6 +7224,21 @@ test("587. pemindai menyimpan angka order (plan) hanya untuk LOLOS (butir 3, P1)
   assert(!held.includes("plan"), "baris ditahan tidak boleh membawa angka order");
   const page = readSrc("src/components/history/HistoryPage.tsx");
   assert(page.includes('const TIGHT = new Set(["Deal", "Type", "Direction", "Volume", "Commission"]);') && page.includes("min-w-[1100px]"), "kolom History dirapatkan");
+});
+
+test("588. halaman detail sinyal: URL, hitung ulang semua satpam, Salin SL/TP hanya bila Lolos (butir 3, P2)", () => {
+  const url = signalPageUrl("finex", "EURUSD", 4965.95);
+  assert(url === "/?halaman=sinyal&broker=finex&symbol=EURUSD&equity=4965.95", url);
+  const p = parseSignalPage(url.slice(1));
+  assert(p !== null && p.broker === "finex" && p.symbol === "EURUSD" && p.equity === 4965.95, JSON.stringify(p));
+  assert(parseSignalPage("?halaman=sinyal&broker=x&symbol=EURUSD") === null && parseSignalPage("?halaman=sinyal&broker=finex") === null, "parameter wajib");
+  assert(parseSignalPage("?halaman=sinyal&broker=orbitraderberjangka&symbol=GBPUSD_ORB&equity=abc")?.equity === 0, "equity rusak = 0");
+  const page = readSrc("src/components/analysis/SignalDetailPage.tsx");
+  for (const k of ["openPositions: open", "pauseReason: pause.paused", "newsEvents:", "referenceCandleMs: reference", "fxRates: rates"]) {
+    assert(page.includes(k), `satpam hilang di halaman detail: ${k}`);
+  }
+  assert(page.includes('data-testid="detail-copy-sl"') && page.includes('data-testid="detail-copy-tp"') && page.includes('data-testid="signal-not-lolos"'), "tombol salin / peringatan");
+  assert(readSrc("src/main.tsx").includes("parseSignalPage(window.location.search)"), "halaman belum dipasang");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
