@@ -45,6 +45,7 @@ import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
 import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
+import { buildHistoryView } from "../server/services/historyView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
 import { formatClock12, serverUtcOffsetHours, WIT_UTC_OFFSET } from "../src/lib/serverClock";
 import {
@@ -7125,6 +7126,32 @@ test("582. US100 Finex = $20/poin/lot: cocok trade nyata MT5 (perbaikan 9 Okt)",
   assert(us30 !== null && us30.value === 2.47, `US30 tetap benar: ${JSON.stringify(us30)}`);
   const preset = applyBrokerPreset(makeEmptyBroker(), "US100", "finex");
   assert(preset.pointValue === 20 && preset.contractSize === 20, `preset analisa: ${preset.pointValue}/${preset.contractSize}`);
+});
+
+test("583. tabel History + Rupiah kurs tanggal transaksi + Sisa setoran (H2a, data Finex demo nyata)", () => {
+  const h = [
+    "DealTicket,PositionId,OrderTicket,ServerTime,Symbol,Type,Entry,Volume,Price,Commission,Swap,Profit,Fee,Magic,Comment,Login,Company,AccountCurrency",
+    "456458599,0,0,2026.09.27 07:52:23,Bonus,BALANCE,IN,0.00,0,0.00,0.00,5000.00,0.00,0,Demo account balance,61823011,PT,USD",
+    "1,10,10,2026.10.08 02:24:00,XTIUSD,SELL,IN,0.01,88.20,-0.01,0.00,0.00,0.00,0,,61823011,PT,USD",
+    "2,10,11,2026.10.08 04:47:04,XTIUSD,BUY,OUT,0.01,89.00,0.00,0.00,-8.00,0.00,0,[sl 89.00],61823011,PT,USD",
+    "3,20,20,2026.10.08 10:17:07,AUDCHF,SELL,IN,0.01,0.57893,-0.01,0.00,0.00,0.00,0,,61823011,PT,USD",
+    "4,20,21,2026.10.08 10:24:42,AUDCHF,BUY,OUT,0.01,0.57947,0.00,0.00,-0.65,0.00,0,,61823011,PT,USD",
+  ].join("\r\n");
+  const book = { "2026-09-25": 17913.9, "2026-10-08": 17920 };
+  const v = buildHistoryView(parseHistoryCsv(h), book);
+  assert(v.rows.length === 5 && v.missingRates === 0 && v.currency === "USD", JSON.stringify(v.rows.length));
+  const bonus = v.rows[0];
+  assert(bonus.kurs?.date === "2026-09-25" && bonus.profitIdr === 89569500, `bonus Sabtu → kurs Jumat: ${JSON.stringify(bonus)}`);
+  const xti = v.rows[2];
+  assert(xti.changePct === -0.91 && xti.profitIdr === -143360, `XTIUSD: ${JSON.stringify(xti)}`);
+  const aud = v.rows[4];
+  assert(aud.profitIdr === -11648 && v.rows[3].commissionIdr === -179, `AUDCHF Rp: ${aud.profitIdr} / ${v.rows[3].commissionIdr}`);
+  assert(v.totals.net === -8.67 && v.totals.profit === -8.65 && v.totals.commission === -0.02 && v.totals.deposit === 5000 && v.totals.balance === 4991.33, JSON.stringify(v.totals));
+  assert(v.totalsIdr !== null && v.totalsIdr.net === -155366 && v.totalsIdr.deposit === 89569500, JSON.stringify(v.totalsIdr));
+  assert(v.sisa !== null && v.sisa.sisaIdr === 89569500 - 155366 && v.sisa.pct === -0.17, JSON.stringify(v.sisa));
+  const live = buildHistoryView(parseHistoryCsv(
+    "h\r\n1,0,0,2026.09.29 03:47:04,External,BALANCE,IN,0.00,0,0.00,0.00,11.11,0.00,0,D-1: IDR 200000.00,91811209,PT,USD"), {});
+  assert(live.rows[0].profitIdr === 200000 && live.missingRates === 1 && live.totalsIdr === null && live.sisa === null, "setoran Rupiah asli; tanpa kurs = null jujur");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
