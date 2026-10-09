@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **579** → test baru mulai **580**.
+Nomor test terakhir: **581** → test baru mulai **582**.
 
 ---
 
@@ -263,7 +263,7 @@ mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: N
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **580**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **582**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -321,6 +321,10 @@ ESLint → pengguna build/test/commit → verifikasi.
    (Balance Rp = jumlah semua baris, bukan saldo USD × kurs hari ini — beri catatan beda keduanya). Perlu sumber kurs
    historis ECB (mis. `eurofxref-hist.xml` / per hari) — `fxRoutes.ts` sekarang hanya kurs harian terbaru.
    Setoran Finex live yang aslinya Rupiah (komentar deal "D-1: IDR 200000.00") tampilkan nilai Rupiah asli.
+   Rencana langkah: **H1 ✅** buku kurs `server/services/ecbHistory.ts` (ECB hist-90d → `data/fx/ecb-usdidr.json`, digabung
+   tidak pernah dihapus; `usdIdrOn` = kurs tanggal transaksi, akhir pekan → hari kerja sebelumnya maks 7 hari; test 580–581)
+   · H2 endpoint History per akun + Rupiah + ringkasan + Sisa setoran · H3 halaman tombol Finex/OTB + tab Live/Demo
+   · H4 kolom S/L & T/P (tambah 2 kolom di AKHIR CSV MDBKAHistoryService, compile ulang 2 terminal) — disetujui Fahmi.
    Contoh uji Finex demo 61823011: Deposit $5.000 (bonus 27 Sep), Profit −$10,04, Komisi −$0,09, Balance $4.989,96;
    AUDCHF 8 Okt: komisi −$0,01, profit −$0,65 → kolom Rp per kurs 8 Okt.
    **Kotak "Sisa setoran" (permintaan 9 Okt)**: Sisa setoran (Rp) = Setoran (Rp) **+** Hasil bersih (Rp), dengan

@@ -44,6 +44,7 @@ import {
 import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
+import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
 import { formatClock12, serverUtcOffsetHours, WIT_UTC_OFFSET } from "../src/lib/serverClock";
 import {
@@ -7084,6 +7085,36 @@ test("579. forex ditahan bila berita Tinggi dalam 3 jam ke depan (penetapan 9 Ok
   assert(sim === null, "windowMinutes eksplisit = simetris");
 });
 
+test("580. buku kurs ECB harian: parse 90 hari, gabung, kurs tanggal transaksi (H1)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const xml =
+    "<gesmes:Envelope><Cube>" +
+    "<Cube time='2026-10-08'><Cube currency='USD' rate='1.1186'/><Cube currency='IDR' rate='20045.31'/></Cube>" +
+    "<Cube time=\"2026-09-25\"><Cube currency=\"USD\" rate=\"1.1403\"/><Cube currency=\"IDR\" rate=\"20427.22\"/></Cube>" +
+    "<Cube time='2026-09-24'><Cube currency='USD' rate='1.14'/></Cube>" +
+    "</Cube></gesmes:Envelope>";
+  const book = parseEcbHistXml(xml);
+  assert(book["2026-10-08"] === 17920 && book["2026-09-25"] === 17913.9, JSON.stringify(book));
+  assert(book["2026-09-24"] === undefined, "hari tanpa IDR harus dilewati");
+  const sabtu = usdIdrOn(book, "2026.09.27 07:52:23");
+  assert(sabtu !== null && sabtu.date === "2026-09-25" && sabtu.rate === 17913.9, "akhir pekan = hari kerja sebelumnya");
+  assert(usdIdrOn(book, "2026.10.08 04:47:04")?.rate === 17920, "tanggal tepat");
+  assert(usdIdrOn(book, "2026.11.20 10:00:00") === null, "lebih dari 7 hari = tidak ada");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "ecb-"));
+  try {
+    const file = npath.join(dir, "fx", "ecb-usdidr.json");
+    mergeUsdIdrBook(file, { "2026-07-01": 16000 });
+    const merged = mergeUsdIdrBook(file, book);
+    assert(merged["2026-07-01"] === 16000 && merged["2026-10-08"] === 17920, "kurs lama harus tetap");
+    assert(Object.keys(readUsdIdrBook(file)).join() === "2026-07-01,2026-09-25,2026-10-08", "urut & tersimpan");
+    assert(readUsdIdrBook(npath.join(dir, "tidak-ada.json")) !== null, "file hilang = buku kosong");
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
@@ -10591,6 +10622,29 @@ test("472. kanonis + profil preservasi nama bertitik/bertanda", () => {
   } catch (e) {
     failed += 1;
     console.log(`FAIL - 550. jadwal MFE/MAE: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  try {
+    const os = require("node:os") as unknown as { tmpdir(): string };
+    const nfs = require("node:fs") as unknown as typeof import("node:fs");
+    const npath = require("node:path") as unknown as typeof import("node:path");
+    const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "ecb2-"));
+    try {
+      const file = npath.join(dir, "ecb-usdidr.json");
+      mergeUsdIdrBook(file, { "2026-10-08": 17920 });
+      const gagal = await refreshUsdIdrBook(file, (async () => { throw new Error("offline"); }) as unknown as typeof fetch);
+      assert(gagal["2026-10-08"] === 17920, "offline harus tetap pakai buku lama");
+      const ok = await refreshUsdIdrBook(file, (async () => ({ ok: true, text: async () =>
+        "<Cube><Cube time='2026-10-09'><Cube currency='USD' rate='1.12'/><Cube currency='IDR' rate='20000'/></Cube></Cube>" })) as unknown as typeof fetch);
+      assert(ok["2026-10-09"] === 17857.14 && ok["2026-10-08"] === 17920, JSON.stringify(ok));
+    } finally {
+      nfs.rmSync(dir, { recursive: true, force: true });
+    }
+    passed += 1;
+    console.log("ok - 581. buku kurs ECB: gagal ambil → buku lama apa adanya (H1)");
+  } catch (e) {
+    failed += 1;
+    console.log(`FAIL - 581. buku kurs ECB: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   console.log(
