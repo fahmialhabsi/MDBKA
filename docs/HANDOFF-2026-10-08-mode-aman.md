@@ -215,6 +215,10 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 - **V1 (9 Okt, berjalan)** `MDBKACalendarService.mq5` juga menulis `MDBKA_Specs_<login>.csv` (Symbol, ContractSize, TickSize, TickValue, Digits,
   VolumeMin, VolumeStep, SwapMode, SwapLong, SwapShort, ProfitCurrency, MarginCurrency, Company, Generated). Rencana: V2 pembaca + bandingkan dg
   spec32 (beda → tandai & tahan sinyal = S5 otomatis), lalu S5 saham wajib ber-SL.
+- ✅ **V1 terpasang 10 Okt 00:55 WIT** (Finex 82 simbol, OTB 68). **Cek manual Claude: Contract size SEMUA 150 simbol MT5 = spec32 (0 beda)**,
+  termasuk 8 simbol yang dulu "meragukan" (XAGUSD 5000, XAUUSD 100, AMAZON/APPLE/BOA.US 1, CSCO/FB/PFE/GOOG.US 100) → daftar "meragukan" SELESAI.
+  Volume min: Finex 0,01, OTB 0,10. SwapMode: OTB saham = 5 (persen dari harga sekarang); Finex semua 0 (perlu dicek artinya) → catatan swap.
+  V2 (belum): pembaca server + pembanding otomatis (agar perubahan spesifikasi broker kelak langsung ketahuan & sinyal ditahan).
 
 - **META.US OTB** (BUY 0,10 @741,07, tanpa SL, −$2,01 ≈ −Rp36 rb pada 8 Okt malam) tidak bisa ditutup: "Market closed" — saham AS hanya bisa ditransaksikan saat bursa AS buka (±22:30–05:00 WIT, cek MT5 Specification → Sessions). Keputusan tutup/pasang SL di tangan Fahmi.
 
