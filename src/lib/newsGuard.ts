@@ -7,6 +7,7 @@
  * "YYYY.MM.DD HH:MM:SS") → tanpa konversi zona waktu. Kalender tidak ada
  * = tidak ada tahanan (satpam diabaikan). MODUL MURNI (CJS-safe).
  */
+import type { AnalysisResult } from "../types/analysis";
 import { parseSnapshotTime } from "./dataFreshness";
 import { baseRiskSymbol, riskGroupOf } from "./riskGroup";
 
@@ -92,4 +93,32 @@ export function findNewsHold(
     };
   }
   return best;
+}
+
+/**
+ * K5: tahan hasil analisa BELI/JUAL yang dekat berita Tinggi (sama seperti
+ * tahanan jeda/korelasi: TUNGGU, SL/TP/lot kosong). Tanpa kalender = tetap.
+ */
+export function applyNewsHold<T extends AnalysisResult>(
+  result: T,
+  symbol: string,
+  serverNow: string | null,
+  events: readonly NewsEventLike[] | null,
+): T {
+  if (result.decision !== "BELI" && result.decision !== "JUAL") return result;
+  const hold = findNewsHold(symbol, serverNow ?? "", events);
+  if (hold === null) return result;
+  return {
+    ...result,
+    decision: "TUNGGU",
+    heldBy: "berita",
+    heldDecision: result.decision,
+    heldReason: hold.reason,
+    stopLoss: null,
+    takeProfit: null,
+    suggestedLot: null,
+    warnings: [`Mode Aman: ${hold.reason}. Setup ditahan.`, ...result.warnings],
+    explanation:
+      "Mode Aman: arah sudah kompak, tetapi ada berita ekonomi penting dalam 30 menit. Harga bisa melonjak tiba-tiba dan menyapu SL; tunggu sampai berita lewat.",
+  };
 }

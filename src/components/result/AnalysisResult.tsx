@@ -665,6 +665,26 @@ function BeginnerGuide({ result }: { result: ResultType }) {
     );
   }
 
+  // Satpam Kalender K5: dekat berita ekonomi Tinggi (±30 menit).
+  if (result.decision === "TUNGGU" && result.heldBy === "berita") {
+    return (
+      <div data-testid="held-berita" className="rounded-2xl border border-orange-400/25 bg-orange-400/5 p-5">
+        <p className="font-semibold text-orange-200">
+          Artinya gampang: sebentar lagi (atau baru saja) ada berita ekonomi
+          penting. JANGAN entry dulu.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+          <li>{result.heldReason ?? "Ditahan: dekat berita Tinggi"}.</li>
+          <li>
+            Saat berita rilis, harga bisa melonjak dan spread melebar sehingga
+            SL tersapu walau arah analisa benar.
+          </li>
+          <li>Tunggu sampai 30 menit setelah jam rilis, lalu analisa ulang.</li>
+        </ul>
+      </div>
+    );
+  }
+
   // Langkah 1c: arah kompak, tapi searah posisi terbuka (taruhan ganda).
   if (result.decision === "TUNGGU" && result.heldBy === "korelasi") {
     return (

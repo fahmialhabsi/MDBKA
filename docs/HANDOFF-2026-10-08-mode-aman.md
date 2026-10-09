@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **575** → test baru mulai **576**.
+Nomor test terakhir: **576** → test baru mulai **577**.
 
 ---
 
@@ -260,7 +260,7 @@ mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: N
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **576**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **577**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -274,7 +274,7 @@ ESLint → pengguna build/test/commit → verifikasi.
 - Rencana langkah: K1 ✅ service · K2a ✅ pembaca · K2b ✅ endpoint `GET /api/calendar?broker=` (`server/routes/calendarRoutes.ts`, test 571) · K3 ✅ modul murni
   `src/lib/newsGuard.ts` (`newsCurrenciesOf`, `findNewsHold`, `NEWS_WINDOW_MINUTES = 30`; test 572) · K4 ✅ pemindai status `DITAHAN_BERITA` (lib + label "Dekat berita"; urutan jeda → berita → taruhan ganda; test 573)
   · K4b ✅ kalender ke `SymbolScannerPanel` (fetch `/api/calendar` per refresh 60 dtk; jam = quote server TERBARU broker; catatan bila tidak tersedia; test 574)
-  · K4c ✅ pencatat entry server (`tradeEntryLog` opsi `getNewsEvents`, dipasang di `server/index.ts`; jam = timeOpen; gagal baca = tanpa satpam; test 575) · K5 Hasil analisa `heldBy: "berita"`
+  · K4c ✅ pencatat entry server (`tradeEntryLog` opsi `getNewsEvents`, dipasang di `server/index.ts`; jam = timeOpen; gagal baca = tanpa satpam; test 575) · K5 ✅ Hasil analisa `heldBy: "berita"` (`applyNewsHold` di `newsGuard.ts`, hook `useNewsCalendar`, kotak oranye `held-berita`, urutan jeda → berita → taruhan ganda; test 576)
   · K6 daftar berita Tinggi mendatang di layar.
 
 ## 5c. BACKLOG tambahan (permintaan Fahmi 9 Okt) — dikerjakan SETELAH tahap inti (Satpam Kalender) selesai
@@ -333,5 +333,5 @@ Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi 
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
 > lalu minus". Time-stop 3 jam hanya Forex & Forex JPY. Langkah berikutnya: kumpulkan trade Mode Aman (langkah 1) dan
-> lanjutkan Satpam Kalender (bagian 5b, mulai K5). Backlog halaman golongan/portofolio saham/halaman pemindai di 5c.
+> lanjutkan Satpam Kalender (bagian 5b, mulai K6). Backlog halaman golongan/portofolio saham/halaman pemindai di 5c.
 > Setiap langkah selesai, jelaskan dulu dalam bahasa awam (GUARD no. 11) sebelum saya commit.

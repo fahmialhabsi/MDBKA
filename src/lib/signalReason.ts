@@ -21,6 +21,7 @@ export function signalReason(result: AnalysisResult): string {
   if (result.heldBy === "risiko") return result.heldReason ?? "Ditahan: risiko lot minimum";
   if (result.heldBy === "korelasi") return result.heldReason ?? "Ditahan: taruhan ganda";
   if (result.heldBy === "jeda") return result.heldReason ?? "Jeda: 3 kali rugi berturut-turut";
+  if (result.heldBy === "berita") return result.heldReason ?? "Ditahan: dekat berita Tinggi";
   if (result.decision === "TUNGGU") return "Skor belum kompak";
   return result.riskStatus === "MEMENUHI batas risiko"
     ? "Lolos biaya & risiko · belum terbukti"

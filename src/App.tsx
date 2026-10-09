@@ -28,6 +28,8 @@ import { useBrokerPositions } from "./hooks/useBrokerPositions";
 import { applyDoubleBetHold } from "./lib/correlationGuard";
 import { applyLossPauseHold } from "./lib/lossStreakGuard";
 import { useLossPause } from "./hooks/useLossPause";
+import { useNewsCalendar } from "./hooks/useNewsCalendar";
+import { applyNewsHold } from "./lib/newsGuard";
 import { useEquityStream } from "./hooks/useEquityStream";
 import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
 import { SwapLogPanel } from "./components/swaplog/SwapLogPanel";
@@ -494,16 +496,24 @@ export default function App() {
   const { positions: openPositionsAll } = useBrokerPositions(activeBrokerId);
   // Langkah F: jeda 24 jam setelah 3 rugi beruntun (didahulukan).
   const lossPause = useLossPause(activeBrokerId, liveQuote?.timestamp ?? null);
+  // K5: dekat berita Tinggi (±30 mnt) → tahan; urutan jeda → berita → ganda.
+  const newsEvents = useNewsCalendar(activeBrokerId);
+  const newsMinute = liveQuote?.timestamp?.slice(0, 16) ?? null;
   const shownResult = useMemo(
     () =>
       result === null
         ? null
         : applyDoubleBetHold(
-            applyLossPauseHold(result, lossPause),
+            applyNewsHold(
+              applyLossPauseHold(result, lossPause),
+              market.symbol,
+              newsMinute === null ? null : `${newsMinute}:00`,
+              newsEvents,
+            ),
             market.symbol,
             openPositionsAll,
           ),
-    [result, market.symbol, openPositionsAll, lossPause],
+    [result, market.symbol, openPositionsAll, lossPause, newsEvents, newsMinute],
   );
 
   // Langkah E: klik status LOLOS di pemindai → pilih simbol (data dimuat

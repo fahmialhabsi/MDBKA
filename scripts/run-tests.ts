@@ -44,7 +44,7 @@ import {
 import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
-import { findNewsHold, newsCurrenciesOf, NEWS_WINDOW_MINUTES } from "../src/lib/newsGuard";
+import { applyNewsHold, findNewsHold, newsCurrenciesOf, NEWS_WINDOW_MINUTES } from "../src/lib/newsGuard";
 import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
@@ -7017,6 +7017,24 @@ test("575. catatan entry server ikut satpam berita pada jam entry (K4c)", () => 
   } finally {
     nfs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("576. Hasil analisa ditahan dekat berita Tinggi (K5)", () => {
+  const ev = [{ serverTime: "2026.10.14 15:30:00", currency: "USD", importance: "HIGH", event: "CPI m/m" }];
+  const base = {
+    decision: "BELI", stopLoss: 1.1, takeProfit: 1.2, suggestedLot: 0.01, warnings: ["w"], explanation: "x",
+  } as unknown as Parameters<typeof applyNewsHold>[0];
+  const h = applyNewsHold(base, "EURUSD", "2026.10.14 15:10:00", ev);
+  assert(h.decision === "TUNGGU" && h.heldBy === "berita" && h.heldDecision === "BELI", JSON.stringify(h));
+  assert(h.stopLoss === null && h.takeProfit === null && h.suggestedLot === null, "SL/TP/lot harus kosong");
+  assert(String(h.heldReason).includes("CPI m/m") && signalReason(h).includes("CPI m/m"), "alasan berita");
+  assert(applyNewsHold(base, "EURUSD", "2026.10.14 16:01:00", ev) === base, "lewat jendela harus tetap");
+  assert(applyNewsHold(base, "EURUSD", "2026.10.14 15:10:00", null) === base, "tanpa kalender harus tetap");
+  assert(applyNewsHold(base, "AUDJPY", "2026.10.14 15:10:00", ev) === base, "mata uang lain harus tetap");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("applyNewsHold(\n              applyLossPauseHold(") || app.includes("applyNewsHold(\r\n              applyLossPauseHold("), "urutan jeda → berita → ganda");
+  assert(readSrc("src/components/result/AnalysisResult.tsx").includes('data-testid="held-berita"'), "kotak berita belum ada");
+  assert(readSrc("src/hooks/useNewsCalendar.ts").includes("/api/calendar?broker=${brokerId}"), "hook kalender");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
