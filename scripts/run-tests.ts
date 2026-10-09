@@ -45,6 +45,7 @@ import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
+import { formatClock12, serverUtcOffsetHours, WIT_UTC_OFFSET } from "../src/lib/serverClock";
 import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
@@ -7053,6 +7054,21 @@ test("577. daftar berita Tinggi mendatang (K6)", () => {
   assert(upcomingHighNews(null, "2026.10.14 15:45:00").length === 0 && upcomingHighNews(ev, null).length === 0, "tanpa data");
   const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
   assert(panel.includes('data-testid="scan-news-upcoming"') && panel.includes("upcomingHighNews(newsEvents, nowServer)"), "daftar belum tampil");
+});
+
+test("578. jam server MT5 & WIT 12 jam di header", () => {
+  const utc = Date.UTC(2026, 9, 9, 19, 0, 15); // 9 Okt 19:00:15 UTC
+  assert(WIT_UTC_OFFSET === 9, "WIT = UTC+9");
+  assert(formatClock12(utc, 3) === "10:00:15 PM · Jum 9 Okt", formatClock12(utc, 3));
+  assert(formatClock12(utc, 9) === "04:00:15 AM · Sab 10 Okt", formatClock12(utc, 9));
+  assert(formatClock12(Date.UTC(2026, 9, 9, 9, 0, 0), 3) === "12:00:00 PM · Jum 9 Okt", "tengah hari = 12 PM");
+  assert(formatClock12(Date.UTC(2026, 9, 9, 21, 5, 0), 3) === "12:05:00 AM · Sab 10 Okt", "tengah malam = 12 AM");
+  assert(serverUtcOffsetHours("finex", "2026.10.09 22:00:10", utc) === 3, "deteksi Finex dari quote segar");
+  assert(serverUtcOffsetHours("orbitraderberjangka", "2026.10.09 21:00:14", utc) === 2, "deteksi OTB");
+  assert(serverUtcOffsetHours("finex", "2026.10.09 21:00:14", utc) === 2, "pergantian jam musim ikut terdeteksi");
+  assert(serverUtcOffsetHours("finex", "2026.10.09 21:40:00", utc) === 3, "quote basi → bawaan");
+  assert(serverUtcOffsetHours("orbitraderberjangka", null, utc) === 2 && serverUtcOffsetHours("finex", "2026.10.07 22:00:15", utc) === 3, "tanpa/lama → bawaan");
+  assert(readSrc("src/App.tsx").includes("<ServerClock"), "jam belum di header");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

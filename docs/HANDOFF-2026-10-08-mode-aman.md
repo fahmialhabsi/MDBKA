@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **577** → test baru mulai **578**.
+Nomor test terakhir: **578** → test baru mulai **579**.
 
 ---
 
@@ -23,6 +23,9 @@ Nomor test terakhir: **577** → test baru mulai **578**.
    Bila ragu, audit dulu, tanya pengguna.
 9. MDBKA **tidak pernah menempatkan/menutup order**. Semua sinyal (breakeven, time-stop) hanya tampilan; eksekusi manual di MT5.
 10. Bukan nasihat keuangan — keputusan trade tetap di tangan Fahmi.
+10b. **Sistem yang merencanakan, bukan Fahmi** (penetapan 9 Okt): Fahmi belum punya ilmu/pengalaman membaca berita &
+    jadwal pasar → setiap aturan (berita, jam, korelasi, dll.) harus **otomatis menahan/memberi aba-aba**, bukan sekadar
+    informasi yang harus Fahmi tafsirkan sendiri. Daftar/teks hanya pelengkap penjelasan.
 11. **Setiap langkah selesai WAJIB disertai penjelasan bahasa awam (tidak teknis)**, sebelum pengguna commit:
     - **Apa yang dibuat** — diibaratkan benda/alat sehari-hari (mis. "kalkulator rekaman ulang").
     - **Contoh nyata dari trade Fahmi sendiri** (simbol, angka, Rupiah) agar langsung terbayang.
@@ -260,7 +263,7 @@ mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: N
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **578**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **579**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -276,6 +279,7 @@ ESLint → pengguna build/test/commit → verifikasi.
   · K4b ✅ kalender ke `SymbolScannerPanel` (fetch `/api/calendar` per refresh 60 dtk; jam = quote server TERBARU broker; catatan bila tidak tersedia; test 574)
   · K4c ✅ pencatat entry server (`tradeEntryLog` opsi `getNewsEvents`, dipasang di `server/index.ts`; jam = timeOpen; gagal baca = tanpa satpam; test 575) · K5 ✅ Hasil analisa `heldBy: "berita"` (`applyNewsHold` di `newsGuard.ts`, hook `useNewsCalendar`, kotak oranye `held-berita`, urutan jeda → berita → taruhan ganda; test 576)
   · K6 ✅ daftar "Berita Tinggi mendatang" (`upcomingHighNews`, `<details>` oranye di pemindai, jam server + waktu relatif; test 577).
+  · Jam header ✅ `ServerClock` (jam server MT5 broker aktif + WIT, 12 jam AM/PM, berdetak tiap detik; zona dideteksi dari quote segar, bawaan Finex +3 / OTB +2; `src/lib/serverClock.ts`; test 578).
   **Satpam Kalender SELESAI** — verifikasi layar pertama: Senin 13 Okt ±22:30–23:30 WIT (Existing Home Sales USD 17:00 jam server Finex).
 
 ## 5c. BACKLOG tambahan (permintaan Fahmi 9 Okt) — dikerjakan SETELAH tahap inti (Satpam Kalender) selesai

@@ -24,6 +24,7 @@ import AnalysisResult from "./components/result/AnalysisResult";
 import { LiveEquityView } from "./components/result/LiveEquity";
 import { KursProfitBar } from "./components/layout/KursProfitBar";
 import { AccountBalancesBar } from "./components/layout/AccountBalancesBar";
+import { ServerClock } from "./components/layout/ServerClock";
 import { useBrokerPositions } from "./hooks/useBrokerPositions";
 import { applyDoubleBetHold } from "./lib/correlationGuard";
 import { applyLossPauseHold } from "./lib/lossStreakGuard";
@@ -885,6 +886,10 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
+            <ServerClock
+              brokerId={activeBrokerId}
+              quoteServerTime={liveQuote?.timestamp ?? null}
+            />
             <KursProfitBar
               profitUsd={autoProfitUsd ?? equityStream.equity?.profit ?? null}
               fxRates={fxRates}
