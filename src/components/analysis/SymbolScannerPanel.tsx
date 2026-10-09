@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { RefreshCw, ScanSearch } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
+import type { NewsEventLike } from "../../lib/newsGuard";
 import {
   lolosLabel,
   mergeGroupStats,
@@ -69,6 +70,11 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
   const [tick, setTick] = useState(0);
   const [showAll, setShowAll] = useState(false);
   const key = `${brokerId}|${tick}`;
+  // Satpam Kalender K4b: kalender broker aktif (null = tidak tersedia).
+  const [calendar, setCalendar] = useState<{
+    readonly broker: BrokerId;
+    readonly events: readonly NewsEventLike[] | null;
+  } | null>(null);
   // Langkah 4d: hasil nyata trade berstatus LOLOS (History MT5).
   const [evalAccounts, setEvalAccounts] = useState<readonly EvalAccount[]>([]);
 
@@ -132,6 +138,24 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
       }
+      // Satpam Kalender K4b: gagal / tidak tersedia = satpam diabaikan.
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/calendar?broker=${brokerId}`);
+        const body = res.ok
+          ? ((await res.json()) as { available?: boolean; events?: NewsEventLike[] })
+          : null;
+        if (!cancelled) {
+          setCalendar({
+            broker: brokerId,
+            events:
+              body !== null && body.available === true && Array.isArray(body.events)
+                ? body.events
+                : null,
+          });
+        }
+      } catch {
+        if (!cancelled) setCalendar({ broker: brokerId, events: null });
+      }
       if (!cancelled) setLoadedKey(key);
     };
     void load();
@@ -156,6 +180,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
     [evalAccounts, brokerId, nowServer],
   );
   const pauseReason = lossPause.paused ? lossPause.reason : null;
+  const newsEvents = calendar !== null && calendar.broker === brokerId ? calendar.events : null;
 
   const rows = useMemo(() => {
     const source = itemsBroker === brokerId ? items : [];
@@ -176,10 +201,13 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
           referenceCandleMs: reference,
           openPositions,
           pauseReason,
+          // K4b: jam server terbaru broker (quote simbol tutup bisa basi).
+          newsEvents,
+          newsNow: nowServer ?? undefined,
         }),
       ),
     );
-  }, [items, itemsBroker, brokerId, equity, fxRates, openPositions, pauseReason]);
+  }, [items, itemsBroker, brokerId, equity, fxRates, openPositions, pauseReason, newsEvents, nowServer]);
 
   const counts = rows.reduce<Record<ScanStatus, number>>(
     (acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }),
@@ -221,6 +249,15 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
       {error !== null && (
         <p className="mb-3 rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
           Gagal memuat candle: {error}
+        </p>
+      )}
+      {calendar !== null && calendar.broker === brokerId && calendar.events === null && (
+        <p
+          data-testid="scan-calendar-missing"
+          className="mb-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-slate-400"
+        >
+          Kalender ekonomi belum tersedia — satpam berita tidak aktif. Pastikan
+          service MDBKACalendarService berjalan di terminal MT5 broker ini.
         </p>
       )}
       {loading && <p className="text-sm text-slate-400">Memindai…</p>}

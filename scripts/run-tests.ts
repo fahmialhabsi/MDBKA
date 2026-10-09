@@ -6980,6 +6980,15 @@ test("573. pemindai: status DITAHAN_BERITA setelah jeda, sebelum taruhan ganda (
   assert(panel.includes('DITAHAN_BERITA: { label: "Dekat berita"') && panel.includes("{counts.DITAHAN_BERITA} dekat berita"), "panel belum tampil");
 });
 
+test("574. pemindai memakai kalender broker aktif (K4b, readSrc)", () => {
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes("/api/calendar?broker=${brokerId}"), "kalender belum diambil");
+  assert(panel.includes("calendar.broker === brokerId ? calendar.events : null"), "kalender broker lain bisa terpakai");
+  assert(panel.includes("newsEvents,") && panel.includes("newsNow: nowServer ?? undefined"), "kalender belum diteruskan ke pemindai");
+  assert(panel.includes('data-testid="scan-calendar-missing"'), "catatan kalender tidak tersedia");
+  assert(panel.includes("API_BASE_URL"), "wajib API_BASE_URL");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
