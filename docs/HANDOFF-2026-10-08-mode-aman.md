@@ -205,6 +205,16 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 - ✅ 9 Okt: komisi SAHAM (`.US`, `#…`) belum terverifikasi → TIDAK dikurangkan di monitor (`stockCommissionUnverified`; deal IN META.US komisi 0,00,
   Equity MT5 turun hanya sebesar P&L harga). Kartu: "komisi saham belum terverifikasi". Kunci aturan setelah posisi saham pertama DITUTUP
   (baca komisi deal OUT di History). Kalkulator target masih memakai 33/lot untuk saham OTB (belum diubah).
+- ✅ **9 Okt 22:37 WIT META.US OTB DITUTUP** @718,33: History komisi IN 0,00 & OUT 0,00, profit −2,27, swap −0,06 → bersih −2,33 (= turun Balance).
+  **Komisi saham OTB = 0** → spec32 semua 38 simbol `.US` commission 33 → **0** (sumber tunggal: pemindai, analisa, monitor, kalkulator).
+  Dulu saham OTB keliru "Biaya mahal" (AAPL.US 13,4%, CITI.US 14,9%, V.US 16,5%). `stockCommissionUnverified` kini hanya Finex `#…`.
+  Forex/indeks OTB TETAP 33/lot: History −3,30 per 0,1 lot saat IN (lot min OTB 0,10) → wajar hampir selalu "Biaya mahal"/"Risiko > batas".
+- **9 Okt XOM.US (Specification): contract 100** (= spec32 ✓; margin 20%×100×~169,6 ≈ 3.392 USD/lot). TEMUAN: "Tick value" saham OTB di MT5 SELALU 1
+  (META contract 1 & XOM contract 100 sama-sama 1) → heuristik "contract ≠ tickValue÷tickSize" TIDAK SAH untuk saham OTB; pegangan = Contract size
+  (cek silang margin). AMAZON/APPLE/BOA contract 1 belum tentu salah.
+- **V1 (9 Okt, berjalan)** `MDBKACalendarService.mq5` juga menulis `MDBKA_Specs_<login>.csv` (Symbol, ContractSize, TickSize, TickValue, Digits,
+  VolumeMin, VolumeStep, SwapMode, SwapLong, SwapShort, ProfitCurrency, MarginCurrency, Company, Generated). Rencana: V2 pembaca + bandingkan dg
+  spec32 (beda → tandai & tahan sinyal = S5 otomatis), lalu S5 saham wajib ber-SL.
 
 - **META.US OTB** (BUY 0,10 @741,07, tanpa SL, −$2,01 ≈ −Rp36 rb pada 8 Okt malam) tidak bisa ditutup: "Market closed" — saham AS hanya bisa ditransaksikan saat bursa AS buka (±22:30–05:00 WIT, cek MT5 Specification → Sessions). Keputusan tutup/pasang SL di tangan Fahmi.
 

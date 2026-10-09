@@ -9,6 +9,9 @@
 //|   jam TRADING tiap simbol Market Watch per hari (jam server),     |
 //|   7 kolom: Symbol,Day(0=Minggu..6=Sabtu),Index,FromMin,ToMin,     |
 //|   Company,Generated. FromMin/ToMin = menit sejak 00:00 (0..1440). |
+//| + Spesifikasi V1 (9 Okt 2026): MDBKA_Specs_<login>.csv = spesifikasi|
+//|   resmi tiap simbol Market Watch (contract size, tick, volume,     |
+//|   swap, mata uang) agar MDBKA memverifikasi catatannya sendiri.    |
 //| Pasang di KEDUA terminal (Finex & OTB): copy ke MQL5/Services,   |
 //| compile (F7), Navigator > Services > klik kanan > Add Service >  |
 //| pilih file ini > Start. Hanya membaca kalender; tidak trading.   |
@@ -21,6 +24,7 @@ input int    DaysBack     = 1;
 input int    DaysAhead    = 7;
 input int    CheckSeconds = 300;
 input string SessionPrefix = "MDBKA_Sessions";
+input string SpecPrefix    = "MDBKA_Specs";
 
 string Clean(string s)
   {
@@ -138,6 +142,44 @@ int WriteSessions(const string fileName)
    return(written);
   }
 
+// Spesifikasi V1: angka resmi broker per simbol (sama dengan jendela
+// Specification MT5). Komisi tidak tersedia lewat SymbolInfo (lihat History).
+int WriteSpecs(const string fileName)
+  {
+   int h = FileOpen(fileName, FILE_WRITE | FILE_CSV | FILE_ANSI | FILE_COMMON | FILE_SHARE_READ, ',');
+   if(h == INVALID_HANDLE)
+     {
+      Print("MDBKACalendarService: FileOpen spesifikasi gagal: ", GetLastError());
+      return(-1);
+     }
+   FileWrite(h, "Symbol", "ContractSize", "TickSize", "TickValue", "Digits", "VolumeMin", "VolumeStep",
+             "SwapMode", "SwapLong", "SwapShort", "ProfitCurrency", "MarginCurrency", "Company", "Generated");
+   string company   = Clean(AccountInfoString(ACCOUNT_COMPANY));
+   string generated = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
+   int total = SymbolsTotal(true);
+   for(int i = 0; i < total; i++)
+     {
+      string sym = SymbolName(i, true);
+      FileWrite(h,
+                Clean(sym),
+                DoubleToString(SymbolInfoDouble(sym, SYMBOL_TRADE_CONTRACT_SIZE), 4),
+                DoubleToString(SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_SIZE), 8),
+                DoubleToString(SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_VALUE), 8),
+                (int)SymbolInfoInteger(sym, SYMBOL_DIGITS),
+                DoubleToString(SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN), 4),
+                DoubleToString(SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP), 4),
+                (int)SymbolInfoInteger(sym, SYMBOL_SWAP_MODE),
+                DoubleToString(SymbolInfoDouble(sym, SYMBOL_SWAP_LONG), 4),
+                DoubleToString(SymbolInfoDouble(sym, SYMBOL_SWAP_SHORT), 4),
+                SymbolInfoString(sym, SYMBOL_CURRENCY_PROFIT),
+                SymbolInfoString(sym, SYMBOL_CURRENCY_MARGIN),
+                company,
+                generated);
+     }
+   FileClose(h);
+   return(total);
+  }
+
 void OnStart()
   {
    Print("=== MDBKACalendarService START (tiap ", CheckSeconds, " dtk) ===");
@@ -153,6 +195,10 @@ void OnStart()
          int m = WriteSessions(sessFile);
          if(m >= 0)
             Print("MDBKACalendarService: ", m, " sesi -> ", sessFile);
+         string specFile = SpecPrefix + "_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".csv";
+         int k = WriteSpecs(specFile);
+         if(k >= 0)
+            Print("MDBKACalendarService: ", k, " spesifikasi -> ", specFile);
         }
       for(int s = 0; s < CheckSeconds && !IsStopped(); s++)
          Sleep(1000);

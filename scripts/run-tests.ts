@@ -2750,7 +2750,7 @@ test("493. komisi default tidak terbawa antar broker; ketikan manual tetap", () 
   const finex = applyBrokerPreset(makeEmptyBroker(), "#AAPL");
   assert(finex.commission === 0.1, `Finex #AAPL=${finex.commission}`);
   const otb = applyBrokerPreset(finex, "BABA.US", "orbitraderberjangka");
-  assert(otb.commission === 33, `Finex→OTB=${otb.commission}`);
+  assert(otb.commission === 0, `Finex→OTB (saham OTB komisi 0, History 9 Okt)=${otb.commission}`);
   const back = applyBrokerPreset(otb, "#AAPL");
   assert(back.commission === 0.1, `OTB→Finex=${back.commission}`);
   const manual = applyBrokerPreset({ ...otb, commission: 50 }, "#AAPL");
@@ -7502,8 +7502,10 @@ test("603. monitor: posisi tanpa SL/TP tetap ada P&L; komisi saham belum terveri
   const usd = (a: number, c: string) => (c === "USD" ? a : null);
   const ev = evaluateExitSignal(h, 720.47, 720.73, usd, Date.UTC(2026, 9, 6, 16));
   assert(ev.pnl === -2.06 && ev.pnlCurrency === "USD", `P&L ${JSON.stringify(ev)}`);
-  assert(ev.pnlNet === -2.06 && ev.commission === 0, `komisi saham belum terverifikasi tak dikurangkan: bersih ${ev.pnlNet} komisi ${ev.commission}`);
-  assert(stockCommissionUnverified("META.US") && stockCommissionUnverified("#META") && !stockCommissionUnverified("AUDUSD_ORB") && !stockCommissionUnverified("US100"), "hanya saham");
+  assert(ev.pnlNet === -2.06 && ev.commission === 0, `komisi saham OTB 0 (terverifikasi): bersih ${ev.pnlNet} komisi ${ev.commission}`);
+  assert(!stockCommissionUnverified("META.US") && stockCommissionUnverified("#META") && !stockCommissionUnverified("AUDUSD_ORB") && !stockCommissionUnverified("US100"), "hanya saham Finex # yang belum terverifikasi");
+  assert(commissionForHolding("META.US", 0.1) === 0 && commissionForHolding("AAPL.US", 0.1) === 0, "spec32 saham OTB komisi 0 (History META.US 9 Okt)");
+  assert(commissionForHolding("EURCHF_ORB", 0.1) === 3.3, "forex OTB tetap 33/lot (History: −3,30 per 0,1 lot)");
   const fx = toAutoHolding({ ticket: "1", symbol: "AUDUSD_ORB", side: "BUY", volume: 0.1, priceOpen: 0.69811, sl: 0.69311, tp: 0.70626, timeOpen: "2026.10.06 17:13:40" }, "orbitraderberjangka");
   assert(evaluateExitSignal(fx, 0.698, 0.6981, usd).commission === 3.3, "komisi OTB forex tetap 33/lot");
   assert(ev.risk === null && ev.reward === null && ev.signal === "HOLD" && ev.reasons[0].includes("tanpa SL/TP"), JSON.stringify(ev.reasons));
@@ -8097,8 +8099,8 @@ test("331. 0 simbol pending; 68/68 ter-apply via spec32 (6I)", () => {
     const applied = applyBrokerPreset(previous, symbol, "orbitraderberjangka");
     assert(applied !== previous, `${symbol} preset spec32 tidak ter-apply`);
     assert(
-      applied.commission === 33,
-      `${symbol} commission=${applied.commission} (spec32 33)`,
+      applied.commission === (symbol.endsWith(".US") ? 0 : 33),
+      `${symbol} commission=${applied.commission} (spec32 33; saham .US 0)`,
     );
     assert(
       getOtbDetectedNotice("finex", symbol) !== null,
@@ -8349,7 +8351,7 @@ test("359. semua specs32 VERIFIED + commission per broker (6G)", () => {
     assert(isSpec32Verified(symbol), `${symbol} helper verified gagal`);
     const expected =
       spec.broker === "orbitraderberjangka"
-        ? 33
+        ? symbol.endsWith(".US") ? 0 : 33
         : symbol.startsWith("#")
           ? 0.1
           : 1;
@@ -8824,7 +8826,7 @@ test("389. wiring semua 150 simbol verified available (komisi per broker)", () =
     // simbol tanpa _ORB seperti CLU dan *.US sejak 6I).
     const spec = requireSpec32(s);
     const expected =
-      spec.broker === "orbitraderberjangka" ? 33 : s.startsWith("#") ? 0.1 : 1;
+      spec.broker === "orbitraderberjangka" ? (s.endsWith(".US") ? 0 : 33) : s.startsWith("#") ? 0.1 : 1;
     assert(d.commission === expected, `${s} commission bukan ${expected}`);
     assert(isSpec32Available(s) === true, `${s} tidak available`);
   }
@@ -9043,7 +9045,7 @@ test("406. applyBrokerPreset: 68 OTB spec32 semua commission=33", () => {
       "orbitraderberjangka",
     );
     // 6I: 68/68 simbol berprofile OTB ter-apply (commission 33).
-    const expected = getOtbInstrumentProfile(symbol) === null ? 0 : 33;
+    const expected = getOtbInstrumentProfile(symbol) === null || symbol.endsWith(".US") ? 0 : 33;
     assert(
       applied.commission === expected,
       `${symbol} commission=${applied.commission}`,

@@ -108,7 +108,9 @@ export function commissionForHolding(
  */
 export function stockCommissionUnverified(symbol: string): boolean {
   const s = symbol.trim().toUpperCase();
-  return s.endsWith(".US") || (s.startsWith("#") && s.length > 1);
+  // OTB `.US` TERVERIFIKASI 9 Okt (META.US ditutup: komisi IN & OUT 0,00) →
+  // spec32 commission 0. Tersisa saham Finex `#…` yang belum terbukti.
+  return s.startsWith("#") && s.length > 1;
 }
 
 function evalCommission(symbol: string, lot: number): number | null {

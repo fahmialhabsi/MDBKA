@@ -508,7 +508,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -524,7 +524,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -540,7 +540,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 1,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -10,
       swapShort: -10,
       baseCurrency: "USD",
@@ -555,7 +555,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -571,7 +571,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 1,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -10,
       swapShort: -10,
       baseCurrency: "USD",
@@ -586,7 +586,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -601,7 +601,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -616,7 +616,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -632,7 +632,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -648,7 +648,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 1,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -10,
       swapShort: -10,
       baseCurrency: "USD",
@@ -663,7 +663,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -678,7 +678,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 0.01,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -694,7 +694,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -709,7 +709,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -724,7 +724,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -739,7 +739,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 10,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -754,7 +754,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -770,7 +770,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 0.1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -785,7 +785,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -801,7 +801,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -816,7 +816,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -832,7 +832,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -847,7 +847,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -863,7 +863,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -878,7 +878,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -893,7 +893,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -908,7 +908,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -923,7 +923,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 1,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -10,
       swapShort: -10,
       baseCurrency: "USD",
@@ -938,7 +938,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -953,7 +953,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -968,7 +968,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -983,7 +983,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 10,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -998,7 +998,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -1014,7 +1014,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -1029,7 +1029,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       swap3DayWeekday: 3,
@@ -1045,7 +1045,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -1060,7 +1060,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
@@ -1075,7 +1075,7 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       tickSize: 0.01,
       tickValue: 1,
       leverage: 100,
-      commission: 33,
+      commission: 0, // History OTB 9 Okt: META.US komisi IN & OUT 0,00 (saham OTB tanpa komisi)
       swapLong: -3.2,
       swapShort: -2.8,
       baseCurrency: "USD",
