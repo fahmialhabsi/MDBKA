@@ -46,6 +46,7 @@ import { parseCalendarCsv, readCalendarForBroker } from "../server/services/cale
 import { calendarResponse } from "../server/routes/calendarRoutes";
 import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
 import { buildHistoryView } from "../server/services/historyView";
+import { accountKind, historyForLogin, listHistoryAccounts } from "../server/routes/historyRoutes";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
 import { formatClock12, serverUtcOffsetHours, WIT_UTC_OFFSET } from "../src/lib/serverClock";
 import {
@@ -7152,6 +7153,30 @@ test("583. tabel History + Rupiah kurs tanggal transaksi + Sisa setoran (H2a, da
   const live = buildHistoryView(parseHistoryCsv(
     "h\r\n1,0,0,2026.09.29 03:47:04,External,BALANCE,IN,0.00,0,0.00,0.00,11.11,0.00,0,D-1: IDR 200000.00,91811209,PT,USD"), {});
   assert(live.rows[0].profitIdr === 200000 && live.missingRates === 1 && live.totalsIdr === null && live.sisa === null, "setoran Rupiah asli; tanpa kurs = null jujur");
+});
+
+test("584. endpoint /api/history: daftar akun live/demo + view per login (H2b)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "history-api-"));
+  try {
+    const head = "DealTicket,PositionId,OrderTicket,ServerTime,Symbol,Type,Entry,Volume,Price,Commission,Swap,Profit,Fee,Magic,Comment,Login,Company,AccountCurrency";
+    nfs.writeFileSync(npath.join(dir, "MDBKA_History_61823011.csv"), [head,
+      "1,0,0,2026.09.27 07:52:23,Bonus,BALANCE,IN,0.00,0,0.00,0.00,5000.00,0.00,0,Demo,61823011,PT. Finex Bisnis Solusi Futures,USD"].join("\r\n"));
+    nfs.writeFileSync(npath.join(dir, "MDBKA_History_70930952.csv"), [head,
+      "2,0,0,2026.09.29 10:00:00,Bonus,BALANCE,IN,0.00,0,0.00,0.00,5000.00,0.00,0,Demo,70930952,PT. Orbi Trade Berjangka,USD"].join("\r\n"));
+    const labels = { "61823011": "Finex demo", "70930952": "OTB demo", "91811209": "Finex live" };
+    const acc = listHistoryAccounts(dir, labels);
+    assert(acc.length === 2 && acc[0].broker === "finex" && acc[0].kind === "demo" && acc[1].broker === "orbitraderberjangka", JSON.stringify(acc));
+    assert(accountKind("Finex live") === "live" && accountKind("Akun 123") === null, "kind");
+    const h = historyForLogin(dir, "61823011", labels, { "2026-09-25": 17913.9 });
+    assert(h !== null && h.view.totals.deposit === 5000 && h.view.rows[0].profitIdr === 89569500, JSON.stringify(h?.view.totals));
+    assert(historyForLogin(dir, "99999", labels, {}) === null && historyForLogin(dir, "../x", labels, {}) === null, "akun tak ada / path aneh = null");
+    assert(readSrc("server/app.ts").includes('app.use("/api/history", createHistoryRoutes());'), "route belum dipasang");
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

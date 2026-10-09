@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **583** → test baru mulai **584**.
+Nomor test terakhir: **584** → test baru mulai **585**.
 
 ---
 
@@ -270,7 +270,7 @@ mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: N
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **584**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **585**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -334,7 +334,8 @@ ESLint → pengguna build/test/commit → verifikasi.
      Komisi/Profit/Swap Rp per kurs tanggal; ringkasan MT5 (net, credit, deposit, withdrawal, balance, komisi, profit) USD & Rp;
      Sisa setoran; setoran "IDR …" pakai Rupiah asli; tanpa kurs → null (test 583). Cocok MT5 Finex demo: Balance 4989.95,
      komisi −0.10, profit −9.95; Rp: setoran 89.569.500 (kurs 25 Sep), hasil −180.094, sisa 89.389.406 (−0,2%).
-   · H2b endpoint `/api/history` (daftar akun + view per login, refresh buku kurs) · H3 halaman tombol Finex/OTB + tab Live/Demo
+   · H2b ✅ `server/routes/historyRoutes.ts`: `GET /api/history` (akun + broker + kind live/demo dari ACCOUNT_LABELS),
+     `GET /api/history/:login` (view); buku kurs disegarkan ECB maks tiap 6 jam (gagal → buku lama); test 584 · H3 halaman tombol Finex/OTB + tab Live/Demo
    · H4 kolom S/L & T/P (tambah 2 kolom di AKHIR CSV MDBKAHistoryService, compile ulang 2 terminal) — disetujui Fahmi.
    Contoh uji Finex demo 61823011: Deposit $5.000 (bonus 27 Sep), Profit −$10,04, Komisi −$0,09, Balance $4.989,96;
    AUDCHF 8 Okt: komisi −$0,01, profit −$0,65 → kolom Rp per kurs 8 Okt.
