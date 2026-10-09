@@ -8,6 +8,7 @@ import type { AnalysisResult, BrokerSettings, MarketData } from "../types/analys
 import type { BrokerId } from "../types/broker";
 import { canonicalSymbolForBroker } from "./brokerSymbols";
 import { findDoubleBet, type OpenPositionLike } from "./correlationGuard";
+import { findNewsHold, type NewsEventLike } from "./newsGuard";
 import { parseCsvCandles } from "./csvCandleParser";
 import { resolveCsvBidAsk, type LiveQuoteLike } from "./csvQuote";
 import { riskCapFor } from "./riskGroup";
@@ -31,6 +32,7 @@ export type ScanStatus =
   | "DITAHAN_RISIKO"
   | "DITAHAN_KORELASI"
   | "DITAHAN_JEDA"
+  | "DITAHAN_BERITA"
   | "TUNGGU"
   | "PASAR_TUTUP"
   | "DATA";
@@ -53,6 +55,13 @@ export interface ScanInput {
   readonly openPositions?: readonly OpenPositionLike[];
   /** Langkah F: alasan jeda 3 rugi beruntun (null = tidak jeda). */
   readonly pauseReason?: string | null;
+  /**
+   * Satpam Kalender K4: event kalender broker ini (jam server). null/absen =
+   * kalender tidak tersedia → satpam diabaikan (penetapan Fahmi 9 Okt).
+   */
+  readonly newsEvents?: readonly NewsEventLike[] | null;
+  /** Jam server penilaian berita; default jam quote live (quotes.csv). */
+  readonly newsNow?: string;
 }
 
 export interface ScanRow {
@@ -206,6 +215,30 @@ export function scanSymbol(input: ScanInput): ScanRow {
       candles: count,
     };
   }
+  // Satpam Kalender K4: lolos tapi dekat berita Tinggi (±30 mnt) → tahan.
+  if (
+    status === "LOLOS" &&
+    (result.decision === "BELI" || result.decision === "JUAL")
+  ) {
+    const berita = findNewsHold(
+      symbol,
+      input.newsNow ?? input.quote?.timestamp ?? "",
+      input.newsEvents,
+    );
+    if (berita !== null) {
+      return {
+        symbol,
+        status: "DITAHAN_BERITA",
+        decision: "TUNGGU",
+        direction: result.decision,
+        held: true,
+        score: result.score,
+        reason: berita.reason,
+        costShareOfRisk: result.costShareOfRisk ?? null,
+        candles: count,
+      };
+    }
+  }
   // Langkah D: lolos tapi searah dengan posisi terbuka → taruhan ganda.
   if (
     status === "LOLOS" &&
@@ -246,9 +279,10 @@ const STATUS_ORDER: Record<ScanStatus, number> = {
   DITAHAN_RISIKO: 2,
   DITAHAN_KORELASI: 3,
   DITAHAN_JEDA: 4,
-  TUNGGU: 5,
-  PASAR_TUTUP: 6,
-  DATA: 7,
+  DITAHAN_BERITA: 5,
+  TUNGGU: 6,
+  PASAR_TUTUP: 7,
+  DATA: 8,
 };
 
 /** Urutan tampil: LOLOS dulu, lalu yang paling dekat lolos; skor kuat di atas. */

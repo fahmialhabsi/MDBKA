@@ -6965,6 +6965,21 @@ test("572. satpam berita: mata uang simbol & jendela ±30 menit berita Tinggi (K
   assert(findNewsHold("EURUSD", "2026.10.14 15:00:00", null) === null && findNewsHold("EURUSD", "", ev) === null, "tanpa kalender/jam = tidak ditahan");
 });
 
+test("573. pemindai: status DITAHAN_BERITA setelah jeda, sebelum taruhan ganda (K4, readSrc)", () => {
+  const sc = readSrc("src/lib/symbolScanner.ts");
+  const jeda = sc.indexOf('status: "DITAHAN_JEDA"');
+  const berita = sc.indexOf('status: "DITAHAN_BERITA"');
+  const ganda = sc.indexOf('status: "DITAHAN_KORELASI"');
+  assert(jeda > 0 && berita > jeda && ganda > berita, `urutan tahanan salah ${jeda}/${berita}/${ganda}`);
+  assert(sc.includes("input.newsNow ?? input.quote?.timestamp") && sc.includes("input.newsEvents"), "jam/kalender berita");
+  assert(sortScanRows([
+    { symbol: "B", status: "TUNGGU", decision: "TUNGGU", direction: "TUNGGU", held: false, score: 0, reason: "", costShareOfRisk: null, candles: 200 },
+    { symbol: "A", status: "DITAHAN_BERITA", decision: "TUNGGU", direction: "BELI", held: true, score: 4, reason: "", costShareOfRisk: null, candles: 200 },
+  ])[0].symbol === "A", "berita di atas TUNGGU");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes('DITAHAN_BERITA: { label: "Dekat berita"') && panel.includes("{counts.DITAHAN_BERITA} dekat berita"), "panel belum tampil");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

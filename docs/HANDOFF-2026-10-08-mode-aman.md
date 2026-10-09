@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **572** → test baru mulai **573**.
+Nomor test terakhir: **573** → test baru mulai **574**.
 
 ---
 
@@ -260,7 +260,7 @@ mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: N
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **573**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **574**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -272,7 +272,8 @@ ESLint → pengguna build/test/commit → verifikasi.
   JP225 → JPY; DE30 → EUR; UK100 → GBP; HK50 → HKD/CNY.
 - File kalender tidak ada / basi → **satpam diabaikan** (analisa tetap jalan + catatan "kalender belum tersedia").
 - Rencana langkah: K1 ✅ service · K2a ✅ pembaca · K2b ✅ endpoint `GET /api/calendar?broker=` (`server/routes/calendarRoutes.ts`, test 571) · K3 ✅ modul murni
-  `src/lib/newsGuard.ts` (`newsCurrenciesOf`, `findNewsHold`, `NEWS_WINDOW_MINUTES = 30`; test 572) · K4 pemindai status `DITAHAN_BERITA` · K5 Hasil analisa `heldBy: "berita"`
+  `src/lib/newsGuard.ts` (`newsCurrenciesOf`, `findNewsHold`, `NEWS_WINDOW_MINUTES = 30`; test 572) · K4 ✅ pemindai status `DITAHAN_BERITA` (lib + label "Dekat berita"; urutan jeda → berita → taruhan ganda; test 573)
+  · K4b sambungkan kalender ke `SymbolScannerPanel` (fetch `/api/calendar`) & pencatat entry server (`tradeEntryLog`, jam = timeOpen) · K5 Hasil analisa `heldBy: "berita"`
   · K6 daftar berita Tinggi mendatang di layar.
 
 ## 5c. BACKLOG tambahan (permintaan Fahmi 9 Okt) — dikerjakan SETELAH tahap inti (Satpam Kalender) selesai
@@ -296,6 +297,12 @@ ESLint → pengguna build/test/commit → verifikasi.
    Catatan: risiko −Rp466 rb > batas golongan Indeks Rp150 rb → kalkulator juga menampilkan peringatan batas golongan.
    **Wajib validasi sisi**: BELI → SL < harga < TP; JUAL → TP < harga < SL. Angka di luar itu (mis. "SL 51113.17,
    TP 51512.26, harga 30748.33" = keduanya di atas harga) → peringatan "cek simbol & angka", bukan profit palsu.
+   **Tabel tangga harga otomatis di halaman (penetapan Fahmi 9 Okt)**: baris TP, beberapa harga antara (mis. tiap ¼ jarak),
+   **titik impas** (entry ∓ komisi), lalu SL — tiap baris: harga, arah gerak & jarak poin, hasil **USD & Rupiah**.
+   Contoh US100 SELL: 30544.73 → +Rp730 rb · 30600 → +Rp532 rb · 30700 → +Rp173 rb · 30748.28 impas · 30800 → −Rp185 rb ·
+   30878.43 → −Rp466 rb. Rumus SELL: (entry − harga) × nilai poin; BELI: (harga − entry) × nilai poin.
+   Catatan wajib: SELL ditutup di **Ask**, BELI di **Bid** (garis chart MT5 = Bid → spread memengaruhi kapan TP/SL kena);
+   tampilkan juga **SL yang sesuai batas golongan** (mis. Indeks Rp150 rb → ±41,9 poin → SL ≈ 30790.18).
 Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi build/test/commit.
 
 ---
@@ -307,5 +314,5 @@ Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi 
 > Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
 > build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
 > lalu minus". Time-stop 3 jam hanya Forex & Forex JPY. Langkah berikutnya: kumpulkan trade Mode Aman (langkah 1) dan
-> lanjutkan Satpam Kalender (bagian 5b, mulai K4). Backlog halaman golongan/portofolio saham/halaman pemindai di 5c.
+> lanjutkan Satpam Kalender (bagian 5b, mulai K4b). Backlog halaman golongan/portofolio saham/halaman pemindai di 5c.
 > Setiap langkah selesai, jelaskan dulu dalam bahasa awam (GUARD no. 11) sebelum saya commit.
