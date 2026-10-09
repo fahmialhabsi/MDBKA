@@ -285,6 +285,17 @@ ESLint → pengguna build/test/commit → verifikasi.
    dan **saldo saham sekarang** (sumber: History MT5 per simbol saham `.US`/`#`). Masuk halaman golongan Saham.
 3. **Pemindai → halaman detail**: tombol status di "Pemindai simbol — Mode Aman" membuka **halaman baru** berisi
    tombol **Salin SL** dan **Salin TP** (pola `copy-sl`/`copy-tp` yang sudah ada di kotak "Salin order").
+4. **Kalkulator target harga (permintaan 9 Okt)**: input **harga entry, SL, TP** (+ arah & lot, simbol) → tampilkan
+   "bila TP kena = **+RpX (+$Y)**, bila SL kena = **−RpX (−$Y)**", jarak harga/poin ke SL & TP, R:R, dan harga impas
+   (entry + biaya komisi, rumus `breakevenCostDistance` yang sudah ada). Pakai `pointValue`/contract size per simbol +
+   kurs ECB (mesin sama dengan monitor posisi), jangan rumus baru.
+   **Contoh uji nyata (posisi Fahmi, 8 Okt 23:13 server)**: US100 **SELL 0,01** @30748.33, SL 30878.43, TP 30544.73,
+   harga 30742.93, profit MT5 +$1,08 → nilai poin $0,20 per 0,01 lot (5,40 poin × 0,2 = 1,08 ✓).
+   Hasil yang harus keluar: TP kena = 203,60 poin = **+$40,72 ≈ +Rp730 rb**; SL kena = 130,10 poin = **−$26,02 ≈
+   −Rp466 rb**; R:R 1:1,56 (kurs ECB 8 Okt ≈ Rp17.920/USD; komisi Finex $0,01 diabaikan di contoh).
+   Catatan: risiko −Rp466 rb > batas golongan Indeks Rp150 rb → kalkulator juga menampilkan peringatan batas golongan.
+   **Wajib validasi sisi**: BELI → SL < harga < TP; JUAL → TP < harga < SL. Angka di luar itu (mis. "SL 51113.17,
+   TP 51512.26, harga 30748.33" = keduanya di atas harga) → peringatan "cek simbol & angka", bukan profit palsu.
 Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi build/test/commit.
 
 ---
