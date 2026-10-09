@@ -7,6 +7,8 @@ import { SignalDetailPage } from "./components/analysis/SignalDetailPage";
 import { parseSignalPage } from "./lib/signalPageView";
 import { CalculatorPage } from "./components/analysis/CalculatorPage";
 import { parseCalculatorPage } from "./lib/calculatorPageView";
+import { GroupPage } from "./components/group/GroupPage";
+import { parseGroupPage } from "./lib/groupPageView";
 import "./index.css";
 
 if (import.meta.env.DEV) {
@@ -19,11 +21,15 @@ const historyPage = parseHistoryPage(window.location.search);
 const signalPage = parseSignalPage(window.location.search);
 // Butir 4 C2: `/?halaman=kalkulator&…` (kalkulator target harga).
 const calculatorPage = parseCalculatorPage(window.location.search);
+// Butir 1 G1: `/?halaman=golongan&broker=…&grup=…` (halaman per golongan).
+const groupPage = parseGroupPage(window.location.search);
 
 ReactDOM.createRoot(document.getElementById("root" )!).render(
   <React.StrictMode>
     {historyPage !== null ? (
       <HistoryPage broker={historyPage.broker} />
+    ) : groupPage !== null ? (
+      <GroupPage params={groupPage} />
     ) : calculatorPage !== null ? (
       <CalculatorPage prefill={calculatorPage} />
     ) : signalPage !== null ? (

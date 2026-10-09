@@ -1,6 +1,7 @@
 import { useEffect, useState, type JSX } from "react";
 import { historyPageUrl } from "../../lib/historyPageView";
 import { calculatorPageUrl } from "../../lib/calculatorPageView";
+import { groupPageUrl } from "../../lib/groupPageView";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import {
   buildBalanceRows,
@@ -99,6 +100,15 @@ export function AccountBalancesBar({
           className="rounded-lg border border-sky-400/30 bg-sky-400/10 px-3 py-1.5 font-semibold text-sky-200 hover:bg-sky-400/20"
         >
           Kalkulator ↗
+        </a>
+        <a
+          href={groupPageUrl({ broker: "finex" })}
+          target="_blank"
+          rel="noreferrer"
+          data-testid="group-link"
+          className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 font-semibold text-emerald-200 hover:bg-emerald-400/20"
+        >
+          Golongan ↗
         </a>
       </div>
     </div>

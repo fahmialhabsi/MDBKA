@@ -909,6 +909,9 @@ export default function App() {
       </header>
 
       <main className={`${dashboard.page} space-y-4 py-4 sm:space-y-6 sm:py-6`}>
+        {/* 9 Okt: kolom live (kanan) mulai dari paling atas; panel lebar masuk kolom kiri. */}
+        <div className={dashboard.workGrid}>
+          <div className={dashboard.mainCol}>
         <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-950 p-5 lg:p-7">
           <div className="max-w-3xl">
             <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -1036,8 +1039,6 @@ export default function App() {
         {/* Langkah 4c-2: hasil nyata dari History MT5, trade lama vs Mode Aman. */}
         <TradeEvaluationPanel fxRates={fxRates} />
 
-        <div className={dashboard.workGrid}>
-          <div className={dashboard.mainCol}>
             <div className="space-y-6">
               <Panel
                 icon={<BarChart3 size={20} />}

@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **595** → test baru mulai **596**.
+Nomor test terakhir: **596** → test baru mulai **597**.
 
 ---
 
@@ -297,6 +297,10 @@ ESLint → pengguna build/test/commit → verifikasi.
    akun **Balance, Equity, Margin, Free Margin, Margin Level** — semua dalam **USD dan Rupiah**.
    Catatan: rencana grafik per simbol pernah dibatalkan 8 Okt (mockup: https://claude.ai/artifact/Hv6o51xhKruFGUTu2x8sqG);
    kini diminta lagi sebagai backlog → rancang ulang dari mockup itu.
+   **[DIKERJAKAN 9 Okt]** Keputusan Fahmi: 1 tombol "Golongan ↗" + tab golongan; tab simbol = semua simbol Market Watch golongan itu,
+   posisi terbuka di depan; chart candle H1. G1 ✅ `GroupPage.tsx` `/?halaman=golongan&broker=&grup=&symbol=` (`groupPageView.ts`:
+   `GROUP_TABS`, `groupSymbolTabs`, `accountMetrics` USD+Rp dari `/api/equity/latest`; harga live; tautan Kalkulator per posisi; test 596)
+   · G2 (belum) chart candle H1 · G3 (belum) garis Entry/SL/TP + Amankan di chart.
 2. **Portofolio saham**: berapa lot/lembar saham sudah dibeli, harga beli, dari simbol apa, berapa yang sudah dijual,
    dan **saldo saham sekarang** (sumber: History MT5 per simbol saham `.US`/`#`). Masuk halaman golongan Saham.
 3. **Pemindai → halaman detail**: tombol status di "Pemindai simbol — Mode Aman" membuka **halaman baru** berisi

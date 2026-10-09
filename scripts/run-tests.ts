@@ -49,6 +49,7 @@ import { buildHistoryView } from "../server/services/historyView";
 import { accountKind, historyForLogin, listHistoryAccounts } from "../server/routes/historyRoutes";
 import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
 import { calculateTargets, secureReadiness } from "../src/lib/targetCalculator";
+import { accountMetrics, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage } from "../src/lib/groupPageView";
 import { calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
@@ -7339,6 +7340,29 @@ test("595. C5: tautan Kalkulator terisi dari monitor posisi & detail sinyal", ()
   assert(readSrc("src/components/holdings/HoldingsDashboard.tsx").includes("calculatorUrlFromHolding(holding)"), "monitor belum bertautan");
   const det = readSrc("src/components/analysis/SignalDetailPage.tsx");
   assert(det.includes('data-testid="detail-calc-link"') && det.includes("calculatorPageUrl({"), "detail sinyal belum bertautan");
+});
+
+test("596. halaman Golongan G1: URL, tab simbol (posisi di depan), metrik akun USD+Rp", () => {
+  assert(GROUP_TABS.map((g) => g.id).join(",") === "FOREX,FOREX_JPY,LOGAM,MINYAK,SAHAM_AS,INDEKS", "urutan tab golongan");
+  const p = parseGroupPage(groupPageUrl({ broker: "orbitraderberjangka", group: "LOGAM", symbol: "xauusd_orb" }).slice(1));
+  assert(p !== null && p.broker === "orbitraderberjangka" && p.group === "LOGAM" && p.symbol === "XAUUSD_ORB", JSON.stringify(p));
+  const d = parseGroupPage("?halaman=golongan&grup=NGAWUR");
+  assert(d !== null && d.broker === "finex" && d.group === "FOREX" && d.symbol === "", "default");
+  assert(parseGroupPage("?halaman=kalkulator") === null, "bukan golongan");
+  const tabs = groupSymbolTabs(["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "AUDCAD"], ["GBPUSD", "gbpusd", "NZDUSD", "US100"], "FOREX");
+  assert(JSON.stringify(tabs) === JSON.stringify([
+    { symbol: "GBPUSD", openCount: 2 }, { symbol: "NZDUSD", openCount: 1 },
+    { symbol: "AUDCAD", openCount: 0 }, { symbol: "EURUSD", openCount: 0 },
+  ]), JSON.stringify(tabs));
+  assert(groupSymbolTabs(["XAUUSD_ORB", "EURUSD_ORB"], [], "LOGAM").map((t) => t.symbol).join() === "XAUUSD_ORB", "OTB _ORB ikut golongan");
+  const m = accountMetrics({ balance: 4973.56, equity: 4959.67, margin: 65.01, freeMargin: 4894.66, marginLevel: 7629.09 }, 17920);
+  assert(m[0].idr === 89126195 && m[2].usd === 65.01 && m[3].idr === Math.round(4894.66 * 17920) && m[4].percent === 7629.09, JSON.stringify(m));
+  const kosong = accountMetrics({ balance: 10, equity: 10 }, null);
+  assert(kosong[0].idr === null && kosong[2].usd === null && kosong[4].percent === null, "tanpa kurs/margin = null");
+  assert(readSrc("src/main.tsx").includes("parseGroupPage(window.location.search)"), "halaman belum dipasang");
+  assert(readSrc("src/components/layout/AccountBalancesBar.tsx").includes('data-testid="group-link"'), "tombol Golongan");
+  const page = readSrc("src/components/group/GroupPage.tsx");
+  assert(page.includes('data-testid="group-metrics"') && page.includes('data-testid="group-symbol-tabs"') && page.includes("useEquityStream(5000, broker)"), "halaman lengkap");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
