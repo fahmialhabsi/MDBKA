@@ -413,6 +413,12 @@ ESLint → pengguna build/test/commit → verifikasi.
    Contoh kurs hari ini Rp17.920: Rp89.600.000 + (−Rp179.917) = **Rp89.420.083** (= Balance $4.989,96 × kurs).
    Dengan kurs tanggal transaksi, setoran dihitung pada kurs tanggal setor (27 Sep) → angka berbeda; tampilkan keduanya
    atau beri catatan agar tidak membingungkan.
+6. **Buku tabungan emas Treasury (permintaan 10 Okt) — dikerjakan SETELAH V2 dan S5 selesai.** Treasury = emas digital fisik
+   (izin & diawasi Bappebti, transaksi dicatat ICDX/ICH, bisa cetak fisik), BUKAN broker MT5: tanpa leverage, tanpa jual duluan,
+   tanpa SL/TP/lot, tanpa EA/CSV/API publik. Selisih beli-jual ±3,3% (±Rp66 rb/gram, Sep 2025) → impas bila emas naik > 3,3%.
+   Bentuk: catatan pembelian manual (tanggal, gram, harga/gram) → rata-rata harga beli, nilai sekarang Rp, untung/rugi
+   SETELAH selisih 3,3%. Harga sekarang: perkiraan XAUUSD MT5 × kurs ECB ÷ 31,1035 g/oz, atau diketik dari aplikasi Treasury.
+   Bukan sinyal BELI/JUAL (investasi bulanan–tahunan, bukan trading 2–3 jam).
 Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi build/test/commit.
 
 ---

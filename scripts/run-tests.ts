@@ -295,6 +295,13 @@ import {
 } from "../src/lib/spec32Wiring";
 
 import {
+  COPY_DRIFT_SHARE,
+  COPY_LOCK_SECONDS,
+  copyLockState,
+  planDriftShare,
+  startCopyLock,
+} from "../src/lib/copyGuard";
+import {
   excursionCell,
   usdPerPriceUnit,
   formatDuration,
@@ -7584,6 +7591,23 @@ test("606. ringkasan transaksi semua golongan: buka BELI/JUAL, ditutup, masih te
   assert(ac.avgOpenSell === 0.57893 && ac.avgBuy === 0.58016 && ac.openLot === 0.01, `harga rata2 5 desimal: ${JSON.stringify(ac)}`);
   const nol = buildTradeSummary([d("GBPUSD", "SELL", "OUT", 0.01, 1.3, 1.64), d("GBPUSD", "SELL", "OUT", 0.01, 1.3, -1.64)], () => true)[0];
   assert(Object.is(nol.realizedUsd, 0), "tanpa -0");
+});
+
+test("607. kunci salin SL/TP: 10 dtk, geser > 10% jarak SL = BERGESER, tanpa harga = BERGESER", () => {
+  assert(COPY_LOCK_SECONDS === 10 && COPY_DRIFT_SHARE === 0.1, "angka penetapan Fahmi 10 Okt");
+  const q = (bid: number, ask: number) => ({ timestamp: "2026.10.08 10:17:07", symbol: "AUDCHF", bid, ask });
+  const jual = { direction: "JUAL" as const, entry: 0.57871, stopLoss: 0.57947, takeProfit: 0.57757, suggestedLot: 0.01, riskAtMinLot: 0.95, maxRiskUsd: 1.95, riskDistance: 0.00076, targetDistance: 0.00114 };
+  const lock = startCopyLock("AUDCHF", jual, 1_000_000);
+  const geser = copyLockState(lock, q(0.57893, 0.57899), 1_003_000);
+  assert(geser.phase === "BERGESER" && geser.reason.includes("29%"), `kasus AUDCHF 8 Okt: ${JSON.stringify(geser)}`);
+  const siap = copyLockState(lock, q(0.57877, 0.57883), 1_003_200);
+  assert(siap.phase === "SIAP_TP" && siap.remainingSec === 7, JSON.stringify(siap));
+  assert(copyLockState(lock, q(0.57877, 0.57883), 1_010_000).phase === "HABIS", "10 dtk habis");
+  assert(copyLockState(lock, null, 1_002_000).phase === "BERGESER", "tanpa harga live = tidak aman");
+  const beli = { ...jual, direction: "BELI" as const, entry: 25033.62, stopLoss: 24962.45, takeProfit: 25140.37 };
+  const d = planDriftShare(beli, { ...q(25035.0, 25037.67), symbol: "DE30" });
+  assert(d !== null && Math.abs(d - 0.0569) < 0.001, `BELI pakai Ask: ${d}`);
+  assert(copyLockState(startCopyLock("DE30", beli, 0), { ...q(25035.0, 25037.67), symbol: "DE30" }, 5_000).phase === "SIAP_TP", "DE30 geser 5,7% masih aman");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
