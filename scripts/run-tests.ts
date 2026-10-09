@@ -54,6 +54,7 @@ import { candleChartModel, hourKey, LINE_COLOR, positionLines, spreadLabels, wit
 import { readCandleCsv } from "../server/routes/candlesRoutes";
 import { serverNowText, serverToWitLabel, sessionNotice, sessionState, weeklyIntervals } from "../src/lib/sessionGuard";
 import { parseSessionsCsv } from "../server/services/sessionReader";
+import { buildStockPortfolio, isStockSymbol } from "../src/lib/stockPortfolio";
 import { calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
@@ -7508,6 +7509,27 @@ test("603. monitor: posisi tanpa SL/TP tetap ada P&L; komisi saham belum terveri
   assert(ev.risk === null && ev.reward === null && ev.signal === "HOLD" && ev.reasons[0].includes("tanpa SL/TP"), JSON.stringify(ev.reasons));
   const rusak = evaluateExitSignal(h, 0, 720.73, usd);
   assert(rusak.pnl === null, "harga rusak tetap null");
+});
+
+test("604. butir 2 P1: portofolio saham dari History (META.US OTB + contoh jual)", () => {
+  const d = (symbol: string, type: string, entry: string, volume: number, price: number, profit = 0, commission = 0, idr: number | null = 0) =>
+    ({ symbol, type, entry, volume, price, commission, swap: 0, profit, fee: 0, commissionIdr: commission === 0 ? 0 : idr, profitIdr: profit === 0 ? 0 : idr, swapIdr: 0 });
+  const nyata = buildStockPortfolio([d("META.US", "BUY", "IN", 0.1, 741.07), d("EURUSD_ORB", "BUY", "IN", 0.1, 1.1)]);
+  assert(nyata.length === 1, "hanya saham");
+  const m = nyata[0];
+  assert(m.symbol === "META.US" && m.boughtLot === 0.1 && m.avgBuy === 741.07 && m.soldLot === 0 && m.heldLot === 0.1 && m.heldShares === 0.1 && m.realizedUsd === 0, JSON.stringify(m));
+  const contoh = buildStockPortfolio([
+    d("#AAPL", "BUY", "IN", 0.2, 200), d("#AAPL", "BUY", "IN", 0.1, 230),
+    d("#AAPL", "SELL", "OUT", 0.1, 240, 4, -0.1, 70000),
+  ]);
+  const a = contoh[0];
+  assert(a.boughtLot === 0.3 && a.avgBuy === 210 && a.soldLot === 0.1 && a.avgSell === 240 && a.heldLot === 0.2, JSON.stringify(a));
+  assert(a.heldShares === null && a.contract === null, "contract #AAPL belum dicek = tanpa lembar");
+  assert(a.realizedUsd === 3.9 && a.realizedIdr === 140000, `hasil ${a.realizedUsd} / ${a.realizedIdr}`);
+  const tanpaKurs = buildStockPortfolio([d("#AAPL", "SELL", "OUT", 0.1, 240, 4, 0, null)]);
+  assert(tanpaKurs[0].realizedIdr === null, "tanpa kurs = Rp null");
+  assert(isStockSymbol("META.US") && isStockSymbol("#META") && !isStockSymbol("#") && !isStockSymbol("US100"), "isStockSymbol");
+  assert(readSrc("src/components/group/GroupPage.tsx").includes('group === "SAHAM_AS" && <StockPortfolio'), "belum dipasang di tab Saham AS");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

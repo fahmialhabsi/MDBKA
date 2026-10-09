@@ -4,6 +4,7 @@ import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import { calculatorUrlFromHolding } from "../../lib/calculatorPageView";
 import { candleChartModel, LINE_COLOR, positionLines, withLiveCandles, type ChartLine, type OhlcLike } from "../../lib/candleChart";
 import { calculateTargets } from "../../lib/targetCalculator";
+import { StockPortfolio } from "./StockPortfolio";
 import { parseCsvCandles } from "../../lib/csvCandleParser";
 import { accountMetrics, GROUP_TABS, groupSymbolTabs, type GroupPageParams } from "../../lib/groupPageView";
 import { formatIdr, formatUsd } from "../../lib/historyPageView";
@@ -186,6 +187,8 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
             </button>
           ))}
         </div>
+
+        {group === "SAHAM_AS" && <StockPortfolio broker={broker} />}
 
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60">
           <div className="min-h-64 p-4" data-testid="group-chart">
