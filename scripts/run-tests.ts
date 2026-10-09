@@ -7200,6 +7200,7 @@ test("585. halaman History: tautan, tab Live/Demo, format USD/Rp (H3)", () => {
   assert(bar.includes("historyPageUrl(b)") && bar.includes('target="_blank"'), "tombol History belum ada");
   const page = readSrc("src/components/history/HistoryPage.tsx");
   assert(page.includes('"Komisi (Rp)", "Profit (Rp)"') && page.includes('data-testid="history-sisa"') && page.includes("API_BASE_URL"), "kolom Rupiah / Sisa setoran");
+  assert(page.includes("formatPrice(r.price, r.symbol)"), "harga harus ikut desimal simbol seperti MT5 (1.32160, 89.00)");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

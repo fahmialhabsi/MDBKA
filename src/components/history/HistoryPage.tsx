@@ -10,6 +10,7 @@ import {
   type HistoryAccountLike,
   type HistoryKind,
 } from "../../lib/historyPageView";
+import { formatPrice } from "../../lib/tickSize";
 import type { BrokerId } from "../../types/broker";
 
 interface Row {
@@ -151,7 +152,7 @@ export function HistoryPage({ broker }: { broker: BrokerId }) {
                       <td className="px-3 py-1.5">{mt5TypeText(r.type)}</td>
                       <td className="px-3 py-1.5">{mt5DirectionText(r.type, r.entry)}</td>
                       <td className="px-3 py-1.5 text-right">{r.type === "BALANCE" ? "" : r.volume.toFixed(2)}</td>
-                      <td className="px-3 py-1.5 text-right">{r.type === "BALANCE" ? "" : r.price}</td>
+                      <td className="px-3 py-1.5 text-right">{r.type === "BALANCE" ? "" : formatPrice(r.price, r.symbol)}</td>
                       <td className={`px-3 py-1.5 text-right ${color(r.commission)}`}>{r.commission === 0 ? "" : formatUsd(r.commission)}</td>
                       <td className={`px-3 py-1.5 text-right ${color(r.profit)}`}>{r.profit === 0 && r.entry === "IN" && r.type !== "BALANCE" ? "" : formatUsd(r.profit)}</td>
                       <td className={`px-3 py-1.5 text-right ${color(r.changePct)}`}>{r.changePct === null ? "" : `${formatUsd(r.changePct)} %`}</td>
