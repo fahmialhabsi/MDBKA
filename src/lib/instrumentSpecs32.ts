@@ -1090,7 +1090,11 @@ export const INSTRUMENT_SPECS_32: Record<string, InstrumentSpec> =
       pip: 0.01,
       tickSize: 0.01,
       tickValue: 0.2,
-      leverage: 100000,
+      // Perbaikan 9 Okt 2026: contract size 20 ($20/poin/lot), bukan 100000.
+      // Bukti 2 trade nyata Finex demo: SELL 0.01 @30748.33→30734.16 =
+      // +$2.83 (14,17 poin × 0,2); 5,40 poin = +$1.08. tickValue 0.2 ÷
+      // tickSize 0.01 = 20. Dulu P&L monitor membengkak 5.000×.
+      leverage: 20,
       commission: 1.0,
       swapLong: -25.29,
       swapShort: -117.17,

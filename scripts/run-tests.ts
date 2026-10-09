@@ -1452,8 +1452,8 @@ test("96. merge menolak Bid 1.32 untuk US100 dan mempertahankan lama", () => {
 
 test("97. preset broker US100 tanpa contract size GBPUSD", () => {
   const applied = applyBrokerPreset(makeEmptyBroker(), "US100");
-  assert(applied.contractSize === 1, `contractSize=${applied.contractSize}`);
-  assert(applied.pointValue === 1, `pointValue=${applied.pointValue}`);
+  assert(applied.contractSize === 20, `contractSize=${applied.contractSize}`);
+  assert(applied.pointValue === 20, `pointValue=${applied.pointValue}`);
   assert(applied.buffer === 10, `buffer=${applied.buffer}`);
   assert(applied.minLot === 0.01, `minLot=${applied.minLot}`);
   assert(applied.equity === 0, "equity tidak boleh ditebak");
@@ -7115,6 +7115,18 @@ test("580. buku kurs ECB harian: parse 90 hari, gabung, kurs tanggal transaksi (
   }
 });
 
+test("582. US100 Finex = $20/poin/lot: cocok trade nyata MT5 (perbaikan 9 Okt)", () => {
+  const sell = { symbol: "US100", direction: "JUAL" as const, lot: 0.01, entryPrice: 30748.33 };
+  const tutup = calculateExitPnL(sell, 30734.16);
+  assert(tutup !== null && tutup.value === 2.83 && tutup.currency === "USD", `harus +2.83 seperti MT5: ${JSON.stringify(tutup)}`);
+  const jalan = calculateHoldingPnL({ ...sell, entryPrice: 30827.82 }, 30835.82, 30838.59);
+  assert(jalan !== null && jalan.value === -2.15, `P&L berjalan harus -2.15: ${JSON.stringify(jalan)}`);
+  const us30 = calculateHoldingPnL({ symbol: "US30", direction: "BELI", lot: 0.01, entryPrice: 51273.15 }, 51322.6, 51327.73);
+  assert(us30 !== null && us30.value === 2.47, `US30 tetap benar: ${JSON.stringify(us30)}`);
+  const preset = applyBrokerPreset(makeEmptyBroker(), "US100", "finex");
+  assert(preset.pointValue === 20 && preset.contractSize === 20, `preset analisa: ${preset.pointValue}/${preset.contractSize}`);
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
@@ -8332,8 +8344,8 @@ test("387. wiring form defaults Finex GBPUSD + US100", () => {
   );
   const us100 = getSpec32FormDefaults("US100");
   assert(
-    us100.leverage === 100000 && us100.commission === 1 && us100.verified,
-    "US100 salah",
+    us100.leverage === 20 && us100.commission === 1 && us100.verified,
+    "US100 salah (contract 20 sejak perbaikan 9 Okt)",
   );
 });
 

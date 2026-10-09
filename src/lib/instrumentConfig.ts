@@ -281,8 +281,10 @@ const profiles: InstrumentProfile[] = [
     spreadUnit: "index points",
     spreadLabel: "index points",
     priceScale: 100,
-    defaultPointValue: 1,
-    contractSize: 1,
+    // Perbaikan 9 Okt 2026: Finex US100 = $20/poin/lot (trade nyata +$2.83
+    // untuk 14,17 poin × 0,01 lot). Dulu 1 → risiko analisa 20× terlalu kecil.
+    defaultPointValue: 20,
+    contractSize: 20,
     defaultBuffer: 10,
     minPrice: 1000,
     maxPrice: 100000,

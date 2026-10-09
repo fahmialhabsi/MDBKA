@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **581** → test baru mulai **582**.
+Nomor test terakhir: **582** → test baru mulai **583**.
 
 ---
 
@@ -192,6 +192,13 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 
 ## 4. Kondisi terbuka / perlu diperhatikan
 
+- **BUG DIPERBAIKI 9 Okt: US100 Finex** — `instrumentSpecs32` contract 100000 → **20**, `instrumentConfig` pointValue/contract
+  1 → **20**. Dulu monitor posisi P&L ×5.000 (−$10.770 padahal −$2,15) dan analisa/pemindai risiko US100 ×20 terlalu kecil
+  (US100 tampil "Lolos" padahal risiko SL ±Rp429 rb > batas Indeks Rp150 rb). Bukti: 2 trade nyata Finex demo. Test 582.
+- **Perlu dicek dengan MT5 Specification (belum diubah, jangan menebak)**: spec32 yang contract ≠ tickValue÷tickSize —
+  Finex XAGUSD (5000 vs 100), XAUUSD (100 vs 1000); OTB AMAZON/APPLE/BOA/META.US (1 vs 100), CSCO.US (100 vs 1),
+  FB/PFE.US (100 vs 1000), GOOG.US (100 vs 10). Bisa salah di contract ATAU di tickValue/tickSize; verifikasi pakai trade nyata.
+
 - **META.US OTB** (BUY 0,10 @741,07, tanpa SL, −$2,01 ≈ −Rp36 rb pada 8 Okt malam) tidak bisa ditutup: "Market closed" — saham AS hanya bisa ditransaksikan saat bursa AS buka (±22:30–05:00 WIT, cek MT5 Specification → Sessions). Keputusan tutup/pasang SL di tangan Fahmi.
 
 - **Audit 8 Okt (5 trade LOLOS Finex demo, bersih ≈ −$5,44 ≈ −Rp97 rb, win 3/5):** rugi besar XTIUSD JUAL −$8 = −1R tepat (SL dipatuhi, MFE hanya 0,08R → sinyal meleset, bukan bug). Akar masalah: risiko 0,01 lot tidak seimbang (minyak ±Rp143 rb vs forex ±Rp12–31 rb) → dijawab batas golongan (R1–R3). Catatan jujur: GBPUSD & GBPCHF menang setelah ditahan **7–8 jam** (melewati time-stop 3 jam); AUDCHF SL hanya 5,4 pip (kena dalam 7 menit). Usulan berikut yang belum dikerjakan: **jarak SL minimum** (mis. berbasis ATR).
@@ -263,7 +270,7 @@ mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: N
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **582**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **583**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
