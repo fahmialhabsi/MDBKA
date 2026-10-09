@@ -316,6 +316,12 @@ ESLint → pengguna build/test/commit → verifikasi.
    Setoran Finex live yang aslinya Rupiah (komentar deal "D-1: IDR 200000.00") tampilkan nilai Rupiah asli.
    Contoh uji Finex demo 61823011: Deposit $5.000 (bonus 27 Sep), Profit −$10,04, Komisi −$0,09, Balance $4.989,96;
    AUDCHF 8 Okt: komisi −$0,01, profit −$0,65 → kolom Rp per kurs 8 Okt.
+   **Kotak "Sisa setoran" (permintaan 9 Okt)**: Sisa setoran (Rp) = Setoran (Rp) **+** Hasil bersih (Rp), dengan
+   Hasil bersih = Profit + Komisi (+ Swap/Fee bila ada) = −$10,04 di contoh (bukan Profit −$9,95 saja). Penjumlahan,
+   BUKAN perkalian. Tampilkan rinci: Setoran Rp… · Hasil bersih Rp… (untung/rugi) · Sisa setoran Rp… (± % dari setoran).
+   Contoh kurs hari ini Rp17.920: Rp89.600.000 + (−Rp179.917) = **Rp89.420.083** (= Balance $4.989,96 × kurs).
+   Dengan kurs tanggal transaksi, setoran dihitung pada kurs tanggal setor (27 Sep) → angka berbeda; tampilkan keduanya
+   atau beri catatan agar tidak membingungkan.
 Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi build/test/commit.
 
 ---
