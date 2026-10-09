@@ -141,3 +141,52 @@ export function sessionNotice(
   return null;
 }
 
+/** S3: entry baru ditahan bila pasar tutup dalam ≤ ini (menit), semua simbol. */
+export const SESSION_ENTRY_CLOSE_MIN = 60;
+/** S3: saham — ditahan bila tutup ≤ ini (menit) DAN setelahnya libur panjang. */
+export const STOCK_WEEKEND_CLOSE_MIN = 240;
+/** Jeda tutup → buka yang dianggap libur panjang (akhir pekan), menit. */
+export const LONG_GAP_MIN = 24 * 60;
+
+function isStock(symbol: string): boolean {
+  const s = symbol.trim().toUpperCase();
+  return s.endsWith(".US") || (s.startsWith("#") && s.length > 1);
+}
+
+/**
+ * S3 (9 Okt 2026): tahan sinyal BELI/JUAL menjelang pasar tutup, agar posisi
+ * tidak terkunci "Market closed" (kasus META.US). Pasar sudah tutup ditangani
+ * satpam "Pasar tutup / data basi" yang lama. Sesi tak diketahui → null
+ * (satpam diabaikan). MURNI.
+ */
+export function findSessionHold(
+  symbol: string,
+  serverNow: string,
+  sessions: readonly TradeSession[] | null | undefined,
+): { reason: string; closesInMin: number } | null {
+  if (sessions === null || sessions === undefined || sessions.length === 0) return null;
+  const st = sessionState(symbol, serverNow, sessions);
+  if (!st.known || !st.open || st.closesInMin === null) return null;
+  if (st.closesInMin <= SESSION_ENTRY_CLOSE_MIN) {
+    return {
+      closesInMin: st.closesInMin,
+      reason: `Ditahan: pasar ${symbol} tutup ${durasi(st.closesInMin)} lagi (posisi bisa terkunci "Market closed")`,
+    };
+  }
+  if (isStock(symbol) && st.closesInMin <= STOCK_WEEKEND_CLOSE_MIN) {
+    const now = parseServer(serverNow);
+    if (now !== null) {
+      const afterClose = fmt(now.ms + (st.closesInMin + 1) * 60_000) + ":00";
+      const next = sessionState(symbol, afterClose, sessions);
+      const gap = next.opensInMin === null ? null : next.opensInMin + 1;
+      if (gap !== null && gap >= LONG_GAP_MIN) {
+        return {
+          closesInMin: st.closesInMin,
+          reason: `Ditahan: saham ${symbol} tutup ${durasi(st.closesInMin)} lagi lalu libur ${durasi(gap)} (tidak bisa ditutup, risiko gap harga)`,
+        };
+      }
+    }
+  }
+  return null;
+}
+

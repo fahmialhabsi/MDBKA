@@ -52,7 +52,7 @@ import { calculateTargets, secureReadiness } from "../src/lib/targetCalculator";
 import { accountMetrics, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage } from "../src/lib/groupPageView";
 import { candleChartModel, hourKey, LINE_COLOR, positionLines, spreadLabels, withLiveCandles } from "../src/lib/candleChart";
 import { readCandleCsv } from "../server/routes/candlesRoutes";
-import { serverNowText, serverToWitLabel, sessionNotice, sessionState, weeklyIntervals } from "../src/lib/sessionGuard";
+import { findSessionHold, serverNowText, serverToWitLabel, sessionNotice, sessionState, weeklyIntervals } from "../src/lib/sessionGuard";
 import { parseSessionsCsv } from "../server/services/sessionReader";
 import { buildStockPortfolio, isStockSymbol } from "../src/lib/stockPortfolio";
 import { calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
@@ -7530,6 +7530,32 @@ test("604. butir 2 P1: portofolio saham dari History (META.US OTB + contoh jual)
   assert(tanpaKurs[0].realizedIdr === null, "tanpa kurs = Rp null");
   assert(isStockSymbol("META.US") && isStockSymbol("#META") && !isStockSymbol("#") && !isStockSymbol("US100"), "isStockSymbol");
   assert(readSrc("src/components/group/GroupPage.tsx").includes('group === "SAHAM_AS" && <StockPortfolio'), "belum dipasang di tab Saham AS");
+});
+
+test("605. Satpam Sesi S3: tahan entry jelang tutup / saham jelang libur akhir pekan", () => {
+  const meta = [1, 2, 3, 4, 5].map((day) => ({ symbol: "META.US", day, fromMin: 930, toMin: 1315 }));
+  const fx = [1, 2, 3, 4].flatMap((day) => [{ symbol: "EURUSD_ORB", day, fromMin: 0, toMin: 1380 }, { symbol: "EURUSD_ORB", day, fromMin: 1385, toMin: 1440 }])
+    .concat([{ symbol: "EURUSD_ORB", day: 0, fromMin: 1385, toMin: 1440 }, { symbol: "EURUSD_ORB", day: 5, fromMin: 0, toMin: 1375 }]);
+  const all = [...meta, ...fx];
+  // Kamis 8 Okt 21:00 server: META.US tutup 55 mnt lagi → tahan (≤60).
+  const h1 = findSessionHold("META.US", "2026.10.08 21:00:00", all);
+  assert(h1 !== null && h1.closesInMin === 55 && h1.reason.includes("tutup 55 menit lagi"), JSON.stringify(h1));
+  // Kamis 19:00: tutup 2 jam 55 mnt lagi, besok buka lagi (jeda < 24 jam) → TIDAK ditahan.
+  assert(findSessionHold("META.US", "2026.10.08 19:00:00", all) === null, "Kamis sore tidak ditahan");
+  // Jumat 19:00: tutup 2 jam 55 mnt lalu libur s/d Senin → saham DITAHAN.
+  const h2 = findSessionHold("META.US", "2026.10.09 19:00:00", all);
+  assert(h2 !== null && h2.reason.includes("libur"), JSON.stringify(h2));
+  // Jumat 16:00 (tutup 5 jam 55 mnt lagi) → belum ditahan.
+  assert(findSessionHold("META.US", "2026.10.09 16:00:00", all) === null, "Jumat awal sesi boleh");
+  // Forex Jumat 21:00 (tutup 22:55, 115 mnt) → tidak ditahan (aturan libur hanya saham); 22:10 → ditahan (45 mnt).
+  assert(findSessionHold("EURUSD_ORB", "2026.10.09 21:00:00", all) === null, "forex aturan libur tidak berlaku");
+  assert(findSessionHold("EURUSD_ORB", "2026.10.09 22:10:00", all) !== null, "forex ≤60 mnt ditahan");
+  assert(findSessionHold("META.US", "2026.10.08 21:00:00", null) === null && findSessionHold("XAUUSD", "2026.10.08 21:00:00", all) === null, "tanpa sesi = diabaikan");
+  const sc = readSrc("src/lib/symbolScanner.ts");
+  assert(sc.includes('status: "DITAHAN_SESI"') && sc.includes("findSessionHold(symbol"), "pemindai belum memakai satpam sesi");
+  assert(readSrc("src/components/analysis/SymbolScannerPanel.tsx").includes("useTradeSessions(brokerId)"), "panel");
+  assert(readSrc("src/components/analysis/SignalDetailPage.tsx").includes("/api/sessions?broker="), "detail");
+  assert(readSrc("server/index.ts").includes("getSessions: () => readSessionsForBroker("), "catatan entry");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

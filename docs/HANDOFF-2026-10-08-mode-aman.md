@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **604** → test baru mulai **605**.
+Nomor test terakhir: **605** → test baru mulai **606**.
 
 ---
 
@@ -304,7 +304,9 @@ ESLint → pengguna build/test/commit → verifikasi.
   (OTB 460 baris, Finex 440). META.US OTB Sen–Jum 15:30–21:55 server = 22:30–04:55 WIT; #META Finex 16:30–23:00 = 22:30–05:00 WIT.
 - S2 ✅ `server/services/sessionReader.ts` + `GET /api/sessions?broker=` + `src/lib/sessionGuard.ts` (`sessionState`: buka/tutup,
   tutup N menit lagi, buka lagi jam server; interval bersambung digabung; simbol tanpa sesi = tidak diketahui; test 601).
-- S3 (belum) satpam pemindai/analisa: tahan BELI/JUAL bila pasar tutup / tutup < N menit / saham menjelang akhir pekan.
+- S3 ✅ status `DITAHAN_SESI` "Jelang tutup" (setelah satpam berita): semua simbol tutup ≤60 mnt (`SESSION_ENTRY_CLOSE_MIN`); saham tutup
+  ≤240 mnt lalu libur ≥24 jam (`STOCK_WEEKEND_CLOSE_MIN`, `LONG_GAP_MIN`). Pemindai, detail sinyal, catatan entry server. `findSessionHold`; test 605.
+  Angka ambang = usulan awal Claude, boleh diubah Fahmi.
 - S4 ✅ kartu posisi monitor: kotak merah "PASAR TUTUP — bisa lagi mulai Jumat 22:30 WIT (… lagi)" / kuning "PASAR SEGERA TUTUP"
   (≤60 mnt). Jam server dari quote TERSEGAR (quote simbol tutup basi). `sessionNotice`, `serverToWitLabel`, `useTradeSessions`; test 602.
   (Dikerjakan sebelum S3 karena langsung membantu META.US.) S5 (belum) saham wajib ber-SL.

@@ -18,6 +18,7 @@ import { getCachedEcbRates } from "./routes/fxRoutes";
 import { resolveCommonFilesDir } from "./routes/marginRoutes";
 import { createTradeEntryLog } from "./services/tradeEntryLog";
 import { readCalendarForBroker } from "./services/calendarReader";
+import { readSessionsForBroker } from "./services/sessionReader";
 import { runExcursionPass, startExcursionSchedule } from "./services/excursionJob";
 import { MT5LogReader } from "./services/mt5LogReader";
 import { QuotesLogReader } from "./services/quotesLogReader";
@@ -217,6 +218,8 @@ async function startServer() {
         ).reason,
       // K4c: kalender ekonomi broker yang sama (jam server); tidak ada = null.
       getNewsEvents: () => readCalendarForBroker(resolveCommonFilesDir(), src.broker)?.events ?? null,
+      // S3: jam trading resmi broker yang sama; tidak ada = null.
+      getSessions: () => readSessionsForBroker(resolveCommonFilesDir(), src.broker)?.sessions ?? null,
     });
     const record = (positions: readonly import("./types/positions").BrokerPosition[]): void => {
       try {

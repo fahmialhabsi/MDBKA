@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTradeSessions } from "../../hooks/useTradeSessions";
 import { RefreshCw, ScanSearch } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
@@ -56,6 +57,7 @@ const STATUS_VIEW: Record<ScanStatus, { label: string; className: string }> = {
   DITAHAN_KORELASI: { label: "Taruhan ganda", className: "bg-fuchsia-400/15 text-fuchsia-300" },
   DITAHAN_JEDA: { label: "Jeda rugi", className: "bg-rose-400/15 text-rose-300" },
   DITAHAN_BERITA: { label: "Dekat berita", className: "bg-orange-400/15 text-orange-300" },
+  DITAHAN_SESI: { label: "Jelang tutup", className: "bg-rose-400/15 text-rose-300" },
   TUNGGU: { label: "Tunggu", className: "bg-white/10 text-slate-300" },
   PASAR_TUTUP: { label: "Pasar tutup / basi", className: "bg-white/5 text-slate-500" },
   DATA: { label: "Data kurang", className: "bg-white/5 text-slate-500" },
@@ -182,6 +184,8 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
   );
   const pauseReason = lossPause.paused ? lossPause.reason : null;
   const newsEvents = calendar !== null && calendar.broker === brokerId ? calendar.events : null;
+  // Satpam Sesi S3: jam trading resmi broker.
+  const sessions = useTradeSessions(brokerId);
   // K6: berita Tinggi mendatang (jam server broker ini).
   const upcoming = useMemo(() => upcomingHighNews(newsEvents, nowServer), [newsEvents, nowServer]);
 
@@ -207,14 +211,15 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
           // K4b: jam server terbaru broker (quote simbol tutup bisa basi).
           newsEvents,
           newsNow: nowServer ?? undefined,
+          sessions,
         }),
       ),
     );
-  }, [items, itemsBroker, brokerId, equity, fxRates, openPositions, pauseReason, newsEvents, nowServer]);
+  }, [items, itemsBroker, brokerId, equity, fxRates, openPositions, pauseReason, newsEvents, nowServer, sessions]);
 
   const counts = rows.reduce<Record<ScanStatus, number>>(
     (acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }),
-    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, DITAHAN_JEDA: 0, DITAHAN_BERITA: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
+    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, DITAHAN_JEDA: 0, DITAHAN_BERITA: 0, DITAHAN_SESI: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
   );
   const visible = showAll ? rows : rows.slice(0, COLLAPSED_ROWS);
   const loading =
@@ -234,6 +239,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
               {counts.DITAHAN_BIAYA} biaya mahal · {counts.DITAHAN_RISIKO} risiko
               &gt; batas · {counts.DITAHAN_KORELASI} taruhan ganda ·{" "}
               {counts.DITAHAN_JEDA} jeda · {counts.DITAHAN_BERITA} dekat berita ·{" "}
+              {counts.DITAHAN_SESI} jelang tutup ·{" "}
               {counts.TUNGGU} tunggu · {counts.PASAR_TUTUP} pasar
               tutup · {counts.DATA} data kurang
             </p>

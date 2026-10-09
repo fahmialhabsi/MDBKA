@@ -10,6 +10,7 @@ import type { BrokerId } from "../../src/types/broker";
 import { collectCandleItems, type CandleSource } from "../routes/candlesRoutes";
 import type { BrokerPosition } from "../types/positions";
 import type { NewsEventLike } from "../../src/lib/newsGuard";
+import type { TradeSession } from "../../src/lib/sessionGuard";
 
 /**
  * Langkah 4b (Mode Aman, 8 Okt 2026) — catatan entry posisi.
@@ -65,6 +66,8 @@ export interface TradeEntryLogOptions {
    * server); dinilai pada jam entry (timeOpen). null / gagal = tanpa satpam.
    */
   readonly getNewsEvents?: () => readonly NewsEventLike[] | null;
+  /** Satpam Sesi S3: jam trading resmi broker; null / gagal = tanpa satpam. */
+  readonly getSessions?: () => readonly TradeSession[] | null;
   readonly now?: () => Date;
 }
 
@@ -116,6 +119,15 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
     }
   };
 
+  const sessions = (): readonly TradeSession[] | null => {
+    if (opts.getSessions === undefined) return null;
+    try {
+      return opts.getSessions();
+    } catch {
+      return null;
+    }
+  };
+
   const scanFor = (
     symbol: string,
     equity: number | null,
@@ -154,6 +166,7 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       // K4c: berita Tinggi ±30 mnt dinilai pada jam server entry.
       newsEvents: newsEvents(),
       newsNow: timeOpen,
+      sessions: sessions(),
     });
     return {
       status: row.status,

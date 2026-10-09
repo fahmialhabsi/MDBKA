@@ -9,6 +9,7 @@ import type { BrokerId } from "../types/broker";
 import { canonicalSymbolForBroker } from "./brokerSymbols";
 import { findDoubleBet, type OpenPositionLike } from "./correlationGuard";
 import { findNewsHold, type NewsEventLike } from "./newsGuard";
+import { findSessionHold, type TradeSession } from "./sessionGuard";
 import { parseCsvCandles } from "./csvCandleParser";
 import { resolveCsvBidAsk, type LiveQuoteLike } from "./csvQuote";
 import { riskCapFor } from "./riskGroup";
@@ -33,6 +34,7 @@ export type ScanStatus =
   | "DITAHAN_KORELASI"
   | "DITAHAN_JEDA"
   | "DITAHAN_BERITA"
+  | "DITAHAN_SESI"
   | "TUNGGU"
   | "PASAR_TUTUP"
   | "DATA";
@@ -62,6 +64,8 @@ export interface ScanInput {
   readonly newsEvents?: readonly NewsEventLike[] | null;
   /** Jam server penilaian berita; default jam quote live (quotes.csv). */
   readonly newsNow?: string;
+  /** Satpam Sesi S3: jam trading resmi broker (null/absen = diabaikan). Jam = newsNow. */
+  readonly sessions?: readonly TradeSession[] | null;
 }
 
 export interface ScanRow {
@@ -257,6 +261,26 @@ export function scanSymbol(input: ScanInput): ScanRow {
       };
     }
   }
+  // Satpam Sesi S3: lolos tapi pasar segera tutup / saham jelang libur → tahan.
+  if (
+    status === "LOLOS" &&
+    (result.decision === "BELI" || result.decision === "JUAL")
+  ) {
+    const sesi = findSessionHold(symbol, input.newsNow ?? input.quote?.timestamp ?? "", input.sessions);
+    if (sesi !== null) {
+      return {
+        symbol,
+        status: "DITAHAN_SESI",
+        decision: "TUNGGU",
+        direction: result.decision,
+        held: true,
+        score: result.score,
+        reason: sesi.reason,
+        costShareOfRisk: result.costShareOfRisk ?? null,
+        candles: count,
+      };
+    }
+  }
   // Langkah D: lolos tapi searah dengan posisi terbuka → taruhan ganda.
   if (
     status === "LOLOS" &&
@@ -316,9 +340,10 @@ const STATUS_ORDER: Record<ScanStatus, number> = {
   DITAHAN_KORELASI: 3,
   DITAHAN_JEDA: 4,
   DITAHAN_BERITA: 5,
-  TUNGGU: 6,
-  PASAR_TUTUP: 7,
-  DATA: 8,
+  DITAHAN_SESI: 6,
+  TUNGGU: 7,
+  PASAR_TUTUP: 8,
+  DATA: 9,
 };
 
 /** Urutan tampil: LOLOS dulu, lalu yang paling dekat lolos; skor kuat di atas. */
