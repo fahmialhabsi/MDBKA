@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX } from "react";
 import { historyPageUrl } from "../../lib/historyPageView";
+import { calculatorPageUrl } from "../../lib/calculatorPageView";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import {
   buildBalanceRows,
@@ -90,6 +91,15 @@ export function AccountBalancesBar({
             History {b === "finex" ? "Finex" : "OTB"} ↗
           </a>
         ))}
+        <a
+          href={calculatorPageUrl({ broker: "finex" })}
+          target="_blank"
+          rel="noreferrer"
+          data-testid="calculator-link"
+          className="rounded-lg border border-sky-400/30 bg-sky-400/10 px-3 py-1.5 font-semibold text-sky-200 hover:bg-sky-400/20"
+        >
+          Kalkulator ↗
+        </a>
       </div>
     </div>
   );

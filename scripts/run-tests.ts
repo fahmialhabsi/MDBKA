@@ -49,6 +49,7 @@ import { buildHistoryView } from "../server/services/historyView";
 import { accountKind, historyForLogin, listHistoryAccounts } from "../server/routes/historyRoutes";
 import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
 import { calculateTargets } from "../src/lib/targetCalculator";
+import { calculatorPageUrl, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
 import { formatClock12, serverUtcOffsetHours, WIT_UTC_OFFSET } from "../src/lib/serverClock";
@@ -7268,6 +7269,33 @@ test("590. kalkulator target harga: contoh nyata US100 SELL, tangga harga, valid
   const beli = calculateTargets({ symbol: "EURUSD", direction: "BELI", lot: 0.01, entry: 1.1, sl: 1.099, tp: 1.1015 }, usd, 17920);
   assert(beli.ok && beli.tpNetUsd === 1.49 && beli.slNetUsd === -1.01 && beli.closeSide === "Bid", JSON.stringify(beli));
   assert(!calculateTargets({ symbol: "ZZZ", direction: "BELI", lot: 0.01, entry: 1, sl: 0.99, tp: 1.01 }, usd, 17920).ok, "simbol tak dikenal");
+});
+
+test("591. halaman kalkulator: URL prefill, angka koma, terpasang (butir 4, C2)", () => {
+  const url = calculatorPageUrl({ broker: "finex", symbol: "US100", direction: "JUAL", lot: "0.01", entry: "30748.33", sl: "30878.43", tp: "30544.73" });
+  const p = parseCalculatorPage(url.slice(1));
+  assert(p !== null && p.symbol === "US100" && p.direction === "JUAL" && p.entry === "30748.33" && p.tp === "30544.73", JSON.stringify(p));
+  const kosong = parseCalculatorPage("?halaman=kalkulator");
+  assert(kosong !== null && kosong.broker === "finex" && kosong.direction === "BELI" && kosong.lot === "0.01" && kosong.sl === "", "default");
+  assert(parseCalculatorPage("?halaman=history") === null, "bukan kalkulator");
+  assert(parseInputNumber("30748,33") === 30748.33 && parseInputNumber("1.32160") === 1.3216 && Number.isNaN(parseInputNumber("")), "angka");
+  assert(readSrc("src/main.tsx").includes("parseCalculatorPage(window.location.search)"), "halaman belum dipasang");
+  assert(readSrc("src/components/layout/AccountBalancesBar.tsx").includes('data-testid="calculator-link"'), "tombol Kalkulator");
+  const page = readSrc("src/components/analysis/CalculatorPage.tsx");
+  assert(page.includes("calculateTargets(") && page.includes('data-testid="calc-ladder"') && page.includes('data-testid="calc-error"') && page.includes('data-testid="calc-cap"'), "halaman lengkap");
+});
+
+test("592. kalkulator C3: dropdown simbol per broker + isi dari posisi terbuka MT5", () => {
+  const pos = { ticket: "123", symbol: "us100", side: "SELL" as const, volume: 0.01, priceOpen: 30748.33, sl: 30878.43, tp: 30544.73 };
+  const p = prefillFromPosition(pos, "finex");
+  assert(p.symbol === "US100" && p.direction === "JUAL" && p.lot === "0.01" && p.entry === "30748.33" && p.sl === "30878.43" && p.tp === "30544.73", JSON.stringify(p));
+  const tanpa = prefillFromPosition({ ...pos, side: "BUY", sl: 0, tp: 0 }, "orbitraderberjangka");
+  assert(tanpa.direction === "BELI" && tanpa.sl === "" && tanpa.tp === "" && tanpa.broker === "orbitraderberjangka", "SL/TP 0 harus kosong");
+  assert(positionOptionLabel(pos) === "us100 JUAL 0.01 @30748.33 (#123)", positionOptionLabel(pos));
+  assert(JSON.stringify(symbolOptions(["XAUUSD", "us100", "US100", " "], "")) === '["US100","XAUUSD"]', "unik+urut");
+  assert(symbolOptions(["EURUSD"], "US100").includes("US100"), "simbol terpilih tetap ada");
+  const page = readSrc("src/components/analysis/CalculatorPage.tsx");
+  assert(page.includes("/api/quotes?broker=${broker}") && page.includes('data-testid="calc-symbol"') && page.includes('data-testid="calc-position"') && page.includes("useBrokerPositions(broker"), "halaman belum memakai dropdown/posisi");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
