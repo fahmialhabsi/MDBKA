@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **600** → test baru mulai **601**.
+Nomor test terakhir: **601** → test baru mulai **602**.
 
 ---
 
@@ -290,6 +290,15 @@ ESLint → pengguna build/test/commit → verifikasi.
   · K6 ✅ daftar "Berita Tinggi mendatang" (`upcomingHighNews`, `<details>` oranye di pemindai, jam server + waktu relatif; test 577).
   · Jam header ✅ `ServerClock` (jam server MT5 broker aktif + WIT, 12 jam AM/PM, berdetak tiap detik; zona dideteksi dari quote segar, bawaan Finex +3 / OTB +2; `src/lib/serverClock.ts`; test 578).
   **Satpam Kalender SELESAI** — verifikasi layar pertama: Senin 13 Okt ±22:30–23:30 WIT (Existing Home Sales USD 17:00 jam server Finex).
+
+## 5d. Satpam Sesi (9 Okt 2026) — latar: META.US OTB tak bisa ditutup "Market closed" di luar jam bursa AS
+- S1 ✅ `MDBKACalendarService.mq5` juga menulis `MDBKA_Sessions_<login>.csv` (SymbolInfoSessionTrade semua simbol Market Watch;
+  Symbol,Day 0=Minggu,Index,FromMin,ToMin,Company,Generated; jam SERVER). Terpasang & tervalidasi 9 Okt di kedua terminal
+  (OTB 460 baris, Finex 440). META.US OTB Sen–Jum 15:30–21:55 server = 22:30–04:55 WIT; #META Finex 16:30–23:00 = 22:30–05:00 WIT.
+- S2 ✅ `server/services/sessionReader.ts` + `GET /api/sessions?broker=` + `src/lib/sessionGuard.ts` (`sessionState`: buka/tutup,
+  tutup N menit lagi, buka lagi jam server; interval bersambung digabung; simbol tanpa sesi = tidak diketahui; test 601).
+- S3 (belum) satpam pemindai/analisa: tahan BELI/JUAL bila pasar tutup / tutup < N menit / saham menjelang akhir pekan.
+- S4 (belum) kartu posisi: "Pasar tutup — bisa ditutup mulai … WIT". S5 (belum) saham wajib ber-SL.
 
 ## 5c. BACKLOG tambahan (permintaan Fahmi 9 Okt) — dikerjakan SETELAH tahap inti (Satpam Kalender) selesai
 1. **Halaman per golongan** (Forex, Forex JPY, Logam, Minyak, Saham AS, Indeks, + Saham): tiap golongan punya tombol

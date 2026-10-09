@@ -52,6 +52,8 @@ import { calculateTargets, secureReadiness } from "../src/lib/targetCalculator";
 import { accountMetrics, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage } from "../src/lib/groupPageView";
 import { candleChartModel, hourKey, LINE_COLOR, positionLines, spreadLabels, withLiveCandles } from "../src/lib/candleChart";
 import { readCandleCsv } from "../server/routes/candlesRoutes";
+import { sessionState, weeklyIntervals } from "../src/lib/sessionGuard";
+import { parseSessionsCsv } from "../server/services/sessionReader";
 import { calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
@@ -7447,6 +7449,33 @@ test("600. Golongan G3b: label harga bertumpuk digeser (Entry vs Bid US100)", ()
   assert(m !== null && Math.abs(m.lines[0].labelY - m.lines[1].labelY) >= 20, "label Entry & Bid tidak bertumpuk");
   assert(m !== null && m.yTicks.every((t) => m.lines.every((l) => Math.abs(l.labelY - t.y) >= 16)), "angka skala tertimpa disembunyikan");
   assert(readSrc("src/components/group/GroupPage.tsx").includes("y={l.labelY - 9}"), "halaman belum memakai labelY");
+});
+
+test("601. Satpam Sesi S2: jam trading resmi broker (META.US OTB, EURUSD_ORB)", () => {
+  const csv = "Symbol,Day,Index,FromMin,ToMin,Company,Generated\r\n" +
+    [1, 2, 3, 4, 5].map((d) => `META.US,${d},0,930,1315,PT. Orbi Trade Berjangka,2026.10.09 14:15:31`).join("\r\n") + "\r\n" +
+    "EURUSD_ORB,0,0,1385,1440,PT. Orbi Trade Berjangka,x\r\n" +
+    [1, 2, 3, 4].map((d) => `EURUSD_ORB,${d},0,0,1380,PT. Orbi Trade Berjangka,x\r\nEURUSD_ORB,${d},1,1385,1440,PT. Orbi Trade Berjangka,x`).join("\r\n") +
+    "\r\nEURUSD_ORB,5,0,0,1375,PT. Orbi Trade Berjangka,x\r\nRUSAK,9,0,1,2,PT,x\r\n";
+  const p = parseSessionsCsv(csv);
+  assert(p.company === "PT. Orbi Trade Berjangka" && p.generated === "2026.10.09 14:15:31", JSON.stringify(p.company));
+  assert(p.sessions.filter((s) => s.symbol === "META.US").length === 5 && !p.sessions.some((s) => s.symbol === "RUSAK"), "parse");
+  // Jumat 9 Okt 14:00 server (21:00 WIT): META.US tutup, buka 15:30 (= 22:30 WIT), 90 menit lagi.
+  const tutup = sessionState("META.US", "2026.10.09 14:00:07", p.sessions);
+  assert(tutup.known && !tutup.open && tutup.opensInMin === 90 && tutup.nextOpenServer === "2026.10.09 15:30", JSON.stringify(tutup));
+  const buka = sessionState("meta.us", "2026.10.09 21:00:00", p.sessions);
+  assert(buka.open && buka.closesInMin === 55, JSON.stringify(buka));
+  // Sabtu 10 Okt 10:00 server → buka lagi Senin 12 Okt 15:30.
+  const libur = sessionState("META.US", "2026.10.10 10:00:00", p.sessions);
+  assert(!libur.open && libur.nextOpenServer === "2026.10.12 15:30", JSON.stringify(libur));
+  // EURUSD_ORB: jeda harian 23:00–23:05, Minggu 23:05 bersambung ke Senin.
+  assert(sessionState("EURUSD_ORB", "2026.10.12 00:30:00", p.sessions).open, "Senin dini hari buka (sambung dari Minggu)");
+  const jeda = sessionState("EURUSD_ORB", "2026.10.12 23:02:00", p.sessions);
+  assert(!jeda.open && jeda.opensInMin === 3, JSON.stringify(jeda));
+  const iv = weeklyIntervals(p.sessions, "EURUSD_ORB")[0];
+  assert(iv[0] === 1385 && iv[1] === 2820, `Minggu 23:05 bersambung s/d Senin 23:00: ${JSON.stringify(iv)}`);
+  assert(!sessionState("XAUUSD", "2026.10.09 14:00:00", p.sessions).known, "simbol tanpa sesi = tidak diketahui");
+  assert(readSrc("server/app.ts").includes('app.use("/api/sessions", createSessionRoutes())'), "route belum dipasang");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

@@ -20,6 +20,7 @@ import { createCandlesRoutes } from "./routes/candlesRoutes";
 import { createBackupRoutes } from "./routes/backupRoutes";
 import { createEvaluationRoutes } from "./routes/evaluationRoutes";
 import { createCalendarRoutes } from "./routes/calendarRoutes";
+import { createSessionRoutes } from "./routes/sessionRoutes";
 import { createHistoryRoutes } from "./routes/historyRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
 import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
@@ -78,6 +79,7 @@ export function createApp(
   app.use("/api/evaluation", createEvaluationRoutes());
   // Satpam Kalender K2b: kalender ekonomi MT5 per broker (jam server).
   app.use("/api/calendar", createCalendarRoutes());
+  app.use("/api/sessions", createSessionRoutes());
   // Halaman History H2b: History MT5 per akun + Rupiah kurs tanggal transaksi.
   app.use("/api/history", createHistoryRoutes());
   app.use(

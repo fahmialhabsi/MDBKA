@@ -5,6 +5,10 @@
 //| ulang event penting (Tinggi + Sedang) dari kemarin s/d 7 hari ke |
 //| depan. Jam = JAM SERVER broker (sama dengan quotes/positions).   |
 //| Output: Common\Files\MDBKA_Calendar_<login>.csv (12 kolom).      |
+//| + Satpam Sesi S1 (9 Okt 2026): MDBKA_Sessions_<login>.csv =      |
+//|   jam TRADING tiap simbol Market Watch per hari (jam server),     |
+//|   7 kolom: Symbol,Day(0=Minggu..6=Sabtu),Index,FromMin,ToMin,     |
+//|   Company,Generated. FromMin/ToMin = menit sejak 00:00 (0..1440). |
 //| Pasang di KEDUA terminal (Finex & OTB): copy ke MQL5/Services,   |
 //| compile (F7), Navigator > Services > klik kanan > Add Service >  |
 //| pilih file ini > Start. Hanya membaca kalender; tidak trading.   |
@@ -16,6 +20,7 @@ input string FilePrefix   = "MDBKA_Calendar";
 input int    DaysBack     = 1;
 input int    DaysAhead    = 7;
 input int    CheckSeconds = 300;
+input string SessionPrefix = "MDBKA_Sessions";
 
 string Clean(string s)
   {
@@ -100,6 +105,39 @@ int WriteCalendar(const string fileName)
    return(written);
   }
 
+// Satpam Sesi S1: jam trading resmi broker (SymbolInfoSessionTrade) untuk
+// semua simbol di Market Watch. Tanpa sesi pada suatu hari = pasar tutup.
+int WriteSessions(const string fileName)
+  {
+   int h = FileOpen(fileName, FILE_WRITE | FILE_CSV | FILE_ANSI | FILE_COMMON | FILE_SHARE_READ, ',');
+   if(h == INVALID_HANDLE)
+     {
+      Print("MDBKACalendarService: FileOpen sesi gagal: ", GetLastError());
+      return(-1);
+     }
+   FileWrite(h, "Symbol", "Day", "Index", "FromMin", "ToMin", "Company", "Generated");
+   string company   = Clean(AccountInfoString(ACCOUNT_COMPANY));
+   string generated = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS);
+   int written = 0;
+   int total = SymbolsTotal(true);
+   for(int i = 0; i < total; i++)
+     {
+      string sym = SymbolName(i, true);
+      for(int d = 0; d < 7; d++)
+        {
+         for(uint k = 0; k < 10; k++)
+           {
+            datetime from, to;
+            if(!SymbolInfoSessionTrade(sym, (ENUM_DAY_OF_WEEK)d, k, from, to)) break;
+            FileWrite(h, Clean(sym), d, (int)k, (int)(from / 60), (int)(to / 60), company, generated);
+            written++;
+           }
+        }
+     }
+   FileClose(h);
+   return(written);
+  }
+
 void OnStart()
   {
    Print("=== MDBKACalendarService START (tiap ", CheckSeconds, " dtk) ===");
@@ -111,6 +149,10 @@ void OnStart()
          int n = WriteCalendar(fileName);
          if(n >= 0)
             Print("MDBKACalendarService: ", n, " event -> ", fileName);
+         string sessFile = SessionPrefix + "_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".csv";
+         int m = WriteSessions(sessFile);
+         if(m >= 0)
+            Print("MDBKACalendarService: ", m, " sesi -> ", sessFile);
         }
       for(int s = 0; s < CheckSeconds && !IsStopped(); s++)
          Sleep(1000);
