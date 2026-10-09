@@ -1,4 +1,5 @@
 import { useEffect, useState, type JSX } from "react";
+import { historyPageUrl } from "../../lib/historyPageView";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import {
   buildBalanceRows,
@@ -75,6 +76,21 @@ export function AccountBalancesBar({
           <span className="ml-2 text-slate-400">setoran {row.depositText}</span>
         </div>
       ))}
+      {/* Halaman History H3: dibuka di tab baru (Live & Demo per broker). */}
+      <div className="ml-auto flex gap-2">
+        {(["finex", "orbitraderberjangka"] as const).map((b) => (
+          <a
+            key={b}
+            href={historyPageUrl(b)}
+            target="_blank"
+            rel="noreferrer"
+            data-testid={`history-link-${b}`}
+            className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 font-semibold text-emerald-200 hover:bg-emerald-400/20"
+          >
+            History {b === "finex" ? "Finex" : "OTB"} ↗
+          </a>
+        ))}
+      </div>
     </div>
   );
 }

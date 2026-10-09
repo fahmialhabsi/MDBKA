@@ -47,6 +47,7 @@ import { calendarResponse } from "../server/routes/calendarRoutes";
 import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
 import { buildHistoryView } from "../server/services/historyView";
 import { accountKind, historyForLogin, listHistoryAccounts } from "../server/routes/historyRoutes";
+import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
 import { formatClock12, serverUtcOffsetHours, WIT_UTC_OFFSET } from "../src/lib/serverClock";
 import {
@@ -7177,6 +7178,28 @@ test("584. endpoint /api/history: daftar akun live/demo + view per login (H2b)",
   } finally {
     nfs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("585. halaman History: tautan, tab Live/Demo, format USD/Rp (H3)", () => {
+  assert(historyPageUrl("finex") === "/?halaman=history&broker=finex", historyPageUrl("finex"));
+  assert(parseHistoryPage("?halaman=history&broker=orbitraderberjangka")?.broker === "orbitraderberjangka", "parse OTB");
+  assert(parseHistoryPage("") === null && parseHistoryPage("?halaman=history&broker=x") === null, "bukan halaman History");
+  const acc = [
+    { login: "61823011", label: "Finex demo", broker: "finex" as const, kind: "demo" as const },
+    { login: "70930952", label: "OTB demo", broker: "orbitraderberjangka" as const, kind: "demo" as const },
+    { login: "91811209", label: "Finex live", broker: "finex" as const, kind: "live" as const },
+  ];
+  const fx = accountsForBroker(acc, "finex");
+  const otb = accountsForBroker(acc, "orbitraderberjangka");
+  assert(fx.live?.login === "91811209" && fx.demo?.login === "61823011" && otb.live === null && otb.demo?.login === "70930952", "pembagian akun");
+  assert(formatUsdHistory(-10.05) === "-10,05" && formatUsdHistory(5000) === "5.000,00", `${formatUsdHistory(-10.05)} ${formatUsdHistory(5000)}`);
+  assert(formatIdr(-180273) === "-Rp180.273" && formatIdr(89389227) === "Rp89.389.227" && formatIdr(null) === "–", formatIdr(-180273));
+  assert(mt5DirectionText("BALANCE", "IN") === "" && mt5DirectionText("SELL", "OUT") === "out", "direction");
+  assert(readSrc("src/main.tsx").includes("parseHistoryPage(window.location.search)"), "halaman belum dipasang di main.tsx");
+  const bar = readSrc("src/components/layout/AccountBalancesBar.tsx");
+  assert(bar.includes("historyPageUrl(b)") && bar.includes('target="_blank"'), "tombol History belum ada");
+  const page = readSrc("src/components/history/HistoryPage.tsx");
+  assert(page.includes('"Komisi (Rp)", "Profit (Rp)"') && page.includes('data-testid="history-sisa"') && page.includes("API_BASE_URL"), "kolom Rupiah / Sisa setoran");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
