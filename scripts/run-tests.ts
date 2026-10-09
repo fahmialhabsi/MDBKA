@@ -7554,6 +7554,11 @@ test("605. Satpam Sesi S3: tahan entry jelang tutup / saham jelang libur akhir p
   assert(findSessionHold("EURUSD_ORB", "2026.10.09 21:00:00", all) === null, "forex aturan libur tidak berlaku");
   assert(findSessionHold("EURUSD_ORB", "2026.10.09 22:10:00", all) !== null, "forex ≤60 mnt ditahan");
   assert(findSessionHold("META.US", "2026.10.08 21:00:00", null) === null && findSessionHold("XAUUSD", "2026.10.08 21:00:00", all) === null, "tanpa sesi = diabaikan");
+  // 10 Okt: pasar SUDAH tutup → ditahan (kasus #IBM Finex Jumat 23:57 server, sesi 16:30–23:00).
+  const ibm = [1, 2, 3, 4, 5].map((day) => ({ symbol: "#IBM", day, fromMin: 990, toMin: 1380 }));
+  const tutup = findSessionHold("#IBM", "2026.10.09 23:57:18", ibm);
+  assert(tutup !== null && tutup.reason.includes("sedang tutup") && tutup.reason.includes("2026.10.12 16:30"), JSON.stringify(tutup));
+  assert(findSessionHold("EURUSD_ORB", "2026.10.09 23:57:00", all) !== null, "forex Jumat setelah 22:55 tutup = ditahan");
   const sc = readSrc("src/lib/symbolScanner.ts");
   assert(sc.includes('status: "DITAHAN_SESI"') && sc.includes("findSessionHold(symbol"), "pemindai belum memakai satpam sesi");
   assert(readSrc("src/components/analysis/SymbolScannerPanel.tsx").includes("useTradeSessions(brokerId)"), "panel");

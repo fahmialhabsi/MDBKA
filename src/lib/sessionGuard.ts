@@ -166,7 +166,17 @@ export function findSessionHold(
 ): { reason: string; closesInMin: number } | null {
   if (sessions === null || sessions === undefined || sessions.length === 0) return null;
   const st = sessionState(symbol, serverNow, sessions);
-  if (!st.known || !st.open || st.closesInMin === null) return null;
+  if (!st.known) return null;
+  // 10 Okt: pasar SUDAH tutup (jam resmi broker) → tahan. Dulu hanya satpam
+  // "data basi" (candle tertinggal ≥2 jam) → 1 jam pertama setelah tutup sinyal
+  // tetap lolos, MT5 menolak "Only position closing is allowed" (#IBM, UK100).
+  if (!st.open) {
+    return {
+      closesInMin: 0,
+      reason: `Ditahan: pasar ${symbol} sedang tutup${st.nextOpenServer === null ? "" : ` (buka lagi ${st.nextOpenServer} jam server)`} — MT5 hanya mengizinkan menutup posisi`,
+    };
+  }
+  if (st.closesInMin === null) return null;
   if (st.closesInMin <= SESSION_ENTRY_CLOSE_MIN) {
     return {
       closesInMin: st.closesInMin,

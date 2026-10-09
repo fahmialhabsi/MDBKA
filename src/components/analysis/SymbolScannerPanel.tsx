@@ -57,7 +57,7 @@ const STATUS_VIEW: Record<ScanStatus, { label: string; className: string }> = {
   DITAHAN_KORELASI: { label: "Taruhan ganda", className: "bg-fuchsia-400/15 text-fuchsia-300" },
   DITAHAN_JEDA: { label: "Jeda rugi", className: "bg-rose-400/15 text-rose-300" },
   DITAHAN_BERITA: { label: "Dekat berita", className: "bg-orange-400/15 text-orange-300" },
-  DITAHAN_SESI: { label: "Jelang tutup", className: "bg-rose-400/15 text-rose-300" },
+  DITAHAN_SESI: { label: "Sesi tutup", className: "bg-rose-400/15 text-rose-300" },
   TUNGGU: { label: "Tunggu", className: "bg-white/10 text-slate-300" },
   PASAR_TUTUP: { label: "Pasar tutup / basi", className: "bg-white/5 text-slate-500" },
   DATA: { label: "Data kurang", className: "bg-white/5 text-slate-500" },
@@ -239,7 +239,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
               {counts.DITAHAN_BIAYA} biaya mahal · {counts.DITAHAN_RISIKO} risiko
               &gt; batas · {counts.DITAHAN_KORELASI} taruhan ganda ·{" "}
               {counts.DITAHAN_JEDA} jeda · {counts.DITAHAN_BERITA} dekat berita ·{" "}
-              {counts.DITAHAN_SESI} jelang tutup ·{" "}
+              {counts.DITAHAN_SESI} sesi tutup/jelang tutup ·{" "}
               {counts.TUNGGU} tunggu · {counts.PASAR_TUTUP} pasar
               tutup · {counts.DATA} data kurang
             </p>

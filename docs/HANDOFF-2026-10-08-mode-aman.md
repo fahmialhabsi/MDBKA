@@ -1,8 +1,14 @@
-# HANDOFF MDBKA — Mode Aman (8 Okt 2026, diperbarui 9 Okt 2026)
+# HANDOFF MDBKA — Mode Aman (8 Okt 2026, diperbarui 10 Okt 2026 dini hari)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
-Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
+Commit terakhir: **8e16bae** (10 Okt 01:02 WIT, working tree bersih).
+Test terakhir terverifikasi: **602 lolos, 0 gagal**, build sukses.
+
+> **MULAI DI SINI (sesi berikutnya):** urutan kerja = **V2** pembanding spesifikasi otomatis (bagian 4, catatan V1)
+> → **S5** saham wajib ber-SL (bagian 5d) → **swap saham persen tahunan** + arti SwapMode 0 di Finex (bagian 4).
+> Hasil sesi 9 Okt: Kalkulator C1–C5 + tombol Salin SL "Amankan"; halaman Golongan G1–G3b (chart candle H1 live,
+> garis Entry/SL/TP/Amankan, ringkasan transaksi + portofolio saham); Satpam Sesi S1–S4; komisi saham OTB = 0;
+> contract size 150 simbol MT5 = spec32.
 Nomor test terakhir: **606** → test baru mulai **607**.
 
 ---
@@ -291,7 +297,7 @@ mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: N
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **592**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **607**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -321,6 +327,9 @@ ESLint → pengguna build/test/commit → verifikasi.
 - S3 ✅ status `DITAHAN_SESI` "Jelang tutup" (setelah satpam berita): semua simbol tutup ≤60 mnt (`SESSION_ENTRY_CLOSE_MIN`); saham tutup
   ≤240 mnt lalu libur ≥24 jam (`STOCK_WEEKEND_CLOSE_MIN`, `LONG_GAP_MIN`). Pemindai, detail sinyal, catatan entry server. `findSessionHold`; test 605.
   Angka ambang = usulan awal Claude, boleh diubah Fahmi.
+  **Perbaikan 10 Okt 05:59 WIT:** pasar yang SUDAH tutup (jam resmi) kini juga `DITAHAN_SESI` ("Sesi tutup"). Dulu #IBM, UK100,
+  EURUSD, XAGUSD Finex tetap "Lolos" ±1 jam setelah tutup (satpam data basi baru menyala ≥2 jam), MT5 menolak
+  "Only position closing is allowed". Test 605 diperluas.
 - S4 ✅ kartu posisi monitor: kotak merah "PASAR TUTUP — bisa lagi mulai Jumat 22:30 WIT (… lagi)" / kuning "PASAR SEGERA TUTUP"
   (≤60 mnt). Jam server dari quote TERSEGAR (quote simbol tutup basi). `sessionNotice`, `serverToWitLabel`, `useTradeSessions`; test 602.
   (Dikerjakan sebelum S3 karena langsung membantu META.US.) S5 (belum) saham wajib ber-SL.
@@ -410,10 +419,11 @@ Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi 
 
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
-> Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, lihat git log,
-> 565 test lolos setelah 9 Okt). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` dan patuhi bagian GUARD KERJA:
-> Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang menjalankan
-> build/test/commit, jumlah dalam Rupiah, dan prinsip "profit kecil lebih baik daripada mengejar profit besar
-> lalu minus". Time-stop 3 jam hanya Forex & Forex JPY. Langkah berikutnya: kumpulkan trade Mode Aman (langkah 1) dan
-> lanjutkan Satpam Kalender (bagian 5b SELESAI; verifikasi layar 13 Okt). Lanjut backlog 5c butir 5 (halaman History Finex/OTB Rupiah). Backlog halaman golongan/portofolio saham/halaman pemindai di 5c.
-> Setiap langkah selesai, jelaskan dulu dalam bahasa awam (GUARD no. 11) sebelum saya commit.
+> Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, commit terakhir 8e16bae,
+> 602 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` (mulai dari kotak "MULAI DI SINI") dan patuhi
+> bagian GUARD KERJA: Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang
+> menjalankan build/test/commit di PowerShell, jumlah dalam Rupiah, prinsip "profit kecil lebih baik daripada mengejar
+> profit besar lalu minus", default TUNGGU, MDBKA tidak menempatkan/menutup order, sistem yang merencanakan otomatis
+> (GUARD 10b), dan setiap langkah selesai jelaskan dulu dalam bahasa awam (GUARD 11) sebelum saya commit.
+> Langkah berikutnya: V2 pembanding spesifikasi MT5 (MDBKA_Specs_<login>.csv) vs spec32, lalu S5 saham wajib ber-SL,
+> lalu swap saham persen tahunan.
