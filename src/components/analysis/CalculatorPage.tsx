@@ -255,7 +255,7 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
                               >
                                 <Copy size={14} /> {copied ? "SL disalin ✓" : `Salin SL ${r.secureSl}`}
                               </button>
-                              <span className="ml-2 text-xs font-normal text-slate-400" data-testid="calc-secure-status">
+                              <span className="mt-1 block whitespace-nowrap text-xs font-normal text-slate-400" data-testid="calc-secure-status">
                                 {st === null
                                   ? "harga live belum ada"
                                   : ready
