@@ -876,37 +876,31 @@ export default function App() {
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-clip bg-slate-950 text-white">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-3 py-3 sm:px-4 lg:px-6">
-          <div>
+        {/* Header rapi (9 Okt): judul + 3 kotak sama tinggi dalam satu grid. */}
+        <div className="mx-auto grid w-full max-w-[1600px] grid-cols-1 items-stretch gap-3 px-3 py-3 sm:px-4 md:grid-cols-2 lg:px-6 xl:grid-cols-[auto_repeat(3,minmax(0,1fr))]">
+          <div className="flex flex-col justify-center pr-2">
             <p className="text-xs font-bold tracking-[0.35em] text-emerald-400">
               MDBKA
             </p>
-            <h1 className="mt-1 text-lg font-bold">
+            <h1 className="mt-1 text-lg font-bold leading-tight">
               Merangkak Dari Bawah Ke Atas
             </h1>
           </div>
-          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3">
-            <ServerClock
-              brokerId={activeBrokerId}
-              quoteServerTime={liveQuote?.timestamp ?? null}
+          <ServerClock
+            brokerId={activeBrokerId}
+            quoteServerTime={liveQuote?.timestamp ?? null}
+          />
+          <KursProfitBar
+            profitUsd={autoProfitUsd ?? equityStream.equity?.profit ?? null}
+            fxRates={fxRates}
+          />
+          {shownResult !== null && market.symbol !== "" && (
+            <LiveSignalsPanel
+              symbol={market.symbol}
+              result={shownResult}
+              bid={liveQuote?.bid ?? null}
             />
-            <KursProfitBar
-              profitUsd={autoProfitUsd ?? equityStream.equity?.profit ?? null}
-              fxRates={fxRates}
-            />
-            {shownResult !== null && market.symbol !== "" && (
-              <LiveSignalsPanel
-                symbol={market.symbol}
-                result={shownResult}
-                bid={liveQuote?.bid ?? null}
-              />
-            )}
-          </div>
-
-          <div className="hidden items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-300 sm:flex">
-            <Activity size={16} />
-            Analisa Otomatis
-          </div>
+          )}
         </div>
         {/* Langkah C: saldo & setoran semua akun (Rupiah) dari History MT5. */}
         <div className="mx-auto w-full max-w-[1600px] px-3 pb-2 sm:px-4 lg:px-6">

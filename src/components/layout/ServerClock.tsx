@@ -26,7 +26,7 @@ export function ServerClock({ brokerId, quoteServerTime }: Props) {
   return (
     <div
       data-testid="server-clock"
-      className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm leading-6"
+      className="flex h-full min-w-0 flex-col justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs leading-5"
     >
       <p className="flex items-center gap-2 text-slate-300">
         <Clock size={14} className="text-emerald-400" />

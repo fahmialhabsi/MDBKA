@@ -26,7 +26,7 @@ export function LiveSignalsPanel({ symbol, result, bid }: LiveSignalsPanelProps)
         : "text-amber-400";
 
   return (
-    <div className="flex max-w-[300px] shrink-0 flex-col gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs whitespace-nowrap">
+    <div className="flex h-full min-w-0 flex-col justify-center gap-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs whitespace-nowrap">
       <div className="flex items-center justify-between gap-3">
         <span className="font-semibold text-white">{symbol}</span>
         <span className={`flex items-center gap-1 font-bold ${color}`}>
