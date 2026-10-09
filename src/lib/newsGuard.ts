@@ -122,3 +122,46 @@ export function applyNewsHold<T extends AnalysisResult>(
       "Mode Aman: arah sudah kompak, tetapi ada berita ekonomi penting dalam 30 menit. Harga bisa melonjak tiba-tiba dan menyapu SL; tunggu sampai berita lewat.",
   };
 }
+
+export interface UpcomingNews {
+  readonly event: NewsEventLike;
+  /** Positif = menit lagi; negatif = sudah lewat (masih dalam jendela). */
+  readonly minutesTo: number;
+  /** Teks relatif, mis. "dalam 3 hari 14 jam", "20 menit lagi", "15 menit lalu". */
+  readonly when: string;
+}
+
+function relative(minutesTo: number): string {
+  const m = Math.round(Math.abs(minutesTo));
+  if (minutesTo < 0) return `${m} menit lalu`;
+  if (m < 60) return `${m} menit lagi`;
+  const d = Math.floor(m / 1440);
+  const h = Math.floor((m % 1440) / 60);
+  return d > 0 ? `dalam ${d} hari ${h} jam` : `dalam ${h} jam ${m % 60} menit`;
+}
+
+/**
+ * K6: berita Tinggi yang belum lewat jendela (≥ sekarang − jendela), urut
+ * waktu, maks `limit`. Jam = jam server broker yang sama. MURNI.
+ */
+export function upcomingHighNews(
+  events: readonly NewsEventLike[] | null | undefined,
+  serverNow: string | null,
+  limit = 8,
+  windowMinutes: number = NEWS_WINDOW_MINUTES,
+): UpcomingNews[] {
+  if (events === null || events === undefined || serverNow === null) return [];
+  const nowMs = parseSnapshotTime(serverNow);
+  if (nowMs === null) return [];
+  const out: UpcomingNews[] = [];
+  for (const ev of events) {
+    if (ev.importance.trim().toUpperCase() !== "HIGH") continue;
+    const evMs = parseSnapshotTime(ev.serverTime);
+    if (evMs === null) continue;
+    const minutesTo = (evMs - nowMs) / 60_000;
+    if (minutesTo < -windowMinutes) continue;
+    out.push({ event: ev, minutesTo, when: relative(minutesTo) });
+  }
+  out.sort((a, b) => a.minutesTo - b.minutesTo);
+  return out.slice(0, limit);
+}

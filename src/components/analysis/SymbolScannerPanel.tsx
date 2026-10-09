@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { RefreshCw, ScanSearch } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
-import type { NewsEventLike } from "../../lib/newsGuard";
+import { NEWS_WINDOW_MINUTES, upcomingHighNews, type NewsEventLike } from "../../lib/newsGuard";
 import {
   lolosLabel,
   mergeGroupStats,
@@ -181,6 +181,8 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
   );
   const pauseReason = lossPause.paused ? lossPause.reason : null;
   const newsEvents = calendar !== null && calendar.broker === brokerId ? calendar.events : null;
+  // K6: berita Tinggi mendatang (jam server broker ini).
+  const upcoming = useMemo(() => upcomingHighNews(newsEvents, nowServer), [newsEvents, nowServer]);
 
   const rows = useMemo(() => {
     const source = itemsBroker === brokerId ? items : [];
@@ -259,6 +261,28 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
           Kalender ekonomi belum tersedia — satpam berita tidak aktif. Pastikan
           service MDBKACalendarService berjalan di terminal MT5 broker ini.
         </p>
+      )}
+      {newsEvents !== null && (
+        <details data-testid="scan-news-upcoming" className="mb-3 rounded-xl border border-orange-400/20 bg-orange-400/5 p-3 text-sm">
+          <summary className="cursor-pointer font-semibold text-orange-200">
+            Berita Tinggi mendatang ({upcoming.length}) · sinyal ditahan ±{NEWS_WINDOW_MINUTES} menit dari jam rilis
+          </summary>
+          {upcoming.length === 0 ? (
+            <p className="mt-2 text-slate-400">Tidak ada berita Tinggi dalam 7 hari ke depan.</p>
+          ) : (
+            <ul className="mt-2 space-y-1 text-slate-300">
+              {upcoming.map((u) => (
+                <li key={`${u.event.serverTime}|${u.event.currency}|${u.event.event}`}>
+                  <span className={Math.abs(u.minutesTo) <= NEWS_WINDOW_MINUTES ? "font-bold text-orange-300" : "text-slate-400"}>
+                    {u.event.serverTime.slice(0, 16)}
+                  </span>{" "}
+                  · <b>{u.event.currency}</b> {u.event.event} · <span className="text-slate-400">{u.when}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-xs text-slate-500">Jam = jam server MT5 broker ini (bukan WIT).</p>
+        </details>
       )}
       {loading && <p className="text-sm text-slate-400">Memindai…</p>}
       {!loading && rows.length === 0 && error === null && (

@@ -44,7 +44,7 @@ import {
 import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
-import { applyNewsHold, findNewsHold, newsCurrenciesOf, NEWS_WINDOW_MINUTES } from "../src/lib/newsGuard";
+import { applyNewsHold, findNewsHold, newsCurrenciesOf, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
 import {
   SUPPORTED_SYMBOLS,
   getInstrumentPreset,
@@ -7035,6 +7035,24 @@ test("576. Hasil analisa ditahan dekat berita Tinggi (K5)", () => {
   assert(app.includes("applyNewsHold(\n              applyLossPauseHold(") || app.includes("applyNewsHold(\r\n              applyLossPauseHold("), "urutan jeda → berita → ganda");
   assert(readSrc("src/components/result/AnalysisResult.tsx").includes('data-testid="held-berita"'), "kotak berita belum ada");
   assert(readSrc("src/hooks/useNewsCalendar.ts").includes("/api/calendar?broker=${brokerId}"), "hook kalender");
+});
+
+test("577. daftar berita Tinggi mendatang (K6)", () => {
+  const ev = [
+    { serverTime: "2026.10.15 09:00:00", currency: "GBP", importance: "HIGH", event: "GDP m/m" },
+    { serverTime: "2026.10.14 15:30:00", currency: "USD", importance: "HIGH", event: "CPI m/m" },
+    { serverTime: "2026.10.14 15:00:00", currency: "USD", importance: "MODERATE", event: "Sedang" },
+    { serverTime: "2026.10.08 15:30:00", currency: "USD", importance: "HIGH", event: "Lama" },
+  ];
+  const u = upcomingHighNews(ev, "2026.10.14 15:45:00");
+  assert(u.length === 2 && u[0].event.event === "CPI m/m" && u[0].when === "15 menit lalu", JSON.stringify(u));
+  assert(u[1].when === "dalam 17 jam 15 menit", u[1].when);
+  const jauh = upcomingHighNews(ev, "2026.10.11 01:00:00");
+  assert(jauh[0].when === "dalam 3 hari 14 jam", jauh[0].when);
+  assert(upcomingHighNews(ev, "2026.10.14 16:01:00").length === 1, "lewat jendela harus hilang");
+  assert(upcomingHighNews(null, "2026.10.14 15:45:00").length === 0 && upcomingHighNews(ev, null).length === 0, "tanpa data");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes('data-testid="scan-news-upcoming"') && panel.includes("upcomingHighNews(newsEvents, nowServer)"), "daftar belum tampil");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
