@@ -142,3 +142,32 @@ export function withLiveCandles<T extends OhlcLike>(
   return out;
 }
 
+/** Warna garis chart per jenis (sama di garis & label kanan). */
+export const LINE_COLOR: Record<ChartLine["kind"], string> = {
+  bid: "#38bdf8",
+  entry: "#e2e8f0",
+  sl: "#f43f5e",
+  tp: "#10b981",
+  secure: "#f59e0b",
+};
+
+/**
+ * G3 (9 Okt 2026): garis posisi terbuka di chart — Entry, SL, TP, dan
+ * pemicu "Amankan" (harga dari mesin kalkulator, aturan breakeven 0,5R).
+ * SL/TP 0 (belum dipasang) tidak digambar. MURNI.
+ */
+export function positionLines(pos: {
+  readonly priceOpen: number;
+  readonly sl: number;
+  readonly tp: number;
+  readonly secureAt?: number | null;
+}): ChartLine[] {
+  const out: ChartLine[] = [{ label: "Entry", price: pos.priceOpen, kind: "entry" }];
+  if (pos.sl > 0) out.push({ label: "SL", price: pos.sl, kind: "sl" });
+  if (pos.tp > 0) out.push({ label: "TP", price: pos.tp, kind: "tp" });
+  if (pos.secureAt !== undefined && pos.secureAt !== null && pos.secureAt > 0) {
+    out.push({ label: "Amankan", price: pos.secureAt, kind: "secure" });
+  }
+  return out;
+}
+

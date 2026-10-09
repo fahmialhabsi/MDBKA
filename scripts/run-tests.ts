@@ -50,7 +50,7 @@ import { accountKind, historyForLogin, listHistoryAccounts } from "../server/rou
 import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
 import { calculateTargets, secureReadiness } from "../src/lib/targetCalculator";
 import { accountMetrics, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage } from "../src/lib/groupPageView";
-import { candleChartModel, hourKey, withLiveCandles } from "../src/lib/candleChart";
+import { candleChartModel, hourKey, LINE_COLOR, positionLines, withLiveCandles } from "../src/lib/candleChart";
 import { readCandleCsv } from "../server/routes/candlesRoutes";
 import { calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
@@ -7418,6 +7418,19 @@ test("598. Golongan G2b: candle jam berjalan dirakit dari tick live (contoh US10
   assert(csv[1].close === 30958.58, "CSV asli tidak diubah");
   assert(withLiveCandles(csv, []).length === 2, "tanpa tick = CSV apa adanya");
   assert(readSrc("src/components/group/GroupPage.tsx").includes("withLiveCandles(chartNow.candles"), "halaman belum memakai candle live");
+});
+
+test("599. Golongan G3: garis Entry/SL/TP/Amankan posisi terbuka di chart", () => {
+  const l = positionLines({ priceOpen: 30995.08, sl: 30893.2, tp: 31143, secureAt: 31046.02 });
+  assert(l.map((x) => `${x.kind}:${x.price}`).join() === "entry:30995.08,sl:30893.2,tp:31143,secure:31046.02", JSON.stringify(l));
+  assert(positionLines({ priceOpen: 741.07, sl: 0, tp: 0 }).length === 1, "SL/TP 0 tidak digambar");
+  const usd = (a: number, c: string) => (c === "USD" ? a : null);
+  const r = calculateTargets({ symbol: "US100", direction: "BELI", lot: 0.01, entry: 30995.08, sl: 30893.2, tp: 31143 }, usd, 17920);
+  const sec = r.ok ? r.ladder.find((x) => x.secure === true) : undefined;
+  assert(sec !== undefined && sec.price === 31046.02, `Amankan US100 ${JSON.stringify(sec)}`);
+  assert(LINE_COLOR.sl !== LINE_COLOR.tp && LINE_COLOR.secure !== LINE_COLOR.bid, "warna beda");
+  const page = readSrc("src/components/group/GroupPage.tsx");
+  assert(page.includes("positionLines({") && page.includes("LINE_COLOR[l.kind]"), "garis posisi belum di chart");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

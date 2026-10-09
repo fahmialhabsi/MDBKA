@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, LayoutGrid } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import { calculatorUrlFromHolding } from "../../lib/calculatorPageView";
-import { candleChartModel, withLiveCandles, type OhlcLike } from "../../lib/candleChart";
+import { candleChartModel, LINE_COLOR, positionLines, withLiveCandles, type ChartLine, type OhlcLike } from "../../lib/candleChart";
+import { calculateTargets } from "../../lib/targetCalculator";
 import { parseCsvCandles } from "../../lib/csvCandleParser";
 import { accountMetrics, GROUP_TABS, groupSymbolTabs, type GroupPageParams } from "../../lib/groupPageView";
 import { formatIdr, formatUsd } from "../../lib/historyPageView";
@@ -10,7 +11,7 @@ import { formatPrice } from "../../lib/tickSize";
 import type { RiskGroupId } from "../../lib/riskGroup";
 import { useBrokerPositions } from "../../hooks/useBrokerPositions";
 import { useEquityStream } from "../../hooks/useEquityStream";
-import { fetchBackendRates, usdIdrRate, type ExchangeRates } from "../../services/fxRateService";
+import { buildUsdConverter, fetchBackendRates, usdIdrRate, type ExchangeRates } from "../../services/fxRateService";
 import type { BrokerId } from "../../types/broker";
 
 /** Butir 1 G1: halaman per golongan — tab golongan, tab simbol ala MT5, metrik akun USD + Rp. */
@@ -93,6 +94,7 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
     };
   }, [broker, active]);
   const liveNow = live !== null && live.key === liveKey ? live : null;
+  const activePositions = positions.filter((p) => p.symbol.trim().toUpperCase() === active);
 
   // G2: candle H1 simbol aktif (GET /api/candles/:symbol), diperbarui tiap 60 detik.
   useEffect(() => {
@@ -118,15 +120,28 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
     };
   }, [active]);
   const chartNow = chart !== null && chart.symbol === active ? chart : null;
+  // G3: garis Entry/SL/TP/Amankan untuk tiap posisi terbuka simbol aktif.
+  const posLines: ChartLine[] = [];
+  for (const p of activePositions) {
+    let secureAt: number | null = null;
+    if (p.sl > 0 && p.tp > 0) {
+      const r = calculateTargets(
+        { symbol: p.symbol, direction: p.side === "SELL" ? "JUAL" : "BELI", lot: p.volume, entry: p.priceOpen, sl: p.sl, tp: p.tp },
+        buildUsdConverter(fx),
+        kurs,
+      );
+      secureAt = r.ok ? (r.ladder.find((x) => x.secure === true)?.price ?? null) : null;
+    }
+    posLines.push(...positionLines({ priceOpen: p.priceOpen, sl: p.sl, tp: p.tp, secureAt }));
+  }
   const model =
     chartNow === null
       ? null
       : candleChartModel(withLiveCandles(chartNow.candles, ticks.key === liveKey ? ticks.list : []), {
           width: 1100,
           height: 380,
-          lines: liveNow === null ? [] : [{ label: "Bid", price: liveNow.bid, kind: "bid" }],
+          lines: [...posLines, ...(liveNow === null ? [] : [{ label: "Bid", price: liveNow.bid, kind: "bid" as const }])],
         });
-  const activePositions = positions.filter((p) => p.symbol.trim().toUpperCase() === active);
   const metrics = accountMetrics(equity, kurs);
 
   const pill = (on: boolean): string =>
@@ -217,9 +232,12 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
                     ))}
                     {model.lines.map((l) => (
                       <g key={l.kind + l.label}>
-                        <line x1={0} x2={model.plotRight} y1={l.y} y2={l.y} stroke="#38bdf8" strokeWidth={1} strokeDasharray="4 3" />
-                        <rect x={model.plotRight} y={l.y - 9} width={78} height={18} fill="#0369a1" />
-                        <text x={model.plotRight + 4} y={l.y + 4} fill="#f8fafc" fontSize={11} fontFamily="monospace">{formatPrice(l.price, active)}</text>
+                        <line x1={0} x2={model.plotRight} y1={l.y} y2={l.y} stroke={LINE_COLOR[l.kind]} strokeWidth={l.kind === "bid" ? 1 : 1.5} strokeDasharray={l.kind === "bid" || l.kind === "secure" ? "4 3" : undefined} />
+                        {l.kind !== "bid" && (
+                          <text x={6} y={l.y - 4} fill={LINE_COLOR[l.kind]} fontSize={11} fontFamily="monospace">{l.label}</text>
+                        )}
+                        <rect x={model.plotRight} y={l.y - 9} width={78} height={18} fill={LINE_COLOR[l.kind]} />
+                        <text x={model.plotRight + 4} y={l.y + 4} fill={l.kind === "entry" ? "#0f172a" : "#f8fafc"} fontSize={11} fontFamily="monospace">{formatPrice(l.price, active)}</text>
                       </g>
                     ))}
                     {model.xLabels.map((x) => (
@@ -227,7 +245,7 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
                     ))}
                   </svg>
                 )}
-                <p className="text-xs text-slate-500">Candle H1 (1 batang = 1 jam, jam server MT5), 120 jam terakhir · batang paling kanan = jam berjalan, dirakit dari harga live · garis biru putus-putus = Bid live.</p>
+                <p className="text-xs text-slate-500">Candle H1 (1 batang = 1 jam, jam server MT5), 120 jam terakhir · batang paling kanan = jam berjalan, dirakit dari harga live · garis: biru putus-putus = Bid live, putih = Entry, merah = SL, hijau = TP, kuning putus-putus = Amankan (geser SL ke impas).</p>
               </div>
             )}
           </div>
