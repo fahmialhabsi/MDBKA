@@ -35,12 +35,36 @@ export interface CandleChartModel {
   readonly bars: CandleBar[];
   readonly yTicks: { y: number; price: number }[];
   readonly xLabels: { x: number; text: string }[];
-  readonly lines: (ChartLine & { y: number })[];
+  /** y = posisi garis; labelY = posisi label kanan (digeser bila bertumpuk). */
+  readonly lines: (ChartLine & { y: number; labelY: number })[];
   readonly min: number;
   readonly max: number;
 }
 
 export const CHART_MAX_BARS = 120;
+/** Jarak minimum (px) antar-label harga di sumbu kanan. */
+export const LABEL_GAP = 20;
+
+/**
+ * G3b: geser label yang bertumpuk (mis. Entry 30995.08 & Bid 30990.58)
+ * agar berjarak ≥ gap, tetap dalam [minY, maxY], urutan atas-bawah sama.
+ * Kembalian sejajar dengan masukan. MURNI.
+ */
+export function spreadLabels(ys: readonly number[], gap: number, minY: number, maxY: number): number[] {
+  const order = ys.map((y, i) => ({ y, i })).sort((a, b) => a.y - b.y || a.i - b.i);
+  const pos = order.map((o) => Math.min(Math.max(o.y, minY), maxY));
+  for (let k = 1; k < pos.length; k++) pos[k] = Math.max(pos[k], pos[k - 1] + gap);
+  const overflow = pos.length > 0 ? pos[pos.length - 1] - maxY : 0;
+  if (overflow > 0) {
+    pos[pos.length - 1] -= overflow;
+    for (let k = pos.length - 2; k >= 0; k--) pos[k] = Math.min(pos[k], pos[k + 1] - gap);
+  }
+  const out = new Array<number>(ys.length);
+  order.forEach((o, k) => {
+    out[o.i] = pos[k];
+  });
+  return out;
+}
 
 export function candleChartModel(
   candles: readonly OhlcLike[],
@@ -80,10 +104,14 @@ export function candleChartModel(
       up: c.close >= c.open,
     };
   });
+  const placed = lines.map((l) => ({ ...l, y: y(l.price) }));
+  const labelYs = spreadLabels(placed.map((l) => l.y), LABEL_GAP, top + 9, bottom - 9);
+  const withLabels = placed.map((l, i) => ({ ...l, labelY: labelYs[i] }));
+  // Angka skala yang tertimpa label garis disembunyikan.
   const yTicks = Array.from({ length: 5 }, (_, i) => {
     const price = max - ((max - min) * (i + 0.5)) / 5;
     return { y: y(price), price };
-  });
+  }).filter((t) => withLabels.every((l) => Math.abs(l.labelY - t.y) >= LABEL_GAP - 4));
   const every = Math.max(1, Math.ceil(shown.length / 6));
   const xLabels = shown
     .map((c, i) => ({ i, c }))
@@ -96,7 +124,7 @@ export function candleChartModel(
     bars,
     yTicks,
     xLabels,
-    lines: lines.map((l) => ({ ...l, y: y(l.price) })),
+    lines: withLabels,
     min,
     max,
   };

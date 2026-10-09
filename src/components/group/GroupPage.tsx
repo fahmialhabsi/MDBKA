@@ -236,8 +236,11 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
                         {l.kind !== "bid" && (
                           <text x={6} y={l.y - 4} fill={LINE_COLOR[l.kind]} fontSize={11} fontFamily="monospace">{l.label}</text>
                         )}
-                        <rect x={model.plotRight} y={l.y - 9} width={78} height={18} fill={LINE_COLOR[l.kind]} />
-                        <text x={model.plotRight + 4} y={l.y + 4} fill={l.kind === "entry" ? "#0f172a" : "#f8fafc"} fontSize={11} fontFamily="monospace">{formatPrice(l.price, active)}</text>
+                        {Math.abs(l.labelY - l.y) > 1 && (
+                          <line x1={model.plotRight - 6} x2={model.plotRight} y1={l.y} y2={l.labelY} stroke={LINE_COLOR[l.kind]} strokeWidth={1} />
+                        )}
+                        <rect x={model.plotRight} y={l.labelY - 9} width={78} height={18} fill={LINE_COLOR[l.kind]} />
+                        <text x={model.plotRight + 4} y={l.labelY + 4} fill={l.kind === "entry" ? "#0f172a" : "#f8fafc"} fontSize={11} fontFamily="monospace">{formatPrice(l.price, active)}</text>
                       </g>
                     ))}
                     {model.xLabels.map((x) => (

@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **599** → test baru mulai **600**.
+Nomor test terakhir: **600** → test baru mulai **601**.
 
 ---
 
@@ -303,7 +303,7 @@ ESLint → pengguna build/test/commit → verifikasi.
    · G2 ✅ chart candle H1 SVG (`candleChart.ts` `candleChartModel`, 120 batang terakhir, garis Bid live; server `GET /api/candles/:symbol`
    → `readCandleCsv` dengan nama simbol aman; test 597) · G2b ✅ CSV H1 hanya ditulis saat candle selesai (sekali/jam) → candle jam
    berjalan dirakit dari tick live (`withLiveCandles`, `hourKey`; muat 5000 tick awal lalu +20 tiap 3 dtk; test 598) · G3 ✅ garis Entry (putih) / SL (merah) / TP (hijau) / Amankan (kuning, dari `calculateTargets`) tiap posisi terbuka simbol aktif
-   (`positionLines`, `LINE_COLOR`; test 599). **Butir 1 inti SELESAI** (sisa opsional: timeframe lain butuh ekspor EA).
+   (`positionLines`, `LINE_COLOR`; test 599) · G3b ✅ label harga bertumpuk digeser ≥20px + garis penghubung, angka skala tertimpa disembunyikan (`spreadLabels`; test 600). **Butir 1 inti SELESAI** (sisa opsional: timeframe lain butuh ekspor EA).
 2. **Portofolio saham**: berapa lot/lembar saham sudah dibeli, harga beli, dari simbol apa, berapa yang sudah dijual,
    dan **saldo saham sekarang** (sumber: History MT5 per simbol saham `.US`/`#`). Masuk halaman golongan Saham.
 3. **Pemindai → halaman detail**: tombol status di "Pemindai simbol — Mode Aman" membuka **halaman baru** berisi

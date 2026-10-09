@@ -50,7 +50,7 @@ import { accountKind, historyForLogin, listHistoryAccounts } from "../server/rou
 import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
 import { calculateTargets, secureReadiness } from "../src/lib/targetCalculator";
 import { accountMetrics, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage } from "../src/lib/groupPageView";
-import { candleChartModel, hourKey, LINE_COLOR, positionLines, withLiveCandles } from "../src/lib/candleChart";
+import { candleChartModel, hourKey, LINE_COLOR, positionLines, spreadLabels, withLiveCandles } from "../src/lib/candleChart";
 import { readCandleCsv } from "../server/routes/candlesRoutes";
 import { calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
@@ -7431,6 +7431,22 @@ test("599. Golongan G3: garis Entry/SL/TP/Amankan posisi terbuka di chart", () =
   assert(LINE_COLOR.sl !== LINE_COLOR.tp && LINE_COLOR.secure !== LINE_COLOR.bid, "warna beda");
   const page = readSrc("src/components/group/GroupPage.tsx");
   assert(page.includes("positionLines({") && page.includes("LINE_COLOR[l.kind]"), "garis posisi belum di chart");
+});
+
+test("600. Golongan G3b: label harga bertumpuk digeser (Entry vs Bid US100)", () => {
+  const ys = spreadLabels([100, 104, 300], 20, 10, 370);
+  assert(ys[0] === 100 && ys[1] === 120 && ys[2] === 300, JSON.stringify(ys));
+  const urut = spreadLabels([104, 100], 20, 10, 370);
+  assert(urut[1] === 100 && urut[0] === 120, `urutan atas-bawah tetap: ${JSON.stringify(urut)}`);
+  const bawah = spreadLabels([365, 368, 370], 20, 10, 370);
+  assert(bawah[2] === 370 && bawah[1] === 350 && bawah[0] === 330, `mentok bawah naik: ${JSON.stringify(bawah)}`);
+  const c = (i: number) => ({ time: `2026.10.09 ${String(i).padStart(2, "0")}:00`, open: 30900, high: 31300, low: 30600, close: 31000 });
+  const m = candleChartModel([c(0), c(1)], { width: 1100, height: 380, lines: [
+    { label: "Entry", price: 30995.08, kind: "entry" }, { label: "Bid", price: 30990.58, kind: "bid" },
+  ] });
+  assert(m !== null && Math.abs(m.lines[0].labelY - m.lines[1].labelY) >= 20, "label Entry & Bid tidak bertumpuk");
+  assert(m !== null && m.yTicks.every((t) => m.lines.every((l) => Math.abs(l.labelY - t.y) >= 16)), "angka skala tertimpa disembunyikan");
+  assert(readSrc("src/components/group/GroupPage.tsx").includes("y={l.labelY - 9}"), "halaman belum memakai labelY");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
