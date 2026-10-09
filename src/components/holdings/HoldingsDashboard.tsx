@@ -22,6 +22,7 @@ import {
   type Holding,
 } from "../../lib/exitMonitor";
 import type { BrokerId } from "../../types/broker";
+import { calculatorUrlFromHolding } from "../../lib/calculatorPageView";
 
 const SIGNAL_STYLE: Record<ExitSignal, { label: string; className: string }> = {
   EXIT_TAKE_PROFIT: {
@@ -173,6 +174,17 @@ function HoldingCard({
           {expanded ? "▾" : "▸"}
         </span>
       </button>
+      {!exited && (
+        <a
+          href={calculatorUrlFromHolding(holding)}
+          target="_blank"
+          rel="noopener"
+          data-testid={`holding-calc-${holding.id}`}
+          className="mt-1 inline-block text-xs font-semibold text-emerald-300 hover:underline"
+        >
+          Kalkulator ↗
+        </a>
+      )}
 
       <div className="mt-2 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
         <div>

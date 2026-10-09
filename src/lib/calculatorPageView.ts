@@ -87,3 +87,24 @@ export function symbolOptions(symbols: readonly string[], current: string): stri
   if (cur !== "") set.add(cur);
   return [...set].sort();
 }
+
+/** C5: posisi monitor (Holding) → URL kalkulator terisi. SL/TP 0 → tidak dikirim. */
+export function calculatorUrlFromHolding(h: {
+  readonly brokerId: BrokerId;
+  readonly symbol: string;
+  readonly direction: CalcDirection;
+  readonly lot: number;
+  readonly entryPrice: number;
+  readonly sl: number;
+  readonly tp: number;
+}): string {
+  return calculatorPageUrl({
+    broker: h.brokerId,
+    symbol: h.symbol.trim().toUpperCase(),
+    direction: h.direction,
+    lot: String(h.lot),
+    entry: String(h.entryPrice),
+    sl: h.sl > 0 ? String(h.sl) : "",
+    tp: h.tp > 0 ? String(h.tp) : "",
+  });
+}

@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **594** → test baru mulai **595**.
+Nomor test terakhir: **595** → test baru mulai **596**.
 
 ---
 
@@ -308,7 +308,7 @@ ESLint → pengguna build/test/commit → verifikasi.
    JANGAN overflow-auto/max-h, itu membuat 2 scrollbar & header hilang).
 4. **Kalkulator target harga (permintaan 9 Okt)** — **[DIKERJAKAN]** C1 ✅ `src/lib/targetCalculator.ts` `calculateTargets`
    (bersih komisi, BE, tangga 7 baris, cap golongan + `capSl`, validasi sisi & jarak >20%; test 590) · C2 ✅ halaman
-   `CalculatorPage.tsx` `/?halaman=kalkulator&…` (prefill URL, `calculatorPageView.ts`, tombol "Kalkulator ↗" di baris saldo; test 591) · C3 ✅ dropdown Simbol per broker (`/api/quotes?broker=`) + pilihan "posisi terbuka MT5" mengisi simbol/arah/lot/entry/SL/TP (`prefillFromPosition`, SL/TP 0 → kosong; test 592) · C4 ✅ baris tangga "Amankan: geser SL ke impas" (pemicu = `BREAKEVEN_R_MULTIPLE` 0,5× jarak SL, sama dengan `checkBreakeven` monitor posisi; disorot hijau + tombol "Salin SL" teks desimal penuh untuk ditempel ke Modify MT5; test 593; tombol abu-abu/nonaktif sampai Bid (BELI) / Ask (JUAL) live menyentuh harga pemicu, lalu hijau tua — `secureReadiness`, harga dari `/api/quotes/:symbol?broker=&limit=1` tiap 3 dtk; test 594) · C5 (belum) tautan dari detail sinyal & monitor posisi.
+   `CalculatorPage.tsx` `/?halaman=kalkulator&…` (prefill URL, `calculatorPageView.ts`, tombol "Kalkulator ↗" di baris saldo; test 591) · C3 ✅ dropdown Simbol per broker (`/api/quotes?broker=`) + pilihan "posisi terbuka MT5" mengisi simbol/arah/lot/entry/SL/TP (`prefillFromPosition`, SL/TP 0 → kosong; test 592) · C4 ✅ baris tangga "Amankan: geser SL ke impas" (pemicu = `BREAKEVEN_R_MULTIPLE` 0,5× jarak SL, sama dengan `checkBreakeven` monitor posisi; disorot hijau + tombol "Salin SL" teks desimal penuh untuk ditempel ke Modify MT5; test 593; tombol abu-abu/nonaktif sampai Bid (BELI) / Ask (JUAL) live menyentuh harga pemicu, lalu hijau tua — `secureReadiness`, harga dari `/api/quotes/:symbol?broker=&limit=1` tiap 3 dtk; test 594) · C5 ✅ tombol "Buka Kalkulator ↗" di detail sinyal (entry/SL/TP/arah/lot rencana) + tautan "Kalkulator ↗" di tiap kartu monitor posisi (`calculatorUrlFromHolding`, SL/TP 0 tidak dikirim; test 595).
    Spesifikasi awal: input **harga entry, SL, TP** (+ arah & lot, simbol) → tampilkan
    "bila TP kena = **+RpX (+$Y)**, bila SL kena = **−RpX (−$Y)**", jarak harga/poin ke SL & TP, R:R, dan harga impas
    (entry + biaya komisi, rumus `breakevenCostDistance` yang sudah ada). Pakai `pointValue`/contract size per simbol +

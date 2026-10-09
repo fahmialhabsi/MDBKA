@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Copy, RefreshCw } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
+import { calculatorPageUrl } from "../../lib/calculatorPageView";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
 import type { OpenPositionLike } from "../../lib/correlationGuard";
 import { checkLossStreak, tradesForBroker, type StreakAccount } from "../../lib/lossStreakGuard";
@@ -174,6 +175,23 @@ export function SignalDetailPage({ broker, symbol, equity }: { broker: BrokerId;
               >
                 <Copy size={16} /> {copied === "tp" ? "TP disalin ✓" : `Salin TP ${tpText}`}
               </button>
+              <a
+                href={calculatorPageUrl({
+                  broker,
+                  symbol,
+                  direction: plan.direction === "JUAL" ? "JUAL" : "BELI",
+                  lot: String(plan.suggestedLot ?? 0.01),
+                  entry: formatPrice(plan.entry, symbol),
+                  sl: slText ?? "",
+                  tp: tpText ?? "",
+                })}
+                target="_blank"
+                rel="noopener"
+                data-testid="detail-calc-link"
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-400/15 px-5 py-3 text-base font-bold text-emerald-200 hover:bg-emerald-400/25"
+              >
+                Buka Kalkulator ↗
+              </a>
             </div>
             <p className="text-sm text-slate-300">
               Risiko lot minimum: <b>{riskIdr === null ? "-" : `Rp${riskIdr.toLocaleString("id-ID")}`}</b>

@@ -49,7 +49,7 @@ import { buildHistoryView } from "../server/services/historyView";
 import { accountKind, historyForLogin, listHistoryAccounts } from "../server/routes/historyRoutes";
 import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
 import { calculateTargets, secureReadiness } from "../src/lib/targetCalculator";
-import { calculatorPageUrl, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
+import { calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
 import { formatClock12, serverUtcOffsetHours, WIT_UTC_OFFSET } from "../src/lib/serverClock";
@@ -7328,6 +7328,17 @@ test("594. kalkulator: tombol Salin SL amankan aktif hanya bila harga sudah samp
   assert(secureReadiness("BELI", 1.3251, 0, 1.3, 5) === null, "harga tak valid");
   const page = readSrc("src/components/analysis/CalculatorPage.tsx");
   assert(page.includes("disabled={!ready}") && page.includes("bg-emerald-700") && page.includes('data-testid="calc-secure-status"'), "tombol belum bergantung harga live");
+});
+
+test("595. C5: tautan Kalkulator terisi dari monitor posisi & detail sinyal", () => {
+  const url = calculatorUrlFromHolding({ brokerId: "finex", symbol: "gbpusd", direction: "BELI", lot: 0.01, entryPrice: 1.32429, sl: 1.32267, tp: 1.32677 });
+  const p = parseCalculatorPage(url.slice(1));
+  assert(p !== null && p.broker === "finex" && p.symbol === "GBPUSD" && p.direction === "BELI" && p.lot === "0.01" && p.entry === "1.32429" && p.sl === "1.32267" && p.tp === "1.32677", JSON.stringify(p));
+  const tanpa = parseCalculatorPage(calculatorUrlFromHolding({ brokerId: "orbitraderberjangka", symbol: "META.US", direction: "JUAL", lot: 0.1, entryPrice: 741.07, sl: 0, tp: 0 }).slice(1));
+  assert(tanpa !== null && tanpa.broker === "orbitraderberjangka" && tanpa.direction === "JUAL" && tanpa.sl === "" && tanpa.tp === "", JSON.stringify(tanpa));
+  assert(readSrc("src/components/holdings/HoldingsDashboard.tsx").includes("calculatorUrlFromHolding(holding)"), "monitor belum bertautan");
+  const det = readSrc("src/components/analysis/SignalDetailPage.tsx");
+  assert(det.includes('data-testid="detail-calc-link"') && det.includes("calculatorPageUrl({"), "detail sinyal belum bertautan");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
