@@ -6236,7 +6236,7 @@ test("526. evaluasi: pasangkan IN/OUT, hasil bersih, R dari SL awal, kelompok st
   const deal = (positionId: string, time: string, type: string, entry: string, price: number, profit: number, commission: number, comment = "") => ({
     dealTicket: `${positionId}-${entry}`, positionId, orderTicket: positionId, serverTime: time,
     symbol: "GBPUSD", type, entry, volume: 0.1, price, commission, swap: 0, profit, fee: 0,
-    comment, login: "1", accountCurrency: "USD", idrAmount: null,
+    comment, login: "1", accountCurrency: "USD", idrAmount: null, sl: null, tp: null,
   });
   const deals = [
     deal("1", "2026.10.08 10:00:00", "BUY", "IN", 1.3, 0, -3.3),
@@ -6359,7 +6359,7 @@ test("533. saldo akun dari History: setoran, penarikan, trade, kredit diabaikan"
     dealTicket: "1", positionId: "0", orderTicket: "0", serverTime: extra.serverTime ?? "2026.10.01 10:00:00",
     symbol: "", type, entry: "IN", volume: 0, price: 0, commission: extra.commission ?? 0,
     swap: extra.swap ?? 0, profit, fee: extra.fee ?? 0, comment: "", login: "70930952",
-    accountCurrency: "USD", idrAmount: extra.idrAmount ?? null,
+    accountCurrency: "USD", idrAmount: extra.idrAmount ?? null, sl: null, tp: null,
   });
   const s = summarizeAccountBalance([
     deal("BALANCE", 10, { idrAmount: 165000 }),
@@ -7201,6 +7201,18 @@ test("585. halaman History: tautan, tab Live/Demo, format USD/Rp (H3)", () => {
   const page = readSrc("src/components/history/HistoryPage.tsx");
   assert(page.includes('"Komisi (Rp)", "Profit (Rp)"') && page.includes('data-testid="history-sisa"') && page.includes("API_BASE_URL"), "kolom Rupiah / Sisa setoran");
   assert(page.includes("formatPrice(r.price, r.symbol)"), "harga harus ikut desimal simbol seperti MT5 (1.32160, 89.00)");
+});
+
+test("586. History CSV kolom 19-20 S/L & T/P (H4a), CSV lama 18 kolom tetap terbaca", () => {
+  const lama = parseHistoryCsv("h\r\n1,10,10,2026.10.08 23:13:40,US100,SELL,IN,0.01,30748.33,-0.01,0.00,0.00,0.00,0,,61823011,PT,USD");
+  assert(lama.length === 1 && lama[0].sl === null && lama[0].tp === null, "CSV lama: sl/tp null");
+  const baru = parseHistoryCsv("h\r\n1,10,10,2026.10.08 23:13:40,US100,SELL,IN,0.01,30748.33,-0.01,0.00,0.00,0.00,0,,61823011,PT,USD,30878.43,30544.73\r\n" +
+    "2,0,0,2026.09.27 07:52:23,Bonus,BALANCE,IN,0.00,0,0.00,0.00,5000.00,0.00,0,Demo,61823011,PT,USD,0.00000,0.00000");
+  assert(baru[0].sl === 30878.43 && baru[0].tp === 30544.73 && baru[1].sl === null && baru[1].tp === null, JSON.stringify(baru));
+  const v = buildHistoryView(baru, { "2026-09-25": 17913.9, "2026-10-08": 17920 });
+  assert(v.rows.find((r) => r.symbol === "US100")?.sl === 30878.43, "view membawa sl");
+  const ea = readSrc("ea/MDBKAHistoryService.mq5");
+  assert(ea.includes('"SL", "TP")') && ea.includes("DEAL_SL") && ea.includes("DEAL_TP"), "service belum ekspor SL/TP");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

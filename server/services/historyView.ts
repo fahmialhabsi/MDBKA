@@ -27,6 +27,9 @@ export interface HistoryRow {
   readonly profit: number;
   readonly fee: number;
   readonly comment: string;
+  /** H4: S/L & T/P deal (null bila tidak ada / CSV lama). */
+  readonly sl: number | null;
+  readonly tp: number | null;
   /** Change MT5 (%) = gerak harga posisi yang menguntungkan; hanya deal OUT. */
   readonly changePct: number | null;
   /** Kurs USD→Rp yang dipakai baris ini + tanggal kursnya. */
@@ -119,6 +122,8 @@ export function buildHistoryView(deals: readonly HistoryDeal[], book: UsdIdrBook
       profit: d.profit,
       fee: d.fee,
       comment: d.comment,
+      sl: d.sl,
+      tp: d.tp,
       changePct,
       kurs,
       commissionIdr: toIdr(d.commission),

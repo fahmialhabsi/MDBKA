@@ -4,7 +4,7 @@
 //| tanpa klik. Tiap CheckSeconds dicek jumlah deal; bila berubah     |
 //| (deal baru / setoran / penarikan) file CSV ditulis ulang utuh.    |
 //| Output: Common\Files\MDBKA_History_<login>.csv (format sama       |
-//| dengan ExportHistoryMDBKA.mq5, 18 kolom).                         |
+//| dengan ExportHistoryMDBKA.mq5 + kolom 19-20 SL/TP sejak 9 Okt).  |
 //| Pasang: copy ke MQL5/Services, compile (F7), Navigator > Services |
 //| > klik kanan > Add Service > pilih file ini > Start.              |
 //| Pasang di terminal FINEX (akun live 91811209).                    |
@@ -78,7 +78,8 @@ int WriteHistory(const string fileName)
 
    FileWrite(h, "DealTicket", "PositionId", "OrderTicket", "ServerTime", "Symbol", "Type",
              "Entry", "Volume", "Price", "Commission", "Swap", "Profit", "Fee",
-             "Magic", "Comment", "Login", "Company", "AccountCurrency");
+             "Magic", "Comment", "Login", "Company", "AccountCurrency",
+             "SL", "TP");   // H4 (9 Okt 2026): 2 kolom di AKHIR agar pembaca lama tetap jalan
    int written = 0;
    for(int i = 0; i < total; i++)
      {
@@ -105,7 +106,9 @@ int WriteHistory(const string fileName)
                 DoubleToString(HistoryDealGetDouble(ticket, DEAL_FEE), 2),
                 IntegerToString(HistoryDealGetInteger(ticket, DEAL_MAGIC)),
                 Clean(HistoryDealGetString(ticket, DEAL_COMMENT)),
-                login, company, accCcy);
+                login, company, accCcy,
+                DoubleToString(HistoryDealGetDouble(ticket, DEAL_SL), digits),
+                DoubleToString(HistoryDealGetDouble(ticket, DEAL_TP), digits));
       written++;
      }
    FileClose(h);

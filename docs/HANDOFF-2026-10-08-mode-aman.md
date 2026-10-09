@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **585** → test baru mulai **586**.
+Nomor test terakhir: **586** → test baru mulai **587**.
 
 ---
 
@@ -270,7 +270,7 @@ mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: N
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **586**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **587**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -339,7 +339,8 @@ ESLint → pengguna build/test/commit → verifikasi.
    · H3 ✅ halaman `src/components/history/HistoryPage.tsx` (tab baru `/?halaman=history&broker=…`, dipilih di `main.tsx`;
      tombol "History Finex ↗ / History OTB ↗" di baris saldo `AccountBalancesBar`); tab Live/Demo, tabel ala MT5 +
      Komisi (Rp)/Profit (Rp) (tooltip kurs), 2 baris ringkasan USD & Rp, kotak Sisa setoran; helper `src/lib/historyPageView.ts`; test 585
-   · H4 kolom S/L & T/P (tambah 2 kolom di AKHIR CSV MDBKAHistoryService, compile ulang 2 terminal) — disetujui Fahmi.
+   · H4a ✅ `MDBKAHistoryService.mq5` kolom 19-20 SL/TP (DEAL_SL/DEAL_TP), `parseHistoryCsv` sl/tp (0/kosong/CSV lama → null),
+     `historyView` membawa sl/tp; test 586. **Wajib compile ulang service di Finex & OTB.** · H4b kolom S/L & T/P di HistoryPage.
    Contoh uji Finex demo 61823011: Deposit $5.000 (bonus 27 Sep), Profit −$10,04, Komisi −$0,09, Balance $4.989,96;
    AUDCHF 8 Okt: komisi −$0,01, profit −$0,65 → kolom Rp per kurs 8 Okt.
    **Kotak "Sisa setoran" (permintaan 9 Okt)**: Sisa setoran (Rp) = Setoran (Rp) **+** Hasil bersih (Rp), dengan

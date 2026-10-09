@@ -24,6 +24,9 @@ export interface HistoryDeal {
   readonly accountCurrency: string;
   /** Nominal IDR dari komentar setoran/penarikan; null bila tidak ada. */
   readonly idrAmount: number | null;
+  /** H4: S/L & T/P deal (kolom 19-20, sejak 9 Okt); null bila 0/kosong/CSV lama. */
+  readonly sl: number | null;
+  readonly tp: number | null;
 }
 
 const COLUMNS = 18;
@@ -31,6 +34,12 @@ const COLUMNS = 18;
 function num(raw: string | undefined): number {
   const n = Number((raw ?? "").trim());
   return Number.isFinite(n) ? n : 0;
+}
+
+/** Level S/L/T/P: 0, kosong, atau kolom tidak ada (CSV 18 kolom) → null. */
+function level(raw: string | undefined): number | null {
+  const n = Number((raw ?? "").trim());
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 export function extractIdrAmount(comment: string): number | null {
@@ -68,6 +77,8 @@ export function parseHistoryCsv(text: string): HistoryDeal[] {
       login: t(15),
       accountCurrency: t(17),
       idrAmount: type === "BALANCE" ? extractIdrAmount(comment) : null,
+      sl: level(c[18]),
+      tp: level(c[19]),
     });
   }
   return deals;
