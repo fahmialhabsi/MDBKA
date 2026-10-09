@@ -54,7 +54,7 @@ import { candleChartModel, hourKey, LINE_COLOR, positionLines, spreadLabels, wit
 import { readCandleCsv } from "../server/routes/candlesRoutes";
 import { findSessionHold, serverNowText, serverToWitLabel, sessionNotice, sessionState, weeklyIntervals } from "../src/lib/sessionGuard";
 import { parseSessionsCsv } from "../server/services/sessionReader";
-import { buildStockPortfolio, isStockSymbol } from "../src/lib/stockPortfolio";
+import { buildStockPortfolio, buildTradeSummary, isStockSymbol } from "../src/lib/stockPortfolio";
 import { calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
@@ -7529,7 +7529,8 @@ test("604. butir 2 P1: portofolio saham dari History (META.US OTB + contoh jual)
   const tanpaKurs = buildStockPortfolio([d("#AAPL", "SELL", "OUT", 0.1, 240, 4, 0, null)]);
   assert(tanpaKurs[0].realizedIdr === null, "tanpa kurs = Rp null");
   assert(isStockSymbol("META.US") && isStockSymbol("#META") && !isStockSymbol("#") && !isStockSymbol("US100"), "isStockSymbol");
-  assert(readSrc("src/components/group/GroupPage.tsx").includes('group === "SAHAM_AS" && <StockPortfolio'), "belum dipasang di tab Saham AS");
+  assert(m.boughtShares === 0.1 && m.soldShares === 0 && m.openLot === 0.1, `lembar dibeli/terjual: ${JSON.stringify(m)}`);
+  assert(readSrc("src/components/group/GroupPage.tsx").includes("<StockPortfolio broker={broker} group={group} />"), "belum dipasang di semua tab golongan");
 });
 
 test("605. Satpam Sesi S3: tahan entry jelang tutup / saham jelang libur akhir pekan", () => {
@@ -7556,6 +7557,26 @@ test("605. Satpam Sesi S3: tahan entry jelang tutup / saham jelang libur akhir p
   assert(readSrc("src/components/analysis/SymbolScannerPanel.tsx").includes("useTradeSessions(brokerId)"), "panel");
   assert(readSrc("src/components/analysis/SignalDetailPage.tsx").includes("/api/sessions?broker="), "detail");
   assert(readSrc("server/index.ts").includes("getSessions: () => readSessionsForBroker("), "catatan entry");
+});
+
+test("606. ringkasan transaksi semua golongan: buka BELI/JUAL, ditutup, masih terbuka (Forex)", () => {
+  const d = (symbol: string, type: string, entry: string, volume: number, price: number, profit = 0) =>
+    ({ symbol, type, entry, volume, price, commission: 0, swap: 0, profit, fee: 0, commissionIdr: 0, profitIdr: profit === 0 ? 0 : Math.round(profit * 17920), swapIdr: 0 });
+  const rows = buildTradeSummary([
+    d("GBPUSD", "BUY", "IN", 0.01, 1.32429),
+    d("EURAUD", "SELL", "IN", 0.01, 1.61),
+    d("EURAUD", "BUY", "OUT", 0.01, 1.6065, 0.22),
+    d("META.US", "BUY", "IN", 0.1, 741.07),
+  ], (s) => !isStockSymbol(s));
+  assert(rows.length === 2 && rows[0].symbol === "GBPUSD" && rows[0].openLot === 0.01, JSON.stringify(rows.map((r) => r.symbol)));
+  const ea = rows[1];
+  assert(ea.boughtLot === 0 && ea.openSellLot === 0.01 && ea.avgOpenSell === 1.61 && ea.closedLot === 0.01 && ea.openLot === 0, JSON.stringify(ea));
+  assert(ea.realizedUsd === 0.22 && ea.realizedIdr === 3942, `${ea.realizedUsd}/${ea.realizedIdr}`);
+  assert(ea.boughtShares === null && ea.contract === null, "non-saham tanpa lembar");
+  const ac = buildTradeSummary([d("AUDCHF", "SELL", "IN", 0.01, 0.57893), d("AUDCHF", "BUY", "OUT", 0.01, 0.57947, -0.65), d("AUDCHF", "BUY", "IN", 0.01, 0.58016)], () => true)[0];
+  assert(ac.avgOpenSell === 0.57893 && ac.avgBuy === 0.58016 && ac.openLot === 0.01, `harga rata2 5 desimal: ${JSON.stringify(ac)}`);
+  const nol = buildTradeSummary([d("GBPUSD", "SELL", "OUT", 0.01, 1.3, 1.64), d("GBPUSD", "SELL", "OUT", 0.01, 1.3, -1.64)], () => true)[0];
+  assert(Object.is(nol.realizedUsd, 0), "tanpa -0");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

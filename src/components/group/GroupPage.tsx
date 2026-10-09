@@ -188,7 +188,7 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
           ))}
         </div>
 
-        {group === "SAHAM_AS" && <StockPortfolio broker={broker} />}
+        <StockPortfolio broker={broker} group={group} />
 
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60">
           <div className="min-h-64 p-4" data-testid="group-chart">

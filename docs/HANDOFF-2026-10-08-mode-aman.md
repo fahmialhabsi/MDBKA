@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **605** → test baru mulai **606**.
+Nomor test terakhir: **606** → test baru mulai **607**.
 
 ---
 
@@ -329,6 +329,8 @@ ESLint → pengguna build/test/commit → verifikasi.
    **[DIKERJAKAN 9 Okt]** P1 ✅ `stockPortfolio.ts` `buildStockPortfolio` + `StockPortfolio.tsx` di tab Saham AS halaman Golongan (per akun
    broker: dibeli/harga beli rata2, terjual/harga jual rata2, dipegang lot & lembar, hasil ditutup USD/Rp kurs ECB tgl transaksi).
    Lembar hanya untuk contract terverifikasi (`VERIFIED_STOCK_CONTRACT`: META.US = 1). Short (IN SELL) tidak dihitung, diberi catatan. test 604.
+   P1b ✅ tabel muncul di SEMUA tab golongan: saham = "Portofolio saham" (lot+lembar di Dibeli/Terjual/Sisa); lainnya = "Ringkasan
+   transaksi" (buka BELI, buka JUAL, ditutup, masih terbuka, hasil). `buildTradeSummary(deals, filter)`; test 606.
 3. **Pemindai → halaman detail**: tombol status di "Pemindai simbol — Mode Aman" membuka **halaman baru** berisi
    tombol **Salin SL** dan **Salin TP** (pola `copy-sl`/`copy-tp` yang sudah ada di kotak "Salin order").
    **[DIKERJAKAN 9 Okt]** P1 ✅ `ScanRow.plan` (entry/SL/TP/lot/risiko, hanya LOLOS; test 587) · P2 ✅ `SignalDetailPage.tsx` `/?halaman=sinyal&broker=&symbol=&equity=`

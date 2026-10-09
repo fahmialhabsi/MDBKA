@@ -6,6 +6,7 @@
  * kurs ECB tanggal transaksi). Lembar = lot × contract size HANYA bila
  * contract terverifikasi dari MT5 Specification (tanpa tebakan).
  */
+import { priceDigits } from "./tickSize";
 export interface DealLike {
   readonly symbol: string;
   readonly type: string;
@@ -40,6 +41,15 @@ export interface StockHolding {
   readonly heldLot: number;
   /** null = contract size belum terverifikasi. */
   readonly heldShares: number | null;
+  readonly boughtShares: number | null;
+  readonly soldShares: number | null;
+  /** Semua golongan: lot dibuka JUAL (IN SELL) & harga rata-rata. */
+  readonly openSellLot: number;
+  readonly avgOpenSell: number | null;
+  /** Semua deal OUT (penutupan BELI maupun JUAL). */
+  readonly closedLot: number;
+  /** Lot masih terbuka = semua IN − semua OUT. */
+  readonly openLot: number;
   readonly contract: number | null;
   readonly realizedUsd: number;
   /** null bila ada transaksi tanpa kurs ECB. */
@@ -52,10 +62,22 @@ const r2 = (n: number): number => Math.round(n * 100) / 100;
 const lot = (n: number): number => Math.round(n * 1000) / 1000;
 
 export function buildStockPortfolio(deals: readonly DealLike[]): StockHolding[] {
+  return buildTradeSummary(deals, isStockSymbol);
+}
+
+/**
+ * Ringkasan transaksi per simbol untuk golongan apa pun (filter simbol).
+ * Saham: dibeli/terjual/dipegang (+lembar). Lainnya: buka BELI, buka JUAL,
+ * ditutup, masih terbuka. Hasil = profit+swap+komisi+fee semua deal.
+ */
+export function buildTradeSummary(
+  deals: readonly DealLike[],
+  include: (symbol: string) => boolean,
+): StockHolding[] {
   const map = new Map<string, DealLike[]>();
   for (const d of deals) {
     const s = d.symbol.trim().toUpperCase();
-    if (!isStockSymbol(s)) continue;
+    if (s === "" || !include(s)) continue;
     map.set(s, [...(map.get(s) ?? []), d]);
   }
   const out: StockHolding[] = [];
@@ -64,10 +86,18 @@ export function buildStockPortfolio(deals: readonly DealLike[]): StockHolding[] 
     const entry = (d: DealLike): string => d.entry.trim().toUpperCase();
     const buys = list.filter((d) => entry(d) === "IN" && type(d) === "BUY");
     const sells = list.filter((d) => entry(d) === "OUT" && type(d) === "SELL");
+    const openSells = list.filter((d) => entry(d) === "IN" && type(d) === "SELL");
+    const ins = list.filter((d) => entry(d) === "IN");
+    const outs = list.filter((d) => entry(d) === "OUT");
+    const sum = (xs: DealLike[]): number => lot(xs.reduce((s, d) => s + d.volume, 0));
+    const openSellLot = sum(openSells);
+    const closedLot = sum(outs);
     const boughtLot = lot(buys.reduce((s, d) => s + d.volume, 0));
     const soldLot = lot(sells.reduce((s, d) => s + d.volume, 0));
+    // Harga rata-rata memakai desimal simbol (Forex 5, JPY 3, indeks 2), bukan 2 tetap.
+    const digits = priceDigits(symbol);
     const avg = (xs: DealLike[], total: number): number | null =>
-      total > 0 ? r2(xs.reduce((s, d) => s + d.volume * d.price, 0) / total) : null;
+      total > 0 ? Number((xs.reduce((s, d) => s + d.volume * d.price, 0) / total).toFixed(digits)) : null;
     let usd = 0;
     let idr: number | null = 0;
     for (const d of list) {
@@ -85,11 +115,17 @@ export function buildStockPortfolio(deals: readonly DealLike[]): StockHolding[] 
       avgSell: avg(sells, soldLot),
       heldLot,
       heldShares: contract === null ? null : lot(heldLot * contract),
+      boughtShares: contract === null ? null : lot(boughtLot * contract),
+      soldShares: contract === null ? null : lot(soldLot * contract),
+      openSellLot,
+      avgOpenSell: avg(openSells, openSellLot),
+      closedLot,
+      openLot: lot(Math.max(0, sum(ins) - closedLot)),
       contract,
-      realizedUsd: r2(usd),
+      realizedUsd: r2(usd) === 0 ? 0 : r2(usd),
       realizedIdr: idr === null ? null : Math.round(idr),
       hasShort: list.some((d) => entry(d) === "IN" && type(d) === "SELL"),
     });
   }
-  return out.sort((a, b) => b.heldLot - a.heldLot || a.symbol.localeCompare(b.symbol));
+  return out.sort((a, b) => b.openLot - a.openLot || a.symbol.localeCompare(b.symbol));
 }
