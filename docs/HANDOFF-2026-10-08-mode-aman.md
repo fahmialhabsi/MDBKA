@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **588** → test baru mulai **589**.
+Nomor test terakhir: **589** → test baru mulai **590**.
 
 ---
 
@@ -270,7 +270,7 @@ mata uang; (5) spesifikasi simbol live dari MT5; (6) satpam Journal. Dilewati: N
 6d. Usulan: **jarak SL minimum** (SL terlalu sempit tertembus noise, mis. AUDCHF 5,4 pip). Belum diputuskan.
 7. Opsional (prioritas terendah, disarankan dilewati): kecilkan bundle JS (±509 kB) dengan dynamic import — tidak berpengaruh ke keputusan trading.
 
-Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **589**) →
+Setiap langkah: audit read-only → jelaskan → satu perubahan kecil + test baru (mulai nomor **590**) →
 ESLint → pengguna build/test/commit → verifikasi.
 
 ---
@@ -302,7 +302,10 @@ ESLint → pengguna build/test/commit → verifikasi.
 3. **Pemindai → halaman detail**: tombol status di "Pemindai simbol — Mode Aman" membuka **halaman baru** berisi
    tombol **Salin SL** dan **Salin TP** (pola `copy-sl`/`copy-tp` yang sudah ada di kotak "Salin order").
    **[DIKERJAKAN 9 Okt]** P1 ✅ `ScanRow.plan` (entry/SL/TP/lot/risiko, hanya LOLOS; test 587) · P2 ✅ `SignalDetailPage.tsx` `/?halaman=sinyal&broker=&symbol=&equity=`
-   (hitung ulang `scanSymbol` dengan semua satpam; Salin SL/TP hanya bila masih LOLOS; `signalPageView.ts`; test 588) · P3 tombol Lolos di pemindai membuka tab baru.
+   (hitung ulang `scanSymbol` dengan semua satpam; Salin SL/TP hanya bila masih LOLOS; `signalPageView.ts`; test 588) · P3 ✅ tombol Lolos membuka detail di tab baru (+ dashboard ikut pilih simbol); test 589.
+   Terverifikasi: XAUUSD BELI 0.01, SL 4176.86/TP 4219.29 tersalin benar. **Butir 3 SELESAI.**
+   Halaman History: header tabel tetap saat digulir (`thead sticky top-0`, satu scroll halaman; wadah `overflow-x-clip` —
+   JANGAN overflow-auto/max-h, itu membuat 2 scrollbar & header hilang).
 4. **Kalkulator target harga (permintaan 9 Okt)**: input **harga entry, SL, TP** (+ arah & lot, simbol) → tampilkan
    "bila TP kena = **+RpX (+$Y)**, bila SL kena = **−RpX (−$Y)**", jarak harga/poin ke SL & TP, R:R, dan harga impas
    (entry + biaya komisi, rumus `breakevenCostDistance` yang sudah ada). Pakai `pointValue`/contract size per simbol +

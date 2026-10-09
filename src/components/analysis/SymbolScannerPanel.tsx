@@ -10,6 +10,7 @@ import {
   type EvalAccount,
 } from "../../lib/evaluationView";
 import { formatSharePercent } from "../../lib/signalReason";
+import { signalPageUrl } from "../../lib/signalPageView";
 import {
   lastCandleTimeMs,
   scanSymbol,
@@ -329,10 +330,14 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
                       type="button"
                       data-testid={`scan-open-${row.symbol}`}
                       disabled={row.status !== "LOLOS" || onOpenAnalysis === undefined}
-                      onClick={() => onOpenAnalysis?.(row.symbol)}
+                      onClick={() => {
+                        // Butir 3 P3: detail + Salin SL/TP di tab baru; dashboard ikut memilih simbol.
+                        window.open(signalPageUrl(brokerId, row.symbol, equity), "_blank", "noopener");
+                        onOpenAnalysis?.(row.symbol);
+                      }}
                       title={
                         row.status === "LOLOS"
-                          ? `Buka Hasil analisa ${row.symbol}`
+                          ? `Buka detail ${row.symbol} (Salin SL/TP) di tab baru`
                           : row.reason
                       }
                       className={`rounded-full border px-2 py-0.5 text-xs ${(row.status === "LOLOS" ? lolosView : STATUS_VIEW[row.status]).className} ${

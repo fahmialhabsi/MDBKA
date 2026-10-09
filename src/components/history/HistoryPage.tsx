@@ -139,9 +139,9 @@ export function HistoryPage({ broker }: { broker: BrokerId }) {
 
         {view !== null && t !== undefined && (
           <>
-            <div className="overflow-x-auto rounded-2xl border border-white/10">
+            <div className="overflow-x-clip rounded-2xl border border-white/10" data-testid="history-scroll">
               <table className="w-full min-w-[1100px] text-left text-sm" data-testid="history-table">
-                <thead className="bg-white/5 text-xs uppercase text-slate-400">
+                <thead className="sticky top-0 z-10 bg-slate-900 text-xs uppercase text-slate-400 shadow-[0_1px_0_rgba(255,255,255,0.1)]">
                   <tr>
                     {["Time", "Symbol", "Deal", "Type", "Direction", "Volume", "Price", "S / L", "T / P", "Commission", "Profit", "Change", "Komisi (Rp)", "Profit (Rp)"].map((h) => (
                       <th

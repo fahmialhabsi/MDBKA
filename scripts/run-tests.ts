@@ -6433,7 +6433,7 @@ test("536. wiring taruhan ganda: pemindai, panel, pencatat entry (readSrc)", () 
 test("537. status pemindai = tombol: hanya LOLOS aktif, buka Hasil analisa (readSrc)", () => {
   const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
   assert(panel.includes('disabled={row.status !== "LOLOS" || onOpenAnalysis === undefined}'), "selain LOLOS harus disabled");
-  assert(panel.includes("onClick={() => onOpenAnalysis?.(row.symbol)}"), "klik tidak membuka analisa");
+  assert(panel.includes("onOpenAnalysis?.(row.symbol);"), "klik tidak membuka analisa");
   const app = readSrc("src/App.tsx");
   assert(app.includes("onOpenAnalysis={handleOpenAnalysis}"), "App belum menyambung tombol");
   assert(app.includes("handleSymbolChange(symbol);") && app.includes('getElementById("hasil-analisa")'), "pilih simbol + gulir");
@@ -7239,6 +7239,13 @@ test("588. halaman detail sinyal: URL, hitung ulang semua satpam, Salin SL/TP ha
   }
   assert(page.includes('data-testid="detail-copy-sl"') && page.includes('data-testid="detail-copy-tp"') && page.includes('data-testid="signal-not-lolos"'), "tombol salin / peringatan");
   assert(readSrc("src/main.tsx").includes("parseSignalPage(window.location.search)"), "halaman belum dipasang");
+});
+
+test("589. tombol Lolos membuka detail di tab baru (P3) + header tabel History tetap (sticky)", () => {
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes('window.open(signalPageUrl(brokerId, row.symbol, equity), "_blank", "noopener");'), "tombol Lolos belum membuka detail");
+  const page = readSrc("src/components/history/HistoryPage.tsx");
+  assert(page.includes("overflow-x-clip rounded-2xl") && !page.includes("max-h-[75vh]") && page.includes("<thead className=\"sticky top-0 z-10"), "header History belum tetap");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
