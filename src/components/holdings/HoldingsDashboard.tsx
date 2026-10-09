@@ -19,6 +19,7 @@ import {
   checkRewardRisk,
   evaluateExitSignal,
   type ExitSignal,
+  stockCommissionUnverified,
   type Holding,
 } from "../../lib/exitMonitor";
 import type { BrokerId } from "../../types/broker";
@@ -230,6 +231,11 @@ function HoldingCard({
                 evaluation?.pnlCurrency ?? "USD",
                 kurs,
               )}
+            </span>
+          )}
+          {!exited && stockCommissionUnverified(holding.symbol) && (
+            <span data-testid={`holding-commission-unverified-${holding.id}`} className="block text-[11px] text-amber-300/80">
+              komisi saham belum terverifikasi (belum dikurangkan)
             </span>
           )}
           {!exited &&

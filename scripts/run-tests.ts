@@ -194,6 +194,7 @@ import {
   commissionForHolding,
   countHoldings,
   evaluateExitSignal,
+  stockCommissionUnverified,
   filterHoldingsByBroker,
   markHoldingExited,
   rewardRiskRatio,
@@ -7493,6 +7494,20 @@ test("602. Satpam Sesi S4: kartu posisi — pasar tutup / segera tutup (META.US)
   assert(libur !== null && libur.text.includes("Senin 22:30 WIT"), JSON.stringify(libur));
   const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
   assert(dash.includes("useTradeSessions(brokerId)") && dash.includes("holding-session-"), "kartu posisi belum memakai sesi");
+});
+
+test("603. monitor: posisi tanpa SL/TP tetap ada P&L; komisi saham belum terverifikasi tak dikurangkan (META.US)", () => {
+  const h = toAutoHolding({ ticket: "2109019", symbol: "META.US", side: "BUY", volume: 0.1, priceOpen: 741.07, sl: 0, tp: 0, timeOpen: "2026.10.06 17:13:40" }, "orbitraderberjangka");
+  const usd = (a: number, c: string) => (c === "USD" ? a : null);
+  const ev = evaluateExitSignal(h, 720.47, 720.73, usd, Date.UTC(2026, 9, 6, 16));
+  assert(ev.pnl === -2.06 && ev.pnlCurrency === "USD", `P&L ${JSON.stringify(ev)}`);
+  assert(ev.pnlNet === -2.06 && ev.commission === 0, `komisi saham belum terverifikasi tak dikurangkan: bersih ${ev.pnlNet} komisi ${ev.commission}`);
+  assert(stockCommissionUnverified("META.US") && stockCommissionUnverified("#META") && !stockCommissionUnverified("AUDUSD_ORB") && !stockCommissionUnverified("US100"), "hanya saham");
+  const fx = toAutoHolding({ ticket: "1", symbol: "AUDUSD_ORB", side: "BUY", volume: 0.1, priceOpen: 0.69811, sl: 0.69311, tp: 0.70626, timeOpen: "2026.10.06 17:13:40" }, "orbitraderberjangka");
+  assert(evaluateExitSignal(fx, 0.698, 0.6981, usd).commission === 3.3, "komisi OTB forex tetap 33/lot");
+  assert(ev.risk === null && ev.reward === null && ev.signal === "HOLD" && ev.reasons[0].includes("tanpa SL/TP"), JSON.stringify(ev.reasons));
+  const rusak = evaluateExitSignal(h, 0, 720.73, usd);
+  assert(rusak.pnl === null, "harga rusak tetap null");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

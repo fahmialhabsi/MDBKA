@@ -100,6 +100,22 @@ export function commissionForHolding(
   return round2(spec.commission * lot);
 }
 
+/**
+ * 9 Okt 2026: komisi SAHAM belum pernah terbukti dari History (META.US OTB:
+ * deal IN komisi 0,00; Equity MT5 hanya turun sebesar P&L harga). Selama
+ * belum terverifikasi, komisi saham TIDAK dikurangkan dari P&L monitor
+ * (bukan tebakan 33/lot). Forex/logam/indeks tetap seperti semula.
+ */
+export function stockCommissionUnverified(symbol: string): boolean {
+  const s = symbol.trim().toUpperCase();
+  return s.endsWith(".US") || (s.startsWith("#") && s.length > 1);
+}
+
+function evalCommission(symbol: string, lot: number): number | null {
+  if (stockCommissionUnverified(symbol)) return Number.isFinite(lot) && lot > 0 ? 0 : null;
+  return commissionForHolding(symbol, lot);
+}
+
 /** Ambang dekat TP/SL: 15% dari rentang TP−SL. */
 export const NEAR_LEVEL_PCT = 15;
 /** Ambang drift: rugi berjalan ≥ 50% risiko terencana. */
@@ -245,7 +261,7 @@ export function evaluateExitSignal(
     reasons: ["Harga berjalan invalid; tak dapat dievaluasi."],
     pnl: null,
     pnlCurrency: "USD",
-    commission: commissionForHolding(holding.symbol, holding.lot),
+    commission: evalCommission(holding.symbol, holding.lot),
     pnlNet: null,
     swap: null,
     risk: null,
@@ -259,14 +275,24 @@ export function evaluateExitSignal(
     ask <= 0 ||
     !Number.isFinite(holding.entryPrice) ||
     holding.entryPrice <= 0 ||
-    !Number.isFinite(holding.sl) ||
-    holding.sl <= 0 ||
-    !Number.isFinite(holding.tp) ||
-    holding.tp <= 0 ||
     !Number.isFinite(holding.lot) ||
     holding.lot <= 0
   ) {
     return fallback;
+  }
+  // 9 Okt (META.US OTB): posisi TANPA SL/TP tetap dihitung P&L-nya (dulu "–"),
+  // risiko/reward tak terdefinisi → null, dengan peringatan jelas.
+  if (!Number.isFinite(holding.sl) || holding.sl <= 0 || !Number.isFinite(holding.tp) || holding.tp <= 0) {
+    const pnlOnly = calculateHoldingPnL(holding, bid, ask, convertToUsd);
+    const comm = evalCommission(holding.symbol, holding.lot);
+    return {
+      ...fallback,
+      reasons: ["Posisi tanpa SL/TP: rugi tidak dibatasi. Pasang SL di MT5 (saat pasar buka)."],
+      pnl: pnlOnly?.value ?? null,
+      pnlCurrency: pnlOnly?.currency ?? "USD",
+      pnlNet: pnlOnly !== null && comm !== null ? round2(pnlOnly.value - comm) : null,
+      swap: calculateHoldingSwap(holding, nowMs),
+    };
   }
 
   const ref = exitReferencePrice(holding.direction, bid, ask);
@@ -287,7 +313,7 @@ export function evaluateExitSignal(
   const pnlCcy = pnl?.currency ?? "USD";
   const riskValue = risk?.value ?? null;
   const planCcy = risk?.currency ?? reward?.currency ?? "USD";
-  const commission = commissionForHolding(holding.symbol, holding.lot);
+  const commission = evalCommission(holding.symbol, holding.lot);
   const pnlNet =
     pnlValue !== null && commission !== null
       ? round2(pnlValue - commission)

@@ -3,7 +3,7 @@
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
 Commit terakhir kode: **51eae63** (sesi 8 Okt) + sesi 9 Okt: **time-stop khusus Forex** (test 569, commit menunggu pengguna).
 Test terakhir terverifikasi: **564 lolos, 0 gagal** (sebelum perubahan 9 Okt), build sukses.
-Nomor test terakhir: **602** → test baru mulai **603**.
+Nomor test terakhir: **603** → test baru mulai **604**.
 
 ---
 
@@ -198,6 +198,13 @@ setelah biaya; 3 jam relatif terbaik; TP kecil butuh win rate ±67% untuk impas.
 - **Perlu dicek dengan MT5 Specification (belum diubah, jangan menebak)**: spec32 yang contract ≠ tickValue÷tickSize —
   Finex XAGUSD (5000 vs 100), XAUUSD (100 vs 1000); OTB AMAZON/APPLE/BOA/META.US (1 vs 100), CSCO.US (100 vs 1),
   FB/PFE.US (100 vs 1000), GOOG.US (100 vs 10). Bisa salah di contract ATAU di tickValue/tickSize; verifikasi pakai trade nyata.
+- ✅ **META.US OTB terverifikasi 9 Okt** (Specification): Contract size **1** (0,1 lot = 0,1 lembar), tick 0.01, margin 20% (~144,15 USD/lot
+  @720,73), sesi Sen–Jum 15:30–21:55 server. spec32 `leverage: 1` BENAR; "Tick value 1" di MT5 tidak dipakai (bertentangan dg margin & P&L nyata).
+  Swap META.US = **persen tahunan dari harga** (−10%), BUKAN poin → `calculateHoldingSwap` (pakai tickValue) SALAH untuk saham ber-swap persen (belum diperbaiki).
+- ✅ 9 Okt: `evaluateExitSignal` posisi TANPA SL/TP kini tetap menghitung P&L (dulu "–"); risiko/reward null + peringatan (test 603).
+- ✅ 9 Okt: komisi SAHAM (`.US`, `#…`) belum terverifikasi → TIDAK dikurangkan di monitor (`stockCommissionUnverified`; deal IN META.US komisi 0,00,
+  Equity MT5 turun hanya sebesar P&L harga). Kartu: "komisi saham belum terverifikasi". Kunci aturan setelah posisi saham pertama DITUTUP
+  (baca komisi deal OUT di History). Kalkulator target masih memakai 33/lot untuk saham OTB (belum diubah).
 
 - **META.US OTB** (BUY 0,10 @741,07, tanpa SL, −$2,01 ≈ −Rp36 rb pada 8 Okt malam) tidak bisa ditutup: "Market closed" — saham AS hanya bisa ditransaksikan saat bursa AS buka (±22:30–05:00 WIT, cek MT5 Specification → Sessions). Keputusan tutup/pasang SL di tangan Fahmi.
 
