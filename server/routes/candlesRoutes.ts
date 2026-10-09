@@ -51,6 +51,27 @@ export function collectCandleItems(
   return items;
 }
 
+/** G2: nama simbol aman untuk nama file (cegah path traversal). */
+export const SAFE_SYMBOL = /^[A-Za-z0-9#._-]{1,32}$/;
+
+/**
+ * Butir 1 G2 (9 Okt 2026) — CSV H1 satu simbol. null bila nama tidak aman,
+ * file tidak ada, atau terkunci MT5 (jujur: tanpa data fiktif).
+ */
+export function readCandleCsv(
+  commonDir: string,
+  symbol: string,
+): { csv: string; modified: string } | null {
+  if (!SAFE_SYMBOL.test(symbol) || symbol.includes("..")) return null;
+  const file = join(commonDir, `MDBKA_${symbol}_H1.csv`);
+  if (!existsSync(file)) return null;
+  try {
+    return { csv: readFileSync(file, "utf8"), modified: statSync(file).mtime.toISOString() };
+  } catch {
+    return null;
+  }
+}
+
 export function createCandlesRoutes(
   reader: CandleSource | null,
   readerFinex: CandleSource | null,
@@ -74,6 +95,18 @@ export function createCandlesRoutes(
       return;
     }
     res.json({ broker, items: collectCandleItems(source, commonDir) });
+  });
+
+  // G2: GET /api/candles/:symbol → { symbol, csv, modified } | 404.
+  router.get("/:symbol", (req: Request, res: Response) => {
+    const raw = req.params.symbol;
+    const symbol = (Array.isArray(raw) ? (raw[0] ?? "") : raw).trim();
+    const found = readCandleCsv(commonDir, symbol);
+    if (found === null) {
+      res.status(404).json({ error: `CSV H1 ${symbol} belum ada` });
+      return;
+    }
+    res.json({ symbol, ...found });
   });
 
   return router;

@@ -50,6 +50,8 @@ import { accountKind, historyForLogin, listHistoryAccounts } from "../server/rou
 import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
 import { calculateTargets, secureReadiness } from "../src/lib/targetCalculator";
 import { accountMetrics, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage } from "../src/lib/groupPageView";
+import { candleChartModel, hourKey, withLiveCandles } from "../src/lib/candleChart";
+import { readCandleCsv } from "../server/routes/candlesRoutes";
 import { calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
@@ -7363,6 +7365,59 @@ test("596. halaman Golongan G1: URL, tab simbol (posisi di depan), metrik akun U
   assert(readSrc("src/components/layout/AccountBalancesBar.tsx").includes('data-testid="group-link"'), "tombol Golongan");
   const page = readSrc("src/components/group/GroupPage.tsx");
   assert(page.includes('data-testid="group-metrics"') && page.includes('data-testid="group-symbol-tabs"') && page.includes("useEquityStream(5000, broker)"), "halaman lengkap");
+});
+
+test("597. Golongan G2: model chart candle H1 + baca CSV satu simbol aman", () => {
+  const c = (o: number, h: number, l: number, cl: number, i: number) => ({ time: `2026.10.09 ${String(i).padStart(2, "0")}:00`, open: o, high: h, low: l, close: cl });
+  const candles = [c(1.32, 1.33, 1.31, 1.325, 0), c(1.325, 1.326, 1.30, 1.305, 1), c(0, 0, 0, 0, 2), c(1.305, 1.34, 1.30, 1.335, 3)];
+  const m = candleChartModel(candles, { width: 1000, height: 300, axisWidth: 100, lines: [{ label: "Bid", price: 1.36, kind: "bid" }] });
+  assert(m !== null && m.bars.length === 3, "candle rusak dibuang");
+  if (m === null) return;
+  assert(m.plotRight === 900 && m.bars[0].up && !m.bars[1].up && m.bars[2].up, JSON.stringify(m.bars.map((b) => b.up)));
+  assert(m.max > 1.36 && m.min < 1.30, `rentang ${m.min}-${m.max} harus memuat garis Bid`);
+  assert(m.lines[0].y < m.bars[2].wickTop, "Bid 1.36 di atas high 1.34");
+  assert(m.bars.every((b) => b.wickTop <= b.bodyTop && b.bodyTop + b.bodyHeight <= b.wickBottom + 1e-9), "sumbu wick/body");
+  assert(m.xLabels[0].text === "10/09 00:00", m.xLabels[0].text);
+  assert(candleChartModel([], { width: 10, height: 10 }) === null, "kosong = null");
+  const many = Array.from({ length: 200 }, (_, i) => c(1, 1.1, 0.9, 1.05, i % 24));
+  assert(candleChartModel(many, { width: 1000, height: 300 })?.bars.length === 120, "maks 120 batang");
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "cdl-"));
+  try {
+    nfs.writeFileSync(npath.join(dir, "MDBKA_GBPUSD_H1.csv"), "time,open,high,low,close,tick_volume\n");
+    assert(readCandleCsv(dir, "GBPUSD")?.csv.startsWith("time,") === true, "baca CSV");
+    assert(readCandleCsv(dir, "EURUSD") === null, "tidak ada = null");
+    assert(readCandleCsv(dir, "../GBPUSD") === null && readCandleCsv(dir, "a/b") === null, "path traversal ditolak");
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+  assert(readSrc("src/components/group/GroupPage.tsx").includes('data-testid="group-candle-chart"'), "chart belum dipasang");
+});
+
+test("598. Golongan G2b: candle jam berjalan dirakit dari tick live (contoh US100)", () => {
+  assert(hourKey("2026.10.09 14:12:10") === "2026.10.09 14:00" && hourKey("rusak") === null, "hourKey");
+  const csv = [
+    { time: "2026.10.09 12:00", open: 30998.65, high: 31001.71, low: 30968.75, close: 30980.27 },
+    { time: "2026.10.09 13:00", open: 30979.93, high: 30991.89, low: 30937.27, close: 30958.58 },
+  ];
+  const ticks = [
+    { timestamp: "2026.10.09 13:59:58", bid: 30930.0 },
+    { timestamp: "2026.10.09 14:00:01", bid: 30957.1 },
+    { timestamp: "2026.10.09 14:05:00", bid: 30970.4 },
+    { timestamp: "2026.10.09 14:09:00", bid: 30949.9 },
+    { timestamp: "2026.10.09 14:12:10", bid: 30955.14 },
+    { timestamp: "2026.10.09 11:00:00", bid: 1 },
+  ];
+  const out = withLiveCandles(csv, ticks);
+  assert(out.length === 3, `harus 3 candle: ${out.length}`);
+  assert(out[1].low === 30930 && out[1].close === 30930, "tick 13:59 memperluas candle 13:00");
+  const now = out[2];
+  assert(now.time === "2026.10.09 14:00" && now.open === 30957.1 && now.high === 30970.4 && now.low === 30949.9 && now.close === 30955.14, JSON.stringify(now));
+  assert(csv[1].close === 30958.58, "CSV asli tidak diubah");
+  assert(withLiveCandles(csv, []).length === 2, "tanpa tick = CSV apa adanya");
+  assert(readSrc("src/components/group/GroupPage.tsx").includes("withLiveCandles(chartNow.candles"), "halaman belum memakai candle live");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

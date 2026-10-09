@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, LayoutGrid } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import { calculatorUrlFromHolding } from "../../lib/calculatorPageView";
+import { candleChartModel, withLiveCandles, type OhlcLike } from "../../lib/candleChart";
+import { parseCsvCandles } from "../../lib/csvCandleParser";
 import { accountMetrics, GROUP_TABS, groupSymbolTabs, type GroupPageParams } from "../../lib/groupPageView";
 import { formatIdr, formatUsd } from "../../lib/historyPageView";
 import { formatPrice } from "../../lib/tickSize";
@@ -19,6 +21,8 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
   const [fx, setFx] = useState<ExchangeRates | null>(null);
   const [book, setBook] = useState<{ broker: BrokerId; symbols: string[] } | null>(null);
   const [live, setLive] = useState<{ key: string; bid: number; ask: number } | null>(null);
+  const [ticks, setTicks] = useState<{ key: string; list: { timestamp: string; bid: number }[] }>({ key: "", list: [] });
+  const [chart, setChart] = useState<{ symbol: string; candles: OhlcLike[]; missing: boolean } | null>(null);
   const { equity } = useEquityStream(5000, broker);
   const { positions } = useBrokerPositions(broker, 5000);
 
@@ -52,17 +56,32 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
   const active = tabs.some((t) => t.symbol === selected) ? selected : (tabs[0]?.symbol ?? "");
   const liveKey = `${broker}|${active}`;
 
-  // Harga live simbol aktif, tiap 3 detik.
+  // Harga live simbol aktif, tiap 3 detik. Muat awal 5000 tick (bahan candle
+  // jam berjalan), selanjutnya tick terbaru ditambahkan (G2b).
   useEffect(() => {
     if (active === "") return;
     let cancelled = false;
+    const key = `${broker}|${active}`;
+    let first = true;
     const load = (): void => {
-      fetch(`${API_BASE_URL}/api/quotes/${encodeURIComponent(active)}?broker=${broker}&limit=1`)
+      const limit = first ? 5000 : 20;
+      first = false;
+      fetch(`${API_BASE_URL}/api/quotes/${encodeURIComponent(active)}?broker=${broker}&limit=${limit}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((j: { data?: { bid?: unknown; ask?: unknown }[] } | null) => {
-          const q = j?.data?.[j.data.length - 1];
-          if (cancelled || q === undefined || typeof q.bid !== "number" || typeof q.ask !== "number") return;
-          setLive({ key: `${broker}|${active}`, bid: q.bid, ask: q.ask });
+        .then((j: { data?: { timestamp?: unknown; bid?: unknown; ask?: unknown }[] } | null) => {
+          const data = (j?.data ?? []).filter(
+            (q): q is { timestamp: string; bid: number; ask: number } =>
+              typeof q.timestamp === "string" && typeof q.bid === "number" && typeof q.ask === "number",
+          );
+          const q = data[data.length - 1];
+          if (cancelled || q === undefined) return;
+          setLive({ key, bid: q.bid, ask: q.ask });
+          setTicks((prev) => {
+            const base = prev.key === key ? prev.list : [];
+            const lastTs = base.length > 0 ? base[base.length - 1].timestamp : "";
+            const fresh = data.filter((d) => d.timestamp > lastTs).map((d) => ({ timestamp: d.timestamp, bid: d.bid }));
+            return { key, list: [...base, ...fresh].slice(-6000) };
+          });
         })
         .catch(() => undefined);
     };
@@ -74,6 +93,39 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
     };
   }, [broker, active]);
   const liveNow = live !== null && live.key === liveKey ? live : null;
+
+  // G2: candle H1 simbol aktif (GET /api/candles/:symbol), diperbarui tiap 60 detik.
+  useEffect(() => {
+    if (active === "") return;
+    let cancelled = false;
+    const load = (): void => {
+      fetch(`${API_BASE_URL}/api/candles/${encodeURIComponent(active)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j: { csv?: unknown } | null) => {
+          if (cancelled) return;
+          const candles = typeof j?.csv === "string" ? parseCsvCandles(j.csv).candles : [];
+          setChart({ symbol: active, candles, missing: candles.length === 0 });
+        })
+        .catch(() => {
+          if (!cancelled) setChart({ symbol: active, candles: [], missing: true });
+        });
+    };
+    load();
+    const id = window.setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [active]);
+  const chartNow = chart !== null && chart.symbol === active ? chart : null;
+  const model =
+    chartNow === null
+      ? null
+      : candleChartModel(withLiveCandles(chartNow.candles, ticks.key === liveKey ? ticks.list : []), {
+          width: 1100,
+          height: 380,
+          lines: liveNow === null ? [] : [{ label: "Bid", price: liveNow.bid, kind: "bid" }],
+        });
   const activePositions = positions.filter((p) => p.symbol.trim().toUpperCase() === active);
   const metrics = accountMetrics(equity, kurs);
 
@@ -145,7 +197,37 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
                     </a>
                   </p>
                 ))}
-                <p className="text-xs text-slate-500">Chart candle H1 menyusul (langkah G2).</p>
+                {model === null ? (
+                  <p className="py-16 text-center text-sm text-slate-400">
+                    {chartNow === null ? "memuat chart…" : `Data candle H1 ${active} belum ada (service AutoExportMDBKA belum mengekspor simbol ini).`}
+                  </p>
+                ) : (
+                  <svg viewBox={`0 0 ${model.width} ${model.height}`} width="100%" role="img" aria-label={`Chart candle H1 ${active}`} data-testid="group-candle-chart">
+                    {model.yTicks.map((t) => (
+                      <g key={t.y}>
+                        <line x1={0} x2={model.plotRight} y1={t.y} y2={t.y} stroke="#1e293b" strokeWidth={1} />
+                        <text x={model.plotRight + 6} y={t.y + 4} fill="#64748b" fontSize={11} fontFamily="monospace">{formatPrice(t.price, active)}</text>
+                      </g>
+                    ))}
+                    {model.bars.map((b, i) => (
+                      <g key={i}>
+                        <line x1={b.x + b.width / 2} x2={b.x + b.width / 2} y1={b.wickTop} y2={b.wickBottom} stroke={b.up ? "#10b981" : "#f43f5e"} strokeWidth={1} />
+                        <rect x={b.x} y={b.bodyTop} width={b.width} height={b.bodyHeight} fill={b.up ? "#10b981" : "#f43f5e"} />
+                      </g>
+                    ))}
+                    {model.lines.map((l) => (
+                      <g key={l.kind + l.label}>
+                        <line x1={0} x2={model.plotRight} y1={l.y} y2={l.y} stroke="#38bdf8" strokeWidth={1} strokeDasharray="4 3" />
+                        <rect x={model.plotRight} y={l.y - 9} width={78} height={18} fill="#0369a1" />
+                        <text x={model.plotRight + 4} y={l.y + 4} fill="#f8fafc" fontSize={11} fontFamily="monospace">{formatPrice(l.price, active)}</text>
+                      </g>
+                    ))}
+                    {model.xLabels.map((x) => (
+                      <text key={x.x} x={x.x} y={model.height - 6} fill="#64748b" fontSize={11} fontFamily="monospace" textAnchor="middle">{x.text}</text>
+                    ))}
+                  </svg>
+                )}
+                <p className="text-xs text-slate-500">Candle H1 (1 batang = 1 jam, jam server MT5), 120 jam terakhir · batang paling kanan = jam berjalan, dirakit dari harga live · garis biru putus-putus = Bid live.</p>
               </div>
             )}
           </div>
