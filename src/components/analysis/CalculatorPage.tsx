@@ -18,6 +18,7 @@ import {
   type ExchangeRates,
 } from "../../services/fxRateService";
 import type { BrokerId } from "../../types/broker";
+import { BROKER_SHORT_LABEL } from "../../lib/brokerRegistry";
 
 function tone(n: number): string {
   return n > 0 ? "text-sky-300" : n < 0 ? "text-rose-300" : "text-slate-300";
@@ -145,7 +146,7 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
         </div>
 
         <label className="block rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3 text-xs text-emerald-200">
-          Ambil dari posisi terbuka MT5 ({broker === "finex" ? "Finex" : "OTB"})
+          Ambil dari posisi terbuka MT5 ({BROKER_SHORT_LABEL[broker]})
           <select value={pickedTicket} onChange={(e) => pickPosition(e.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-900 px-3 py-2 font-mono text-white" data-testid="calc-position">
             <option value="">{positions.length === 0 ? "— tidak ada posisi terbuka —" : "— pilih posisi (isi otomatis simbol, arah, lot, entry, SL, TP) —"}</option>
             {positions.map((pos) => (
@@ -159,6 +160,7 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
             <select value={broker} onChange={(e) => changeBroker(e.target.value as BrokerId)} className={field}>
               <option value="finex">Finex</option>
               <option value="orbitraderberjangka">OTB</option>
+              <option value="mifx">MIFX</option>
             </select>
           </label>
           <label className="text-xs text-slate-400">Simbol

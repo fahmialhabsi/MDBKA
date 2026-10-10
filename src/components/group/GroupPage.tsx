@@ -161,6 +161,7 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
           <div className="ml-auto inline-flex gap-2">
             <button type="button" className={pill(broker === "finex")} onClick={() => { setBroker("finex"); setSelected(""); }}>Finex</button>
             <button type="button" className={pill(broker === "orbitraderberjangka")} onClick={() => { setBroker("orbitraderberjangka"); setSelected(""); }}>OTB</button>
+            <button type="button" className={pill(broker === "mifx")} onClick={() => { setBroker("mifx"); setSelected(""); }}>MIFX</button>
           </div>
         </div>
 

@@ -109,7 +109,9 @@ import {
 import type { BrokerSettings, MarketData } from "../src/types/analysis";
 import type { BrokerProfile } from "../src/types/broker";
 import {
+  BROKER_IDS,
   BROKER_PROFILES,
+  BROKER_SHORT_LABEL,
   DEFAULT_BROKER_ID,
   FINEX_BROKER_ID,
   ORBITRADER_BROKER_ID,
@@ -117,6 +119,7 @@ import {
   createBrokerContext,
   getBrokerProfile,
   isSupportedBrokerId,
+  parseBrokerParam,
   resolveBrokerSymbol,
 } from "../src/lib/brokerRegistry";
 import {
@@ -7962,6 +7965,21 @@ test("632. M4b-2 monitor posisi: tab MIFX + posisi MT5 MIFX", () => {
   assert(h.brokerId === "mifx" && h.direction === "JUAL" && h.symbol === "NQ.m", JSON.stringify(h));
   assert(getAvailableSymbols("mifx").length === 35 && getAvailableSymbols("mifx").includes("EURUSD.m") && getAvailableSymbols("finex").includes("EURUSD"), "daftar simbol per broker");
   assert(readSrc("src/components/holdings/HoldingsForm.tsx").includes('brokerId === "mifx" ? "EURUSD.m"') && readSrc("src/components/extraction/ExtractedDataForm.tsx").includes('brokerId === "orbitraderberjangka" || brokerId === "mifx"'), "form simbol MIFX");
+});
+
+test("633. M4b-3 History/Kalkulator/Golongan MIFX + parser broker=", () => {
+  assert(parseBrokerParam("mifx") === "mifx" && parseBrokerParam("finex") === "finex" && parseBrokerParam("xyz") === null && parseBrokerParam(null) === null, "parseBrokerParam");
+  assert(BROKER_IDS.join(",") === "finex,orbitraderberjangka,mifx" && BROKER_SHORT_LABEL.mifx === "MIFX" && BROKER_SHORT_LABEL.orbitraderberjangka === "OTB", "daftar & label broker");
+  assert(parseHistoryPage("?halaman=history&broker=mifx")?.broker === "mifx", "history mifx");
+  const c = parseCalculatorPage("?halaman=kalkulator&broker=mifx&symbol=eurusd.m");
+  assert(c?.broker === "mifx" && c.symbol === "EURUSD.m", JSON.stringify(c));
+  assert(parseCalculatorPage("?halaman=kalkulator&broker=finex&symbol=eurusd")?.symbol === "EURUSD", "finex tetap huruf besar");
+  const g = parseGroupPage("?halaman=golongan&broker=mifx&grup=FOREX&symbol=EURUSD.M");
+  assert(g?.broker === "mifx" && g.symbol === "EURUSD.m", JSON.stringify(g));
+  assert(parseSignalPage("?halaman=sinyal&broker=mifx&symbol=NQ.m&equity=10000")?.broker === "mifx", "sinyal mifx");
+  assert(readSrc("src/components/layout/AccountBalancesBar.tsx").includes("BROKER_IDS.map((b)"), "link History semua broker");
+  assert(readSrc("src/components/analysis/CalculatorPage.tsx").includes('<option value="mifx">MIFX</option>'), "kalkulator MIFX");
+  assert(readSrc("src/components/group/GroupPage.tsx").includes('setBroker("mifx")'), "golongan MIFX");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

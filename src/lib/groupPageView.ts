@@ -5,6 +5,8 @@
  * metrik akun Balance/Equity/Margin/Free Margin/Margin Level (USD + Rp).
  */
 import type { BrokerId } from "../types/broker";
+import { parseBrokerParam } from "./brokerRegistry";
+import { getMifxSpec } from "./mifxSpecs";
 import { riskGroupOf, type RiskGroupId } from "./riskGroup";
 
 export const GROUP_TABS: readonly { readonly id: RiskGroupId; readonly label: string }[] = [
@@ -32,10 +34,12 @@ export function groupPageUrl(p: { broker: BrokerId; group?: RiskGroupId; symbol?
 export function parseGroupPage(search: string): GroupPageParams | null {
   const q = new URLSearchParams(search);
   if (q.get("halaman") !== "golongan") return null;
-  const broker: BrokerId = q.get("broker") === "orbitraderberjangka" ? "orbitraderberjangka" : "finex";
+  const broker: BrokerId = parseBrokerParam(q.get("broker")) ?? "finex";
   const g = q.get("grup");
   const group = GROUP_TABS.find((t) => t.id === g)?.id ?? "FOREX";
-  return { broker, group, symbol: (q.get("symbol") ?? "").trim().toUpperCase() };
+  const rawSymbol = (q.get("symbol") ?? "").trim();
+  const symbol = broker === "mifx" ? (getMifxSpec(rawSymbol)?.symbol ?? rawSymbol) : rawSymbol.toUpperCase();
+  return { broker, group, symbol };
 }
 
 export interface SymbolTab {

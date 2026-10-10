@@ -3,6 +3,7 @@
  * Halaman dibuka di tab baru: `/?halaman=history&broker=finex|orbitraderberjangka`.
  */
 import type { BrokerId } from "../types/broker";
+import { parseBrokerParam } from "./brokerRegistry";
 
 export type HistoryKind = "live" | "demo";
 
@@ -23,9 +24,8 @@ export function historyPageUrl(broker: BrokerId): string {
 export function parseHistoryPage(search: string): { broker: BrokerId } | null {
   const q = new URLSearchParams(search);
   if (q.get(HISTORY_PAGE_PARAM) !== "history") return null;
-  const b = q.get("broker");
-  if (b === "finex" || b === "orbitraderberjangka") return { broker: b };
-  return null;
+  const b = parseBrokerParam(q.get("broker"));
+  return b === null ? null : { broker: b };
 }
 
 /** Akun live & demo milik satu broker (yang pertama bila lebih dari satu). */

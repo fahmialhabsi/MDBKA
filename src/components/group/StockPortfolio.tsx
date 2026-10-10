@@ -5,6 +5,7 @@ import { formatPrice } from "../../lib/tickSize";
 import { riskGroupOf, type RiskGroupId } from "../../lib/riskGroup";
 import { buildTradeSummary, type DealLike, type StockHolding } from "../../lib/stockPortfolio";
 import type { BrokerId } from "../../types/broker";
+import { BROKER_SHORT_LABEL } from "../../lib/brokerRegistry";
 
 interface Account {
   readonly login: string;
@@ -73,7 +74,7 @@ export function StockPortfolio({ broker, group }: { broker: BrokerId; group: Ris
       {now === null ? (
         <p className="text-sm text-slate-400">memuat…</p>
       ) : filled.length === 0 ? (
-        <p className="text-sm text-slate-400">Belum ada transaksi golongan ini di akun {broker === "finex" ? "Finex" : "OTB"}.</p>
+        <p className="text-sm text-slate-400">Belum ada transaksi golongan ini di akun {BROKER_SHORT_LABEL[broker]}.</p>
       ) : (
         filled.map(({ account, rows }) => (
           <div key={account.login} className="mb-3 overflow-x-auto">

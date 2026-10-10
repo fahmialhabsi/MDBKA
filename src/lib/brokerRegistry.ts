@@ -146,3 +146,18 @@ export function resolveBrokerSymbol(
 
   return { brokerSymbol, instrumentFamily };
 }
+
+/** M4b-3: nama pendek broker untuk tombol/label (satu sumber). */
+export const BROKER_SHORT_LABEL: Readonly<Record<BrokerId, string>> = Object.freeze({
+  finex: "Finex",
+  orbitraderberjangka: "OTB",
+  mifx: "MIFX",
+});
+
+/** M4b-3: urutan broker di tombol halaman (History, Kalkulator, Golongan). */
+export const BROKER_IDS: readonly BrokerId[] = Object.freeze(["finex", "orbitraderberjangka", "mifx"]);
+
+/** Query `broker=` → BrokerId; tak dikenal/kosong → null. */
+export function parseBrokerParam(value: string | null): BrokerId | null {
+  return value !== null && isSupportedBrokerId(value) ? value : null;
+}

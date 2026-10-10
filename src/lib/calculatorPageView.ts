@@ -4,6 +4,8 @@
  * Semua parameter isian opsional (prefill dari detail sinyal / monitor).
  */
 import type { BrokerId } from "../types/broker";
+import { parseBrokerParam } from "./brokerRegistry";
+import { getMifxSpec } from "./mifxSpecs";
 import type { CalcDirection } from "./targetCalculator";
 
 export interface CalculatorPrefill {
@@ -30,11 +32,12 @@ export function calculatorPageUrl(p: Partial<CalculatorPrefill> & { broker: Brok
 export function parseCalculatorPage(search: string): CalculatorPrefill | null {
   const q = new URLSearchParams(search);
   if (q.get("halaman") !== "kalkulator") return null;
-  const b = q.get("broker");
-  const broker: BrokerId = b === "orbitraderberjangka" ? "orbitraderberjangka" : "finex";
+  const broker: BrokerId = parseBrokerParam(q.get("broker")) ?? "finex";
+  const rawSymbol = (q.get("symbol") ?? "").trim();
   return {
     broker,
-    symbol: (q.get("symbol") ?? "").trim().toUpperCase(),
+    // M4b-3: MIFX memakai nama persis ("EURUSD.m"), lainnya huruf besar seperti dulu.
+    symbol: broker === "mifx" ? (getMifxSpec(rawSymbol)?.symbol ?? rawSymbol) : rawSymbol.toUpperCase(),
     direction: q.get("arah") === "JUAL" ? "JUAL" : "BELI",
     lot: q.get("lot") ?? "0.01",
     entry: q.get("entry") ?? "",

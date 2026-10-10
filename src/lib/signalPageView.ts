@@ -4,6 +4,7 @@
  * (equity = nilai yang dipakai pemindai, agar lot & risiko sama).
  */
 import type { BrokerId } from "../types/broker";
+import { parseBrokerParam } from "./brokerRegistry";
 
 export interface SignalPageParams {
   readonly broker: BrokerId;
@@ -24,9 +25,9 @@ export function signalPageUrl(broker: BrokerId, symbol: string, equity: number):
 export function parseSignalPage(search: string): SignalPageParams | null {
   const q = new URLSearchParams(search);
   if (q.get("halaman") !== "sinyal") return null;
-  const broker = q.get("broker");
+  const broker = parseBrokerParam(q.get("broker"));
   const symbol = (q.get("symbol") ?? "").trim();
   const equity = Number(q.get("equity") ?? "0");
-  if ((broker !== "finex" && broker !== "orbitraderberjangka") || symbol === "") return null;
+  if (broker === null || symbol === "") return null;
   return { broker, symbol, equity: Number.isFinite(equity) && equity > 0 ? equity : 0 };
 }

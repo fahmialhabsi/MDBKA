@@ -1,3 +1,4 @@
+import { BROKER_IDS, BROKER_SHORT_LABEL } from "../../lib/brokerRegistry";
 import { useEffect, useState, type JSX } from "react";
 import { historyPageUrl } from "../../lib/historyPageView";
 import { calculatorPageUrl } from "../../lib/calculatorPageView";
@@ -80,7 +81,7 @@ export function AccountBalancesBar({
       ))}
       {/* Halaman History H3: dibuka di tab baru (Live & Demo per broker). */}
       <div className="ml-auto flex gap-2">
-        {(["finex", "orbitraderberjangka"] as const).map((b) => (
+        {BROKER_IDS.map((b) => (
           <a
             key={b}
             href={historyPageUrl(b)}
@@ -89,7 +90,7 @@ export function AccountBalancesBar({
             data-testid={`history-link-${b}`}
             className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 font-semibold text-emerald-200 hover:bg-emerald-400/20"
           >
-            History {b === "finex" ? "Finex" : "OTB"} ↗
+            History {BROKER_SHORT_LABEL[b]} ↗
           </a>
         ))}
         <a
