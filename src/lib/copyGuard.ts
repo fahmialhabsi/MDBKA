@@ -62,3 +62,42 @@ export function copyLockState(lock: CopyLock, quote: LiveQuoteLike | null, nowMs
   }
   return { phase: "SIAP_TP", remainingSec, driftShare, reason: `TP siap disalin (${remainingSec} dtk lagi)` };
 }
+
+export type CopyTone = "netral" | "siap" | "merah";
+
+export interface CopyButtonsView {
+  readonly slLabel: string;
+  readonly tpLabel: string;
+  readonly tpEnabled: boolean;
+  readonly tone: CopyTone;
+  /** Penjelasan singkat di bawah tombol (null = tidak ada). */
+  readonly note: string | null;
+}
+
+/**
+ * Tampilan tombol [SL]/[TP] di kolom Arah pemindai (MURNI).
+ * - belum ada kunci: SL aktif, TP mati ("tekan SL dulu");
+ * - SIAP_TP: TP aktif + hitung mundur;
+ * - BERGESER: TP mati merah "harga bergeser — salin ulang";
+ * - HABIS: kembali seperti awal + catatan waktu habis;
+ * - selesai (TP sudah disalin): pengingat tekan Buy/Sell di MT5.
+ */
+export function copyButtonsView(
+  lock: CopyLock | null,
+  state: CopyLockState | null,
+  done: boolean,
+): CopyButtonsView {
+  if (done) {
+    return { slLabel: "SL ✓", tpLabel: "TP ✓", tpEnabled: false, tone: "siap", note: "SL & TP tersalin — tekan Buy/Sell di MT5 sekarang" };
+  }
+  if (lock === null || state === null) {
+    return { slLabel: "SL", tpLabel: "TP", tpEnabled: false, tone: "netral", note: null };
+  }
+  if (state.phase === "HABIS") {
+    return { slLabel: "SL", tpLabel: "TP", tpEnabled: false, tone: "netral", note: state.reason };
+  }
+  if (state.phase === "BERGESER") {
+    return { slLabel: "SL ulang", tpLabel: "harga bergeser — salin ulang", tpEnabled: false, tone: "merah", note: state.reason };
+  }
+  return { slLabel: "SL ✓", tpLabel: `TP · ${state.remainingSec} dtk`, tpEnabled: true, tone: "siap", note: null };
+}

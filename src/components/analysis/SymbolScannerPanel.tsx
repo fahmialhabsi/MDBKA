@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTradeSessions } from "../../hooks/useTradeSessions";
 import { RefreshCw, ScanSearch } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
@@ -19,6 +19,8 @@ import {
   type ScanStatus,
 } from "../../lib/symbolScanner";
 import { useBrokerPositions } from "../../hooks/useBrokerPositions";
+import { ScanCopyButtons } from "./ScanCopyButtons";
+import { canonicalSymbolForBroker } from "../../lib/brokerSymbols";
 import { checkLossStreak, tradesForBroker } from "../../lib/lossStreakGuard";
 import type { ExchangeRates } from "../../services/fxRateService";
 import type { BrokerId } from "../../types/broker";
@@ -189,33 +191,49 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
   // K6: berita Tinggi mendatang (jam server broker ini).
   const upcoming = useMemo(() => upcomingHighNews(newsEvents, nowServer), [newsEvents, nowServer]);
 
-  const rows = useMemo(() => {
-    const source = itemsBroker === brokerId ? items : [];
-    // Candle terbaru broker ini = acuan "pasar buka" (jam server yang sama).
-    const reference = source.reduce<number | null>((max, item) => {
-      const t = lastCandleTimeMs(item.csv);
-      return t !== null && (max === null || t > max) ? t : max;
-    }, null);
-    return sortScanRows(
-      source.map((item) =>
-        scanSymbol({
-          symbol: item.symbol,
-          brokerId,
-          csv: item.csv,
-          quote: item.quote,
-          equity,
-          fxRates,
-          referenceCandleMs: reference,
-          openPositions,
-          pauseReason,
-          // K4b: jam server terbaru broker (quote simbol tutup bisa basi).
-          newsEvents,
-          newsNow: nowServer ?? undefined,
-          sessions,
-        }),
-      ),
-    );
-  }, [items, itemsBroker, brokerId, equity, fxRates, openPositions, pauseReason, newsEvents, nowServer, sessions]);
+  const source = useMemo(() => (itemsBroker === brokerId ? items : []), [items, itemsBroker, brokerId]);
+  // Candle terbaru broker ini = acuan "pasar buka" (jam server yang sama).
+  const reference = useMemo(
+    () =>
+      source.reduce<number | null>((max, item) => {
+        const t = lastCandleTimeMs(item.csv);
+        return t !== null && (max === null || t > max) ? t : max;
+      }, null),
+    [source],
+  );
+  // Satu pintu analisa: dipakai tabel DAN tombol [SL] (quote baru, satpam sama).
+  const scanItem = useCallback(
+    (item: CandleItem, quote: LiveQuoteLike | null) =>
+      scanSymbol({
+        symbol: item.symbol,
+        brokerId,
+        csv: item.csv,
+        quote,
+        equity,
+        fxRates,
+        referenceCandleMs: reference,
+        openPositions,
+        pauseReason,
+        // K4b: jam server terbaru broker (quote simbol tutup bisa basi).
+        newsEvents,
+        newsNow: nowServer ?? undefined,
+        sessions,
+      }),
+    [brokerId, equity, fxRates, reference, openPositions, pauseReason, newsEvents, nowServer, sessions],
+  );
+  const rows = useMemo(
+    () => sortScanRows(source.map((item) => scanItem(item, item.quote))),
+    [source, scanItem],
+  );
+  const recomputePlan = useCallback(
+    (symbol: string, quote: LiveQuoteLike) => {
+      const item = source.find((i) => canonicalSymbolForBroker(i.symbol, brokerId) === symbol);
+      if (item === undefined) return null;
+      const row = scanItem(item, quote);
+      return row.status === "LOLOS" ? (row.plan ?? null) : null;
+    },
+    [source, scanItem, brokerId],
+  );
 
   const counts = rows.reduce<Record<ScanStatus, number>>(
     (acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }),
@@ -358,6 +376,13 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
                   <td className="py-2 pr-3 text-slate-300">
                     {row.direction ?? "-"}
                     {row.held ? " · ditahan" : ""}
+                    {row.status === "LOLOS" && row.plan !== null && row.plan !== undefined && (
+                      <ScanCopyButtons
+                        brokerId={brokerId}
+                        symbol={row.symbol}
+                        recompute={(q) => recomputePlan(row.symbol, q)}
+                      />
+                    )}
                   </td>
                   <td className="py-2 pr-3 text-right text-slate-300">
                     {row.score === null ? "-" : `${row.score}/5`}

@@ -297,6 +297,7 @@ import {
 import {
   COPY_DRIFT_SHARE,
   COPY_LOCK_SECONDS,
+  copyButtonsView,
   copyLockState,
   planDriftShare,
   startCopyLock,
@@ -7608,6 +7609,26 @@ test("607. kunci salin SL/TP: 10 dtk, geser > 10% jarak SL = BERGESER, tanpa har
   const d = planDriftShare(beli, { ...q(25035.0, 25037.67), symbol: "DE30" });
   assert(d !== null && Math.abs(d - 0.0569) < 0.001, `BELI pakai Ask: ${d}`);
   assert(copyLockState(startCopyLock("DE30", beli, 0), { ...q(25035.0, 25037.67), symbol: "DE30" }, 5_000).phase === "SIAP_TP", "DE30 geser 5,7% masih aman");
+});
+
+test("608. tombol [SL]/[TP] di kolom Arah pemindai: hanya Lolos, TP ikut kunci, SL hitung ulang harga live", () => {
+  const plan = { direction: "JUAL" as const, entry: 0.57871, stopLoss: 0.57947, takeProfit: 0.57757, suggestedLot: 0.01, riskAtMinLot: 0.95, maxRiskUsd: 1.95, riskDistance: 0.00076, targetDistance: 0.00114 };
+  const awal = copyButtonsView(null, null, false);
+  assert(awal.slLabel === "SL" && !awal.tpEnabled, "awal: TP mati sampai SL ditekan");
+  const lock = startCopyLock("AUDCHF", plan, 0);
+  const q = (bid: number) => ({ timestamp: "t", symbol: "AUDCHF", bid, ask: bid + 0.00006 });
+  const siap = copyButtonsView(lock, copyLockState(lock, q(0.57875), 2_500), false);
+  assert(siap.tpEnabled && siap.tpLabel === "TP · 8 dtk" && siap.tone === "siap", JSON.stringify(siap));
+  const merah = copyButtonsView(lock, copyLockState(lock, q(0.57893), 3_000), false);
+  assert(!merah.tpEnabled && merah.tone === "merah" && merah.tpLabel === "harga bergeser — salin ulang", JSON.stringify(merah));
+  const habis = copyButtonsView(lock, copyLockState(lock, q(0.57875), 10_000), false);
+  assert(!habis.tpEnabled && habis.slLabel === "SL" && (habis.note ?? "").includes("habis"), JSON.stringify(habis));
+  assert(copyButtonsView(null, null, true).note?.includes("Buy/Sell") === true, "selesai: pengingat Buy/Sell");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes('row.status === "LOLOS" && row.plan !== null') && panel.includes("<ScanCopyButtons"), "tombol hanya baris Lolos");
+  assert(panel.includes('return row.status === "LOLOS" ? (row.plan ?? null) : null;'), "hitung ulang wajib masih Lolos");
+  const btn = readSrc("src/components/analysis/ScanCopyButtons.tsx");
+  assert(btn.includes("const plan = recompute(q);") && btn.includes("formatPrice(lock.plan.takeProfit, symbol)"), "SL hitung ulang, TP dari rencana terkunci");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
