@@ -298,6 +298,7 @@ import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } 
 import { readSpecsForBroker } from "../server/services/specReader";
 import { mandatoryStop } from "../src/lib/mandatoryStop";
 import { estimateSwap, swapChargeDays } from "../src/lib/swapEstimate";
+import { findOpeningHold, openingState, openingWarning } from "../src/lib/openingGuard";
 import {
   COPY_DRIFT_SHARE,
   COPY_LOCK_SECONDS,
@@ -7802,6 +7803,29 @@ test("619. SW2b monitor posisi: perkiraan swap pakai mesin mode broker + jam ser
     51300, 51302, testToUsd, Date.parse("2026-10-09T08:00:00.000Z"), "2026.10.09 11:00:00",
   );
   assert(finex.swap !== null && finex.swap.value === 0 && finex.swap.source === "PERKIRAAN", `Finex swap mati: ${JSON.stringify(finex.swap)}`);
+});
+
+test("620. O1 satpam pembukaan bursa: US100 22:30 WIT, tahan -30/+60, peringatan posisi 60 mnt, DST otomatis", () => {
+  const t = (iso: string) => Date.parse(iso);
+  // Jumat 9 Okt 2026: NYSE buka 09:30 EDT = 13:30 UTC = 22:30 WIT.
+  const buka = openingState("US100", t("2026-10-09T13:30:00Z"));
+  assert(buka !== null && buka.minutesFromOpen === 0 && buka.openWit === "22:30", JSON.stringify(buka));
+  assert(findOpeningHold("US100", t("2026-10-09T13:00:00Z")) !== null, "30 mnt sebelum = tahan");
+  assert(findOpeningHold("US100", t("2026-10-09T12:59:00Z")) === null, "31 mnt sebelum = bebas");
+  assert(findOpeningHold("US30", t("2026-10-09T14:30:00Z")) !== null, "60 mnt sesudah = tahan");
+  assert(findOpeningHold("US500.DEC", t("2026-10-09T14:31:00Z")) === null, "61 mnt sesudah = bebas");
+  assert(findOpeningHold("#META", t("2026-10-09T13:40:00Z")) !== null, "saham AS ikut bursa AS");
+  assert(findOpeningHold("EURUSD", t("2026-10-09T13:30:00Z")) === null, "forex tidak diatur");
+  assert(findOpeningHold("US100", t("2026-10-10T13:30:00Z")) === null, "Sabtu tidak ada pembukaan");
+  // US100 BELI 18:07 WIT: peringatan muncul 21:30–22:29 WIT.
+  const warn = openingWarning("US100", t("2026-10-09T13:00:00Z"));
+  assert(warn !== null && warn.includes("22:30 WIT") && warn.includes("30 menit lagi"), String(warn));
+  assert(openingWarning("US100", t("2026-10-09T12:29:00Z")) === null, "61 mnt sebelum = belum");
+  // DST: Senin 2 Nov 2026 NY sudah EST → 14:30 UTC = 23:30 WIT.
+  const nov = openingState("US100", t("2026-11-02T14:30:00Z"));
+  assert(nov !== null && nov.minutesFromOpen === 0 && nov.openWit === "23:30", JSON.stringify(nov));
+  const de = openingState("DE30_ORB", t("2026-10-09T07:00:00Z"));
+  assert(de !== null && de.minutesFromOpen === 0 && de.openWit === "16:00", JSON.stringify(de));
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
