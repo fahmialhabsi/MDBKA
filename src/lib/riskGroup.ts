@@ -80,8 +80,8 @@ export function riskGroupTable(): RiskGroupRow[] {
   return [
     { group: RISK_GROUPS.FOREX, symbols: [...FOREX], note: "OTB: nama sama + akhiran _ORB; MIFX: + .m" },
     { group: RISK_GROUPS.FOREX_JPY, symbols: [...FOREX_JPY], note: "OTB: nama sama + akhiran _ORB; MIFX: + .m" },
-    { group: RISK_GROUPS.LOGAM, symbols: [...LOGAM], note: "XAU = emas, XAG = perak; OTB + _ORB" },
-    { group: RISK_GROUPS.MINYAK, symbols: [...MINYAK], note: "" },
+    { group: RISK_GROUPS.LOGAM, symbols: [...LOGAM], note: "XAU = emas, XAG = perak; OTB + _ORB; MIFX: + .m" },
+    { group: RISK_GROUPS.MINYAK, symbols: [...MINYAK], note: "MIFX: CLS10.m, OIL_NEXT" },
     { group: RISK_GROUPS.INDEKS, symbols: [...INDEKS], note: "OTB: US30/US100/US500 juga .DEC; MIFX: DJ.m=US30, NQ.m=US100, SP.m=US500, NK.m=JP225, HK.m=HK50" },
     { group: RISK_GROUPS.SAHAM_AS, symbols: [...SAHAM_AS_FINEX], note: "Finex (#); OTB: semua simbol berakhiran .US" },
     { group: RISK_GROUPS.FOREX_TIDAK_LAZIM, symbols: [...FOREX_TIDAK_LAZIM], note: "" },
