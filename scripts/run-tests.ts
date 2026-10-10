@@ -7892,7 +7892,8 @@ test("626. M2a spesifikasi 35 simbol MIFX (.m): forex VERIFIED komisi $10/lot, l
   const gbp = getInstrumentSpec32("EURGBP.m");
   assert(gbp !== null && gbp.quoteCurrency === "GBP" && gbp.swapLong === -2.69 && gbp.swapShort === -0.31, "EURGBP.m = Specification MT5");
   const nq = getInstrumentSpec32("NQ.m");
-  assert(nq !== null && nq.leverage === 20 && nq.status === "PENDING", "indeks: komisi belum terverifikasi");
+  assert(nq !== null && nq.leverage === 20 && nq.status === "VERIFIED", "NQ.m komisi terverifikasi (Specification 10 Okt)");
+  assert(getInstrumentSpec32("XAGUSD.m")?.status === "VERIFIED" && getInstrumentSpec32("DJ.m")?.status === "PENDING", "XAG terverifikasi; DJ.m belum");
   assert(getInstrumentSpec32("USDJPY.m")?.isJPYPair === true && getInstrumentSpec32("XAUUSD.m")?.leverage === 100, "JPY/emas");
   assert(getInstrumentSpec32("EURUSD")?.broker === "finex", "simbol Finex tetap");
   for (const s of MIFX_SPEC_SYMBOLS) assert(INSTRUMENT_SPECS_32[s] === undefined, `nama ${s} bentrok dengan Finex/OTB`);
