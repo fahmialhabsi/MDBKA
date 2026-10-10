@@ -20,6 +20,7 @@ import {
 } from "../../lib/symbolScanner";
 import { useBrokerPositions } from "../../hooks/useBrokerPositions";
 import { ScanCopyButtons } from "./ScanCopyButtons";
+import { specHoldMap } from "../../lib/specCompare";
 import { canonicalSymbolForBroker } from "../../lib/brokerSymbols";
 import { checkLossStreak, tradesForBroker } from "../../lib/lossStreakGuard";
 import type { ExchangeRates } from "../../services/fxRateService";
@@ -60,6 +61,7 @@ const STATUS_VIEW: Record<ScanStatus, { label: string; className: string }> = {
   DITAHAN_JEDA: { label: "Jeda rugi", className: "bg-rose-400/15 text-rose-300" },
   DITAHAN_BERITA: { label: "Dekat berita", className: "bg-orange-400/15 text-orange-300" },
   DITAHAN_SESI: { label: "Sesi tutup", className: "bg-rose-400/15 text-rose-300" },
+  DITAHAN_SPEK: { label: "Spesifikasi berubah", className: "bg-violet-400/15 text-violet-300" },
   TUNGGU: { label: "Tunggu", className: "bg-white/10 text-slate-300" },
   PASAR_TUTUP: { label: "Pasar tutup / basi", className: "bg-white/5 text-slate-500" },
   DATA: { label: "Data kurang", className: "bg-white/5 text-slate-500" },
@@ -79,6 +81,11 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
   const [calendar, setCalendar] = useState<{
     readonly broker: BrokerId;
     readonly events: readonly NewsEventLike[] | null;
+  } | null>(null);
+  // V2c: simbol yang spesifikasi MT5-nya beda dengan spec32 (null = tidak tersedia).
+  const [specBook, setSpecBook] = useState<{
+    readonly broker: BrokerId;
+    readonly holds: ReadonlyMap<string, string> | null;
   } | null>(null);
   // Langkah 4d: hasil nyata trade berstatus LOLOS (History MT5).
   const [evalAccounts, setEvalAccounts] = useState<readonly EvalAccount[]>([]);
@@ -161,6 +168,21 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
       } catch {
         if (!cancelled) setCalendar({ broker: brokerId, events: null });
       }
+      // V2c: gagal / tidak tersedia = satpam spesifikasi diabaikan.
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/specs?broker=${brokerId}`);
+        const body = res.ok
+          ? ((await res.json()) as { available?: boolean; diffs?: { symbol: string; level: string; reason: string }[] })
+          : null;
+        if (!cancelled) {
+          setSpecBook({
+            broker: brokerId,
+            holds: body !== null && body.available === true && Array.isArray(body.diffs) ? specHoldMap(body.diffs) : null,
+          });
+        }
+      } catch {
+        if (!cancelled) setSpecBook({ broker: brokerId, holds: null });
+      }
       if (!cancelled) setLoadedKey(key);
     };
     void load();
@@ -186,6 +208,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
   );
   const pauseReason = lossPause.paused ? lossPause.reason : null;
   const newsEvents = calendar !== null && calendar.broker === brokerId ? calendar.events : null;
+  const specHolds = specBook !== null && specBook.broker === brokerId ? specBook.holds : null;
   // Satpam Sesi S3: jam trading resmi broker.
   const sessions = useTradeSessions(brokerId);
   // K6: berita Tinggi mendatang (jam server broker ini).
@@ -218,8 +241,9 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         newsEvents,
         newsNow: nowServer ?? undefined,
         sessions,
+        specHolds,
       }),
-    [brokerId, equity, fxRates, reference, openPositions, pauseReason, newsEvents, nowServer, sessions],
+    [brokerId, equity, fxRates, reference, openPositions, pauseReason, newsEvents, nowServer, sessions, specHolds],
   );
   const rows = useMemo(
     () => sortScanRows(source.map((item) => scanItem(item, item.quote))),
@@ -237,7 +261,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
 
   const counts = rows.reduce<Record<ScanStatus, number>>(
     (acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }),
-    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, DITAHAN_JEDA: 0, DITAHAN_BERITA: 0, DITAHAN_SESI: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
+    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, DITAHAN_JEDA: 0, DITAHAN_BERITA: 0, DITAHAN_SESI: 0, DITAHAN_SPEK: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
   );
   const visible = showAll ? rows : rows.slice(0, COLLAPSED_ROWS);
   const loading =
@@ -258,6 +282,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
               &gt; batas · {counts.DITAHAN_KORELASI} taruhan ganda ·{" "}
               {counts.DITAHAN_JEDA} jeda · {counts.DITAHAN_BERITA} dekat berita ·{" "}
               {counts.DITAHAN_SESI} sesi tutup/jelang tutup ·{" "}
+              {counts.DITAHAN_SPEK} spesifikasi berubah ·{" "}
               {counts.TUNGGU} tunggu · {counts.PASAR_TUTUP} pasar
               tutup · {counts.DATA} data kurang
             </p>

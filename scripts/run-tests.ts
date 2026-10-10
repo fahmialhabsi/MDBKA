@@ -294,7 +294,7 @@ import {
   spec32VerificationNotice,
 } from "../src/lib/spec32Wiring";
 
-import { compareSpecs, heldSymbols, parseSpecsCsv } from "../src/lib/specCompare";
+import { compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
 import { readSpecsForBroker } from "../server/services/specReader";
 import {
   COPY_DRIFT_SHARE,
@@ -7678,6 +7678,27 @@ test("610. V2b pembaca spesifikasi per broker (Company, file terbaru) + GET /api
   }
   assert(readSrc("server/app.ts").includes('app.use("/api/specs", createSpecRoutes())'), "route belum dipasang");
   assert(readSrc("server/routes/specRoutes.ts").includes("available: false"), "tanpa file = available false");
+});
+
+test("611. V2c pemindai: DITAHAN_SPEK paling awal (sebelum jeda), hanya diff TAHAN, panel ambil /api/specs", () => {
+  const map = specHoldMap([
+    { symbol: "EURUSD", level: "CATATAN", reason: "Swap beli EURUSD berubah" },
+    { symbol: "US100", level: "TAHAN", reason: "Contract size US100 berubah: MT5 100000, MDBKA 20" },
+    { symbol: "US100", level: "TAHAN", reason: "Tick size US100 berubah" },
+  ]);
+  assert(map.size === 1 && map.get("US100") === "Contract size US100 berubah: MT5 100000, MDBKA 20", [...map.entries()].join("|"));
+  const sc = readSrc("src/lib/symbolScanner.ts");
+  const spek = sc.indexOf('status: "DITAHAN_SPEK"');
+  const jeda = sc.indexOf('status: "DITAHAN_JEDA"');
+  assert(spek > 0 && jeda > spek, `spesifikasi harus dinilai sebelum jeda ${spek}/${jeda}`);
+  assert(sc.includes("input.specHolds?.get(symbol)"), "pakai simbol kanonik broker");
+  assert(sortScanRows([
+    { symbol: "B", status: "TUNGGU", decision: "TUNGGU", direction: "TUNGGU", held: false, score: 0, reason: "", costShareOfRisk: null, candles: 200 },
+    { symbol: "A", status: "DITAHAN_SPEK", decision: "TUNGGU", direction: "BELI", held: true, score: 4, reason: "", costShareOfRisk: null, candles: 200 },
+  ])[0].symbol === "A", "spek di atas TUNGGU");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes("/api/specs?broker=${brokerId}") && panel.includes("specBook.broker === brokerId ? specBook.holds : null"), "spesifikasi broker aktif");
+  assert(panel.includes('DITAHAN_SPEK: { label: "Spesifikasi berubah"') && panel.includes("specHolds,"), "panel/tampilan");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

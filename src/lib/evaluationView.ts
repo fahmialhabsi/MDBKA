@@ -79,6 +79,7 @@ const GROUP_LABELS: Readonly<Record<string, string>> = {
   DITAHAN_JEDA: "Entry saat jeda rugi beruntun",
   DITAHAN_BERITA: "Entry dekat berita Tinggi (±30 menit)",
   DITAHAN_SESI: "Entry saat pasar tutup / jelang tutup / saham jelang libur",
+  DITAHAN_SPEK: "Entry saat spesifikasi broker berubah",
   TUNGGU: "Entry saat sinyal TUNGGU",
   PASAR_TUTUP: "Entry saat data pasar basi",
   DATA: "Entry tanpa data cukup",

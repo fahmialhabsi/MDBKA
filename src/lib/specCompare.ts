@@ -109,6 +109,17 @@ export function compareSpecs(
   return [...all.filter((d) => d.level === "TAHAN"), ...all.filter((d) => d.level === "CATATAN")];
 }
 
+/** Peta simbol → alasan TAHAN pertama (untuk pemindai; CATATAN diabaikan). */
+export function specHoldMap(
+  diffs: readonly { readonly symbol: string; readonly level: string; readonly reason: string }[],
+): ReadonlyMap<string, string> {
+  const map = new Map<string, string>();
+  for (const d of diffs) {
+    if (d.level === "TAHAN" && !map.has(d.symbol)) map.set(d.symbol, d.reason);
+  }
+  return map;
+}
+
 /** Simbol yang wajib ditahan (beda contract/tick/mata uang profit). */
 export function heldSymbols(diffs: readonly SpecDiff[]): ReadonlySet<string> {
   return new Set(diffs.filter((d) => d.level === "TAHAN").map((d) => d.symbol));

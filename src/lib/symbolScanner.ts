@@ -35,6 +35,7 @@ export type ScanStatus =
   | "DITAHAN_JEDA"
   | "DITAHAN_BERITA"
   | "DITAHAN_SESI"
+  | "DITAHAN_SPEK"
   | "TUNGGU"
   | "PASAR_TUTUP"
   | "DATA";
@@ -66,6 +67,12 @@ export interface ScanInput {
   readonly newsNow?: string;
   /** Satpam Sesi S3: jam trading resmi broker (null/absen = diabaikan). Jam = newsNow. */
   readonly sessions?: readonly TradeSession[] | null;
+  /**
+   * V2c (10 Okt 2026): simbol yang spesifikasi MT5-nya beda dengan spec32
+   * (contract/tick/mata uang profit) → alasan. null/absen = file spesifikasi
+   * tidak tersedia → satpam diabaikan.
+   */
+  readonly specHolds?: ReadonlyMap<string, string> | null;
 }
 
 export interface ScanRow {
@@ -218,6 +225,21 @@ export function scanSymbol(input: ScanInput): ScanRow {
           : result.riskStatus === "MEMENUHI batas risiko"
             ? "LOLOS"
             : "DITAHAN_RISIKO";
+  // V2c: spesifikasi broker berubah → hitungan risiko tak bisa dipercaya → tahan.
+  const specReason = input.specHolds?.get(symbol) ?? null;
+  if (status === "LOLOS" && (result.decision === "BELI" || result.decision === "JUAL") && specReason !== null) {
+    return {
+      symbol,
+      status: "DITAHAN_SPEK",
+      decision: "TUNGGU",
+      direction: result.decision,
+      held: true,
+      score: result.score,
+      reason: `${specReason} — sinyal ditahan sampai MDBKA diperbarui`,
+      costShareOfRisk: result.costShareOfRisk ?? null,
+      candles: count,
+    };
+  }
   // Langkah F: jeda setelah 3 rugi beruntun menahan semua sinyal lolos.
   if (
     status === "LOLOS" &&
@@ -341,9 +363,10 @@ const STATUS_ORDER: Record<ScanStatus, number> = {
   DITAHAN_JEDA: 4,
   DITAHAN_BERITA: 5,
   DITAHAN_SESI: 6,
-  TUNGGU: 7,
-  PASAR_TUTUP: 8,
-  DATA: 9,
+  DITAHAN_SPEK: 7,
+  TUNGGU: 8,
+  PASAR_TUTUP: 9,
+  DATA: 10,
 };
 
 /** Urutan tampil: LOLOS dulu, lalu yang paling dekat lolos; skor kuat di atas. */
