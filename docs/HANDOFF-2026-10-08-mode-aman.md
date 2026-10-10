@@ -444,6 +444,10 @@ ESLint → pengguna build/test/commit → verifikasi.
    **BAHAYA (belum boleh dipasang):** `AutoExportMDBKAService` menulis `Common\Files\MDBKA_<sym>_H1.csv`; simbol MIFX tanpa
    akhiran (EURUSD) akan MENIMPA candle Finex. Langkah pertama nanti: nama file/awalan khusus per broker, baru pasang EA/service
    di terminal Monex. Service kalender/sesi/spesifikasi/History aman (nama per login, Company tak dikenal diabaikan).
+   **Update 10 Okt 17:08:** login berhasil setelah ganti password ("authorized on Monex-Demo"); setelah login judul terminal
+   = **Hedge** (bukan Netting — "Netting" tadi tampilan sebelum login), balance demo $10.000, Company "PT Monex Investindo
+   Futures", folder terminal `9CF14355DB10DCA27FBE7DA11B54CB92`. Simbol berakhiran **.m** (AUDNZD.m, EURUSD.m, 35 simbol)
+   → risiko tabrakan nama file candle dengan Finex lebih kecil, tetap cek semua simbol sebelum pasang AutoExport.
 Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi build/test/commit.
 
 ---
