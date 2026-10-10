@@ -1,8 +1,8 @@
-# HANDOFF MDBKA — Mode Aman (8 Okt 2026, diperbarui 10 Okt 2026 sore)
+# HANDOFF MDBKA — Mode Aman (8 Okt 2026, diperbarui 10 Okt 2026 malam)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir: **b2a000d** (10 Okt 16:43 WIT).
-Test terakhir terverifikasi: **619 lolos, 0 gagal**, build sukses.
+Commit terakhir: **f8b885d** (10 Okt malam WIT, M4b-3 MIFX).
+Test terakhir terverifikasi: **629 lolos, 0 gagal**, build sukses.
 
 > **MULAI DI SINI (sesi berikutnya):** sesi 10 Okt menyelesaikan **V2 + S5 + swap**. Urutan berikut:
 > (1) **Verifikasi layar Senin 12 Okt** saat pasar buka: tombol [SL]/[TP] kolom Arah pemindai (kunci 10 dtk, ambang 10%),
@@ -11,12 +11,13 @@ Test terakhir terverifikasi: **619 lolos, 0 gagal**, build sukses.
 > di Finex & OTB, 0 errors). (2) ✅ (b) satpam pembukaan bursa SELESAI (O1–O3, `openingGuard.ts`: −30/+60 mnt sinyal,
 > peringatan posisi 60 mnt, DST otomatis via Intl; heldBy "buka", DITAHAN_BUKA). Sisa: **(c) TP lebih dekat/ambil sebagian**
 > (setelah ≥ 20 trade Mode Aman). (3) Backlog: History/halaman lain sesuai 5c,
-> **Treasury** (5c-6), **broker ketiga MIFX Netting** (5c-7, jangan pasang AutoExport di Monex dulu).
+> **Treasury** (5c-6), ✅ **broker ketiga MIFX** (5c-7) TERPASANG M0–M4b (lihat 5c-7); sisa MIFX: arsip tick/MFE-MAE MIFX.
+> Verifikasi Senin juga: tab MIFX live (quotes/equity/posisi, pemindai .m, History MIFX, saldo header "MIFX demo").
 > Sesi 10 Okt: V2a–V2c (DITAHAN_SPEK / heldBy "spek", `specCompare.ts`, `/api/specs`), S5a–S5b (`mandatoryStop.ts`, semua
 > posisi tanpa SL → SL = batas golongan Rupiah + Salin SL), SW1 (kolom Swap asli di positions.csv → `brokerSwap`),
 > SW2 (`swapEstimate.ts`: OTB SwapMode 5 = persen tahunan ÷ 360, Rabu ×3 forex / Jumat saham; Finex SwapMode 0 = mati;
 > cocok History AUDUSD −1,16 / AUDCAD −0,29 / META −0,06). Perkiraan swap butuh jam server quote; posisi manual ISO = tanpa tebakan.
-Nomor test terakhir: **623** → test baru mulai **624**.
+Nomor test terakhir: **633** → test baru mulai **634**.
 
 > **Sesi 10 Okt pagi:** audit History Finex demo (20 trade): **TP 0/20 kena**, gerak terbaik median ±0,27R (TP = 1,5R);
 > DE30 +Rp43 rb karena ditutup manual lebih awal; US100 −Rp745 rb (MA50 telat + guncangan buka bursa AS 22:30 WIT).
@@ -448,17 +449,26 @@ ESLint → pengguna build/test/commit → verifikasi.
    = **Hedge** (bukan Netting — "Netting" tadi tampilan sebelum login), balance demo $10.000, Company "PT Monex Investindo
    Futures", folder terminal `9CF14355DB10DCA27FBE7DA11B54CB92`. Simbol berakhiran **.m** (AUDNZD.m, EURUSD.m, 35 simbol)
    → risiko tabrakan nama file candle dengan Finex lebih kecil, tetap cek semua simbol sebelum pasang AutoExport.
+   **SELESAI 10 Okt malam (M0–M4b, commit s/d f8b885d):** `BrokerId` + "mifx"; `brokerFromCompany` /monex/ → mifx;
+   `mifxSpecs.ts` 35 simbol VERIFIED (komisi 5+5 = 10 USD/lot, lot 0,01; OIL_NEXT 0,1; SwapMode 5 seperti OTB);
+   golongan risiko (.m dibuang, DJ/NQ/SP/NK/HK → US30/US100/US500/JP225/HK50, CLS10/OIL_NEXT → MINYAK);
+   candle `MDBKA_<sym>.m_H1.csv` dicek: TIDAK tabrakan dengan Finex → AutoExport dipasang; jam server **UTC+3 terverifikasi**;
+   `.env`: `MT5_LOG_PATH_MIFX`, `QUOTES_LOG_PATH_MIFX`, `POSITIONS_LOG_PATH_MIFX`, `MT5_TZ_OFFSET_MIFX=3`,
+   `ACCOUNT_LABELS` + `1003997005:MIFX demo`; EA MultiLive + ExportPositions (chart **EURUSD.m**, bukan EURUSD) +
+   MDBKAHistoryService terpasang. Layar: tab MIFX dashboard, monitor posisi, History MIFX, Kalkulator & Golongan MIFX,
+   parser URL `broker=mifx` (simbol nama persis "EURUSD.m"). Mode akun ternyata **Hedge**. Uji Jumat: forex "Biaya mahal"
+   (spread akhir pekan + komisi), DJ/HK/NQ/SP Lolos. Belum: arsip tick/MFE-MAE MIFX.
 Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi build/test/commit.
 
 ---
 
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
-> Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, commit terakhir b2a000d,
-> 619 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` (mulai dari kotak "MULAI DI SINI") dan patuhi
+> Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, commit terakhir f8b885d,
+> 629 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` (mulai dari kotak "MULAI DI SINI") dan patuhi
 > bagian GUARD KERJA: Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang
 > menjalankan build/test/commit di PowerShell, jumlah dalam Rupiah, prinsip "profit kecil lebih baik daripada mengejar
 > profit besar lalu minus", default TUNGGU, MDBKA tidak menempatkan/menutup order, sistem yang merencanakan otomatis
 > (GUARD 10b), dan setiap langkah selesai jelaskan dulu dalam bahasa awam (GUARD 11) sebelum saya commit.
-> Langkah berikutnya: verifikasi layar Senin (tombol [SL]/[TP] pemindai, WAJIB PASANG SL, Pembukaan bursa, Swap MT5),
+> Langkah berikutnya: verifikasi layar Senin (tombol [SL]/[TP] pemindai, WAJIB PASANG SL, Pembukaan bursa, Swap MT5, tab MIFX live),
 > lalu backlog sesuai kotak MULAI DI SINI.

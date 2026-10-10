@@ -1,7 +1,7 @@
 /**
  * Jam server MT5 & WIT di header (penetapan Fahmi 9 Okt 2026). MURNI.
  *
- * Zona server broker: Finex UTC+3, OTB UTC+2 (lihat .env MT5_TZ_OFFSET_*).
+ * Zona server broker: Finex UTC+3, OTB UTC+2, MIFX UTC+3 (terverifikasi 10 Okt) (lihat .env MT5_TZ_OFFSET_*).
  * Bila quote live segar tersedia, selisih jam dideteksi dari quote itu
  * (aman saat pergantian jam musim); selain itu pakai bawaan. WIT = UTC+9
  * (sama dengan jam laptop Fahmi). Format 12 jam (AM/PM).
