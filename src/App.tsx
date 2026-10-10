@@ -30,6 +30,8 @@ import { applyDoubleBetHold } from "./lib/correlationGuard";
 import { applyLossPauseHold } from "./lib/lossStreakGuard";
 import { useLossPause } from "./hooks/useLossPause";
 import { useNewsCalendar } from "./hooks/useNewsCalendar";
+import { useSpecHolds } from "./hooks/useSpecHolds";
+import { applySpecHold } from "./lib/specCompare";
 import { applyNewsHold } from "./lib/newsGuard";
 import { useEquityStream } from "./hooks/useEquityStream";
 import { HoldingsMonitor } from "./components/holdings/HoldingsMonitor";
@@ -500,13 +502,15 @@ export default function App() {
   // K5: dekat berita Tinggi (±30 mnt) → tahan; urutan jeda → berita → ganda.
   const newsEvents = useNewsCalendar(activeBrokerId);
   const newsMinute = liveQuote?.timestamp?.slice(0, 16) ?? null;
+  // V2c-3: spesifikasi MT5 berubah → tahan (didahulukan dari jeda).
+  const specHolds = useSpecHolds(activeBrokerId);
   const shownResult = useMemo(
     () =>
       result === null
         ? null
         : applyDoubleBetHold(
             applyNewsHold(
-              applyLossPauseHold(result, lossPause),
+              applyLossPauseHold(applySpecHold(result, market.symbol, specHolds), lossPause),
               market.symbol,
               newsMinute === null ? null : `${newsMinute}:00`,
               newsEvents,
@@ -514,7 +518,7 @@ export default function App() {
             market.symbol,
             openPositionsAll,
           ),
-    [result, market.symbol, openPositionsAll, lossPause, newsEvents, newsMinute],
+    [result, market.symbol, openPositionsAll, lossPause, newsEvents, newsMinute, specHolds],
   );
 
   // Langkah E: klik status LOLOS di pemindai → pilih simbol (data dimuat

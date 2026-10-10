@@ -294,7 +294,7 @@ import {
   spec32VerificationNotice,
 } from "../src/lib/spec32Wiring";
 
-import { compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
+import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
 import { readSpecsForBroker } from "../server/services/specReader";
 import {
   COPY_DRIFT_SHARE,
@@ -6511,7 +6511,7 @@ test("540. jeda menahan Hasil analisa & pemindai (TUNGGU, tanpa SL/TP/lot)", () 
   const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
   assert(panel.includes("pauseReason,") && panel.includes('label: "Jeda rugi"') && panel.includes("scan-loss-pause"), "panel jeda");
   const app = readSrc("src/App.tsx");
-  assert(app.includes("applyLossPauseHold(result, lossPause)") && app.includes("useLossPause(activeBrokerId"), "App belum memakai jeda");
+  assert(app.includes("applyLossPauseHold(applySpecHold(result, market.symbol, specHolds), lossPause)") && app.includes("useLossPause(activeBrokerId"), "App belum memakai jeda");
 });
 
 test("541. format harga mengikuti desimal simbol (sama dengan MT5)", () => {
@@ -7708,6 +7708,20 @@ test("612. V2c-2 satpam spesifikasi juga di halaman detail sinyal & pencatat ent
   assert(log.includes("readonly getSpecHolds?:") && log.includes("specHolds: specHolds(),"), "pencatat entry");
   const idx = readSrc("server/index.ts");
   assert(idx.includes("getSpecHolds: () => {") && idx.includes("specHoldMap(snap.diffs)"), "dipasang di server/index.ts");
+});
+
+test("613. V2c-3 Hasil analisa ditahan bila spesifikasi berubah (heldBy spek, didahulukan dari jeda)", () => {
+  const base = { decision: "BELI", stopLoss: 1, takeProfit: 2, suggestedLot: 0.01, warnings: [] as string[] } as unknown as ReturnType<typeof analyzeMarket>;
+  const holds = specHoldMap([{ symbol: "US100", level: "TAHAN", reason: "Contract size US100 berubah: MT5 100000, MDBKA 20" }]);
+  const held = applySpecHold(base, "US100", holds);
+  assert(held.decision === "TUNGGU" && held.heldBy === "spek" && held.heldDecision === "BELI" && held.stopLoss === null && held.suggestedLot === null, JSON.stringify(held));
+  assert(held.heldReason === "Contract size US100 berubah: MT5 100000, MDBKA 20", String(held.heldReason));
+  assert(applySpecHold(base, "DE30", holds) === base, "simbol lain tidak berubah");
+  assert(applySpecHold(base, "US100", null) === base, "tanpa file = tanpa satpam");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("applyLossPauseHold(applySpecHold(result, market.symbol, specHolds), lossPause)") && app.includes("useSpecHolds(activeBrokerId)"), "dipasang di App");
+  assert(readSrc("src/components/result/AnalysisResult.tsx").includes('data-testid="held-spek"'), "kotak penjelasan");
+  assert(readSrc("src/lib/signalReason.ts").includes('result.heldBy === "spek"'), "alasan di panel header");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

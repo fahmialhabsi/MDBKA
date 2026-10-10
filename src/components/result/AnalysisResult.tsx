@@ -642,6 +642,26 @@ function Metric({ label, value }: { label: string; value: string }) {
  * target untung = take profit otomatis, lot = ukuran transaksi.
  */
 function BeginnerGuide({ result }: { result: ResultType }) {
+  // V2c-3: spesifikasi simbol di MT5 berubah (contract/tick/mata uang profit).
+  if (result.decision === "TUNGGU" && result.heldBy === "spek") {
+    return (
+      <div data-testid="held-spek" className="rounded-2xl border border-violet-400/25 bg-violet-400/5 p-5">
+        <p className="font-semibold text-violet-200">
+          Artinya gampang: aturan simbol ini di broker baru saja berubah.
+          JANGAN entry dulu.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+          <li>{result.heldReason ?? "Ditahan: spesifikasi simbol berubah"}.</li>
+          <li>
+            Ukuran kontrak atau langkah harga yang berbeda membuat hitungan
+            rugi/untung dalam Rupiah bisa meleset jauh.
+          </li>
+          <li>Simbol lain tetap bisa dipakai; simbol ini menunggu MDBKA diperbarui.</li>
+        </ul>
+      </div>
+    );
+  }
+
   // Langkah F: jeda setelah 3 kali rugi berturut-turut.
   if (result.decision === "TUNGGU" && result.heldBy === "jeda") {
     return (

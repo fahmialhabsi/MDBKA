@@ -1,3 +1,4 @@
+import type { AnalysisResult } from "../types/analysis";
 import { getInstrumentSpec32, type InstrumentSpec } from "./instrumentSpecs32";
 
 /**
@@ -123,4 +124,31 @@ export function specHoldMap(
 /** Simbol yang wajib ditahan (beda contract/tick/mata uang profit). */
 export function heldSymbols(diffs: readonly SpecDiff[]): ReadonlySet<string> {
   return new Set(diffs.filter((d) => d.level === "TAHAN").map((d) => d.symbol));
+}
+
+/**
+ * V2c-3: Hasil analisa ikut ditahan bila spesifikasi simbol berubah
+ * (didahulukan dari jeda/berita/taruhan ganda). holds null = tanpa satpam.
+ */
+export function applySpecHold<T extends AnalysisResult>(
+  result: T,
+  symbol: string,
+  holds: ReadonlyMap<string, string> | null,
+): T {
+  if (result.decision !== "BELI" && result.decision !== "JUAL") return result;
+  const reason = holds?.get(symbol) ?? null;
+  if (reason === null) return result;
+  return {
+    ...result,
+    decision: "TUNGGU",
+    heldBy: "spek",
+    heldDecision: result.decision,
+    heldReason: reason,
+    stopLoss: null,
+    takeProfit: null,
+    suggestedLot: null,
+    warnings: [`Mode Aman: ${reason}. Setup ditahan.`, ...result.warnings],
+    explanation:
+      "Mode Aman: spesifikasi simbol di MT5 berbeda dengan catatan MDBKA, sehingga hitungan risiko dan lot bisa meleset. Tahan sampai MDBKA diperbarui.",
+  };
 }
