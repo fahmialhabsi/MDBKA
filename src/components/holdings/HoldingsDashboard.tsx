@@ -26,6 +26,8 @@ import type { BrokerId } from "../../types/broker";
 import { calculatorUrlFromHolding } from "../../lib/calculatorPageView";
 import { serverNowText, sessionNotice, sessionState, type TradeSession } from "../../lib/sessionGuard";
 import { mandatoryStop } from "../../lib/mandatoryStop";
+import { openingWarning } from "../../lib/openingGuard";
+import { useNowMs } from "../../hooks/useNowMs";
 import { serverUtcOffsetHours } from "../../lib/serverClock";
 import { useTradeSessions } from "../../hooks/useTradeSessions";
 
@@ -154,6 +156,9 @@ function HoldingCard({
     ? null
     : mandatoryStop(holding, live?.bid ?? null, live?.ask ?? null, convert, kurs);
   const [slCopied, setSlCopied] = useState(false);
+  // O3: posisi indeks/saham ≤60 mnt sebelum pembukaan bursa asal → peringatan.
+  const nowMs = useNowMs();
+  const openingNotice = exited ? null : openingWarning(holding.symbol, nowMs);
   const copyMandatorySl = (text: string): void => {
     void navigator.clipboard?.writeText(text).then(() => {
       setSlCopied(true);
@@ -287,6 +292,16 @@ function HoldingCard({
             {marketNotice.level === "closed" ? "PASAR TUTUP" : "PASAR SEGERA TUTUP"}
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-100">{marketNotice.text}</p>
+        </div>
+      )}
+
+      {openingNotice !== null && (
+        <div
+          data-testid={`holding-opening-${holding.id}`}
+          className="mt-2 rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-3"
+        >
+          <p className="text-sm font-bold text-yellow-200">BURSA SEGERA BUKA</p>
+          <p className="mt-1 text-sm leading-6 text-yellow-50">{openingNotice}.</p>
         </div>
       )}
 

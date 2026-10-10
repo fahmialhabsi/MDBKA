@@ -7857,6 +7857,12 @@ test("622. O2b pembukaan bursa juga menahan Hasil analisa, detail sinyal, pencat
   assert(readSrc("server/services/tradeEntryLog.ts").includes("openingNowMs: now().getTime(),"), "pencatat entry");
 });
 
+test("623. O3 kartu posisi: peringatan BURSA SEGERA BUKA 60 menit sebelum pembukaan", () => {
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes("openingWarning(holding.symbol, nowMs)") && dash.includes("holding-opening-${holding.id}"), "kotak peringatan");
+  assert(dash.includes("BURSA SEGERA BUKA") && dash.includes("const nowMs = useNowMs();"), "label + jam nyata");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
