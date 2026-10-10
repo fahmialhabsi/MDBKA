@@ -9,7 +9,17 @@ Test terakhir terverifikasi: **602 lolos, 0 gagal**, build sukses.
 > Hasil sesi 9 Okt: Kalkulator C1–C5 + tombol Salin SL "Amankan"; halaman Golongan G1–G3b (chart candle H1 live,
 > garis Entry/SL/TP/Amankan, ringkasan transaksi + portofolio saham); Satpam Sesi S1–S4; komisi saham OTB = 0;
 > contract size 150 simbol MT5 = spec32.
-Nomor test terakhir: **606** → test baru mulai **607**.
+Nomor test terakhir: **608** → test baru mulai **609**. Commit terakhir: **b2f9b7f** (604 pengujian lolos).
+
+> **Sesi 10 Okt pagi:** audit History Finex demo (20 trade): **TP 0/20 kena**, gerak terbaik median ±0,27R (TP = 1,5R);
+> DE30 +Rp43 rb karena ditutup manual lebih awal; US100 −Rp745 rb (MA50 telat + guncangan buka bursa AS 22:30 WIT).
+> Usulan belum dikerjakan: (b) satpam pembukaan bursa indeks, (c) TP lebih dekat/ambil sebagian (setelah ≥ 20 trade).
+> ✅ (a) **Kunci salin SL/TP** (7755458, b2f9b7f): tombol [SL]/[TP] di kolom Arah pemindai, hanya Lolos; [SL] hitung ulang
+> rencana dari harga live + semua satpam, kunci **10 dtk**; TP mati merah bila harga eksekusi (BELI Ask / JUAL Bid) geser
+> **> 10% jarak SL**; habis → ulang dari SL (`src/lib/copyGuard.ts`, `ScanCopyButtons.tsx`; test 607–608).
+> **Verifikasi layar: Senin saat pasar buka** (baris Lolos → SL → tempel MT5 → TP → tempel → Buy/Sell). Lalu lanjut V2a.
+> V2 audit: contract/tickSize/swap 150 simbol MT5 = spec32; tahan bila contract/tickSize/mata uang profit beda, swap beda = catatan saja.
+> OTB SwapMode 5 dipakai 64/68 simbol (termasuk forex), Finex semua 0.
 
 ---
 
