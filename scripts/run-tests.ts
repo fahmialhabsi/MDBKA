@@ -294,6 +294,7 @@ import {
   spec32VerificationNotice,
 } from "../src/lib/spec32Wiring";
 
+import { compareSpecs, heldSymbols, parseSpecsCsv } from "../src/lib/specCompare";
 import {
   COPY_DRIFT_SHARE,
   COPY_LOCK_SECONDS,
@@ -7629,6 +7630,27 @@ test("608. tombol [SL]/[TP] di kolom Arah pemindai: hanya Lolos, TP ikut kunci, 
   assert(panel.includes('return row.status === "LOLOS" ? (row.plan ?? null) : null;'), "hitung ulang wajib masih Lolos");
   const btn = readSrc("src/components/analysis/ScanCopyButtons.tsx");
   assert(btn.includes("const plan = recompute(q);") && btn.includes("formatPrice(lock.plan.takeProfit, symbol)"), "SL hitung ulang, TP dari rencana terkunci");
+});
+
+test("609. V2a pembanding spesifikasi MT5 vs spec32: contract/tick/mata uang = TAHAN, swap = CATATAN", () => {
+  const head = "Symbol,ContractSize,TickSize,TickValue,Digits,VolumeMin,VolumeStep,SwapMode,SwapLong,SwapShort,ProfitCurrency,MarginCurrency,Company,Generated";
+  const row = (sym: string, contract: string, tick: string, sl: string, ss: string, pc: string) =>
+    `${sym},${contract},${tick},0.70141475,5,0.0100,0.0100,0,${sl},${ss},${pc},AUD,PT. Finex Bisnis Solusi Futures,2026.10.09 23:59:59`;
+  const asli = parseSpecsCsv(["\uFEFF" + head, row("AUDCAD", "100000.0000", "0.00001000", "-2.3900", "-2.3500", "CAD"), "rusak,1"].join("\r\n"));
+  assert(asli.specs.length === 1 && asli.company === "PT. Finex Bisnis Solusi Futures" && asli.generated === "2026.10.09 23:59:59", JSON.stringify(asli));
+  assert(compareSpecs(asli).length === 0, "baris asli 9 Okt AUDCAD harus cocok spec32");
+  const ubah = parseSpecsCsv([head,
+    row("AUDCAD", "10000.0000", "0.00001000", "-2.3900", "-2.3500", "CAD"),
+    row("EURUSD", "100000.0000", "0.00001000", "-9.0000", "1.0000", "USD"),
+    row("ZZZUSD", "100000.0000", "0.00001000", "0", "0", "USD"),
+  ].join("\n"));
+  const diffs = compareSpecs(ubah);
+  assert(diffs[0].level === "TAHAN" && diffs[0].symbol === "AUDCAD" && diffs[0].field === "contract", JSON.stringify(diffs[0]));
+  assert(diffs[0].reason === "Contract size AUDCAD berubah: MT5 10000, MDBKA 100000", diffs[0].reason);
+  const held = heldSymbols(diffs);
+  assert(held.has("AUDCAD") && !held.has("EURUSD") && !held.has("ZZZUSD"), [...held].join(","));
+  assert(diffs.some((d) => d.symbol === "EURUSD" && d.level === "CATATAN" && d.field === "swapLong"), "swap beda = catatan saja");
+  assert(diffs.some((d) => d.symbol === "ZZZUSD" && d.field === "spec32" && d.level === "CATATAN"), "simbol baru = catatan");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

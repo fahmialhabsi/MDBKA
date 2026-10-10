@@ -429,6 +429,14 @@ ESLint → pengguna build/test/commit → verifikasi.
    Bentuk: catatan pembelian manual (tanggal, gram, harga/gram) → rata-rata harga beli, nilai sekarang Rp, untung/rugi
    SETELAH selisih 3,3%. Harga sekarang: perkiraan XAUUSD MT5 × kurs ECB ÷ 31,1035 g/oz, atau diketik dari aplikasi Treasury.
    Bukan sinyal BELI/JUAL (investasi bulanan–tahunan, bukan trading 2–3 jam).
+7. **Broker ketiga MIFX (Netting) (permintaan 10 Okt) — setelah V2 dan S5.** Akun demo **1003997005 Monex-Demo**
+   (PT Monex Investindo Futures, "Monex MT5"), mode **Netting** (1 posisi per simbol; order berlawanan mengurangi/menutup,
+   bukan posisi baru) → cek dulu pembacaan positions/History/evaluasi/taruhan ganda untuk Netting.
+   `BrokerId` hanya "finex" | "orbitraderberjangka" (±39 file) + `brokerFromCompany` (regex orbi/finex) → pekerjaan bertahap.
+   Perlu: spesifikasi & komisi MIFX, nama simbol → golongan risiko, zona jam server (`MT5_TZ_OFFSET_*`), path EA di `.env`.
+   **BAHAYA (belum boleh dipasang):** `AutoExportMDBKAService` menulis `Common\Files\MDBKA_<sym>_H1.csv`; simbol MIFX tanpa
+   akhiran (EURUSD) akan MENIMPA candle Finex. Langkah pertama nanti: nama file/awalan khusus per broker, baru pasang EA/service
+   di terminal Monex. Service kalender/sesi/spesifikasi/History aman (nama per login, Company tak dikenal diabaikan).
 Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi build/test/commit.
 
 ---
