@@ -51,6 +51,12 @@ export function createApp(
   } | null = null,
   positionsReader: PositionsLogReader | null = null,
   positionsReaderFinex: PositionsLogReader | null = null,
+  /** M3a (10 Okt 2026): sumber live MIFX (null = belum dikonfigurasi → 404 jujur). */
+  mifx: {
+    readonly equity: MT5LogReader | null;
+    readonly quotes: QuotesLogReader | null;
+    readonly positions: PositionsLogReader | null;
+  } | null = null,
 ): Express {
   const app = express();
   app.use(cors({ origin: FRONTEND_ORIGIN }));
@@ -60,8 +66,8 @@ export function createApp(
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  app.use("/api/equity", createEquityRoutes(reader, readerFinex));
-  app.use("/api/quotes", createQuotesRoutes(quotesReader, quotesReaderFinex));
+  app.use("/api/equity", createEquityRoutes(reader, readerFinex, mifx?.equity ?? null));
+  app.use("/api/quotes", createQuotesRoutes(quotesReader, quotesReaderFinex, mifx?.quotes ?? null));
   app.use("/api/fx", createFxRoutes());
   // Item (e): margin per lot dari OrderCalcMargin MT5 (Common\Files).
   app.use("/api/margin", createMarginRoutes());
@@ -73,7 +79,7 @@ export function createApp(
   app.use("/api/pajak", createPajakRoutes());
   // Langkah 3a Mode Aman: CSV candle H1 + quote terakhir per simbol broker
   // (bahan pemindai simbol di frontend).
-  app.use("/api/candles", createCandlesRoutes(quotesReader, quotesReaderFinex));
+  app.use("/api/candles", createCandlesRoutes(quotesReader, quotesReaderFinex, undefined, mifx?.quotes ?? null));
   // Backup data MDBKA (pengingat + tombol "Backup sekarang").
   app.use("/api/backup", createBackupRoutes());
   // Langkah 4c: evaluasi trade tertutup (History MT5 + catatan entry).
@@ -86,7 +92,7 @@ export function createApp(
   app.use("/api/history", createHistoryRoutes());
   app.use(
     "/api/positions",
-    createPositionsRoutes(positionsReader, positionsReaderFinex),
+    createPositionsRoutes(positionsReader, positionsReaderFinex, mifx?.positions ?? null),
   );
 
   // Tahap HIST-1: cakupan arsip tick (per broker/simbol/rentang).

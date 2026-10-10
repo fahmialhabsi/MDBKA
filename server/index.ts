@@ -80,7 +80,20 @@ const positionsReader =
 const positionsReaderFinex =
   positionsLogPathFinex.trim() !== "" ? new PositionsLogReader(positionsLogPathFinex) : null;
 
+// M3a (10 Okt 2026): sumber live MIFX (opsional). EA MDBKAMultiLive + ExportPositions
+// di terminal MIFX menulis equity.csv/quotes.csv/positions.csv di folder MQL5\Files-nya
+// sendiri. Kosong → null → ?broker=mifx menjawab 404 jujur (tidak jatuh ke OTB).
+const mifxLogPath = process.env.MT5_LOG_PATH_MIFX ?? "";
+const mifxQuotesLogPath = process.env.QUOTES_LOG_PATH_MIFX ?? "";
+const mifxPositionsLogPath = process.env.POSITIONS_LOG_PATH_MIFX ?? "";
+const readerMifx = mifxLogPath.trim() !== "" ? new MT5LogReader(mifxLogPath) : null;
+const quotesReaderMifx =
+  mifxQuotesLogPath.trim() !== "" ? new QuotesLogReader(mifxQuotesLogPath) : null;
+const positionsReaderMifx =
+  mifxPositionsLogPath.trim() !== "" ? new PositionsLogReader(mifxPositionsLogPath) : null;
+
 const stopWatching = reader.startWatching();
+if (readerMifx !== null) readerMifx.startWatching();
 if (readerFinex !== null) readerFinex.startWatching();
 
 // Tahap HIST-1: arsip tick per broker ke JSONL harian (data/history/).
@@ -141,7 +154,11 @@ if (quotesReaderFinex !== null && historyFinex !== null) {
 const app = createApp(reader, quotesReader, readerFinex, quotesReaderFinex, {
   otb: historyOtb,
   finex: historyFinex,
-}, positionsReader, positionsReaderFinex);
+}, positionsReader, positionsReaderFinex, {
+  equity: readerMifx,
+  quotes: quotesReaderMifx,
+  positions: positionsReaderMifx,
+});
 
 // Polling startup: tunggu data pertama kali tersedia
 async function startServer() {
@@ -182,6 +199,19 @@ async function startServer() {
     });
   }
 
+  if (quotesReaderMifx !== null) {
+    await quotesReaderMifx.init().catch(() => {
+      console.log(`⚠ MIFX quotes reader will retry when file unlocks`);
+    });
+  } else {
+    console.log(`⚠ MIFX source not configured (QUOTES_LOG_PATH_MIFX empty): ?broker=mifx answers 404`);
+  }
+  if (positionsReaderMifx !== null) {
+    await positionsReaderMifx.init().catch(() => {
+      console.log(`⚠ Positions MIFX init ditunda (file terkunci/hilang)`);
+    });
+  }
+
   // Tahap AP: baca awal positions.csv (boleh absen/EA belum dipasang).
   if (positionsReader !== null) {
     await positionsReader.init().catch(() => {
@@ -200,6 +230,7 @@ async function startServer() {
   const entrySources = [
     { broker: "orbitraderberjangka" as const, positions: positionsReader, quotes: quotesReader, equity: reader },
     { broker: "finex" as const, positions: positionsReaderFinex, quotes: quotesReaderFinex, equity: readerFinex },
+    { broker: "mifx" as const, positions: positionsReaderMifx, quotes: quotesReaderMifx, equity: readerMifx },
   ];
   for (const src of entrySources) {
     if (src.positions === null || src.quotes === null) continue;
@@ -288,6 +319,9 @@ function shutdown(): void {
   if (quotesReaderFinex !== null) quotesReaderFinex.destroy();
   if (positionsReader !== null) positionsReader.destroy();
   if (positionsReaderFinex !== null) positionsReaderFinex.destroy();
+  if (readerMifx !== null) readerMifx.stopWatching();
+  if (quotesReaderMifx !== null) quotesReaderMifx.destroy();
+  if (positionsReaderMifx !== null) positionsReaderMifx.destroy();
   excursionSchedule?.stop();
   serverPromise
     .then((server) => {

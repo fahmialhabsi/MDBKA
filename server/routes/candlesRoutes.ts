@@ -76,6 +76,7 @@ export function createCandlesRoutes(
   reader: CandleSource | null,
   readerFinex: CandleSource | null,
   commonDir: string = resolveCommonFilesDir(),
+  readerMifx: CandleSource | null = null,
 ): Router {
   const router = Router();
 
@@ -87,7 +88,7 @@ export function createCandlesRoutes(
         .json({ error: "Unknown broker (use finex|orbitraderberjangka)" });
       return;
     }
-    const source = pickLiveSource(broker, reader, readerFinex);
+    const source = pickLiveSource(broker, reader, readerFinex, readerMifx);
     if (source === null) {
       res
         .status(404)

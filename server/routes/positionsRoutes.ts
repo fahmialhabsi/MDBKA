@@ -14,6 +14,7 @@ import {
 export function createPositionsRoutes(
   positionsReader: PositionsLogReader | null,
   positionsReaderFinex: PositionsLogReader | null = null,
+  positionsReaderMifx: PositionsLogReader | null = null,
 ): Router {
   const router = Router();
 
@@ -26,7 +27,7 @@ export function createPositionsRoutes(
           .json({ error: "Unknown broker (use finex|orbitraderberjangka)" });
         return;
       }
-      const active = pickLiveSource(broker, positionsReader, positionsReaderFinex);
+      const active = pickLiveSource(broker, positionsReader, positionsReaderFinex, positionsReaderMifx);
       if (active === null) {
         res.status(404).json({
           error: `Positions source not configured for broker ${broker}`,

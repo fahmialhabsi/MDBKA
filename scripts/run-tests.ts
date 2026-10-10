@@ -7911,6 +7911,17 @@ test("627. M2b nama MIFX: golongan risiko, mata uang berita, bursa asal (DJ/NQ/S
   for (const m of MIFX_SPEC_SYMBOLS) assert(riskGroupOf(m).capIdr !== null, `${m} punya batas risiko (bukan ditahan)`);
 });
 
+test("628. M3a server: sumber live MIFX (equity/quotes/positions/candles) dari .env, entry log mifx", () => {
+  const idx = readSrc("server/index.ts");
+  assert(idx.includes("process.env.QUOTES_LOG_PATH_MIFX") && idx.includes("process.env.POSITIONS_LOG_PATH_MIFX") && idx.includes("process.env.MT5_LOG_PATH_MIFX"), "env MIFX");
+  assert(idx.includes('{ broker: "mifx" as const, positions: positionsReaderMifx'), "catatan entry MIFX");
+  const app = readSrc("server/app.ts");
+  for (const s of ["createEquityRoutes(reader, readerFinex, mifx?.equity ?? null)", "createQuotesRoutes(quotesReader, quotesReaderFinex, mifx?.quotes ?? null)", "createPositionsRoutes(positionsReader, positionsReaderFinex, mifx?.positions ?? null)", "mifx?.quotes ?? null)"]) {
+    assert(app.includes(s), s);
+  }
+  assert(readSrc(".env.example").includes("QUOTES_LOG_PATH_MIFX="), ".env.example");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

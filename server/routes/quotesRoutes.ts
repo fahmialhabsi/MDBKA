@@ -12,13 +12,14 @@ function selectReader(
   res: Response,
   reader: QuotesLogReader,
   readerFinex: QuotesLogReader | null,
+  readerMifx: QuotesLogReader | null = null,
 ): QuotesLogReader | null {
   const broker = resolveLiveBroker(req.query.broker);
   if (broker === null) {
     res.status(400).json({ error: "Unknown broker (use finex|orbitraderberjangka)" });
     return null;
   }
-  const active = pickLiveSource(broker, reader, readerFinex);
+  const active = pickLiveSource(broker, reader, readerFinex, readerMifx);
   if (active === null) {
     res.status(404).json({
       error: `Live source not configured for broker ${broker}`,
@@ -31,12 +32,13 @@ function selectReader(
 export function createQuotesRoutes(
   quotesReader: QuotesLogReader,
   quotesReaderFinex: QuotesLogReader | null = null,
+  quotesReaderMifx: QuotesLogReader | null = null,
 ): Router {
   const router = Router();
 
   router.get("/:symbol", (req: Request, res: Response) => {
     try {
-      const active = selectReader(req, res, quotesReader, quotesReaderFinex);
+      const active = selectReader(req, res, quotesReader, quotesReaderFinex, quotesReaderMifx);
       if (active === null) return;
 
       const rawSymbol = req.params.symbol;
@@ -65,7 +67,7 @@ export function createQuotesRoutes(
 
   router.get("/:symbol/stream", (req: Request, res: Response) => {
     try {
-      const active = selectReader(req, res, quotesReader, quotesReaderFinex);
+      const active = selectReader(req, res, quotesReader, quotesReaderFinex, quotesReaderMifx);
       if (active === null) return;
 
       const rawSymbol = req.params.symbol;
@@ -117,7 +119,7 @@ export function createQuotesRoutes(
 
   router.get("/", (req: Request, res: Response) => {
     try {
-      const active = selectReader(req, res, quotesReader, quotesReaderFinex);
+      const active = selectReader(req, res, quotesReader, quotesReaderFinex, quotesReaderMifx);
       if (active === null) return;
       const symbols = active.getSymbols();
       res.json({ symbols, count: symbols.length });
