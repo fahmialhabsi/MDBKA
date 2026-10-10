@@ -7741,6 +7741,13 @@ test("614. S5a SL wajib semua posisi tanpa SL: batas golongan, lewat batas, golo
   assert(mandatoryStop(meta, 735, 736, usd, null).kind === "TIDAK_DIKETAHUI", "tanpa kurs");
 });
 
+test("615. S5b kotak WAJIB PASANG SL + Salin SL di kartu monitor posisi (semua posisi tanpa SL)", () => {
+  const src = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(src.includes("mandatoryStop(holding, live?.bid ?? null, live?.ask ?? null, convert, kurs)"), "pakai mesin S5a");
+  assert(src.includes('stopPlan.kind !== "ADA_SL"') && src.includes("holding-mandatory-sl-${holding.id}"), "kotak hanya bila tanpa SL");
+  assert(src.includes("copyMandatorySl(stopPlan.slText)") && src.includes("WAJIB PASANG SL"), "tombol Salin SL");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

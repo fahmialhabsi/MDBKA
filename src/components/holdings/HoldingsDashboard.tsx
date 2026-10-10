@@ -25,6 +25,7 @@ import {
 import type { BrokerId } from "../../types/broker";
 import { calculatorUrlFromHolding } from "../../lib/calculatorPageView";
 import { serverNowText, sessionNotice, sessionState, type TradeSession } from "../../lib/sessionGuard";
+import { mandatoryStop } from "../../lib/mandatoryStop";
 import { serverUtcOffsetHours } from "../../lib/serverClock";
 import { useTradeSessions } from "../../hooks/useTradeSessions";
 
@@ -148,6 +149,17 @@ function HoldingCard({
     ? null
     : sessionNotice(holding.symbol, sessionState(holding.symbol, serverNow, sessions), serverOffset);
   const rrWarning = checkRewardRisk(holding.entryPrice, holding.sl, holding.tp);
+  // S5 (10 Okt 2026): SEMUA posisi tanpa SL → SL wajib dihitung MDBKA (batas golongan Rupiah).
+  const stopPlan = exited
+    ? null
+    : mandatoryStop(holding, live?.bid ?? null, live?.ask ?? null, convert, kurs);
+  const [slCopied, setSlCopied] = useState(false);
+  const copyMandatorySl = (text: string): void => {
+    void navigator.clipboard?.writeText(text).then(() => {
+      setSlCopied(true);
+      window.setTimeout(() => setSlCopied(false), 2000);
+    });
+  };
   const badge = exited
     ? "KELUAR — konfirmasi di MT5"
     : evaluation !== null
@@ -275,6 +287,32 @@ function HoldingCard({
             {marketNotice.level === "closed" ? "PASAR TUTUP" : "PASAR SEGERA TUTUP"}
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-100">{marketNotice.text}</p>
+        </div>
+      )}
+
+      {stopPlan !== null && stopPlan.kind !== "ADA_SL" && (
+        <div
+          data-testid={`holding-mandatory-sl-${holding.id}`}
+          className="mt-2 rounded-xl border border-rose-500/60 bg-rose-500/15 p-3"
+        >
+          <p className="text-sm font-bold text-rose-100">
+            {stopPlan.kind === "PASANG" ? "WAJIB PASANG SL — rugi sekarang tidak dibatasi" : "POSISI TANPA SL"}
+          </p>
+          <p className="mt-1 text-sm leading-6 text-rose-50">{stopPlan.message}.</p>
+          {stopPlan.kind === "PASANG" && (
+            <button
+              type="button"
+              data-testid={`holding-mandatory-sl-copy-${holding.id}`}
+              onClick={() => copyMandatorySl(stopPlan.slText)}
+              className="mt-2 rounded-lg border border-rose-300/60 bg-rose-500/25 px-3 py-1 text-sm font-semibold text-rose-50 hover:bg-rose-500/35"
+            >
+              {slCopied ? "SL disalin ✓" : `Salin SL ${stopPlan.slText}`}
+            </button>
+          )}
+          <p className="mt-2 text-xs text-rose-200/80">
+            Tempel di MT5: klik kanan posisi → Modify → Stop Loss.
+            {marketNotice !== null && marketNotice.level === "closed" ? " Pasar sedang tutup — pasang saat pasar buka (lihat kotak di atas)." : ""}
+          </p>
         </div>
       )}
 
