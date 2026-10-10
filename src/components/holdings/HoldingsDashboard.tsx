@@ -363,6 +363,16 @@ function HoldingCard({
           )}
           {evaluation?.swap !== null &&
             evaluation?.swap !== undefined &&
+            evaluation.swap.source === "MT5" &&
+            (evaluation.swap.value !== 0 || evaluation.swap.daysHeld > 0) && (
+              <p className="text-xs text-slate-300" data-testid={`holding-swap-mt5-${holding.id}`}>
+                Swap MT5 {money(evaluation.swap.value, evaluation.swap.currency)} ≈{" "}
+                {rupiah(evaluation.swap.value, evaluation.swap.currency, kurs)} (sudah dipotong broker)
+              </p>
+            )}
+          {evaluation?.swap !== null &&
+            evaluation?.swap !== undefined &&
+            evaluation.swap.source === "PERKIRAAN" &&
             evaluation.swap.daysHeld > 0 && (
               <p className="text-xs text-slate-400">
                 Swap est.{" "}

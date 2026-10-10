@@ -7762,6 +7762,19 @@ test("616. SW1a positions.csv kolom Swap asli MT5 (opsional, CSV lama tetap terb
   assert(ea.includes("PositionGetDouble(POSITION_SWAP)") && ea.includes('"TimeOpen", "Swap"'), "EA menulis kolom Swap");
 });
 
+test("617. SW1b swap asli MT5 didahulukan dari perkiraan; kartu menampilkan 'Swap MT5' + Rupiah", () => {
+  const now = Date.parse("2026-10-09T12:00:00.000Z");
+  const base = { symbol: "META.US", direction: "BELI" as const, lot: 0.1, entryTime: "2026.10.06 16:31:02" };
+  const asli = calculateHoldingSwap({ ...base, brokerSwap: -0.06 }, now);
+  assert(asli !== null && asli.source === "MT5" && asli.value === -0.06 && asli.daysHeld === 2, JSON.stringify(asli));
+  const nolHariIni = calculateHoldingSwap({ ...base, entryTime: "2026.10.09 10:00:00", brokerSwap: 0 }, now);
+  assert(nolHariIni !== null && nolHariIni.source === "MT5" && nolHariIni.value === 0, "Finex swap 0 = 0 asli, bukan perkiraan");
+  const est = calculateHoldingSwap(base, now);
+  assert(est === null || est.source === "PERKIRAAN", "tanpa kolom swap = perkiraan");
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes('evaluation.swap.source === "MT5"') && dash.includes("Swap MT5") && dash.includes("(sudah dipotong broker)"), "kartu");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

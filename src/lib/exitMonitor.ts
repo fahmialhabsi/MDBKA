@@ -789,10 +789,12 @@ export interface HoldingSwap {
   readonly value: number;
   readonly currency: string;
   readonly daysHeld: number;
+  /** SW1b: "MT5" = swap asli dari broker (positions.csv); "PERKIRAAN" = rumus spec32. */
+  readonly source: "MT5" | "PERKIRAAN";
 }
 
 export function calculateHoldingSwap(
-  holding: Pick<Holding, "symbol" | "direction" | "lot" | "entryTime">,
+  holding: Pick<Holding, "symbol" | "direction" | "lot" | "entryTime" | "brokerSwap">,
   nowMs: number = Date.now(),
 ): HoldingSwap | null {
   if (
@@ -805,7 +807,11 @@ export function calculateHoldingSwap(
   const entryMs = parseSnapshotTime(holding.entryTime);
   if (entryMs === null) return null;
   const daysHeld = Math.floor((nowMs - entryMs) / 86400000);
-  if (daysHeld <= 0) return { value: 0, currency: "USD", daysHeld: 0 };
+  // SW1b: swap asli MT5 (sudah dipotong broker) didahulukan dari rumus.
+  if (holding.brokerSwap !== undefined && Number.isFinite(holding.brokerSwap)) {
+    return { value: round2(holding.brokerSwap), currency: "USD", daysHeld: Math.max(0, daysHeld), source: "MT5" };
+  }
+  if (daysHeld <= 0) return { value: 0, currency: "USD", daysHeld: 0, source: "PERKIRAAN" };
   const preview = getSpec32SwapPreview({
     symbol: holding.symbol,
     daysHeld,
@@ -817,6 +823,7 @@ export function calculateHoldingSwap(
     value: round2(preview.swapUSD * holding.lot),
     currency: "USD",
     daysHeld,
+    source: "PERKIRAAN",
   };
 }
 
