@@ -297,6 +297,7 @@ import {
 import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
 import { readSpecsForBroker } from "../server/services/specReader";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
+import { MIFX_SPEC_SYMBOLS } from "../src/lib/mifxSpecs";
 import { mandatoryStop } from "../src/lib/mandatoryStop";
 import { estimateSwap, swapChargeDays } from "../src/lib/swapEstimate";
 import { applyOpeningHold, findOpeningHold, openingState, openingWarning } from "../src/lib/openingGuard";
@@ -7882,6 +7883,19 @@ test("625. M1b server mengenal MIFX: ?broker=mifx, Company Monex → mifx, TIDAK
   assert(pickLiveSource("orbitraderberjangka", def, fin, mifx) === def && pickLiveSource("finex", def, fin, mifx) === fin, "broker lama tetap");
   assert(brokerFromCompany("PT Monex Investindo Futures") === "mifx", "Company MIFX");
   assert(brokerFromCompany("PT. Finex Bisnis Solusi Futures") === "finex" && brokerFromCompany("Lain") === null, "lama tetap");
+});
+
+test("626. M2a spesifikasi 35 simbol MIFX (.m): forex VERIFIED komisi $10/lot, lainnya PENDING; 150 lama utuh", () => {
+  assert(MIFX_SPEC_SYMBOLS.length === 35 && Object.keys(INSTRUMENT_SPECS_32).length === 150, "jumlah");
+  const eu = getInstrumentSpec32("EURUSD.m");
+  assert(eu !== null && eu.broker === "mifx" && eu.leverage === 100000 && eu.commission === 10 && eu.status === "VERIFIED", JSON.stringify(eu));
+  const gbp = getInstrumentSpec32("EURGBP.m");
+  assert(gbp !== null && gbp.quoteCurrency === "GBP" && gbp.swapLong === -2.69 && gbp.swapShort === -0.31, "EURGBP.m = Specification MT5");
+  const nq = getInstrumentSpec32("NQ.m");
+  assert(nq !== null && nq.leverage === 20 && nq.status === "PENDING", "indeks: komisi belum terverifikasi");
+  assert(getInstrumentSpec32("USDJPY.m")?.isJPYPair === true && getInstrumentSpec32("XAUUSD.m")?.leverage === 100, "JPY/emas");
+  assert(getInstrumentSpec32("EURUSD")?.broker === "finex", "simbol Finex tetap");
+  for (const s of MIFX_SPEC_SYMBOLS) assert(INSTRUMENT_SPECS_32[s] === undefined, `nama ${s} bentrok dengan Finex/OTB`);
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
