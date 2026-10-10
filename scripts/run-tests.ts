@@ -297,7 +297,7 @@ import {
 import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
 import { readSpecsForBroker } from "../server/services/specReader";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
-import { getMifxSpec, MIFX_SPEC_SYMBOLS } from "../src/lib/mifxSpecs";
+import { getMifxSpec, MIFX_SPEC_SYMBOLS, mifxVolume } from "../src/lib/mifxSpecs";
 import { mandatoryStop } from "../src/lib/mandatoryStop";
 import { estimateSwap, swapChargeDays } from "../src/lib/swapEstimate";
 import { applyOpeningHold, findOpeningHold, openingState, openingWarning } from "../src/lib/openingGuard";
@@ -7930,6 +7930,21 @@ test("629. M4a identitas & desimal simbol MIFX: nama .m utuh (bukan nama Finex),
   assert(tickSizeForSymbol("NQ.m") === 0.01 && tickSizeForSymbol("DJ.m") === 1 && tickSizeForSymbol("USDJPY.m") === 0.001, "tick MIFX");
   assert(priceDigits("NQ.m") === 2 && priceDigits("DJ.m") === 0 && priceDigits("EURUSD.m") === 5 && priceDigits("XAGUSD.m") === 3, "desimal MIFX");
   assert(priceDigits("EURUSD") === 5 && priceDigits("USDJPY") === 3 && canonicalSymbolForBroker("EURUSD", "finex") === "EURUSD", "Finex tetap");
+});
+
+test("630. M4a-2 aturan broker MIFX: kontrak/komisi/lot dari Specification, nilai poin ke USD, simbol diterima", () => {
+  const kosong = { equity: 10000, riskPercent: 0, minLot: 0, lotStep: 0, pointValue: 0, contractSize: 0, commission: 0, slippage: 0, buffer: 0, atrMultiplier: 0, targetRR: 0 };
+  const nq = applyBrokerPreset(kosong, "NQ.m", "mifx");
+  assert(nq.pointValue === 20 && nq.contractSize === 20 && nq.commission === 10 && nq.minLot === 0.01 && nq.lotStep === 0.01 && nq.buffer === 0.05, JSON.stringify(nq));
+  const oil = applyBrokerPreset(kosong, "OIL_NEXT", "mifx");
+  assert(oil.minLot === 0.1 && oil.lotStep === 0.1 && mifxVolume("OIL_NEXT").minVolume === 0.1, "OIL_NEXT lot 0.1");
+  assert(applyBrokerPreset(kosong, "EURUSD", "mifx") === kosong, "nama Finex di MIFX = tanpa preset (tidak memakai angka Finex)");
+  const eg = applyBrokerPreset(kosong, "EURGBP.m", "mifx");
+  const fx = { EUR: 1, USD: 1.12, GBP: 0.846 } as unknown as Parameters<typeof withUsdPointValue>[3];
+  const usd = withUsdPointValue(eg, "EURGBP.m", "mifx", fx);
+  assert(Math.abs(usd.pointValue - 100000 * 1.12 / 0.846) < 1, `EURGBP.m nilai poin GBP→USD ${usd.pointValue}`);
+  assert(normalizeSymbol("NQ.m") === "US100" && normalizeSymbol("OIL_NEXT") === "XTIUSD" && normalizeSymbol("DJ.m") === "US30", "profil skala harga");
+  assert(normalizeSymbol("GBPUSD.pro") === "GBPUSD" && normalizeSymbol("US100,H1") === "US100", "normalisasi lama tetap");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

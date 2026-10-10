@@ -6,6 +6,7 @@ import type { BrokerId } from "../types/broker";
 import { ORBITRADER_BROKER_ID } from "../lib/brokerRegistry";
 import { isOtbSymbolVerified } from "../lib/brokerSymbols";
 import { getOtbInstrumentProfile } from "../lib/otbInstrumentConfig";
+import { getMifxSpec } from "../lib/mifxSpecs";
 import { getInstrumentProfile } from "../lib/instrumentConfig";
 import { traceOcrStage } from "../lib/debugTrace";
 
@@ -61,8 +62,10 @@ export function validateAnalysisInputs(
     // Tahap 4C: simbol OTB terverifikasi diterima bila broker aktif OTB
     // (exact match, tanpa normalisasi). Jalur lain tidak berubah.
     const otbAccepted =
-      brokerId === ORBITRADER_BROKER_ID &&
-      getOtbInstrumentProfile(market.symbol) !== null;
+      (brokerId === ORBITRADER_BROKER_ID &&
+        getOtbInstrumentProfile(market.symbol) !== null) ||
+      // M4a-2: simbol MIFX terverifikasi (Specification MIFX).
+      (brokerId === "mifx" && getMifxSpec(market.symbol)?.status === "VERIFIED");
 
     if (!otbAccepted) {
       errors.push(

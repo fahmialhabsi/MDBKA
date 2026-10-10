@@ -594,3 +594,13 @@ export function getMifxSpec(symbol: string): InstrumentSpec | null {
   const s = symbol.trim();
   return MIFX_SPECS[s] ?? BY_UPPER[s.toUpperCase()] ?? null;
 }
+
+/**
+ * M4a-2: lot minimum & langkah lot MIFX (MDBKA_Specs 10 Okt): semua 0.01/0.01,
+ * kecuali OIL_NEXT 0.1/0.1.
+ */
+export function mifxVolume(symbol: string): { readonly minVolume: number; readonly volumeStep: number } {
+  return getMifxSpec(symbol)?.symbol === "OIL_NEXT"
+    ? { minVolume: 0.1, volumeStep: 0.1 }
+    : { minVolume: 0.01, volumeStep: 0.01 };
+}

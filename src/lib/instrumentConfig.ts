@@ -2229,6 +2229,15 @@ export function normalizeSymbol(symbol: string): string {
   // Ambil kode simbol di depan; buang suffix broker dan sisa label
   // seperti ".pro", ".cash", ",H1", " H1", "-ECN", " - Nasdaq".
   // Contoh: "GBPUSD.pro" -> "GBPUSD", "US100,H1" -> "US100".
+  // M4a-2: nama MIFX → nama profil MDBKA (skala harga & kategori sama).
+  if (raw === "OIL_NEXT") return "XTIUSD";
+  if (raw.endsWith(".M")) {
+    const alias: Record<string, string> = {
+      DJ: "US30", NQ: "US100", SP: "US500", NK: "JP225", HK: "HK50", CLS10: "XTIUSD",
+    };
+    const base = raw.slice(0, -2);
+    if (alias[base] !== undefined) return alias[base];
+  }
   const withoutSuffix = raw.split(/[^A-Z0-9]/)[0] ?? raw;
   const value = withoutSuffix.trim();
   if (!value) return "";

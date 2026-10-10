@@ -31,6 +31,12 @@ export function withUsdPointValue(
       pointValue: convertToUSD(broker.pointValue, spec.quoteCurrency, fxRates),
     };
   }
+  if (brokerId === "mifx") {
+    // M4a-2: nilai poin MIFX dalam mata uang profit Specification → USD.
+    const spec = getInstrumentSpec32(symbol.trim());
+    if (spec === null || spec.broker !== "mifx" || spec.quoteCurrency === "USD") return broker;
+    return { ...broker, pointValue: convertToUSD(broker.pointValue, spec.quoteCurrency, fxRates) };
+  }
   if (brokerId !== ORBITRADER_BROKER_ID) return broker;
   const otb = getOtbInstrumentProfile(symbol);
   if (otb === null || otb.currencyProfit === "USD") return broker;
