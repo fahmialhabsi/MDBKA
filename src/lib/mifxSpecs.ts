@@ -581,3 +581,16 @@ export const MIFX_SPECS: Readonly<Record<string, InstrumentSpec>> = Object.freez
 });
 
 export const MIFX_SPEC_SYMBOLS: readonly string[] = Object.freeze(Object.keys(MIFX_SPECS));
+
+const BY_UPPER: Readonly<Record<string, InstrumentSpec>> = Object.freeze(
+  Object.fromEntries(Object.values(MIFX_SPECS).map((spec) => [spec.symbol.toUpperCase(), spec])),
+);
+
+/**
+ * M4a: spesifikasi MIFX tanpa peka huruf besar/kecil — banyak jalur MDBKA
+ * meng-UPPERCASE simbol ("EURUSD.m" → "EURUSD.M"). null = bukan simbol MIFX.
+ */
+export function getMifxSpec(symbol: string): InstrumentSpec | null {
+  const s = symbol.trim();
+  return MIFX_SPECS[s] ?? BY_UPPER[s.toUpperCase()] ?? null;
+}

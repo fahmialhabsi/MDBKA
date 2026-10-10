@@ -24,7 +24,7 @@
  *   nama field dipertahankan sesuai kontrak prompt 6B.
  */
 
-import { MIFX_SPECS } from "./mifxSpecs";
+import { getMifxSpec } from "./mifxSpecs";
 
 export type SpecBroker = "orbitraderberjangka" | "finex" | "mifx";
 
@@ -2329,7 +2329,7 @@ export const FINEX_SPECS_32: readonly string[] = Object.freeze([
 /** Lookup exact (case-sensitive); null bila simbol tidak terdaftar. */
 export function getInstrumentSpec32(symbol: string): InstrumentSpec | null {
   // M2a: simbol MIFX (".m") disimpan terpisah (mifxSpecs.ts); 150 spesifikasi lama tetap.
-  return INSTRUMENT_SPECS_32[symbol] ?? MIFX_SPECS[symbol] ?? null;
+  return INSTRUMENT_SPECS_32[symbol] ?? getMifxSpec(symbol);
 }
 
 /** True bila simbol terdaftar dengan status VERIFIED. */

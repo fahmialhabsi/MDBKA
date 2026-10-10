@@ -5,6 +5,7 @@ import {
 import { ORBITRADER_BROKER_ID } from "./brokerRegistry";
 import { getOtbInstrumentProfile } from "./otbInstrumentConfig";
 import type { BrokerId } from "../types/broker";
+import { getMifxSpec } from "./mifxSpecs";
 
 /**
  * Tahap 4C/5A — daftar simbol & kanonikalisasi per broker (UI/wiring only).
@@ -235,6 +236,11 @@ export function canonicalSymbolForBroker(
 ): string {
   if (brokerId === ORBITRADER_BROKER_ID) {
     return symbol.trim().toUpperCase();
+  }
+  // M4a: MIFX — nama persis Specification ("EURUSD.m"), JANGAN dinormalisasi
+  // ke nama Finex ("EURUSD"); simbol tak dikenal MIFX = "" (Simbol tidak dikenal).
+  if (brokerId === "mifx") {
+    return getMifxSpec(symbol)?.symbol ?? "";
   }
 
   const raw = symbol.trim().toUpperCase();

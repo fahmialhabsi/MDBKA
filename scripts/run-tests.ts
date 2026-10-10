@@ -257,7 +257,7 @@ import { summarizeAccountBalance } from "../server/services/accountBalance";
 import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
 import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
 import { applyLossPauseHold, checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
-import { formatPrice, priceDigits } from "../src/lib/tickSize";
+import { formatPrice, priceDigits, tickSizeForSymbol } from "../src/lib/tickSize";
 import { baseRiskSymbol, RISK_GROUPS, riskCapFor, riskGroupOf, riskGroupTable } from "../src/lib/riskGroup";
 import { computeExcursion } from "../server/services/tradeExcursion";
 import { computeExcursionsFromArchive, excursionFileNames } from "../server/services/excursionReader";
@@ -297,7 +297,7 @@ import {
 import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
 import { readSpecsForBroker } from "../server/services/specReader";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
-import { MIFX_SPEC_SYMBOLS } from "../src/lib/mifxSpecs";
+import { getMifxSpec, MIFX_SPEC_SYMBOLS } from "../src/lib/mifxSpecs";
 import { mandatoryStop } from "../src/lib/mandatoryStop";
 import { estimateSwap, swapChargeDays } from "../src/lib/swapEstimate";
 import { applyOpeningHold, findOpeningHold, openingState, openingWarning } from "../src/lib/openingGuard";
@@ -7920,6 +7920,16 @@ test("628. M3a server: sumber live MIFX (equity/quotes/positions/candles) dari .
     assert(app.includes(s), s);
   }
   assert(readSrc(".env.example").includes("QUOTES_LOG_PATH_MIFX="), ".env.example");
+});
+
+test("629. M4a identitas & desimal simbol MIFX: nama .m utuh (bukan nama Finex), tick dari Specification", () => {
+  assert(getMifxSpec("EURUSD.M")?.symbol === "EURUSD.m" && getMifxSpec("eurusd.m")?.symbol === "EURUSD.m" && getMifxSpec("EURUSD") === null, "case-insensitive, hanya .m");
+  assert(getInstrumentSpec32("NQ.M")?.leverage === 20, "lookup spesifikasi setelah UPPERCASE");
+  assert(canonicalSymbolForBroker("EURUSD.m", "mifx") === "EURUSD.m" && canonicalSymbolForBroker("eurusd.m", "mifx") === "EURUSD.m", "nama persis MIFX");
+  assert(canonicalSymbolForBroker("EURUSD", "mifx") === "", "nama Finex di broker MIFX = tidak dikenal");
+  assert(tickSizeForSymbol("NQ.m") === 0.01 && tickSizeForSymbol("DJ.m") === 1 && tickSizeForSymbol("USDJPY.m") === 0.001, "tick MIFX");
+  assert(priceDigits("NQ.m") === 2 && priceDigits("DJ.m") === 0 && priceDigits("EURUSD.m") === 5 && priceDigits("XAGUSD.m") === 3, "desimal MIFX");
+  assert(tickSizeForSymbol("EURUSD") === 0.00001 && priceDigits("USDJPY") === 3, "Finex tetap");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

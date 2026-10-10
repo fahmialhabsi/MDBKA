@@ -1,5 +1,6 @@
 import { getInstrumentProfile } from "./instrumentConfig";
 import { getOtbInstrumentProfile } from "./otbInstrumentConfig";
+import { getMifxSpec } from "./mifxSpecs";
 
 /**
  * Ukuran 1 tick untuk simbol (dipakai sebagai spread minimal placeholder
@@ -8,6 +9,9 @@ import { getOtbInstrumentProfile } from "./otbInstrumentConfig";
  * Selalu > 0 agar guard ask > bid lolos. Dipakai App dan pemindai simbol.
  */
 export function tickSizeForSymbol(symbol: string): number {
+  // M4a: simbol MIFX (".m", OIL_NEXT) dari Specification MT5 MIFX (NQ.m 0.01, DJ.m 1, USDJPY.m 0.001).
+  const mifx = getMifxSpec(symbol);
+  if (mifx !== null && mifx.tickSize > 0) return mifx.tickSize;
   const otb = getOtbInstrumentProfile(symbol.trim().toUpperCase());
   if (otb !== null && otb.tickSize > 0) return otb.tickSize;
   const profile = getInstrumentProfile(symbol);
