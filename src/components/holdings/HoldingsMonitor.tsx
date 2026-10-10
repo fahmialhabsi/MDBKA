@@ -99,6 +99,8 @@ export function HoldingsMonitor({
     orbitraderberjangka: autoOtb.positions.map((position) =>
       toAutoHolding(position, "orbitraderberjangka"),
     ),
+    // M1a: MIFX terdaftar; posisi live menyusul (M3).
+    mifx: [],
   };
 
 

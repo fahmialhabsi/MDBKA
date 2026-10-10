@@ -39,7 +39,7 @@ export type WorkspaceStore = Record<BrokerId, BrokerWorkspace | null>;
 
 /** Store kosong: kedua broker belum dikunjungi. */
 export function createWorkspaceStore(): WorkspaceStore {
-  return { finex: null, orbitraderberjangka: null };
+  return { finex: null, orbitraderberjangka: null, mifx: null };
 }
 
 /** Bekukan slice aktif menjadi workspace (snapshot sekali jalan). */

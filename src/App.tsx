@@ -209,6 +209,7 @@ export default function App() {
   const [savedFlags, setSavedFlags] = useState<Record<BrokerId, boolean>>({
     finex: false,
     orbitraderberjangka: false,
+    mifx: false,
   });
 
   const scaleIssues = useMemo(() => detectScaleMismatch(market), [market]);
@@ -239,6 +240,7 @@ export default function App() {
   const appliedLiveEquityRef = useRef<Record<BrokerId, number | null>>({
     finex: null,
     orbitraderberjangka: null,
+    mifx: null,
   });
 
   // Quote live simbol aktif: sumber spread asli untuk ask dari CSV.
@@ -826,7 +828,7 @@ export default function App() {
       // Pindah broker = mulai bersih (tanpa pulihkan workspace lama):
       // data pasar, setting broker, CSV, dan hasil dikosongkan otomatis.
       workspacesRef.current = createWorkspaceStore();
-      setSavedFlags({ finex: false, orbitraderberjangka: false });
+      setSavedFlags({ finex: false, orbitraderberjangka: false, mifx: false });
       setMarket(emptyMarket);
       setBroker(emptyBroker);
       appliedLiveEquityRef.current[nextBrokerId] = null;
@@ -851,7 +853,7 @@ export default function App() {
 
   function clearAll() {
     workspacesRef.current = createWorkspaceStore();
-    setSavedFlags({ finex: false, orbitraderberjangka: false });
+    setSavedFlags({ finex: false, orbitraderberjangka: false, mifx: false });
     setMarket(emptyMarket);
     setBroker(emptyBroker);
     appliedLiveEquityRef.current[activeBrokerId] = null;
@@ -869,7 +871,7 @@ export default function App() {
 
   function resetToDefault() {
     workspacesRef.current = createWorkspaceStore();
-    setSavedFlags({ finex: false, orbitraderberjangka: false });
+    setSavedFlags({ finex: false, orbitraderberjangka: false, mifx: false });
     setMarket(initialMarket);
     setBroker(initialBroker);
     appliedLiveEquityRef.current[activeBrokerId] = initialBroker.equity;

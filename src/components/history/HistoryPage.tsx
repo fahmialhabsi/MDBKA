@@ -58,6 +58,7 @@ interface View {
 const BROKER_NAME: Record<BrokerId, string> = {
   finex: "Finex",
   orbitraderberjangka: "OTB (Orbi Trade Berjangka)",
+  mifx: "MIFX (Monex Investindo Futures)",
 };
 
 /** Kolom yang dirapatkan (permintaan Fahmi 9 Okt) agar tabel muat satu layar. */

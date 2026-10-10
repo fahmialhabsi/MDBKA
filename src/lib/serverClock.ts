@@ -13,6 +13,8 @@ export const WIT_UTC_OFFSET = 9;
 export const DEFAULT_SERVER_UTC_OFFSET: Readonly<Record<BrokerId, number>> = {
   finex: 3,
   orbitraderberjangka: 2,
+  // M1a: perkiraan awal (belum terverifikasi; dideteksi dari quote segar saat pasar buka).
+  mifx: 3,
 };
 
 /**

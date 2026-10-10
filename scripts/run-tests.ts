@@ -7863,6 +7863,14 @@ test("623. O3 kartu posisi: peringatan BURSA SEGERA BUKA 60 menit sebelum pembuk
   assert(dash.includes("BURSA SEGERA BUKA") && dash.includes("const nowMs = useNowMs();"), "label + jam nyata");
 });
 
+test("624. M1a broker ketiga MIFX terdaftar (BrokerId mifx), belum aktif di runtime", () => {
+  const store = createWorkspaceStore();
+  assert(store.mifx === null && store.finex === null && store.orbitraderberjangka === null, JSON.stringify(store));
+  assert(readSrc("src/types/broker.ts").includes('export type BrokerId = "finex" | "orbitraderberjangka" | "mifx";'), "tipe");
+  assert(readSrc("src/lib/serverClock.ts").includes("mifx: 3,"), "jam server perkiraan");
+  assert(readSrc("src/components/holdings/HoldingsMonitor.tsx").includes("mifx: [],"), "posisi live menyusul");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

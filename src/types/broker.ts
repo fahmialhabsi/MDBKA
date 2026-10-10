@@ -11,8 +11,12 @@ import type { InstrumentProfile } from "../lib/instrumentConfig";
  *   tanpa angka preset fiktif.
  */
 
-/** Identitas broker yang didukung. Finex adalah default. */
-export type BrokerId = "finex" | "orbitraderberjangka";
+/**
+ * Identitas broker yang didukung. Finex adalah default.
+ * M1a (10 Okt 2026): "mifx" = PT Monex Investindo Futures (demo 1003997005, Hedge,
+ * simbol akhiran .m). Terdaftar dulu; sumber data live & aturan simbol menyusul (M1b–M4).
+ */
+export type BrokerId = "finex" | "orbitraderberjangka" | "mifx";
 
 /**
  * Preset instrumen per broker.
