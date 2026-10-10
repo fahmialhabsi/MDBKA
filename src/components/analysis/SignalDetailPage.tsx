@@ -7,6 +7,7 @@ import type { OpenPositionLike } from "../../lib/correlationGuard";
 import { checkLossStreak, tradesForBroker, type StreakAccount } from "../../lib/lossStreakGuard";
 import type { NewsEventLike } from "../../lib/newsGuard";
 import type { TradeSession } from "../../lib/sessionGuard";
+import { specHoldMap } from "../../lib/specCompare";
 import { lastCandleTimeMs, scanSymbol, type ScanRow } from "../../lib/symbolScanner";
 import { formatPrice } from "../../lib/tickSize";
 import { fetchBackendRates, usdIdrRate, type ExchangeRates } from "../../services/fxRateService";
@@ -42,13 +43,15 @@ export function SignalDetailPage({ broker, symbol, equity }: { broker: BrokerId;
   const [copied, setCopied] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [candles, rates, positions, evaluation, calendar, sessionBook] = await Promise.all([
+    const [candles, rates, positions, evaluation, calendar, sessionBook, specBook] = await Promise.all([
       getJson<{ items?: CandleItem[] }>(`/api/candles?broker=${broker}`),
       fetchBackendRates(API_BASE_URL),
       getJson<{ positions?: { symbol: string; side: string }[] }>(`/api/positions?broker=${broker}`),
       getJson<{ accounts?: StreakAccount[] }>("/api/evaluation"),
       getJson<{ available?: boolean; events?: NewsEventLike[] }>(`/api/calendar?broker=${broker}`),
       getJson<{ sessions?: TradeSession[] }>(`/api/sessions?broker=${broker}`),
+      // V2c-2: spesifikasi MT5 vs spec32 (tidak tersedia = satpam diabaikan).
+      getJson<{ available?: boolean; diffs?: { symbol: string; level: string; reason: string }[] }>(`/api/specs?broker=${broker}`),
     ]);
     const items = candles?.items ?? [];
     const item = items.find((i) => i.symbol.toUpperCase() === symbol.toUpperCase());
@@ -81,6 +84,7 @@ export function SignalDetailPage({ broker, symbol, equity }: { broker: BrokerId;
         newsEvents: calendar?.available === true && Array.isArray(calendar.events) ? calendar.events : null,
         newsNow: nowServer ?? undefined,
         sessions: Array.isArray(sessionBook?.sessions) ? sessionBook.sessions : null,
+        specHolds: specBook?.available === true && Array.isArray(specBook.diffs) ? specHoldMap(specBook.diffs) : null,
       }),
     );
     setError(null);

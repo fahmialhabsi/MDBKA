@@ -68,6 +68,8 @@ export interface TradeEntryLogOptions {
   readonly getNewsEvents?: () => readonly NewsEventLike[] | null;
   /** Satpam Sesi S3: jam trading resmi broker; null / gagal = tanpa satpam. */
   readonly getSessions?: () => readonly TradeSession[] | null;
+  /** V2c-2: simbol → alasan spesifikasi MT5 beda spec32; null / gagal = tanpa satpam. */
+  readonly getSpecHolds?: () => ReadonlyMap<string, string> | null;
   readonly now?: () => Date;
 }
 
@@ -128,6 +130,15 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
     }
   };
 
+  const specHolds = (): ReadonlyMap<string, string> | null => {
+    if (opts.getSpecHolds === undefined) return null;
+    try {
+      return opts.getSpecHolds();
+    } catch {
+      return null;
+    }
+  };
+
   const scanFor = (
     symbol: string,
     equity: number | null,
@@ -167,6 +178,7 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       newsEvents: newsEvents(),
       newsNow: timeOpen,
       sessions: sessions(),
+      specHolds: specHolds(),
     });
     return {
       status: row.status,

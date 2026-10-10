@@ -7701,6 +7701,15 @@ test("611. V2c pemindai: DITAHAN_SPEK paling awal (sebelum jeda), hanya diff TAH
   assert(panel.includes('DITAHAN_SPEK: { label: "Spesifikasi berubah"') && panel.includes("specHolds,"), "panel/tampilan");
 });
 
+test("612. V2c-2 satpam spesifikasi juga di halaman detail sinyal & pencatat entry server", () => {
+  const detail = readSrc("src/components/analysis/SignalDetailPage.tsx");
+  assert(detail.includes("/api/specs?broker=${broker}") && detail.includes("specHolds: specBook?.available === true"), "detail sinyal");
+  const log = readSrc("server/services/tradeEntryLog.ts");
+  assert(log.includes("readonly getSpecHolds?:") && log.includes("specHolds: specHolds(),"), "pencatat entry");
+  const idx = readSrc("server/index.ts");
+  assert(idx.includes("getSpecHolds: () => {") && idx.includes("specHoldMap(snap.diffs)"), "dipasang di server/index.ts");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

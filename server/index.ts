@@ -19,6 +19,8 @@ import { resolveCommonFilesDir } from "./routes/marginRoutes";
 import { createTradeEntryLog } from "./services/tradeEntryLog";
 import { readCalendarForBroker } from "./services/calendarReader";
 import { readSessionsForBroker } from "./services/sessionReader";
+import { readSpecsForBroker } from "./services/specReader";
+import { specHoldMap } from "../src/lib/specCompare";
 import { runExcursionPass, startExcursionSchedule } from "./services/excursionJob";
 import { MT5LogReader } from "./services/mt5LogReader";
 import { QuotesLogReader } from "./services/quotesLogReader";
@@ -220,6 +222,11 @@ async function startServer() {
       getNewsEvents: () => readCalendarForBroker(resolveCommonFilesDir(), src.broker)?.events ?? null,
       // S3: jam trading resmi broker yang sama; tidak ada = null.
       getSessions: () => readSessionsForBroker(resolveCommonFilesDir(), src.broker)?.sessions ?? null,
+      // V2c-2: spesifikasi MT5 broker yang sama vs spec32; tidak ada = null.
+      getSpecHolds: () => {
+        const snap = readSpecsForBroker(resolveCommonFilesDir(), src.broker);
+        return snap === null ? null : specHoldMap(snap.diffs);
+      },
     });
     const record = (positions: readonly import("./types/positions").BrokerPosition[]): void => {
       try {
