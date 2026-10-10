@@ -297,6 +297,7 @@ import {
 import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
 import { readSpecsForBroker } from "../server/services/specReader";
 import { mandatoryStop } from "../src/lib/mandatoryStop";
+import { estimateSwap, swapChargeDays } from "../src/lib/swapEstimate";
 import {
   COPY_DRIFT_SHARE,
   COPY_LOCK_SECONDS,
@@ -7773,6 +7774,21 @@ test("617. SW1b swap asli MT5 didahulukan dari perkiraan; kartu menampilkan 'Swa
   assert(est === null || est.source === "PERKIRAAN", "tanpa kolom swap = perkiraan");
   const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
   assert(dash.includes('evaluation.swap.source === "MT5"') && dash.includes("Swap MT5") && dash.includes("(sudah dipotong broker)"), "kartu");
+});
+
+test("618. SW2 perkiraan swap ikut mode broker: OTB persen/360 (cocok History), Finex 0", () => {
+  const usd = (amount: number, ccy: string) => (ccy === "USD" ? amount : ccy === "CAD" ? amount / 1.405 : null);
+  assert(swapChargeDays("2026.10.06 14:41:45", "2026.10.08 08:13:52", 3) === 4, "Sel→Kam, Rabu x3");
+  assert(swapChargeDays("2026.10.02 17:42:46", "2026.10.06 09:18:35", 3) === 2, "Jum→Sel: Jum + Sen (akhir pekan 0)");
+  assert(swapChargeDays("2026.10.09 10:00:00", "2026.10.09 23:59:00", 3) === 0, "intraday 0");
+  const audusd = estimateSwap({ symbol: "AUDUSD_ORB", broker: "orbitraderberjangka", direction: "BELI", lot: 0.1, price: 0.69811, entryServer: "2026.10.06 14:41:45", nowServer: "2026.10.08 08:13:52" }, usd);
+  assert(audusd !== null && audusd.value === -1.16, `AUDUSD_ORB History -1.16: ${JSON.stringify(audusd)}`);
+  const audcad = estimateSwap({ symbol: "AUDCAD_ORB", broker: "orbitraderberjangka", direction: "BELI", lot: 0.1, price: 0.99132, entryServer: "2026.10.02 17:42:46", nowServer: "2026.10.06 09:18:35" }, usd);
+  assert(audcad !== null && Math.abs(audcad.value - -0.29) <= 0.01, `AUDCAD_ORB History -0.29: ${JSON.stringify(audcad)}`);
+  const meta = estimateSwap({ symbol: "META.US", broker: "orbitraderberjangka", direction: "BELI", lot: 0.1, price: 741.07, entryServer: "2026.10.06 17:13:40", nowServer: "2026.10.09 15:37:16" }, usd);
+  assert(meta !== null && meta.chargeDays === 3 && meta.value === -0.06, `META.US History -0.06: ${JSON.stringify(meta)}`);
+  const finex = estimateSwap({ symbol: "US30", broker: "finex", direction: "BELI", lot: 0.01, price: 51273.15, entryServer: "2026.10.08 23:23:28", nowServer: "2026.10.09 11:16:00" }, usd);
+  assert(finex !== null && finex.mode === "MATI" && finex.value === 0, "Finex swap mati (US30 menginap = 0,00)");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
