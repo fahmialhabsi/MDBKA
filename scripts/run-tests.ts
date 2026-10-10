@@ -7748,6 +7748,20 @@ test("615. S5b kotak WAJIB PASANG SL + Salin SL di kartu monitor posisi (semua p
   assert(src.includes("copyMandatorySl(stopPlan.slText)") && src.includes("WAJIB PASANG SL"), "tombol Salin SL");
 });
 
+test("616. SW1a positions.csv kolom Swap asli MT5 (opsional, CSV lama tetap terbaca) → Holding.brokerSwap", () => {
+  const baru = parsePositionRow("2109019,META.US,BUY,0.10,741.07,0.00,0.00,2026.10.06 16:31:02,-0.06");
+  assert(baru !== null && baru.swap === -0.06, JSON.stringify(baru));
+  const lama = parsePositionRow("2109019,META.US,BUY,0.10,741.07,0.00,0.00,2026.10.06 16:31:02");
+  assert(lama !== null && lama.swap === undefined, "CSV lama: swap tidak diketahui, bukan 0");
+  const rusak = parsePositionRow("2109019,META.US,BUY,0.10,741.07,0.00,0.00,2026.10.06 16:31:02,abc");
+  assert(rusak !== null && rusak.swap === undefined, "swap rusak diabaikan");
+  if (baru === null || lama === null) throw new Error("parse gagal");
+  assert(toAutoHolding(baru, "orbitraderberjangka").brokerSwap === -0.06, "dibawa ke Holding");
+  assert(toAutoHolding(lama, "orbitraderberjangka").brokerSwap === undefined, "tanpa kolom = absen");
+  const ea = readSrc("ea/ExportPositions.mq5");
+  assert(ea.includes("PositionGetDouble(POSITION_SWAP)") && ea.includes('"TimeOpen", "Swap"'), "EA menulis kolom Swap");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

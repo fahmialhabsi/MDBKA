@@ -3,7 +3,8 @@
 //| Pasang: File > Open Data Folder > MQL5/Experts, compile (F7),      |
 //| drag ke chart mana pun, izinkan Algo Trading. Menulis ulang file  |
 //| setiap 5 detik (timer). Format:                                   |
-//| Ticket,Symbol,Type,Volume,PriceOpen,SL,TP,TimeOpen                 |
+//| Ticket,Symbol,Type,Volume,PriceOpen,SL,TP,TimeOpen,Swap            |
+//| Swap (SW1, 10 Okt 2026) = POSITION_SWAP asli MT5, mata uang akun.  |
 //| Type = BUY/SELL. Posisi tertutup otomatis hilang dari file.       |
 //+------------------------------------------------------------------+
 #property strict
@@ -37,7 +38,7 @@ void Export()
       Print("ExportPositions: FileOpen gagal: ", GetLastError());
       return;
      }
-   FileWrite(handle, "Ticket", "Symbol", "Type", "Volume", "PriceOpen", "SL", "TP", "TimeOpen");
+   FileWrite(handle, "Ticket", "Symbol", "Type", "Volume", "PriceOpen", "SL", "TP", "TimeOpen", "Swap");
    for(int i = total - 1; i >= 0; i--)
      {
       ulong ticket = PositionGetTicket(i);
@@ -50,6 +51,7 @@ void Export()
       double sl     = PositionGetDouble(POSITION_SL);
       double tp     = PositionGetDouble(POSITION_TP);
       datetime t    = (datetime)PositionGetInteger(POSITION_TIME);
+      double swap   = PositionGetDouble(POSITION_SWAP);
       // Presisi per SIMBOL posisi (bukan _Digits milik chart EA):
       // tanpa ini AUDUSD 0.69812 terekam 0.698 bila EA di chart CFD.
       int    digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
@@ -62,7 +64,8 @@ void Export()
                 DoubleToString(open, digits),
                 DoubleToString(sl, digits),
                 DoubleToString(tp, digits),
-                TimeToString(t, TIME_DATE | TIME_SECONDS));
+                TimeToString(t, TIME_DATE | TIME_SECONDS),
+                DoubleToString(swap, 2));
      }
    FileClose(handle);
   }

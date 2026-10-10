@@ -18,6 +18,11 @@ export interface BrokerPosition {
   readonly tp: number;
   /** Waktu open mentah MT5 "YYYY.MM.DD HH:MM:SS" (display). */
   readonly timeOpen: string;
+  /**
+   * SW1 (10 Okt 2026): swap ASLI yang sudah dipotong broker (POSITION_SWAP,
+   * mata uang akun = USD). Absen = CSV lama (EA belum di-compile ulang).
+   */
+  readonly swap?: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -67,5 +72,10 @@ export function parsePositionRow(row: string): BrokerPosition | null {
   if (!Number.isFinite(sl) || sl < 0) return null;
   if (!Number.isFinite(tp) || tp < 0) return null;
   if (timeOpen === "") return null;
-  return { ticket, symbol, side: sideRaw, volume, priceOpen, sl, tp, timeOpen };
+  // SW1: kolom 9 opsional; kosong/rusak = tidak diketahui (bukan 0 palsu).
+  const swapCell = (cells[8] ?? "").trim();
+  const swap = swapCell === "" ? Number.NaN : Number(swapCell);
+  return Number.isFinite(swap)
+    ? { ticket, symbol, side: sideRaw, volume, priceOpen, sl, tp, timeOpen, swap }
+    : { ticket, symbol, side: sideRaw, volume, priceOpen, sl, tp, timeOpen };
 }

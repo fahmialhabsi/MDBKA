@@ -38,6 +38,8 @@ export interface Holding {
   readonly createdAt: string;
   /** Equity akun USD saat entry (opsional, untuk margin guard 10%). */
   readonly accountEquity?: number;
+  /** SW1: swap asli dari MT5 (USD, posisi otomatis); absen = pakai perkiraan. */
+  readonly brokerSwap?: number;
   /**
    * Status posisi (Tahap v1.3.0): OPEN aktif dipantau; EXITED sudah
    * ditandai keluar MANUAL oleh pengguna (BUKAN eksekusi order —
@@ -837,6 +839,7 @@ export function toAutoHolding(
     tp: position.tp,
     entryTime: position.timeOpen,
     createdAt: position.timeOpen,
+    ...(position.swap !== undefined ? { brokerSwap: position.swap } : {}),
   };
 }
 
