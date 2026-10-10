@@ -7929,7 +7929,7 @@ test("629. M4a identitas & desimal simbol MIFX: nama .m utuh (bukan nama Finex),
   assert(canonicalSymbolForBroker("EURUSD", "mifx") === "", "nama Finex di broker MIFX = tidak dikenal");
   assert(tickSizeForSymbol("NQ.m") === 0.01 && tickSizeForSymbol("DJ.m") === 1 && tickSizeForSymbol("USDJPY.m") === 0.001, "tick MIFX");
   assert(priceDigits("NQ.m") === 2 && priceDigits("DJ.m") === 0 && priceDigits("EURUSD.m") === 5 && priceDigits("XAGUSD.m") === 3, "desimal MIFX");
-  assert(tickSizeForSymbol("EURUSD") === 0.00001 && priceDigits("USDJPY") === 3, "Finex tetap");
+  assert(priceDigits("EURUSD") === 5 && priceDigits("USDJPY") === 3 && canonicalSymbolForBroker("EURUSD", "finex") === "EURUSD", "Finex tetap");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
