@@ -295,6 +295,7 @@ import {
 } from "../src/lib/spec32Wiring";
 
 import { compareSpecs, heldSymbols, parseSpecsCsv } from "../src/lib/specCompare";
+import { readSpecsForBroker } from "../server/services/specReader";
 import {
   COPY_DRIFT_SHARE,
   COPY_LOCK_SECONDS,
@@ -7651,6 +7652,32 @@ test("609. V2a pembanding spesifikasi MT5 vs spec32: contract/tick/mata uang = T
   assert(held.has("AUDCAD") && !held.has("EURUSD") && !held.has("ZZZUSD"), [...held].join(","));
   assert(diffs.some((d) => d.symbol === "EURUSD" && d.level === "CATATAN" && d.field === "swapLong"), "swap beda = catatan saja");
   assert(diffs.some((d) => d.symbol === "ZZZUSD" && d.field === "spec32" && d.level === "CATATAN"), "simbol baru = catatan");
+});
+
+test("610. V2b pembaca spesifikasi per broker (Company, file terbaru) + GET /api/specs", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "spec-"));
+  try {
+    const head = "Symbol,ContractSize,TickSize,TickValue,Digits,VolumeMin,VolumeStep,SwapMode,SwapLong,SwapShort,ProfitCurrency,MarginCurrency,Company,Generated\r\n";
+    nfs.writeFileSync(npath.join(dir, "MDBKA_Specs_61823011.csv"),
+      head + "AUDCAD,10000.0000,0.00001000,0.7,5,0.0100,0.0100,0,-2.3900,-2.3500,CAD,AUD,PT. Finex Bisnis Solusi Futures,2026.10.09 23:59:59\r\n");
+    nfs.writeFileSync(npath.join(dir, "MDBKA_Specs_70930952.csv"),
+      head + "AUDCAD_ORB,100000.0000,0.00001000,0.7,5,0.1000,0.1000,5,-0.7500,-2.2500,CAD,USD,PT. Orbi Trade Berjangka,2026.10.09 22:54:59\r\n");
+    nfs.writeFileSync(npath.join(dir, "MDBKA_Specs_1003997005.csv"),
+      head + "EURUSD,100000.0000,0.00001000,1,5,0.0100,0.0100,0,0,0,USD,EUR,PT. Monex Investindo Futures,x\r\n");
+    const finex = readSpecsForBroker(dir, "finex");
+    assert(finex !== null && finex.file === "MDBKA_Specs_61823011.csv" && finex.symbols === 1, JSON.stringify(finex));
+    assert(finex !== null && finex.diffs.length === 1 && finex.diffs[0].level === "TAHAN" && finex.diffs[0].field === "contract", JSON.stringify(finex?.diffs));
+    const otb = readSpecsForBroker(dir, "orbitraderberjangka");
+    assert(otb !== null && otb.diffs.length === 0 && otb.generated === "2026.10.09 22:54:59", JSON.stringify(otb));
+    assert(readSpecsForBroker(npath.join(dir, "tidak-ada"), "finex") === null, "folder tidak ada = null, tanpa throw");
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+  assert(readSrc("server/app.ts").includes('app.use("/api/specs", createSpecRoutes())'), "route belum dipasang");
+  assert(readSrc("server/routes/specRoutes.ts").includes("available: false"), "tanpa file = available false");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
