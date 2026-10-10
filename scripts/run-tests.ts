@@ -296,6 +296,7 @@ import {
 
 import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
 import { readSpecsForBroker } from "../server/services/specReader";
+import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
 import { mandatoryStop } from "../src/lib/mandatoryStop";
 import { estimateSwap, swapChargeDays } from "../src/lib/swapEstimate";
 import { applyOpeningHold, findOpeningHold, openingState, openingWarning } from "../src/lib/openingGuard";
@@ -7869,6 +7870,18 @@ test("624. M1a broker ketiga MIFX terdaftar (BrokerId mifx), belum aktif di runt
   assert(readSrc("src/types/broker.ts").includes('export type BrokerId = "finex" | "orbitraderberjangka" | "mifx";'), "tipe");
   assert(readSrc("src/lib/serverClock.ts").includes("mifx: 3,"), "jam server perkiraan");
   assert(readSrc("src/components/holdings/HoldingsMonitor.tsx").includes("mifx: [],"), "posisi live menyusul");
+});
+
+test("625. M1b server mengenal MIFX: ?broker=mifx, Company Monex → mifx, TIDAK jatuh ke sumber OTB", () => {
+  assert(resolveLiveBroker("mifx") === "mifx", "query mifx valid");
+  const def = { name: "otb" };
+  const fin = { name: "finex" };
+  const mifx = { name: "mifx" };
+  assert(pickLiveSource("mifx", def, fin) === null, "MIFX belum dikonfigurasi = null (404 jujur), bukan data OTB");
+  assert(pickLiveSource("mifx", def, fin, mifx) === mifx, "sumber MIFX");
+  assert(pickLiveSource("orbitraderberjangka", def, fin, mifx) === def && pickLiveSource("finex", def, fin, mifx) === fin, "broker lama tetap");
+  assert(brokerFromCompany("PT Monex Investindo Futures") === "mifx", "Company MIFX");
+  assert(brokerFromCompany("PT. Finex Bisnis Solusi Futures") === "finex" && brokerFromCompany("Lain") === null, "lama tetap");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

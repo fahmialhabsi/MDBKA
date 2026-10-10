@@ -48,6 +48,8 @@ export function parseAccountLabels(raw: string | undefined): Record<string, stri
 export function brokerFromCompany(company: string): BrokerId | null {
   if (/orbi/i.test(company)) return "orbitraderberjangka";
   if (/finex/i.test(company)) return "finex";
+  // M1b: PT Monex Investindo Futures (MIFX).
+  if (/monex/i.test(company)) return "mifx";
   return null;
 }
 
