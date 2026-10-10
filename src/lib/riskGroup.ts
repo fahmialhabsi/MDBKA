@@ -51,7 +51,7 @@ const FOREX_JPY = new Set([
 ]);
 const FOREX_TIDAK_LAZIM = new Set(["USDEUR", "USDGBP", "USDHKD", "GBXUSD"]);
 const LOGAM = new Set(["XAUUSD", "XAGUSD"]);
-const MINYAK = new Set(["XTIUSD", "CLU"]);
+const MINYAK = new Set(["XTIUSD", "CLU", "CLS10", "OIL_NEXT"]);
 const INDEKS = new Set(["US30", "US100", "US500", "DE30", "UK100", "HK50", "JP225"]);
 const SAHAM_AS_FINEX = new Set([
   "#AAPL", "#AA", "#ADBE", "#AIG", "#AMGN", "#AXP", "#BA", "#BIDU", "#BLK",
@@ -78,11 +78,11 @@ export interface RiskGroupRow {
  */
 export function riskGroupTable(): RiskGroupRow[] {
   return [
-    { group: RISK_GROUPS.FOREX, symbols: [...FOREX], note: "OTB: nama sama + akhiran _ORB" },
-    { group: RISK_GROUPS.FOREX_JPY, symbols: [...FOREX_JPY], note: "OTB: nama sama + akhiran _ORB" },
+    { group: RISK_GROUPS.FOREX, symbols: [...FOREX], note: "OTB: nama sama + akhiran _ORB; MIFX: + .m" },
+    { group: RISK_GROUPS.FOREX_JPY, symbols: [...FOREX_JPY], note: "OTB: nama sama + akhiran _ORB; MIFX: + .m" },
     { group: RISK_GROUPS.LOGAM, symbols: [...LOGAM], note: "XAU = emas, XAG = perak; OTB + _ORB" },
     { group: RISK_GROUPS.MINYAK, symbols: [...MINYAK], note: "" },
-    { group: RISK_GROUPS.INDEKS, symbols: [...INDEKS], note: "OTB: US30/US100/US500 juga .DEC" },
+    { group: RISK_GROUPS.INDEKS, symbols: [...INDEKS], note: "OTB: US30/US100/US500 juga .DEC; MIFX: DJ.m=US30, NQ.m=US100, SP.m=US500, NK.m=JP225, HK.m=HK50" },
     { group: RISK_GROUPS.SAHAM_AS, symbols: [...SAHAM_AS_FINEX], note: "Finex (#); OTB: semua simbol berakhiran .US" },
     { group: RISK_GROUPS.FOREX_TIDAK_LAZIM, symbols: [...FOREX_TIDAK_LAZIM], note: "" },
     { group: RISK_GROUPS.SAHAM_LAIN, symbols: SAHAM_LAIN_DIKENAL, note: "Juga saham # lain yang belum terdaftar" },
@@ -90,9 +90,19 @@ export function riskGroupTable(): RiskGroupRow[] {
   ];
 }
 
-/** Buang akhiran broker: _ORB (OTB), .DEC (kontrak OTB). Huruf besar. */
+/**
+ * M2b (10 Okt 2026): nama indeks MIFX → nama baku MDBKA (golongan Indeks,
+ * mata uang berita, bursa asal). DJ = Dow Jones, NQ = Nasdaq, SP = S&P 500,
+ * NK = Nikkei, HK = Hang Seng.
+ */
+const INDEX_ALIASES: Readonly<Record<string, string>> = {
+  DJ: "US30", NQ: "US100", SP: "US500", NK: "JP225", HK: "HK50",
+};
+
+/** Buang akhiran broker: _ORB (OTB), .DEC (kontrak OTB), .m (MIFX); alias indeks MIFX. Huruf besar. */
 export function baseRiskSymbol(symbol: string): string {
-  return symbol.trim().toUpperCase().replace(/_ORB$/, "").replace(/\.DEC$/, "");
+  const s = symbol.trim().toUpperCase().replace(/_ORB$/, "").replace(/\.DEC$/, "").replace(/\.M$/, "");
+  return INDEX_ALIASES[s] ?? s;
 }
 
 /**

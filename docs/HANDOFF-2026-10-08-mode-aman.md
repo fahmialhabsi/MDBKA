@@ -35,7 +35,7 @@ Nomor test terakhir: **623** → test baru mulai **624**.
 1. **Bahasa Indonesia**, jawaban ringkas (maks ±5 baris kecuali penjelasan bug kompleks).
 2. **Root cause / audit read-only dulu**, baru coding. Jelaskan temuan sebelum mengubah.
 3. **Satu perubahan kecil per langkah**, verifikasi tiap langkah sebelum lanjut.
-4. **Pengguna yang menjalankan** `npm run build; npm test` lalu `git add -A; git commit -m "..."; git push`
+4. **Pengguna yang menjalankan** `npm test; npm run build` (test DULU, penetapan Fahmi 10 Okt) lalu `git add -A; git commit -m "..."; git push`
    di Windows PowerShell (`PS E:\MDBKA>`). Claude memberi perintah + pesan commit, lalu menunggu hasilnya.
 5. **Jangan bilang selesai sebelum terbukti** (test lolos, data dicek). Bila keliru, akui dan koreksi.
 6. **Jumlah uang ditampilkan dalam Rupiah** (USD boleh di samping).

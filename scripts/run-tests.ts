@@ -258,7 +258,7 @@ import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
 import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
 import { applyLossPauseHold, checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
 import { formatPrice, priceDigits } from "../src/lib/tickSize";
-import { RISK_GROUPS, riskCapFor, riskGroupOf, riskGroupTable } from "../src/lib/riskGroup";
+import { baseRiskSymbol, RISK_GROUPS, riskCapFor, riskGroupOf, riskGroupTable } from "../src/lib/riskGroup";
 import { computeExcursion } from "../server/services/tradeExcursion";
 import { computeExcursionsFromArchive, excursionFileNames } from "../server/services/excursionReader";
 import {
@@ -6909,9 +6909,9 @@ test("568. panel golongan: daftar tampil = aturan yang dipakai (R4)", () => {
     }
   }
   const minyak = rows.find((r) => r.group.id === "MINYAK");
-  assert(minyak !== undefined && minyak.symbols.join() === "XTIUSD,CLU" && minyak.group.capIdr === 150000, "minyak");
+  assert(minyak !== undefined && minyak.symbols.join() === "XTIUSD,CLU,CLS10,OIL_NEXT" && minyak.group.capIdr === 150000, "minyak");
   const total = rows.reduce((n, r) => n + r.symbols.length, 0);
-  assert(total === 20 + 7 + 2 + 2 + 7 + 28 + 4 + 13, `jumlah simbol tampil ${total}`);
+  assert(total === 20 + 7 + 2 + 4 + 7 + 28 + 4 + 13, `jumlah simbol tampil ${total}`); // M2b: + CLS10, OIL_NEXT (MIFX)
   const app = readSrc("src/App.tsx");
   assert(app.includes("<RiskGroupsPanel usdIdr={usdIdrRate(fxRates)} />"), "panel belum dipasang di App");
   const panel = readSrc("src/components/analysis/RiskGroupsPanel.tsx");
@@ -7897,6 +7897,18 @@ test("626. M2a spesifikasi 35 simbol MIFX (.m): forex VERIFIED komisi $10/lot, l
   assert(getInstrumentSpec32("USDJPY.m")?.isJPYPair === true && getInstrumentSpec32("XAUUSD.m")?.leverage === 100, "JPY/emas");
   assert(getInstrumentSpec32("EURUSD")?.broker === "finex", "simbol Finex tetap");
   for (const s of MIFX_SPEC_SYMBOLS) assert(INSTRUMENT_SPECS_32[s] === undefined, `nama ${s} bentrok dengan Finex/OTB`);
+});
+
+test("627. M2b nama MIFX: golongan risiko, mata uang berita, bursa asal (DJ/NQ/SP/NK/HK.m, .m, minyak)", () => {
+  assert(riskGroupOf("EURUSD.m").id === "FOREX" && riskGroupOf("USDJPY.m").id === "FOREX_JPY", "forex .m");
+  assert(riskGroupOf("XAUUSD.m").id === "LOGAM" && riskGroupOf("CLS10.m").id === "MINYAK" && riskGroupOf("OIL_NEXT").id === "MINYAK", "logam/minyak");
+  for (const s of ["DJ.m", "NQ.m", "SP.m", "NK.m", "HK.m"]) assert(riskGroupOf(s).id === "INDEKS", `${s} indeks`);
+  assert(baseRiskSymbol("NQ.m") === "US100" && baseRiskSymbol("META.US") === "META.US", "alias tanpa merusak saham .US");
+  assert(newsCurrenciesOf("NK.m").join() === "JPY" && newsCurrenciesOf("GBPAUD.m").join() === "GBP,AUD", "mata uang berita");
+  const t = Date.parse("2026-10-09T13:30:00Z");
+  assert(openingState("SP.m", t)?.minutesFromOpen === 0 && openingState("HK.m", t) !== null, "bursa asal");
+  assert(findOpeningHold("DJ.m", Date.parse("2026-10-09T13:15:00Z")) !== null, "DJ.m ditahan dekat buka bursa AS");
+  for (const m of MIFX_SPEC_SYMBOLS) assert(riskGroupOf(m).capIdr !== null, `${m} punya batas risiko (bukan ditahan)`);
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
