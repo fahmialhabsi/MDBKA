@@ -296,6 +296,7 @@ import {
 
 import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
 import { readSpecsForBroker } from "../server/services/specReader";
+import { mandatoryStop } from "../src/lib/mandatoryStop";
 import {
   COPY_DRIFT_SHARE,
   COPY_LOCK_SECONDS,
@@ -7722,6 +7723,22 @@ test("613. V2c-3 Hasil analisa ditahan bila spesifikasi berubah (heldBy spek, di
   assert(app.includes("applyLossPauseHold(applySpecHold(result, market.symbol, specHolds), lossPause)") && app.includes("useSpecHolds(activeBrokerId)"), "dipasang di App");
   assert(readSrc("src/components/result/AnalysisResult.tsx").includes('data-testid="held-spek"'), "kotak penjelasan");
   assert(readSrc("src/lib/signalReason.ts").includes('result.heldBy === "spek"'), "alasan di panel header");
+});
+
+test("614. S5a SL wajib semua posisi tanpa SL: batas golongan, lewat batas, golongan ditahan", () => {
+  const usd = (amount: number, currency: string) => (currency === "USD" ? amount : null);
+  const kurs = 17880.55;
+  const meta = { symbol: "META.US", direction: "BELI" as const, lot: 0.1, entryPrice: 741.07, sl: 0 };
+  const pasang = mandatoryStop(meta, 735.5, 735.9, usd, kurs);
+  assert(pasang.kind === "PASANG" && pasang.slText === "713.11" && pasang.capIdr === 50000, JSON.stringify(pasang));
+  assert(pasang.kind === "PASANG" && pasang.lossIdr <= 50000 && pasang.lossIdr > 49000, `rugi ${JSON.stringify(pasang)}`);
+  const lewat = mandatoryStop(meta, 710, 710.4, usd, kurs);
+  assert(lewat.kind === "LEWAT_BATAS" && lewat.message.includes("713.11"), JSON.stringify(lewat));
+  const jual = mandatoryStop({ ...meta, direction: "JUAL" }, 741, 741.2, usd, kurs);
+  assert(jual.kind === "PASANG" && jual.slText === "769.03", `JUAL: SL di atas entry ${JSON.stringify(jual)}`);
+  assert(mandatoryStop({ ...meta, sl: 720 }, 735, 736, usd, kurs).kind === "ADA_SL", "sudah ber-SL");
+  assert(mandatoryStop({ ...meta, symbol: "#HSBA" }, 1, 1, usd, kurs).kind === "TUTUP", "golongan ditahan");
+  assert(mandatoryStop(meta, 735, 736, usd, null).kind === "TIDAK_DIKETAHUI", "tanpa kurs");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
