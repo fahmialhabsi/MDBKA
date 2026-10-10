@@ -179,6 +179,8 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       newsNow: timeOpen,
       sessions: sessions(),
       specHolds: specHolds(),
+      // O2b: pembukaan bursa pada jam nyata posisi pertama terlihat (≈ jam entry).
+      openingNowMs: now().getTime(),
     });
     return {
       status: row.status,

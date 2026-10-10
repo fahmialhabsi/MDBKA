@@ -23,6 +23,7 @@ export function signalReason(result: AnalysisResult): string {
   if (result.heldBy === "jeda") return result.heldReason ?? "Jeda: 3 kali rugi berturut-turut";
   if (result.heldBy === "berita") return result.heldReason ?? "Ditahan: dekat berita Tinggi";
   if (result.heldBy === "spek") return result.heldReason ?? "Ditahan: spesifikasi simbol berubah";
+  if (result.heldBy === "buka") return result.heldReason ?? "Ditahan: dekat pembukaan bursa";
   if (result.decision === "TUNGGU") return "Skor belum kompak";
   return result.riskStatus === "MEMENUHI batas risiko"
     ? "Lolos biaya & risiko · belum terbukti"

@@ -9,6 +9,7 @@
  * Jam buka dihitung di zona waktu bursa asal (Intl) → ikut musim panas/dingin
  * otomatis. Hari libur bursa tidak dikenali (tetap ditahan = aman).
  */
+import type { AnalysisResult } from "../types/analysis";
 import { baseRiskSymbol, riskGroupOf } from "./riskGroup";
 
 export const OPENING_HOLD_BEFORE_MIN = 30;
@@ -102,4 +103,25 @@ export function openingWarning(symbol: string, nowMs: number): string | null {
   const m = st.minutesFromOpen;
   if (m < -OPENING_WARN_BEFORE_MIN || m >= 0) return null;
   return `Posisi ini akan melewati pembukaan ${st.exchange} ${st.openWit} WIT (${-m} menit lagi) — harga bisa melonjak; pertimbangkan tutup atau kecilkan risiko`;
+}
+
+/** O2b: Hasil analisa ikut ditahan dekat pembukaan bursa (heldBy "buka"). */
+export function applyOpeningHold<T extends AnalysisResult>(result: T, symbol: string, nowMs: number | null): T {
+  if (result.decision !== "BELI" && result.decision !== "JUAL") return result;
+  if (nowMs === null) return result;
+  const hold = findOpeningHold(symbol, nowMs);
+  if (hold === null) return result;
+  return {
+    ...result,
+    decision: "TUNGGU",
+    heldBy: "buka",
+    heldDecision: result.decision,
+    heldReason: hold.reason,
+    stopLoss: null,
+    takeProfit: null,
+    suggestedLot: null,
+    warnings: [`Mode Aman: ${hold.reason}. Setup ditahan.`, ...result.warnings],
+    explanation:
+      "Mode Aman: arah sudah kompak, tetapi bursa asal simbol ini sedang/akan buka. Saat pembukaan harga sering melonjak dan menyapu SL; tunggu sampai 60 menit setelah buka.",
+  };
 }

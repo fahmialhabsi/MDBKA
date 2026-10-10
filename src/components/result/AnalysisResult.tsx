@@ -662,6 +662,25 @@ function BeginnerGuide({ result }: { result: ResultType }) {
     );
   }
 
+  // O2b: dekat pembukaan bursa asal (indeks / saham AS).
+  if (result.decision === "TUNGGU" && result.heldBy === "buka") {
+    return (
+      <div data-testid="held-buka" className="rounded-2xl border border-yellow-400/25 bg-yellow-400/5 p-5">
+        <p className="font-semibold text-yellow-200">
+          Artinya gampang: bursa asal simbol ini sedang/akan buka. JANGAN entry dulu.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+          <li>{result.heldReason ?? "Ditahan: dekat pembukaan bursa"}.</li>
+          <li>
+            Saat bursa buka, banyak order masuk sekaligus sehingga harga bisa melonjak
+            jauh dalam beberapa menit dan menyapu SL.
+          </li>
+          <li>Tunggu sampai 60 menit setelah jam buka, lalu analisa ulang.</li>
+        </ul>
+      </div>
+    );
+  }
+
   // Langkah F: jeda setelah 3 kali rugi berturut-turut.
   if (result.decision === "TUNGGU" && result.heldBy === "jeda") {
     return (

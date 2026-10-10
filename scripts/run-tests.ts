@@ -298,7 +298,7 @@ import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } 
 import { readSpecsForBroker } from "../server/services/specReader";
 import { mandatoryStop } from "../src/lib/mandatoryStop";
 import { estimateSwap, swapChargeDays } from "../src/lib/swapEstimate";
-import { findOpeningHold, openingState, openingWarning } from "../src/lib/openingGuard";
+import { applyOpeningHold, findOpeningHold, openingState, openingWarning } from "../src/lib/openingGuard";
 import {
   COPY_DRIFT_SHARE,
   COPY_LOCK_SECONDS,
@@ -7060,7 +7060,7 @@ test("576. Hasil analisa ditahan dekat berita Tinggi (K5)", () => {
   assert(applyNewsHold(base, "EURUSD", "2026.10.14 15:10:00", null) === base, "tanpa kalender harus tetap");
   assert(applyNewsHold(base, "AUDJPY", "2026.10.14 15:10:00", ev) === base, "mata uang lain harus tetap");
   const app = readSrc("src/App.tsx");
-  assert(app.includes("applyNewsHold(\n              applyLossPauseHold(") || app.includes("applyNewsHold(\r\n              applyLossPauseHold("), "urutan jeda → berita → ganda");
+  assert(/applyNewsHold\(\s*applyLossPauseHold\(/.test(app) && /applyDoubleBetHold\(\s*applyOpeningHold\(\s*applyNewsHold\(/.test(app), "urutan spek → jeda → berita → pembukaan → ganda");
   assert(readSrc("src/components/result/AnalysisResult.tsx").includes('data-testid="held-berita"'), "kotak berita belum ada");
   assert(readSrc("src/hooks/useNewsCalendar.ts").includes("/api/calendar?broker=${brokerId}"), "hook kalender");
 });
@@ -7841,6 +7841,20 @@ test("621. O2 pemindai: status DITAHAN_BUKA (setelah sesi, sebelum taruhan ganda
   ])[0].symbol === "A", "pembukaan di atas TUNGGU");
   const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
   assert(panel.includes('DITAHAN_BUKA: { label: "Pembukaan bursa"') && panel.includes("openingNowMs: scanAtMs"), "panel");
+});
+
+test("622. O2b pembukaan bursa juga menahan Hasil analisa, detail sinyal, pencatat entry", () => {
+  const base = { decision: "BELI", stopLoss: 1, takeProfit: 2, suggestedLot: 0.01, warnings: [] as string[] } as unknown as ReturnType<typeof analyzeMarket>;
+  const held = applyOpeningHold(base, "US100", Date.parse("2026-10-09T13:15:00Z"));
+  assert(held.decision === "TUNGGU" && held.heldBy === "buka" && held.heldDecision === "BELI" && held.stopLoss === null, JSON.stringify(held));
+  assert(applyOpeningHold(base, "EURUSD", Date.parse("2026-10-09T13:15:00Z")) === base, "forex tidak diatur");
+  assert(applyOpeningHold(base, "US100", Date.parse("2026-10-09T16:00:00Z")) === base, "di luar jendela");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("applyOpeningHold(") && app.includes("const nowMs = useNowMs();"), "App");
+  assert(readSrc("src/components/result/AnalysisResult.tsx").includes('data-testid="held-buka"'), "kotak penjelasan");
+  assert(readSrc("src/lib/signalReason.ts").includes('result.heldBy === "buka"'), "alasan header");
+  assert(readSrc("src/components/analysis/SignalDetailPage.tsx").includes("openingNowMs: Date.now(),"), "detail sinyal");
+  assert(readSrc("server/services/tradeEntryLog.ts").includes("openingNowMs: now().getTime(),"), "pencatat entry");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

@@ -85,6 +85,8 @@ export function SignalDetailPage({ broker, symbol, equity }: { broker: BrokerId;
         newsNow: nowServer ?? undefined,
         sessions: Array.isArray(sessionBook?.sessions) ? sessionBook.sessions : null,
         specHolds: specBook?.available === true && Array.isArray(specBook.diffs) ? specHoldMap(specBook.diffs) : null,
+        // O2b: pembukaan bursa (jam nyata saat dihitung).
+        openingNowMs: Date.now(),
       }),
     );
     setError(null);
