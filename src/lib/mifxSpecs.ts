@@ -5,7 +5,8 @@
  * - Komisi: Specification MT5 EURGBP.m "5 USD per lot, in/out deals" = $10/lot pulang-pergi
  *   (= tabel situs MIFX akun Ultra Low). Forex (26) VERIFIED.
  * - NQ.m & XAGUSD.m: Specification 10 Okt "5 USD per lot, in/out deals" → VERIFIED.
- * - Logam/minyak/indeks lain: komisi BELUM terverifikasi → status PENDING (MDBKA menahan).
+ * - XAUUSD.m, CLS10.m, OIL_NEXT, DJ.m, HK.m, NK.m, SP.m: dikonfirmasi Fahmi 10 Okt dari
+ *   Specification MT5 — komisi sama ("5 USD per lot, in/out deals") → VERIFIED (35/35).
  * - Swap: SwapMode 5 (persen tahunan dari harga sekarang, /360, Rabu ×3) — swapEstimate.ts.
  * Kunci = nama simbol persis (akhiran ".m"; OIL_NEXT tanpa akhiran). Tidak ada nama yang
  * sama dengan simbol Finex/OTB (dicek 10 Okt).
@@ -463,7 +464,7 @@ export const MIFX_SPECS: Readonly<Record<string, InstrumentSpec>> = Object.freez
     baseCurrency: "XAU",
     quoteCurrency: "USD",
     isJPYPair: false,
-    status: "PENDING",
+    status: "VERIFIED",
   }),
   "CLS10.m": freeze({
     symbol: "CLS10.m",
@@ -479,7 +480,7 @@ export const MIFX_SPECS: Readonly<Record<string, InstrumentSpec>> = Object.freez
     baseCurrency: "USD",
     quoteCurrency: "USD",
     isJPYPair: false,
-    status: "PENDING",
+    status: "VERIFIED",
   }),
   "OIL_NEXT": freeze({
     symbol: "OIL_NEXT",
@@ -495,7 +496,7 @@ export const MIFX_SPECS: Readonly<Record<string, InstrumentSpec>> = Object.freez
     baseCurrency: "USD",
     quoteCurrency: "USD",
     isJPYPair: false,
-    status: "PENDING",
+    status: "VERIFIED",
   }),
   "DJ.m": freeze({
     symbol: "DJ.m",
@@ -511,7 +512,7 @@ export const MIFX_SPECS: Readonly<Record<string, InstrumentSpec>> = Object.freez
     baseCurrency: "USD",
     quoteCurrency: "USD",
     isJPYPair: false,
-    status: "PENDING",
+    status: "VERIFIED",
   }),
   "HK.m": freeze({
     symbol: "HK.m",
@@ -527,7 +528,7 @@ export const MIFX_SPECS: Readonly<Record<string, InstrumentSpec>> = Object.freez
     baseCurrency: "USD",
     quoteCurrency: "USD",
     isJPYPair: false,
-    status: "PENDING",
+    status: "VERIFIED",
   }),
   "NK.m": freeze({
     symbol: "NK.m",
@@ -543,7 +544,7 @@ export const MIFX_SPECS: Readonly<Record<string, InstrumentSpec>> = Object.freez
     baseCurrency: "USD",
     quoteCurrency: "USD",
     isJPYPair: false,
-    status: "PENDING",
+    status: "VERIFIED",
   }),
   "NQ.m": freeze({
     symbol: "NQ.m",
@@ -575,7 +576,7 @@ export const MIFX_SPECS: Readonly<Record<string, InstrumentSpec>> = Object.freez
     baseCurrency: "USD",
     quoteCurrency: "USD",
     isJPYPair: false,
-    status: "PENDING",
+    status: "VERIFIED",
   }),
 });
 
