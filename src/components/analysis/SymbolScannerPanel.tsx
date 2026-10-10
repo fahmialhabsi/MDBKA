@@ -62,6 +62,7 @@ const STATUS_VIEW: Record<ScanStatus, { label: string; className: string }> = {
   DITAHAN_BERITA: { label: "Dekat berita", className: "bg-orange-400/15 text-orange-300" },
   DITAHAN_SESI: { label: "Sesi tutup", className: "bg-rose-400/15 text-rose-300" },
   DITAHAN_SPEK: { label: "Spesifikasi berubah", className: "bg-violet-400/15 text-violet-300" },
+  DITAHAN_BUKA: { label: "Pembukaan bursa", className: "bg-yellow-400/15 text-yellow-300" },
   TUNGGU: { label: "Tunggu", className: "bg-white/10 text-slate-300" },
   PASAR_TUTUP: { label: "Pasar tutup / basi", className: "bg-white/5 text-slate-500" },
   DATA: { label: "Data kurang", className: "bg-white/5 text-slate-500" },
@@ -74,6 +75,8 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
   const [error, setError] = useState<string | null>(null);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  // O2: jam nyata saat pindaian dimuat (satpam pembukaan bursa; diperbarui tiap refresh).
+  const [scanAtMs, setScanAtMs] = useState<number | null>(null);
   const [tick, setTick] = useState(0);
   const [showAll, setShowAll] = useState(false);
   const key = `${brokerId}|${tick}`;
@@ -146,6 +149,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         setItemsBroker(brokerId);
         setError(null);
         setFetchedAt(new Date().toLocaleTimeString("id-ID"));
+        setScanAtMs(Date.now());
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
@@ -242,8 +246,9 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         newsNow: nowServer ?? undefined,
         sessions,
         specHolds,
+        openingNowMs: scanAtMs,
       }),
-    [brokerId, equity, fxRates, reference, openPositions, pauseReason, newsEvents, nowServer, sessions, specHolds],
+    [brokerId, equity, fxRates, reference, openPositions, pauseReason, newsEvents, nowServer, sessions, specHolds, scanAtMs],
   );
   const rows = useMemo(
     () => sortScanRows(source.map((item) => scanItem(item, item.quote))),
@@ -261,7 +266,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
 
   const counts = rows.reduce<Record<ScanStatus, number>>(
     (acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }),
-    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, DITAHAN_JEDA: 0, DITAHAN_BERITA: 0, DITAHAN_SESI: 0, DITAHAN_SPEK: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
+    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, DITAHAN_JEDA: 0, DITAHAN_BERITA: 0, DITAHAN_SESI: 0, DITAHAN_SPEK: 0, DITAHAN_BUKA: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
   );
   const visible = showAll ? rows : rows.slice(0, COLLAPSED_ROWS);
   const loading =
@@ -283,6 +288,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
               {counts.DITAHAN_JEDA} jeda · {counts.DITAHAN_BERITA} dekat berita ·{" "}
               {counts.DITAHAN_SESI} sesi tutup/jelang tutup ·{" "}
               {counts.DITAHAN_SPEK} spesifikasi berubah ·{" "}
+              {counts.DITAHAN_BUKA} pembukaan bursa ·{" "}
               {counts.TUNGGU} tunggu · {counts.PASAR_TUTUP} pasar
               tutup · {counts.DATA} data kurang
             </p>

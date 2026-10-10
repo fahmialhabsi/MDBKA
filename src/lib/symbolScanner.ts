@@ -1,3 +1,4 @@
+import { findOpeningHold } from "./openingGuard";
 import { analyzeMarket } from "../calculations/decisionEngine";
 import { computeIndicators } from "../calculations/indicators";
 import { validateAnalysisInputs } from "../calculations/inputValidator";
@@ -36,6 +37,7 @@ export type ScanStatus =
   | "DITAHAN_BERITA"
   | "DITAHAN_SESI"
   | "DITAHAN_SPEK"
+  | "DITAHAN_BUKA"
   | "TUNGGU"
   | "PASAR_TUTUP"
   | "DATA";
@@ -73,6 +75,11 @@ export interface ScanInput {
    * tidak tersedia → satpam diabaikan.
    */
   readonly specHolds?: ReadonlyMap<string, string> | null;
+  /**
+   * O2 (10 Okt 2026): jam NYATA (ms UTC) untuk satpam pembukaan bursa indeks
+   * & saham AS (−30/+60 mnt). null/absen = satpam diabaikan.
+   */
+  readonly openingNowMs?: number | null;
 }
 
 export interface ScanRow {
@@ -303,6 +310,28 @@ export function scanSymbol(input: ScanInput): ScanRow {
       };
     }
   }
+  // O2: lolos tapi dekat pembukaan bursa asal (indeks / saham AS) → tahan.
+  if (
+    status === "LOLOS" &&
+    (result.decision === "BELI" || result.decision === "JUAL") &&
+    input.openingNowMs !== undefined &&
+    input.openingNowMs !== null
+  ) {
+    const buka = findOpeningHold(symbol, input.openingNowMs);
+    if (buka !== null) {
+      return {
+        symbol,
+        status: "DITAHAN_BUKA",
+        decision: "TUNGGU",
+        direction: result.decision,
+        held: true,
+        score: result.score,
+        reason: buka.reason,
+        costShareOfRisk: result.costShareOfRisk ?? null,
+        candles: count,
+      };
+    }
+  }
   // Langkah D: lolos tapi searah dengan posisi terbuka → taruhan ganda.
   if (
     status === "LOLOS" &&
@@ -364,9 +393,10 @@ const STATUS_ORDER: Record<ScanStatus, number> = {
   DITAHAN_BERITA: 5,
   DITAHAN_SESI: 6,
   DITAHAN_SPEK: 7,
-  TUNGGU: 8,
-  PASAR_TUTUP: 9,
-  DATA: 10,
+  DITAHAN_BUKA: 8,
+  TUNGGU: 9,
+  PASAR_TUTUP: 10,
+  DATA: 11,
 };
 
 /** Urutan tampil: LOLOS dulu, lalu yang paling dekat lolos; skor kuat di atas. */

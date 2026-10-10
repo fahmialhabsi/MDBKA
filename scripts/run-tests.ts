@@ -7828,6 +7828,21 @@ test("620. O1 satpam pembukaan bursa: US100 22:30 WIT, tahan -30/+60, peringatan
   assert(de !== null && de.minutesFromOpen === 0 && de.openWit === "16:00", JSON.stringify(de));
 });
 
+test("621. O2 pemindai: status DITAHAN_BUKA (setelah sesi, sebelum taruhan ganda) + panel pakai jam pindai", () => {
+  const sc = readSrc("src/lib/symbolScanner.ts");
+  const sesi = sc.indexOf('status: "DITAHAN_SESI"');
+  const buka = sc.indexOf('status: "DITAHAN_BUKA"');
+  const ganda = sc.indexOf('status: "DITAHAN_KORELASI"');
+  assert(sesi > 0 && buka > sesi && ganda > buka, `urutan ${sesi}/${buka}/${ganda}`);
+  assert(sc.includes("findOpeningHold(symbol, input.openingNowMs)"), "pakai satpam O1");
+  assert(sortScanRows([
+    { symbol: "B", status: "TUNGGU", decision: "TUNGGU", direction: "TUNGGU", held: false, score: 0, reason: "", costShareOfRisk: null, candles: 200 },
+    { symbol: "A", status: "DITAHAN_BUKA", decision: "TUNGGU", direction: "BELI", held: true, score: 4, reason: "", costShareOfRisk: null, candles: 200 },
+  ])[0].symbol === "A", "pembukaan di atas TUNGGU");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes('DITAHAN_BUKA: { label: "Pembukaan bursa"') && panel.includes("openingNowMs: scanAtMs"), "panel");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
