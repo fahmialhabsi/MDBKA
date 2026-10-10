@@ -1,15 +1,20 @@
-# HANDOFF MDBKA — Mode Aman (8 Okt 2026, diperbarui 10 Okt 2026 dini hari)
+# HANDOFF MDBKA — Mode Aman (8 Okt 2026, diperbarui 10 Okt 2026 sore)
 
 Dokumen serah-terima untuk melanjutkan pekerjaan MDBKA di chat baru.
-Commit terakhir: **8e16bae** (10 Okt 01:02 WIT, working tree bersih).
-Test terakhir terverifikasi: **602 lolos, 0 gagal**, build sukses.
+Commit terakhir: **cb9b163** (10 Okt 16:19 WIT).
+Test terakhir terverifikasi: **615 lolos, 0 gagal**, build sukses.
 
-> **MULAI DI SINI (sesi berikutnya):** urutan kerja = **V2** pembanding spesifikasi otomatis (bagian 4, catatan V1)
-> → **S5** saham wajib ber-SL (bagian 5d) → **swap saham persen tahunan** + arti SwapMode 0 di Finex (bagian 4).
-> Hasil sesi 9 Okt: Kalkulator C1–C5 + tombol Salin SL "Amankan"; halaman Golongan G1–G3b (chart candle H1 live,
-> garis Entry/SL/TP/Amankan, ringkasan transaksi + portofolio saham); Satpam Sesi S1–S4; komisi saham OTB = 0;
-> contract size 150 simbol MT5 = spec32.
-Nomor test terakhir: **608** → test baru mulai **609**. Commit terakhir: **b2f9b7f** (604 pengujian lolos).
+> **MULAI DI SINI (sesi berikutnya):** sesi 10 Okt menyelesaikan **V2 + S5 + swap**. Urutan berikut:
+> (1) **Verifikasi layar Senin 12 Okt** saat pasar buka: tombol [SL]/[TP] kolom Arah pemindai (kunci 10 dtk, ambang 10%),
+> kotak WAJIB PASANG SL (posisi tanpa SL), baris "Swap MT5" di kartu posisi (EA ExportPositions sudah di-compile ulang 10 Okt
+> di Finex & OTB, 0 errors). (2) Usulan audit 10 Okt yang belum: **(b) satpam pembukaan bursa indeks** (US100 22:30 WIT),
+> **(c) TP lebih dekat/ambil sebagian** (setelah ≥ 20 trade Mode Aman). (3) Backlog: History/halaman lain sesuai 5c,
+> **Treasury** (5c-6), **broker ketiga MIFX Netting** (5c-7, jangan pasang AutoExport di Monex dulu).
+> Sesi 10 Okt: V2a–V2c (DITAHAN_SPEK / heldBy "spek", `specCompare.ts`, `/api/specs`), S5a–S5b (`mandatoryStop.ts`, semua
+> posisi tanpa SL → SL = batas golongan Rupiah + Salin SL), SW1 (kolom Swap asli di positions.csv → `brokerSwap`),
+> SW2 (`swapEstimate.ts`: OTB SwapMode 5 = persen tahunan ÷ 360, Rabu ×3 forex / Jumat saham; Finex SwapMode 0 = mati;
+> cocok History AUDUSD −1,16 / AUDCAD −0,29 / META −0,06). Perkiraan swap butuh jam server quote; posisi manual ISO = tanpa tebakan.
+Nomor test terakhir: **619** → test baru mulai **620**.
 
 > **Sesi 10 Okt pagi:** audit History Finex demo (20 trade): **TP 0/20 kena**, gerak terbaik median ±0,27R (TP = 1,5R);
 > DE30 +Rp43 rb karena ditutup manual lebih awal; US100 −Rp745 rb (MA50 telat + guncangan buka bursa AS 22:30 WIT).
@@ -443,11 +448,11 @@ Setiap butir tetap: audit read-only → satu perubahan kecil → test → Fahmi 
 
 ## 6. Prompt pembuka untuk chat baru (salin-tempel)
 
-> Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, commit terakhir 8e16bae,
-> 602 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` (mulai dari kotak "MULAI DI SINI") dan patuhi
+> Lanjutkan proyek MDBKA (repo E:\MDBKA, GitHub fahmialhabsi/MDBKA, branch main, commit terakhir cb9b163,
+> 615 test lolos). Baca dulu `docs/HANDOFF-2026-10-08-mode-aman.md` (mulai dari kotak "MULAI DI SINI") dan patuhi
 > bagian GUARD KERJA: Bahasa Indonesia ringkas, audit read-only dulu, satu perubahan kecil per langkah, saya yang
 > menjalankan build/test/commit di PowerShell, jumlah dalam Rupiah, prinsip "profit kecil lebih baik daripada mengejar
 > profit besar lalu minus", default TUNGGU, MDBKA tidak menempatkan/menutup order, sistem yang merencanakan otomatis
 > (GUARD 10b), dan setiap langkah selesai jelaskan dulu dalam bahasa awam (GUARD 11) sebelum saya commit.
-> Langkah berikutnya: V2 pembanding spesifikasi MT5 (MDBKA_Specs_<login>.csv) vs spec32, lalu S5 saham wajib ber-SL,
-> lalu swap saham persen tahunan.
+> Langkah berikutnya: verifikasi layar (tombol [SL]/[TP] pemindai, WAJIB PASANG SL, Swap MT5), lalu usulan (b) satpam
+> pembukaan bursa indeks (US100 22:30 WIT), lalu backlog sesuai kotak MULAI DI SINI.
