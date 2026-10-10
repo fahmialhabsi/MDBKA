@@ -64,7 +64,7 @@ export default function ExtractedDataForm({
   // OTB), tampilkan nilai aktif agar select tidak kosong, tetapi value
   // tetap kode simbol.
   const symbolOptions: string[] =
-    brokerId === "orbitraderberjangka"
+    brokerId === "orbitraderberjangka" || brokerId === "mifx"
       ? [...getAvailableSymbols(brokerId)]
       : [...SUPPORTED_SYMBOLS];
   if (market.symbol && !symbolOptions.includes(market.symbol)) {

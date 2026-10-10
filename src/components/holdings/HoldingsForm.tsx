@@ -37,11 +37,13 @@ export function HoldingsForm({
 }): JSX.Element {
   const symbols: readonly string[] = getAvailableSymbols(brokerId);
   const defaultSymbol =
-    brokerId === "orbitraderberjangka" ? "GBPUSD_ORB" : "USDCHF";
+    brokerId === "orbitraderberjangka" ? "GBPUSD_ORB" : brokerId === "mifx" ? "EURUSD.m" : "USDCHF";
   const resolveInitialSymbol = (): string => {
     const cleaned = (activeSymbol ?? "").trim().toUpperCase();
-    if (cleaned !== "" && (symbols as readonly string[]).includes(cleaned)) {
-      return cleaned;
+    // M4b-2: cocokkan tanpa peka huruf (MIFX "EURUSD.m"), kembalikan nama persis daftar.
+    const match = cleaned === "" ? undefined : symbols.find((s) => s.toUpperCase() === cleaned);
+    if (match !== undefined) {
+      return match;
     }
     return defaultSymbol;
   };
@@ -60,10 +62,9 @@ export function HoldingsForm({
   // Pilihan manual pengguna di luar itu tidak dioverride (key tak berubah).
   const cleanedActive = (activeSymbol ?? "").trim().toUpperCase();
   const validActive =
-    cleanedActive !== "" &&
-    (symbols as readonly string[]).includes(cleanedActive)
-      ? cleanedActive
-      : null;
+    cleanedActive === ""
+      ? null
+      : (symbols.find((s) => s.toUpperCase() === cleanedActive) ?? null);
   const [syncKey, setSyncKey] = useState(
     `${brokerId}|${validActive ?? ""}`,
   );

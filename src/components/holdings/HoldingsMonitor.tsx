@@ -18,7 +18,8 @@ import type { BrokerId } from "../../types/broker";
 
 const STORAGE_KEY = "mdbka-holdings-v1";
 
-const TABS: readonly BrokerId[] = ["finex", "orbitraderberjangka"];
+const TABS: readonly BrokerId[] = ["finex", "orbitraderberjangka", "mifx"];
+const TAB_LABEL: Record<BrokerId, string> = { finex: "Finex", orbitraderberjangka: "OTB", mifx: "MIFX" };
 
 function makeId(): string {
   return `h${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
@@ -92,6 +93,7 @@ export function HoldingsMonitor({
   // tab tak aktif — hooks tak kondisional (aturan React aman).
   const autoFinex = useBrokerPositions("finex");
   const autoOtb = useBrokerPositions("orbitraderberjangka");
+  const autoMifx = useBrokerPositions("mifx");
   const autoByBroker: Record<BrokerId, Holding[]> = {
     finex: autoFinex.positions.map((position) =>
       toAutoHolding(position, "finex"),
@@ -99,8 +101,8 @@ export function HoldingsMonitor({
     orbitraderberjangka: autoOtb.positions.map((position) =>
       toAutoHolding(position, "orbitraderberjangka"),
     ),
-    // M1a: MIFX terdaftar; posisi live menyusul (M3).
-    mifx: [],
+    // M4b-2: posisi MT5 MIFX (EA ExportPositions di terminal MIFX).
+    mifx: autoMifx.positions.map((position) => toAutoHolding(position, "mifx")),
   };
 
 
@@ -171,7 +173,7 @@ export function HoldingsMonitor({
                   : "bg-white/5 text-slate-400 hover:bg-white/10"
               }`}
             >
-              {broker === "finex" ? "Finex" : "OTB"} · POSISI OPEN ({open}/
+              {TAB_LABEL[broker]} · POSISI OPEN ({open}/
               {total})
             </button>
           );

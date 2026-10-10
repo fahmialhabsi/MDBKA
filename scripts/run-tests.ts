@@ -7870,7 +7870,7 @@ test("624. M1a broker ketiga MIFX terdaftar (BrokerId mifx), belum aktif di runt
   assert(store.mifx === null && store.finex === null && store.orbitraderberjangka === null, JSON.stringify(store));
   assert(readSrc("src/types/broker.ts").includes('export type BrokerId = "finex" | "orbitraderberjangka" | "mifx";'), "tipe");
   assert(readSrc("src/lib/serverClock.ts").includes("mifx: 3,"), "jam server perkiraan");
-  assert(readSrc("src/components/holdings/HoldingsMonitor.tsx").includes("mifx: [],"), "posisi live menyusul");
+  assert(readSrc("src/components/holdings/HoldingsMonitor.tsx").includes('mifx: autoMifx.positions.map((position) => toAutoHolding(position, "mifx")),'), "posisi live MIFX (M4b-2)");
 });
 
 test("625. M1b server mengenal MIFX: ?broker=mifx, Company Monex → mifx, TIDAK jatuh ke sumber OTB", () => {
@@ -7952,6 +7952,16 @@ test("631. M4b-1 tab MIFX di dashboard: broker terdaftar, tombol, nama file .m d
   const app = readSrc("src/App.tsx");
   assert(app.includes('data-testid="broker-tab-mifx"') && app.includes('onClick={() => handleBrokerChange("mifx")}'), "tombol MIFX");
   assert(app.includes("longestFirst(MIFX_SPEC_SYMBOLS).find((candidate) =>") && app.includes("upperName.includes(candidate.toUpperCase())"), "nama file CSV .m");
+});
+
+test("632. M4b-2 monitor posisi: tab MIFX + posisi MT5 MIFX", () => {
+  const mon = readSrc("src/components/holdings/HoldingsMonitor.tsx");
+  assert(mon.includes('const TABS: readonly BrokerId[] = ["finex", "orbitraderberjangka", "mifx"];') && mon.includes('useBrokerPositions("mifx")'), "tab + hook");
+  assert(mon.includes("{TAB_LABEL[broker]} · POSISI OPEN"), "label tab");
+  const h = toAutoHolding({ ticket: "9", symbol: "NQ.m", side: "SELL", volume: 0.01, priceOpen: 31108.5, sl: 31217.36, tp: 30976.45, timeOpen: "2026.10.12 10:00:00" }, "mifx");
+  assert(h.brokerId === "mifx" && h.direction === "JUAL" && h.symbol === "NQ.m", JSON.stringify(h));
+  assert(getAvailableSymbols("mifx").length === 35 && getAvailableSymbols("mifx").includes("EURUSD.m") && getAvailableSymbols("finex").includes("EURUSD"), "daftar simbol per broker");
+  assert(readSrc("src/components/holdings/HoldingsForm.tsx").includes('brokerId === "mifx" ? "EURUSD.m"') && readSrc("src/components/extraction/ExtractedDataForm.tsx").includes('brokerId === "orbitraderberjangka" || brokerId === "mifx"'), "form simbol MIFX");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

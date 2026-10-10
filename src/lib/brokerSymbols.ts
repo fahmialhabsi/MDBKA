@@ -5,7 +5,7 @@ import {
 import { ORBITRADER_BROKER_ID } from "./brokerRegistry";
 import { getOtbInstrumentProfile } from "./otbInstrumentConfig";
 import type { BrokerId } from "../types/broker";
-import { getMifxSpec } from "./mifxSpecs";
+import { getMifxSpec, MIFX_SPEC_SYMBOLS } from "./mifxSpecs";
 
 /**
  * Tahap 4C/5A — daftar simbol & kanonikalisasi per broker (UI/wiring only).
@@ -203,6 +203,10 @@ function isCompleteOtbPreset(symbol: string): boolean {
 export function getAvailableSymbols(brokerId?: BrokerId): string[] {
   if (brokerId === ORBITRADER_BROKER_ID) {
     return [...OTB_ALL_SYMBOLS];
+  }
+  // M4b-2: daftar simbol MIFX (nama persis Specification, akhiran .m).
+  if (brokerId === "mifx") {
+    return [...MIFX_SPEC_SYMBOLS];
   }
 
   return [...SUPPORTED_SYMBOLS];
