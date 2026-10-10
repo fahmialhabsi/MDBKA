@@ -10162,19 +10162,17 @@ test("444. markHoldingExited + filter + counter", () => {
   assert(exited.exitPrice === 0.83349, "harga exit hilang");
   assert(exited.exitTime === "2026-10-05T01:00:00.000Z", "waktu hilang");
   assert(exited.exitNote === "TP", "note hilang");
-  // Realisasi kini termasuk swap 5 hari (LONG +1.01, triple Rabu 30 Sep):
-  // +1.42 − 0.01 komisi + ~0.09 swap ≈ +1.50.
+  // SW2b (10 Okt): posisi manual (jam laptop ISO) tanpa swap asli MT5 →
+  // swap TIDAK ditebak (0). Lagi pula Finex swap mati (SwapMode 0, US30
+  // menginap 8→9 Okt = 0,00). Dulu +0,09 dari rumus poin lama = keliru.
+  // +1.42 − 0.01 komisi + 0 swap = +1.41.
   assert(
     exited.realizedPnl !== undefined &&
-      Math.abs(exited.realizedPnl - 1.5) < 0.03,
+      Math.abs(exited.realizedPnl - 1.41) < 0.03,
     `realized=${exited.realizedPnl}`,
   );
   assert(exited.realizedCurrency === "USD", "ccy realized salah");
-  assert(
-    exited.swapAtExit !== undefined &&
-      Math.abs(exited.swapAtExit - 0.09) < 0.03,
-    `swapAtExit=${exited.swapAtExit}`,
-  );
+  assert(exited.swapAtExit === 0, `swapAtExit=${exited.swapAtExit}`);
   // Asli tak termutasi (murni).
   assert(holding.status === undefined, "objek asli termutasi");
   // Sudah EXITED / harga invalid → null.
