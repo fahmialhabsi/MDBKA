@@ -1,7 +1,7 @@
 import {
   getInstrumentSpec32,
 } from "./instrumentSpecs32";
-import { getSpec32SwapPreview } from "./spec32Wiring";
+import { estimateSwap } from "./swapEstimate";
 import { parseSnapshotTime } from "./dataFreshness";
 import { priceDigits, tickSizeForSymbol } from "./tickSize";
 import { riskGroupOf } from "./riskGroup";
@@ -259,6 +259,8 @@ export function evaluateExitSignal(
   ask: number,
   convertToUsd?: (amount: number, currency: string) => number | null,
   nowMs: number = Date.now(),
+  /** SW2b: jam server MT5 sekarang (timestamp quote live) untuk perkiraan swap. */
+  nowServer: string | null = null,
 ): ExitEvaluation {
   const fallback: ExitEvaluation = {
     signal: "HOLD",
@@ -295,7 +297,7 @@ export function evaluateExitSignal(
       pnl: pnlOnly?.value ?? null,
       pnlCurrency: pnlOnly?.currency ?? "USD",
       pnlNet: pnlOnly !== null && comm !== null ? round2(pnlOnly.value - comm) : null,
-      swap: calculateHoldingSwap(holding, nowMs),
+      swap: calculateHoldingSwap(holding, nowMs, { nowServer, price: holding.direction === "BELI" ? bid : ask, convertToUsd }),
     };
   }
 
@@ -322,7 +324,7 @@ export function evaluateExitSignal(
     pnlValue !== null && commission !== null
       ? round2(pnlValue - commission)
       : null;
-  const swap = calculateHoldingSwap(holding, nowMs);
+  const swap = calculateHoldingSwap(holding, nowMs, { nowServer, price: ref, convertToUsd });
 
   const tpHit =
     holding.direction === "BELI" ? ref >= holding.tp : ref <= holding.tp;
@@ -794,8 +796,19 @@ export interface HoldingSwap {
 }
 
 export function calculateHoldingSwap(
-  holding: Pick<Holding, "symbol" | "direction" | "lot" | "entryTime" | "brokerSwap">,
+  holding: Pick<Holding, "symbol" | "direction" | "lot" | "entryTime" | "brokerSwap"> &
+    Partial<Pick<Holding, "brokerId" | "entryPrice">>,
   nowMs: number = Date.now(),
+  /**
+   * SW2b: konteks perkiraan — jam server SEKARANG (quote live), harga acuan,
+   * konversi kurs. Tanpa ini (atau entry bukan jam server MT5) perkiraan = null:
+   * lebih jujur daripada rumus poin lama yang salah (Finex mati, OTB persen).
+   */
+  estimate?: {
+    readonly nowServer?: string | null;
+    readonly price?: number | null;
+    readonly convertToUsd?: (amount: number, currency: string) => number | null;
+  },
 ): HoldingSwap | null {
   if (
     !Number.isFinite(holding.lot) ||
@@ -812,19 +825,31 @@ export function calculateHoldingSwap(
     return { value: round2(holding.brokerSwap), currency: "USD", daysHeld: Math.max(0, daysHeld), source: "MT5" };
   }
   if (daysHeld <= 0) return { value: 0, currency: "USD", daysHeld: 0, source: "PERKIRAAN" };
-  const preview = getSpec32SwapPreview({
-    symbol: holding.symbol,
-    daysHeld,
-    direction: holding.direction === "BELI" ? "LONG" : "SHORT",
-    tradeDatetime: new Date(entryMs),
-  });
-  if (preview === null) return null;
-  return {
-    value: round2(preview.swapUSD * holding.lot),
-    currency: "USD",
-    daysHeld,
-    source: "PERKIRAAN",
-  };
+  // SW2b: perkiraan mengikuti mode broker (swapEstimate.ts), jam server ke jam server.
+  const price = estimate?.price ?? holding.entryPrice ?? null;
+  if (
+    holding.brokerId === undefined ||
+    estimate?.nowServer == null ||
+    estimate.convertToUsd === undefined ||
+    price === null ||
+    !/^\d{4}\.\d{2}\.\d{2} /.test(holding.entryTime.trim())
+  ) {
+    return null;
+  }
+  const est = estimateSwap(
+    {
+      symbol: holding.symbol,
+      broker: holding.brokerId,
+      direction: holding.direction,
+      lot: holding.lot,
+      price,
+      entryServer: holding.entryTime,
+      nowServer: estimate.nowServer,
+    },
+    estimate.convertToUsd,
+  );
+  if (est === null) return null;
+  return { value: est.value, currency: "USD", daysHeld, source: "PERKIRAAN" };
 }
 
 /**

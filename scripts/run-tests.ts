@@ -7791,6 +7791,19 @@ test("618. SW2 perkiraan swap ikut mode broker: OTB persen/360 (cocok History), 
   assert(finex !== null && finex.mode === "MATI" && finex.value === 0, "Finex swap mati (US30 menginap = 0,00)");
 });
 
+test("619. SW2b monitor posisi: perkiraan swap pakai mesin mode broker + jam server quote", () => {
+  const ex = readSrc("src/lib/exitMonitor.ts");
+  assert(ex.includes('import { estimateSwap } from "./swapEstimate";') && !ex.includes("getSpec32SwapPreview"), "rumus poin lama dicabut");
+  assert(ex.includes("calculateHoldingSwap(holding, nowMs, { nowServer, price: ref, convertToUsd })"), "evaluasi pakai jam server + harga acuan");
+  const dash = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(dash.includes("convert, undefined, live.timestamp)"), "kartu meneruskan jam server quote live");
+  const finex = evaluateExitSignal(
+    { ...makeHolding({ symbol: "US30", entryPrice: 51273.15, sl: 51113.17, tp: 51512.26, entryTime: "2026.10.08 23:23:28" }) },
+    51300, 51302, testToUsd, Date.parse("2026-10-09T08:00:00.000Z"), "2026.10.09 11:00:00",
+  );
+  assert(finex.swap !== null && finex.swap.value === 0 && finex.swap.source === "PERKIRAAN", `Finex swap mati: ${JSON.stringify(finex.swap)}`);
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
@@ -10580,23 +10593,25 @@ test("452. calculateHoldingSwap: intraday 0, multi-hari via spec32", () => {
   if (intraday === null) throw new Error("intraday null");
   assert(intraday.value === 0 && intraday.daysHeld === 0, "intraday bukan 0");
   assert(intraday.currency === "USD", "ccy salah");
-  // AUDCAD_ORB buy 0.1, entry 2 Okt 17:42 → 5 Okt 10:00 = 2 hari penuh.
-  // LONG −0.75 × 2 hari × 0.70 × 0.1 lot = −0.105 → −0.1 (Jum+Sab, tanpa triple).
-  const multi = calculateHoldingSwap(
-    makeHolding({
-      symbol: "AUDCAD_ORB",
-      entryPrice: 0.99132,
-      sl: 0.98895,
-      tp: 0.99523,
-      lot: 0.1,
-      entryTime: "2026.10.02 17:42:46",
-    }),
-    now,
-  );
+  // SW2b (10 Okt): perkiraan ikut mode broker (OTB persen/360). AUDCAD_ORB 0,1
+  // Jum 2 Okt 17:42 → Sen 5 Okt 10:00 jam server = 1 hari tagih (Jumat;
+  // akhir pekan 0) × 0,1 × 100.000 × 0,99132 × −0,75% ÷ 360 = −0,2065 CAD ≈ −0,15 USD.
+  const cad = (amount: number, ccy: string) => (ccy === "USD" ? amount : ccy === "CAD" ? amount / 1.405 : null);
+  const audcad = makeHolding({
+    symbol: "AUDCAD_ORB",
+    brokerId: "orbitraderberjangka",
+    entryPrice: 0.99132,
+    sl: 0.98895,
+    tp: 0.99523,
+    lot: 0.1,
+    entryTime: "2026.10.02 17:42:46",
+  });
+  const multi = calculateHoldingSwap(audcad, now, { nowServer: "2026.10.05 10:00:00", price: 0.99132, convertToUsd: cad });
   assert(multi !== null, "multi-hari null");
   if (multi === null) throw new Error("multi-hari null");
-  assert(multi.daysHeld === 2, `days=${multi.daysHeld}`);
-  assert(Math.abs(multi.value - -0.1) < 0.02, `swap=${multi.value}`);
+  assert(multi.daysHeld === 2 && multi.source === "PERKIRAAN", `days=${multi.daysHeld}`);
+  assert(multi.value === -0.15, `swap=${multi.value}`);
+  assert(calculateHoldingSwap(audcad, now) === null, "tanpa jam server = tanpa perkiraan (bukan rumus poin lama)");
   // Entry invalid / simbol unknown / lot 0 → null.
   assert(
     calculateHoldingSwap(makeHolding({ entryTime: "kapan" }), now) === null,

@@ -126,7 +126,7 @@ function HoldingCard({
   const evaluation =
     exited || live === undefined
       ? null
-      : evaluateExitSignal(holding, live.bid, live.ask, convert);
+      : evaluateExitSignal(holding, live.bid, live.ask, convert, undefined, live.timestamp);
   const breakeven =
     exited || live === undefined
       ? null
@@ -531,7 +531,7 @@ export function HoldingsDashboard({
       if (h.symbol !== symbol || (h.status ?? "OPEN") === "EXITED") continue;
       const live = quotes[symbol];
       if (live === undefined) continue;
-      const ev = evaluateExitSignal(h, live.bid, live.ask, convert);
+      const ev = evaluateExitSignal(h, live.bid, live.ask, convert, undefined, live.timestamp);
       if (ev.pnlNet === null || ev.pnlCurrency !== "USD") continue;
       usd += ev.pnlNet;
       count++;
