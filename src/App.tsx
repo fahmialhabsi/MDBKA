@@ -50,6 +50,7 @@ import { analyzeMarket } from "./calculations/decisionEngine";
 import { detectScaleMismatch } from "./calculations/scaleValidator";
 import { validateAnalysisInputs } from "./calculations/inputValidator";
 import { SUPPORTED_SYMBOLS } from "./lib/instrumentConfig";
+import { MIFX_SPEC_SYMBOLS } from "./lib/mifxSpecs";
 import { parseCsvCandles } from "./lib/csvCandleParser";
 import { resolveSwingLevels } from "./calculations/swingDetector";
 import { computeIndicators } from "./calculations/indicators";
@@ -396,7 +397,13 @@ export default function App() {
     // Kecocokan terpanjang dulu (sama dengan handleCsvLoaded).
     const longestFirst = (list: readonly string[]) =>
       [...list].sort((a, b) => b.length - a.length);
+    // M4b-1: MIFX dicek dulu (nama .m, tanpa peka huruf) agar "EURUSD.m" tidak terbaca "EURUSD" Finex.
     const token =
+      (activeBrokerId === "mifx"
+        ? longestFirst(MIFX_SPEC_SYMBOLS).find((candidate) =>
+            upper.includes(candidate.toUpperCase()),
+          )
+        : undefined) ??
       longestFirst(OTB_ALL_SYMBOLS).find((candidate) =>
         upper.includes(candidate),
       ) ??
@@ -632,6 +639,11 @@ export default function App() {
       const longestFirst = (list: readonly string[]) =>
         [...list].sort((a, b) => b.length - a.length);
       const fileToken =
+        (activeBrokerId === "mifx"
+          ? longestFirst(MIFX_SPEC_SYMBOLS).find((candidate) =>
+              upperName.includes(candidate.toUpperCase()),
+            )
+          : undefined) ??
         longestFirst(OTB_ALL_SYMBOLS).find((candidate) =>
           upperName.includes(candidate),
         ) ??
@@ -844,7 +856,9 @@ export default function App() {
       setBrokerNotice(
         nextBrokerId === "orbitraderberjangka"
           ? "Broker aktif: OrbiTraderBerjangka. Preset instrumen belum diaktifkan. Verifikasi simbol dan parameter broker dari Specification OrbiTraderBerjangka terlebih dahulu."
-          : "Broker aktif: Finex. Gunakan CSV dan parameter dari terminal Finex.",
+          : nextBrokerId === "mifx"
+            ? "Broker aktif: MIFX (demo). Simbol berakhiran .m; aturan dari Specification MT5 MIFX, komisi 10 USD/lot pulang-pergi."
+            : "Broker aktif: Finex. Gunakan CSV dan parameter dari terminal Finex.",
       );
       clearAnalysisOutput();
     },
@@ -963,6 +977,19 @@ export default function App() {
                   }`}
                 >
                   OTB
+                </button>
+                <button
+                  type="button"
+                  data-testid="broker-tab-mifx"
+                  aria-pressed={activeBrokerId === "mifx"}
+                  onClick={() => handleBrokerChange("mifx")}
+                  className={`px-4 py-1.5 text-xs font-bold ${
+                    activeBrokerId === "mifx"
+                      ? "bg-emerald-400 text-slate-950"
+                      : "bg-transparent text-slate-300 hover:bg-white/10"
+                  }`}
+                >
+                  MIFX
                 </button>
               </div>
             </div>

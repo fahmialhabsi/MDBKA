@@ -3481,7 +3481,7 @@ test("175. object registry tidak boleh dimutasi oleh pemanggil", () => {
     "registry berhasil dimutasi via push",
   );
   assert(
-    BROKER_PROFILES.length === 2,
+    BROKER_PROFILES.length === 3, // M4b-1: + MIFX
     `jumlah profil=${BROKER_PROFILES.length}`,
   );
 
@@ -7945,6 +7945,13 @@ test("630. M4a-2 aturan broker MIFX: kontrak/komisi/lot dari Specification, nila
   assert(Math.abs(usd.pointValue - 100000 * 1.12 / 0.846) < 1, `EURGBP.m nilai poin GBP→USD ${usd.pointValue}`);
   assert(normalizeSymbol("NQ.m") === "US100" && normalizeSymbol("OIL_NEXT") === "XTIUSD" && normalizeSymbol("DJ.m") === "US30", "profil skala harga");
   assert(normalizeSymbol("GBPUSD.pro") === "GBPUSD" && normalizeSymbol("US100,H1") === "US100", "normalisasi lama tetap");
+});
+
+test("631. M4b-1 tab MIFX di dashboard: broker terdaftar, tombol, nama file .m dikenali", () => {
+  assert(isSupportedBrokerId("mifx") && getBrokerProfile("mifx").label === "MIFX" && BROKER_PROFILES.length === 3, "registry");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes('data-testid="broker-tab-mifx"') && app.includes('onClick={() => handleBrokerChange("mifx")}'), "tombol MIFX");
+  assert(app.includes("longestFirst(MIFX_SPEC_SYMBOLS).find((candidate) =>") && app.includes("upperName.includes(candidate.toUpperCase())"), "nama file CSV .m");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

@@ -52,6 +52,18 @@ function buildOrbitraderProfile(): BrokerProfile {
   };
 }
 
+export const MIFX_BROKER_ID = "mifx" as const;
+
+/** M4b-1 (10 Okt 2026): MIFX — aturan simbol di mifxSpecs.ts (bukan preset Finex). */
+function buildMifxProfile(): BrokerProfile {
+  return {
+    id: MIFX_BROKER_ID,
+    label: "MIFX",
+    instruments: [],
+    note: "PT Monex Investindo Futures (demo 1003997005). Simbol akhiran .m; aturan dari Specification MT5 MIFX.",
+  };
+}
+
 function freezeProfile(profile: BrokerProfile): BrokerProfile {
   Object.freeze(profile.instruments);
   return Object.freeze(profile);
@@ -64,12 +76,13 @@ function freezeProfile(profile: BrokerProfile): BrokerProfile {
 export const BROKER_PROFILES: readonly BrokerProfile[] = Object.freeze([
   freezeProfile(buildFinexProfile()),
   freezeProfile(buildOrbitraderProfile()),
+  freezeProfile(buildMifxProfile()),
 ]);
 
 /** True bila value adalah id broker yang didukung. */
 export function isSupportedBrokerId(value: string): value is BrokerId {
   return (
-    value === FINEX_BROKER_ID || value === ORBITRADER_BROKER_ID
+    value === FINEX_BROKER_ID || value === ORBITRADER_BROKER_ID || value === MIFX_BROKER_ID
   );
 }
 
