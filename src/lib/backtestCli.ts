@@ -11,7 +11,7 @@ import { DEFAULT_STRATEGY_ID, parseStrategyId, STRATEGY_IDS, type StrategyId } f
 export interface BacktestCliOptions {
   readonly brokerId: BrokerId;
   /** Nama file Margin MT5: MDBKA_Margin_<tag>.csv. */
-  readonly marginTag: "Finex" | "OTB";
+  readonly marginTag: "Finex" | "OTB" | "MIFX";
   readonly equity: number;
   /** null = semua golongan. */
   readonly groups: readonly RiskGroupId[] | null;
@@ -30,7 +30,7 @@ export type ParsedArgs =
   | { readonly ok: false; readonly error: string };
 
 export const BACKTEST_USAGE =
-  "Pakai: npm run backtest -- --broker finex|otb --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD] [--strategi skor] [--batas-waktu 3|6|12|0] [--timeframe H1|H4]";
+  "Pakai: npm run backtest -- --broker finex|otb|mifx --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD] [--strategi skor] [--batas-waktu 3|6|12|0] [--timeframe H1|H4]";
 
 const GROUP_IDS: readonly RiskGroupId[] = [
   "FOREX", "FOREX_JPY", "FOREX_TIDAK_LAZIM", "LOGAM", "MINYAK", "INDEKS",
@@ -44,7 +44,7 @@ export function parseBacktestArgs(argv: readonly string[]): ParsedArgs {
   };
   const broker = (get("--broker") ?? "").toLowerCase();
   let brokerId: BrokerId;
-  let marginTag: "Finex" | "OTB";
+  let marginTag: "Finex" | "OTB" | "MIFX";
   if (broker === "finex") {
     brokerId = "finex";
     marginTag = "Finex";
@@ -52,9 +52,11 @@ export function parseBacktestArgs(argv: readonly string[]): ParsedArgs {
     brokerId = "orbitraderberjangka";
     marginTag = "OTB";
   } else if (broker === "mifx") {
-    return { ok: false, error: "MIFX belum didukung: belum ada file MDBKA_Margin_MIFX.csv (sumber spread)." };
+    // E2c (12 Okt 2026): spread dari MDBKA_Margin_MIFX.csv (ExportMarginMDBKA di terminal MIFX).
+    brokerId = "mifx";
+    marginTag = "MIFX";
   } else {
-    return { ok: false, error: `Broker wajib finex atau otb. ${BACKTEST_USAGE}` };
+    return { ok: false, error: `Broker wajib finex, otb, atau mifx. ${BACKTEST_USAGE}` };
   }
   const equity = Number(get("--equity") ?? "");
   if (!Number.isFinite(equity) || equity <= 0) {

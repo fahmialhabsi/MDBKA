@@ -8122,7 +8122,8 @@ test("640. B4 perintah backtest: argumen broker/equity/golongan diperiksa jujur"
   const otb = parseBacktestArgs(["--broker", "otb", "--equity", "4812"]);
   assert(otb.ok && otb.options.brokerId === "orbitraderberjangka" && otb.options.marginTag === "OTB" && otb.options.groups === null, JSON.stringify(otb));
   const mifx = parseBacktestArgs(["--broker", "mifx", "--equity", "100"]);
-  assert(!mifx.ok && mifx.error.includes("MIFX belum didukung"), "MIFX ditolak jujur (tanpa spread)");
+  // E2c (12 Okt 2026): MIFX kini didukung (spread dari MDBKA_Margin_MIFX.csv); file tak ada → ditolak di scripts/backtest.ts.
+  assert(mifx.ok && mifx.options.brokerId === "mifx" && mifx.options.marginTag === "MIFX", "MIFX didukung lewat file Margin MIFX");
   const tanpaEquity = parseBacktestArgs(["--broker", "finex"]);
   assert(!tanpaEquity.ok && tanpaEquity.error.includes("Equity"), "equity wajib");
   const grupSalah = parseBacktestArgs(["--broker", "finex", "--equity", "10", "--grup", "KRIPTO"]);
@@ -8442,6 +8443,22 @@ test("657. E2 alat uji H4: default H1 identik, --timeframe H4 diteruskan dengan 
   assert(JSON.stringify(runBacktest(base)) === JSON.stringify(runBacktest({ ...base, barHours: 1 })), "barHours 1 = default");
   const src = readSrc("scripts/backtest.ts");
   assert(src.includes("aggregateCandleCsv(readFileSync(longFile(symbol), \"utf8\"), 4)") && src.includes("{ barHours: 4 }"), "H4 dirakit & lama candle 4 jam");
+});
+
+test("658. E2b ekspor H4 asli: script MT5 punya pilihan timeframe (default H1 = B1), backtest mendahulukan file H4 asli", () => {
+  const mq = readSrc("ea/ExportLongH1MDBKA.mq5");
+  assert(mq.includes("input ENUM_TIMEFRAMES InpPeriod = PERIOD_H1;") && mq.includes("CopyRates(symbol, InpPeriod, 1, candleCount, rates)"), "pilihan timeframe, default H1");
+  assert(mq.includes('"MDBKA_" + symbol + "_" + tf + "_LONG.csv"') && mq.includes('(InpPeriod == PERIOD_H4) ? "H4" : "H1"'), "nama file H1 lama tetap, H4 terpisah");
+  assert(mq.includes("InpPeriod != PERIOD_H1 && InpPeriod != PERIOD_H4"), "timeframe lain ditolak");
+  const src = readSrc("scripts/backtest.ts");
+  assert(src.includes("MDBKA_${s}_H4_LONG.csv") && src.includes("h4Native(symbol)") && src.includes("Sumber H4:"), "H4 asli didahulukan + dicatat di rapor");
+});
+
+test("659. E2c MIFX: script margin mengenali Monex, backtest MIFX butuh file spread (ditolak jujur bila tak ada)", () => {
+  assert(readSrc("ea/ExportMarginMDBKA.mq5").includes('StringFind(company, "Monex") >= 0) tag = "MIFX"'), "MIFX terdeteksi otomatis");
+  const salah = parseBacktestArgs(["--broker", "xyz", "--equity", "100"]);
+  assert(!salah.ok && salah.error.includes("finex, otb, atau mifx"), salah.ok ? "" : salah.error);
+  assert(readSrc("scripts/backtest.ts").includes("File spread tidak ada: ${marginFile}"), "file Margin MIFX tak ada → berhenti dengan pesan, tanpa spread tebakan");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

@@ -13,6 +13,7 @@ void OnStart()
       string company = AccountInfoString(ACCOUNT_COMPANY);
       if(StringFind(company, "Finex") >= 0)     tag = "Finex";
       else if(StringFind(company, "Orbi") >= 0) tag = "OTB";
+      else if(StringFind(company, "Monex") >= 0) tag = "MIFX";   // E2c (12 Okt 2026)
       else
       {
          Print("MDBKA margin: broker tidak dikenal '", company, "', isi BrokerTag manual");

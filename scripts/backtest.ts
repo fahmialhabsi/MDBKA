@@ -37,6 +37,9 @@ async function main(): Promise<number> {
   }
   const spreads = parseSpreadsFromMargin(readFileSync(marginFile, "utf8"));
   const longFile = (s: string): string => join(dir, `MDBKA_${s}_H1_LONG.csv`);
+  // E2b: H4 asli dari MT5 (ExportLongH1MDBKA InpPeriod=H4) didahulukan; tidak ada → dirakit dari H1.
+  const h4File = (s: string): string => join(dir, `MDBKA_${s}_H4_LONG.csv`);
+  const h4Native = (s: string): boolean => opt.timeframe === "H4" && existsSync(h4File(s));
   const picked = pickBacktestSymbols(spreads, (s) => existsSync(longFile(s)), opt);
   if (picked.symbols.length === 0) {
     console.error("Tidak ada simbol yang bisa diuji.", picked.notes.join("; "));
@@ -50,6 +53,9 @@ async function main(): Promise<number> {
     `Spread dari ${marginFile.split(/[\\/]/).pop() ?? marginFile}.`,
     ecb !== FALLBACK_RATES ? `Kurs silang ECB ${ecb.ecbDate ?? ecb.fetchedAt ?? "-"}.` : `Kurs silang: cadangan bawaan ${FALLBACK_RATES.fetchedAt ?? ""} (ECB tidak terjangkau).`,
     ...picked.notes,
+    ...(opt.timeframe === "H4"
+      ? [`Sumber H4: ${picked.symbols.filter(h4Native).length} simbol file asli MT5, ${picked.symbols.filter((s) => !h4Native(s)).length} simbol dirakit dari H1.`]
+      : []),
   ];
   const rates = kurs === null ? ecb : { ...ecb, IDR: kurs.rate * ecb.USD };
 
@@ -58,9 +64,11 @@ async function main(): Promise<number> {
       const run = runBacktest({
         symbol,
         brokerId: opt.brokerId,
-        csv: opt.timeframe === "H4"
-          ? aggregateCandleCsv(readFileSync(longFile(symbol), "utf8"), 4)
-          : readFileSync(longFile(symbol), "utf8"),
+        csv: h4Native(symbol)
+          ? readFileSync(h4File(symbol), "utf8")
+          : opt.timeframe === "H4"
+            ? aggregateCandleCsv(readFileSync(longFile(symbol), "utf8"), 4)
+            : readFileSync(longFile(symbol), "utf8"),
         ...(opt.timeframe === "H4" ? { barHours: 4 } : {}),
         equity,
         fxRates: rates,
