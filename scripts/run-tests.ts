@@ -28,7 +28,10 @@ import {
 } from "../src/calculations/indicators";
 import {
   analyzeMarket,
+  applyRiskGates,
   MAX_COST_SHARE_OF_RISK,
+  scoreSetup,
+  type StrategySetup,
 } from "../src/calculations/decisionEngine";
 import { formatSharePercent, signalReason } from "../src/lib/signalReason";
 import { collectCandleItems } from "../server/routes/candlesRoutes";
@@ -8148,6 +8151,31 @@ test("642. B4 teks rapor: latih, ujian, vonis, satpam yang dilewati, catatan", (
   }
   assert(readSrc("package.json").includes('"backtest": "tsx scripts/backtest.ts"'), "perintah npm run backtest");
   assert(!readSrc("scripts/backtest.ts").includes("writeFileSync"), "perintah backtest hanya membaca");
+});
+
+test("643. S1 colokan strategi: analyzeMarket = applyRiskGates(scoreSetup) dan setup strategi lain memakai rumus risiko yang sama", () => {
+  const market: MarketData = {
+    symbol: "GBPUSD", timeframe: "H1", bid: 1.3, ask: 1.30012, close: 1.301, open: 1.3, high: 1.302, low: 1.299,
+    ma50: 1.29, cci: 150, rsi: 60, macd: 0.001, macdSignal: 0, atr: 0.002, support: 1.297, resistance: 1.305,
+  };
+  const broker: BrokerSettings = {
+    equity: 10000, riskPercent: 1, minLot: 0.01, lotStep: 0.01, pointValue: 100000, contractSize: 100000,
+    commission: 1, slippage: 0, buffer: 0.0002, atrMultiplier: 1.5, targetRR: 2,
+  };
+  const setup = scoreSetup(market, broker);
+  assert(setup.decision === "BELI" && setup.score === 5 && setup.factors.length === 4, JSON.stringify(setup));
+  assert(JSON.stringify(applyRiskGates(market, broker, setup)) === JSON.stringify(analyzeMarket(market, broker)), "belah dua harus identik");
+  // Strategi lain (mis. candlestick) cukup kirim setup; lot/risiko dihitung rumus yang sama.
+  const lain: StrategySetup = {
+    decision: "BELI", score: 0, trendScore: 0, cciScore: 0, macdScore: 0, rsiScore: 0,
+    entry: 1.30012, stopLoss: 1.29812, takeProfit: 1.30412, riskDistance: 0.002, targetDistance: 0.004,
+    factors: ["Wick bawah panjang di lembah tren naik"], waitWarning: "-", waitExplanation: "-",
+  };
+  const r = applyRiskGates(market, broker, lain);
+  // risiko 1 lot = (0.002 + spread 0.00012) × 100000 + 1 = 213 USD → lot 0.01 = 2.13 USD; biaya 13/213 = 6,1% (lolos)
+  assert(r.decision === "BELI" && r.riskAtMinLot === 2.13 && r.suggestedLot === 0.46 && r.factors[0].startsWith("Wick"), JSON.stringify(r));
+  const mahal = applyRiskGates(market, { ...broker, commission: 33 }, lain) /* 45/245 = 18% > 10% */;
+  assert(mahal.decision === "TUNGGU" && mahal.heldBy === "biaya" && mahal.heldDecision === "BELI" && mahal.stopLoss === null, "gerbang biaya Mode Aman berlaku untuk strategi lain");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

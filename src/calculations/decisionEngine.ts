@@ -23,13 +23,44 @@ function floorToStep(value: number, step: number) {
   return Math.floor(value / step) * step;
 }
 
+/**
+ * S1 (12 Okt 2026) — usulan setup dari SATU strategi (arah + SL/TP),
+ * SEBELUM risiko & gerbang Mode Aman. Strategi lain cukup menghasilkan
+ * objek ini; lot, batas Rupiah, dan gerbang biaya tetap satu rumus
+ * (applyRiskGates). Angka belum dibulatkan.
+ */
+export interface StrategySetup {
+  readonly decision: Decision;
+  readonly score: number;
+  readonly trendScore: number;
+  readonly cciScore: number;
+  readonly macdScore: number;
+  readonly rsiScore: number;
+  readonly entry: number;
+  readonly stopLoss: number | null;
+  readonly takeProfit: number | null;
+  readonly riskDistance: number | null;
+  readonly targetDistance: number | null;
+  /** Alasan pendukung yang ditampilkan (urut). */
+  readonly factors: readonly string[];
+  /** Peringatan saat TUNGGU murni (bukan ditahan Mode Aman). */
+  readonly waitWarning: string;
+  /** Penjelasan saat TUNGGU murni. */
+  readonly waitExplanation: string;
+}
+
 export function analyzeMarket(
   market: MarketData,
   broker: BrokerSettings
 ): AnalysisResult {
-  // Satuan pembulatan mengikuti desimal instrumen aktif
-  // (forex 5/3 desimal, indeks 2 desimal), bukan nilai tetap.
-  const priceDecimals = getInstrumentProfile(market.symbol).decimals;
+  return applyRiskGates(market, broker, scoreSetup(market, broker));
+}
+
+/** Strategi bawaan "skor indikator" (MA50 + CCI + MACD + RSI). */
+export function scoreSetup(
+  market: MarketData,
+  broker: BrokerSettings
+): StrategySetup {
   const trendScore =
     market.close > market.ma50
       ? 2
@@ -95,6 +126,61 @@ export function analyzeMarket(
     takeProfit = entry - riskDistance * broker.targetRR;
     targetDistance = entry - takeProfit;
   }
+
+  const factors: string[] = [];
+
+  if (trendScore > 0) {
+    factors.push("Harga berada di atas MA50");
+  } else if (trendScore < 0) {
+    factors.push("Harga berada di bawah MA50");
+  } else {
+    factors.push("Harga berada di sekitar MA50");
+  }
+
+  if (cciScore > 0) factors.push("CCI menunjukkan tekanan bullish");
+  if (cciScore < 0) factors.push("CCI menunjukkan tekanan bearish");
+
+  if (macdScore > 0) factors.push("MACD berada di atas signal");
+  if (macdScore < 0) factors.push("MACD berada di bawah signal");
+
+  if (rsiScore > 0) factors.push("RSI mendukung momentum bullish");
+  if (rsiScore < 0) factors.push("RSI mendukung momentum bearish");
+
+  return {
+    decision,
+    score,
+    trendScore,
+    cciScore,
+    macdScore,
+    rsiScore,
+    entry,
+    stopLoss,
+    takeProfit,
+    riskDistance,
+    targetDistance,
+    factors,
+    waitWarning: "Skor belum cukup kuat atau indikator belum searah.",
+    waitExplanation:
+      "Lebih baik menunggu karena skor belum cukup kuat atau indikator masih bertentangan.",
+  };
+}
+
+/**
+ * Risiko + gerbang Mode Aman untuk setup dari strategi MANA PUN
+ * (rumus tunggal: lot, batas Rupiah golongan, biaya 10%).
+ */
+export function applyRiskGates(
+  market: MarketData,
+  broker: BrokerSettings,
+  setup: StrategySetup
+): AnalysisResult {
+  // Satuan pembulatan mengikuti desimal instrumen aktif
+  // (forex 5/3 desimal, indeks 2 desimal), bukan nilai tetap.
+  const priceDecimals = getInstrumentProfile(market.symbol).decimals;
+  const { score, trendScore, cciScore, macdScore, rsiScore, entry, riskDistance, targetDistance } = setup;
+  let decision: Decision = setup.decision;
+  let stopLoss: number | null = setup.stopLoss;
+  let takeProfit: number | null = setup.takeProfit;
 
   const pctRiskUsd = broker.equity * (broker.riskPercent / 100);
   // Mode Aman R2: batas golongan (Rupiah→USD); dipakai yang lebih kecil.
@@ -189,24 +275,7 @@ export function analyzeMarket(
     suggestedLot = null;
   }
 
-  const factors: string[] = [];
-
-  if (trendScore > 0) {
-    factors.push("Harga berada di atas MA50");
-  } else if (trendScore < 0) {
-    factors.push("Harga berada di bawah MA50");
-  } else {
-    factors.push("Harga berada di sekitar MA50");
-  }
-
-  if (cciScore > 0) factors.push("CCI menunjukkan tekanan bullish");
-  if (cciScore < 0) factors.push("CCI menunjukkan tekanan bearish");
-
-  if (macdScore > 0) factors.push("MACD berada di atas signal");
-  if (macdScore < 0) factors.push("MACD berada di bawah signal");
-
-  if (rsiScore > 0) factors.push("RSI mendukung momentum bullish");
-  if (rsiScore < 0) factors.push("RSI mendukung momentum bearish");
+  const factors: string[] = [...setup.factors];
 
   const warnings: string[] = [];
 
@@ -223,9 +292,7 @@ export function analyzeMarket(
     );
   }
   if (decision === "TUNGGU" && !blockedByCost && !blockedByRisk) {
-    warnings.push(
-      "Skor belum cukup kuat atau indikator belum searah."
-    );
+    warnings.push(setup.waitWarning);
   }
 
   if (riskAtMinLot !== null && riskAtMinLot > maxRiskUsd && !blockedByRisk) {
@@ -256,8 +323,7 @@ export function analyzeMarket(
     explanation =
       "Mode Aman: indikator searah, tetapi biaya atau risiko belum aman. Menjaga modal lebih penting daripada memaksa entry.";
   } else {
-    explanation =
-      "Lebih baik menunggu karena skor belum cukup kuat atau indikator masih bertentangan.";
+    explanation = setup.waitExplanation;
   }
 
   return {
