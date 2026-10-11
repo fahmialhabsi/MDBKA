@@ -244,6 +244,7 @@ import {
 } from "../src/services/fxRateService";
 import { withUsdPointValue } from "../src/lib/usdPointValue";
 import { resolveCsvBidAsk } from "../src/lib/csvQuote";
+import { BACKTEST_SKIPPED_GUARDS, BACKTEST_WINDOW, runBacktest, simulateTrade } from "../src/lib/backtest";
 import {
   calculateSwapWithTriple,
   getTripleSwapLabel,
@@ -7980,6 +7981,72 @@ test("633. M4b-3 History/Kalkulator/Golongan MIFX + parser broker=", () => {
   assert(readSrc("src/components/layout/AccountBalancesBar.tsx").includes("BROKER_IDS.map((b)"), "link History semua broker");
   assert(readSrc("src/components/analysis/CalculatorPage.tsx").includes('<option value="mifx">MIFX</option>'), "kalkulator MIFX");
   assert(readSrc("src/components/group/GroupPage.tsx").includes('setBroker("mifx")'), "golongan MIFX");
+});
+
+function btCsv(n: number, wave: (i: number) => number): string {
+  const rows = ["time,open,high,low,close,tick_volume"];
+  const start = Date.UTC(2026, 0, 5, 0, 0);
+  for (let i = 0; i < n; i++) {
+    const d = new Date(start + i * 3_600_000);
+    const t = `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${String(d.getUTCDate()).padStart(2, "0")} ${String(d.getUTCHours()).padStart(2, "0")}:00`;
+    const o = wave(i);
+    const c = wave(i + 1);
+    rows.push(`${t},${o.toFixed(5)},${(Math.max(o, c) + 0.0002).toFixed(5)},${(Math.min(o, c) - 0.0002).toFixed(5)},${c.toFixed(5)},100`);
+  }
+  return rows.join("\n");
+}
+
+function btCandle(time: string, open: number, high: number, low: number, close: number) {
+  return { time, open, high, low, close };
+}
+
+test("634. B2 simulasi BELI: TP/SL, SL & TP di candle sama = SL, loncat buka = harga buka", () => {
+  const plan = { direction: "BELI" as const, entry: 1.1, stopLoss: 1.099, takeProfit: 1.102 };
+  const tp = simulateTrade(plan, [btCandle("2026.01.05 01:00", 1.1, 1.1015, 1.0995, 1.101), btCandle("2026.01.05 02:00", 1.101, 1.1025, 1.1005, 1.102)], 0.0001, null, null);
+  assert(tp !== null && tp.outcome === "TP" && tp.exitIndex === 1 && tp.exitPrice === 1.102, JSON.stringify(tp));
+  const dua = simulateTrade(plan, [btCandle("2026.01.05 01:00", 1.1, 1.103, 1.098, 1.1)], 0.0001, null, null);
+  assert(dua !== null && dua.outcome === "SL" && dua.exitPrice === 1.099, `SL&TP sekandle harus SL: ${JSON.stringify(dua)}`);
+  const loncat = simulateTrade(plan, [btCandle("2026.01.05 01:00", 1.0985, 1.0988, 1.098, 1.0986)], 0.0001, null, null);
+  assert(loncat !== null && loncat.outcome === "SL" && loncat.exitPrice === 1.0985, `gap: ${JSON.stringify(loncat)}`);
+  assert(simulateTrade(plan, [], 0.0001, null, null) === null, "tanpa candle = null");
+});
+
+test("635. B2 simulasi JUAL pakai ask (+spread), time-stop 3 jam = WAKTU, data habis = TERBUKA", () => {
+  const plan = { direction: "JUAL" as const, entry: 1.1, stopLoss: 1.101, takeProfit: 1.098 };
+  // high 1.10095 + spread 0.0001 = 1.10105 >= SL → SL (ask yang kena, bukan bid)
+  const sl = simulateTrade(plan, [btCandle("2026.01.05 01:00", 1.1, 1.10095, 1.0995, 1.1)], 0.0001, null, null);
+  assert(sl !== null && sl.outcome === "SL", `JUAL harus kena SL lewat ask: ${JSON.stringify(sl)}`);
+  const sinyalMs = Date.UTC(2026, 0, 5, 0, 0);
+  const sepi = [1, 2, 3, 4].map((h) => btCandle(`2026.01.05 0${h}:00`, 1.0999, 1.1002, 1.0996, 1.0998));
+  const waktu = simulateTrade(plan, sepi, 0.0001, sinyalMs, 3);
+  assert(waktu !== null && waktu.outcome === "WAKTU" && waktu.exitIndex === 2 && Math.abs(waktu.exitPrice - 1.0999) < 1e-12, JSON.stringify(waktu));
+  const terbuka = simulateTrade(plan, sepi.slice(0, 2), 0.0001, sinyalMs, 3);
+  assert(terbuka !== null && terbuka.outcome === "TERBUKA" && terbuka.exitIndex === 1, JSON.stringify(terbuka));
+  const tanpaBatas = simulateTrade(plan, sepi, 0.0001, sinyalMs, null);
+  assert(tanpaBatas !== null && tanpaBatas.outcome === "TERBUKA", "golongan tanpa time-stop tidak boleh WAKTU");
+});
+
+test("636. B2 runBacktest: data kurang/rusak jujur, tanpa mengintip masa depan, status terhitung", () => {
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const base = { symbol: "GBPUSD", brokerId: "finex" as const, equity: 10000, fxRates: rates, spread: 0.00012 };
+  const pendek = runBacktest({ ...base, csv: btCsv(BACKTEST_WINDOW, () => 1.3) });
+  assert(pendek.error !== null && pendek.error.includes("Candle kurang") && pendek.trades.length === 0, String(pendek.error));
+  const gelombang = (i: number) => 1.3 + 0.004 * Math.sin(i / 40) + 0.0006 * Math.sin(i / 3);
+  const full = runBacktest({ ...base, csv: btCsv(700, gelombang) });
+  assert(full.error === null && full.candles === 700, String(full.error));
+  const total = Object.values(full.statusCount).reduce((a, b) => a + (b ?? 0), 0);
+  assert(total === full.evaluated && full.evaluated > 0, `status ${total} vs dinilai ${full.evaluated}`);
+  // Tanpa mengintip: memotong data masa depan tidak mengubah trade yang sudah tutup.
+  const potong = runBacktest({ ...base, csv: btCsv(500, gelombang) });
+  const tutup = potong.trades.filter((t) => t.outcome !== "TERBUKA");
+  assert(tutup.length > 0 && full.trades.length > tutup.length, `uji harus berisi trade: ${tutup.length}/${full.trades.length}`);
+  assert(tutup.every((t, k) => JSON.stringify(t) === JSON.stringify(full.trades[k])), "hasil berubah saat data masa depan dipotong = mengintip");
+  for (const t of full.trades) {
+    assert(t.signalTime < t.exitTime && t.bars >= 1, `urutan waktu: ${JSON.stringify(t)}`);
+    assert(t.outcome !== "WAKTU" || t.bars <= 3, `Forex WAKTU maks 3 candle: ${JSON.stringify(t)}`);
+  }
+  assert(BACKTEST_SKIPPED_GUARDS.length === 6, "daftar satpam yang dilewati wajib tampil di rapor");
+  assert(readSrc("src/lib/backtest.ts").includes("scanSymbol({") && !readSrc("src/lib/backtest.ts").includes("analyzeMarket"), "wajib lewat pemindai yang sama, tanpa jalur keputusan lain");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
