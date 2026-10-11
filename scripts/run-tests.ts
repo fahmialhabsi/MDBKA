@@ -246,6 +246,7 @@ import { withUsdPointValue } from "../src/lib/usdPointValue";
 import { resolveCsvBidAsk } from "../src/lib/csvQuote";
 import { BACKTEST_SKIPPED_GUARDS, BACKTEST_WINDOW, runBacktest, simulateTrade, type BacktestRun, type BacktestTrade } from "../src/lib/backtest";
 import { buildBacktestReport, summarizeTrades } from "../src/lib/backtestReport";
+import { formatBacktestReport, parseBacktestArgs, parseSpreadsFromMargin, pickBacktestSymbols } from "../src/lib/backtestCli";
 import {
   calculateSwapWithTriple,
   getTripleSwapLabel,
@@ -8106,6 +8107,47 @@ test("639. B3 runBacktest: tiap trade punya lot + hasil bersih USD (komisi dipot
   }
   const rapor = buildBacktestReport([run], 17000);
   assert(rapor.all.n + rapor.openAtEnd === run.trades.length, "semua trade terhitung");
+});
+
+test("640. B4 perintah backtest: argumen broker/equity/golongan diperiksa jujur", () => {
+  const ok = parseBacktestArgs(["--broker", "finex", "--equity", "10000", "--grup", "forex,FOREX_JPY", "--simbol", "GBPUSD,EURUSD"]);
+  assert(ok.ok && ok.options.brokerId === "finex" && ok.options.marginTag === "Finex" && ok.options.equity === 10000, JSON.stringify(ok));
+  assert(ok.ok && ok.options.groups?.join(",") === "FOREX,FOREX_JPY" && ok.options.symbols?.join(",") === "GBPUSD,EURUSD", "filter");
+  const otb = parseBacktestArgs(["--broker", "otb", "--equity", "4812"]);
+  assert(otb.ok && otb.options.brokerId === "orbitraderberjangka" && otb.options.marginTag === "OTB" && otb.options.groups === null, JSON.stringify(otb));
+  const mifx = parseBacktestArgs(["--broker", "mifx", "--equity", "100"]);
+  assert(!mifx.ok && mifx.error.includes("MIFX belum didukung"), "MIFX ditolak jujur (tanpa spread)");
+  const tanpaEquity = parseBacktestArgs(["--broker", "finex"]);
+  assert(!tanpaEquity.ok && tanpaEquity.error.includes("Equity"), "equity wajib");
+  const grupSalah = parseBacktestArgs(["--broker", "finex", "--equity", "10", "--grup", "KRIPTO"]);
+  assert(!grupSalah.ok && grupSalah.error.includes("KRIPTO"), "golongan salah ditolak");
+});
+
+test("641. B4 spread dari file Margin + pilih simbol yang punya data", () => {
+  const margin = "Symbol,Ask,Bid,Margin_Buy_1Lot,Margin_Sell_1Lot,Account_Leverage,Account_Currency,Exported\n" +
+    "AUDCAD,0.99506,0.99492,139.44,139.43,500,USD,2026.10.06 10:41:00\n" +
+    "USDJPY,147.512,147.5,200,200,500,USD,2026.10.06 10:41:00\n" +
+    "XAUUSD,2650.5,2650.1,500,500,500,USD,2026.10.06 10:41:00\n" +
+    "RUSAK,0,0,1,1,500,USD,2026.10.06 10:41:00\n";
+  const spreads = parseSpreadsFromMargin(margin);
+  assert(spreads.size === 3 && spreads.get("AUDCAD") === 0.00014 && spreads.get("USDJPY") === 0.012, JSON.stringify([...spreads]));
+  const semua = pickBacktestSymbols(spreads, (s) => s !== "USDJPY", { groups: null, symbols: null });
+  assert(semua.symbols.join(",") === "AUDCAD,XAUUSD" && semua.notes.some((n) => n.startsWith("USDJPY: file MDBKA_USDJPY_H1_LONG.csv belum ada")), JSON.stringify(semua));
+  const forex = pickBacktestSymbols(spreads, () => true, { groups: ["FOREX"], symbols: null });
+  assert(forex.symbols.join(",") === "AUDCAD", JSON.stringify(forex));
+  const pilih = pickBacktestSymbols(spreads, () => true, { groups: null, symbols: ["xauusd", "EURUSD"] });
+  assert(pilih.symbols.join(",") === "XAUUSD" && pilih.notes.some((n) => n.startsWith("EURUSD: tidak ada di file Margin")), JSON.stringify(pilih));
+});
+
+test("642. B4 teks rapor: latih, ujian, vonis, satpam yang dilewati, catatan", () => {
+  const latih = Array.from({ length: 20 }, (_, k) => btTrade(2 + Math.floor(k / 10), 1 + (k % 10) * 2, k % 2 === 0 ? 2 : -1));
+  const report = buildBacktestReport([btRun(latih)], 17880.55);
+  const text = formatBacktestReport(report, { broker: "Finex", equity: 10000, extraNotes: ["Spread dari MDBKA_Margin_Finex.csv."] });
+  for (const kata of ["RAPOR UJI DATA LAMA MDBKA", "DATA LATIH", "DATA UJIAN", "titik impas", "VONIS: BELUM CUKUP BUKTI", "Satpam TIDAK ikut diuji", "Spread dari MDBKA_Margin_Finex.csv.", "Rp"]) {
+    assert(text.includes(kata), `teks rapor tanpa "${kata}"`);
+  }
+  assert(readSrc("package.json").includes('"backtest": "tsx scripts/backtest.ts"'), "perintah npm run backtest");
+  assert(!readSrc("scripts/backtest.ts").includes("writeFileSync"), "perintah backtest hanya membaca");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
