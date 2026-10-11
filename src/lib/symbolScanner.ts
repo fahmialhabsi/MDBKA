@@ -1,5 +1,5 @@
 import { findOpeningHold } from "./openingGuard";
-import { analyzeMarket } from "../calculations/decisionEngine";
+import { applyRiskGates } from "../calculations/decisionEngine";
 import { computeIndicators } from "../calculations/indicators";
 import { validateAnalysisInputs } from "../calculations/inputValidator";
 import { detectScaleMismatch } from "../calculations/scaleValidator";
@@ -16,6 +16,7 @@ import { resolveCsvBidAsk, type LiveQuoteLike } from "./csvQuote";
 import { riskCapFor } from "./riskGroup";
 import { applyBrokerPreset, createEmptyMarketForSymbol } from "./marketReset";
 import { signalReason } from "./signalReason";
+import { getStrategy, type StrategyId } from "./strategyRegistry";
 import { tickSizeForSymbol } from "./tickSize";
 import { buildBlockedReasons } from "./validationView";
 import { withUsdPointValue } from "./usdPointValue";
@@ -80,6 +81,8 @@ export interface ScanInput {
    * & saham AS (−30/+60 mnt). null/absen = satpam diabaikan.
    */
   readonly openingNowMs?: number | null;
+  /** S2: strategi pengusul setup; absen = "skor" (identik analyzeMarket). */
+  readonly strategy?: StrategyId;
 }
 
 export interface ScanRow {
@@ -221,7 +224,11 @@ export function scanSymbol(input: ScanInput): ScanRow {
   });
   if (reasons !== null) return dataRow(symbol, reasons[0] ?? "Data belum lengkap", count);
 
-  const result = analyzeMarket(market, broker);
+  const result = applyRiskGates(
+    market,
+    broker,
+    getStrategy(input.strategy).propose({ market, broker, candles: parsed.candles }),
+  );
   const status: ScanStatus =
     result.heldBy === "biaya"
       ? "DITAHAN_BIAYA"

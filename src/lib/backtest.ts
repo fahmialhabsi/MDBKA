@@ -31,6 +31,7 @@ import { timeStopApplies, TIME_STOP_HOURS } from "./exitMonitor";
 import { applyBrokerPreset } from "./marketReset";
 import { withUsdPointValue } from "./usdPointValue";
 import { candleTimeMs, scanSymbol, type ScanStatus } from "./symbolScanner";
+import type { StrategyId } from "./strategyRegistry";
 
 /** Jumlah candle yang dilihat mesin tiap jam (= CSV live AutoExport). */
 export const BACKTEST_WINDOW = 200;
@@ -88,6 +89,8 @@ export interface BacktestInput {
   /** Spread tetap (satuan harga). <= 0 → spread 1 tick (perilaku pemindai). */
   readonly spread: number;
   readonly window?: number;
+  /** S2: strategi yang diuji; absen = default "skor". */
+  readonly strategy?: StrategyId;
 }
 
 export interface BacktestRun {
@@ -207,6 +210,7 @@ export function runBacktest(input: BacktestInput): BacktestRun {
     const row = scanSymbol({
       symbol, brokerId: input.brokerId, csv, quote,
       equity: input.equity, fxRates: input.fxRates,
+      ...(input.strategy !== undefined ? { strategy: input.strategy } : {}),
     });
     evaluated += 1;
     statusCount[row.status] = (statusCount[row.status] ?? 0) + 1;

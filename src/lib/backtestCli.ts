@@ -6,6 +6,7 @@
 import type { BrokerId } from "../types/broker";
 import type { BacktestReport, BacktestSegment } from "./backtestReport";
 import { riskGroupOf, type RiskGroupId } from "./riskGroup";
+import { DEFAULT_STRATEGY_ID, parseStrategyId, STRATEGY_IDS, type StrategyId } from "./strategyRegistry";
 
 export interface BacktestCliOptions {
   readonly brokerId: BrokerId;
@@ -16,6 +17,8 @@ export interface BacktestCliOptions {
   readonly groups: readonly RiskGroupId[] | null;
   /** null = semua simbol yang punya data. */
   readonly symbols: readonly string[] | null;
+  /** S2: strategi yang diuji (default "skor"). */
+  readonly strategy: StrategyId;
 }
 
 export type ParsedArgs =
@@ -23,7 +26,7 @@ export type ParsedArgs =
   | { readonly ok: false; readonly error: string };
 
 export const BACKTEST_USAGE =
-  "Pakai: npm run backtest -- --broker finex|otb --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD]";
+  "Pakai: npm run backtest -- --broker finex|otb --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD] [--strategi skor]";
 
 const GROUP_IDS: readonly RiskGroupId[] = [
   "FOREX", "FOREX_JPY", "FOREX_TIDAK_LAZIM", "LOGAM", "MINYAK", "INDEKS",
@@ -63,7 +66,12 @@ export function parseBacktestArgs(argv: readonly string[]): ParsedArgs {
     if (bad.length > 0) return { ok: false, error: `Golongan tidak dikenal: ${bad.join(", ")}. Pilihan: ${GROUP_IDS.join(", ")}` };
     groups = upper as RiskGroupId[];
   }
-  return { ok: true, options: { brokerId, marginTag, equity, groups, symbols: list(get("--simbol")) } };
+  const strategyRaw = get("--strategi");
+  const strategy = strategyRaw === null ? DEFAULT_STRATEGY_ID : parseStrategyId(strategyRaw);
+  if (strategy === null) {
+    return { ok: false, error: `Strategi tidak dikenal: ${strategyRaw ?? ""}. Pilihan: ${STRATEGY_IDS.join(", ")}` };
+  }
+  return { ok: true, options: { brokerId, marginTag, equity, groups, symbols: list(get("--simbol")), strategy } };
 }
 
 /** Spread per simbol (Ask − Bid) dari MDBKA_Margin_<broker>.csv. */
@@ -133,11 +141,18 @@ function segmentLines(label: string, s: BacktestSegment): string[] {
 
 export function formatBacktestReport(
   report: BacktestReport,
-  head: { readonly broker: string; readonly equity: number; readonly extraNotes: readonly string[] },
+  head: {
+    readonly broker: string;
+    readonly equity: number;
+    readonly extraNotes: readonly string[];
+    /** S2: nama strategi yang diuji (absen = tidak ditulis). */
+    readonly strategy?: string;
+  },
 ): string {
   const lines = [
     "=================== RAPOR UJI DATA LAMA MDBKA ===================",
     `Broker ${head.broker} · equity anggapan $${head.equity} · ${report.symbols.length} simbol`,
+    ...(head.strategy !== undefined ? [`Strategi: ${head.strategy}`] : []),
     `Periode ${report.startTime} s/d ${report.endTime} · batas latih|ujian ${report.splitTime}`,
     "",
     ...segmentLines("DATA LATIH (bagian awal)", report.latih),

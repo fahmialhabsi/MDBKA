@@ -13,6 +13,7 @@ import { readUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
 import { FALLBACK_RATES, fetchECBRates } from "../src/services/fxRateService";
 import { runBacktest, type BacktestRun } from "../src/lib/backtest";
 import { buildBacktestReport } from "../src/lib/backtestReport";
+import { getStrategy } from "../src/lib/strategyRegistry";
 import {
   formatBacktestReport,
   parseBacktestArgs,
@@ -60,13 +61,19 @@ async function main(): Promise<number> {
       equity: opt.equity,
       fxRates: rates,
       spread: spreads.get(symbol) ?? 0,
+      strategy: opt.strategy,
     });
     runs.push(run);
     console.log(`  ${symbol.padEnd(12)} ${run.error ?? `${run.trades.length} trade`}`);
   }
   const report = buildBacktestReport(runs, kurs?.rate ?? null);
   console.log("");
-  console.log(formatBacktestReport(report, { broker: opt.marginTag, equity: opt.equity, extraNotes }));
+  console.log(formatBacktestReport(report, {
+    broker: opt.marginTag,
+    equity: opt.equity,
+    extraNotes,
+    strategy: getStrategy(opt.strategy).label,
+  }));
   return 0;
 }
 

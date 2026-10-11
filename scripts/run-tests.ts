@@ -249,6 +249,7 @@ import { withUsdPointValue } from "../src/lib/usdPointValue";
 import { resolveCsvBidAsk } from "../src/lib/csvQuote";
 import { BACKTEST_SKIPPED_GUARDS, BACKTEST_WINDOW, runBacktest, simulateTrade, type BacktestRun, type BacktestTrade } from "../src/lib/backtest";
 import { buildBacktestReport, summarizeTrades } from "../src/lib/backtestReport";
+import { DEFAULT_STRATEGY_ID, getStrategy, parseStrategyId, STRATEGIES, STRATEGY_IDS } from "../src/lib/strategyRegistry";
 import { formatBacktestReport, parseBacktestArgs, parseSpreadsFromMargin, pickBacktestSymbols } from "../src/lib/backtestCli";
 import {
   calculateSwapWithTriple,
@@ -8176,6 +8177,38 @@ test("643. S1 colokan strategi: analyzeMarket = applyRiskGates(scoreSetup) dan s
   assert(r.decision === "BELI" && r.riskAtMinLot === 2.13 && r.suggestedLot === 0.46 && r.factors[0].startsWith("Wick"), JSON.stringify(r));
   const mahal = applyRiskGates(market, { ...broker, commission: 33 }, lain) /* 45/245 = 18% > 10% */;
   assert(mahal.decision === "TUNGGU" && mahal.heldBy === "biaya" && mahal.heldDecision === "BELI" && mahal.stopLoss === null, "gerbang biaya Mode Aman berlaku untuk strategi lain");
+});
+
+test("644. S2 rak strategi: default skor, pemindai & alat uji identik tanpa/dengan pilihan skor", () => {
+  assert(DEFAULT_STRATEGY_ID === "skor" && STRATEGY_IDS.join(",") === "skor" && getStrategy(undefined).id === "skor", "default skor");
+  assert(parseStrategyId(" SKOR ") === "skor" && parseStrategyId("candle") === null && parseStrategyId(null) === null, "parse jujur");
+  assert(STRATEGIES.skor.label === "Skor indikator" && STRATEGIES.skor.description.includes("MA50"), "label/deskripsi");
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const tanpa = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: scanCsv(80), quote: null, equity: 10000, fxRates: rates });
+  const dengan = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: scanCsv(80), quote: null, equity: 10000, fxRates: rates, strategy: "skor" });
+  assert(JSON.stringify(tanpa) === JSON.stringify(dengan) && tanpa.status !== "DATA", `pemindai: ${tanpa.status}`);
+  const gelombang = (i: number) => 1.3 + 0.004 * Math.sin(i / 40) + 0.0006 * Math.sin(i / 3);
+  const base = { symbol: "GBPUSD", brokerId: "finex" as const, csv: btCsv(500, gelombang), equity: 10000, fxRates: rates, spread: 0.00012 };
+  const a = runBacktest(base);
+  const b = runBacktest({ ...base, strategy: "skor" });
+  assert(a.trades.length > 0 && JSON.stringify(a) === JSON.stringify(b), "alat uji identik");
+  const sc = readSrc("src/lib/symbolScanner.ts");
+  assert(sc.includes("getStrategy(input.strategy).propose(") && sc.includes("applyRiskGates(") && !sc.includes("analyzeMarket("), "pemindai lewat rak strategi + gerbang tunggal");
+  assert(readSrc("src/App.tsx").includes("analyzeMarket(marketData, effectiveBroker)"), "Hasil analisa di layar tetap mesin bawaan");
+});
+
+test("645. S2 perintah backtest: --strategi (default skor, tak dikenal ditolak) + nama strategi di rapor", () => {
+  const def = parseBacktestArgs(["--broker", "finex", "--equity", "100"]);
+  assert(def.ok && def.options.strategy === "skor", JSON.stringify(def));
+  const pilih = parseBacktestArgs(["--broker", "finex", "--equity", "100", "--strategi", "Skor"]);
+  assert(pilih.ok && pilih.options.strategy === "skor", JSON.stringify(pilih));
+  const salah = parseBacktestArgs(["--broker", "finex", "--equity", "100", "--strategi", "ajaib"]);
+  assert(!salah.ok && salah.error.includes("Strategi tidak dikenal: ajaib") && salah.error.includes("skor"), "strategi salah ditolak");
+  const report = buildBacktestReport([btRun([btTrade(2, 1, 2)])], 17000);
+  const text = formatBacktestReport(report, { broker: "Finex", equity: 100, extraNotes: [], strategy: "Skor indikator" });
+  assert(text.includes("Strategi: Skor indikator"), "nama strategi di rapor");
+  assert(!formatBacktestReport(report, { broker: "Finex", equity: 100, extraNotes: [] }).includes("Strategi:"), "tanpa nama → tidak ditulis");
+  assert(readSrc("scripts/backtest.ts").includes("strategy: opt.strategy"), "perintah meneruskan strategi");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
