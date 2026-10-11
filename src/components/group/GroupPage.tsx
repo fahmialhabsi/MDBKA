@@ -6,7 +6,7 @@ import { candleChartModel, LINE_COLOR, positionLines, withLiveCandles, type Char
 import { calculateTargets } from "../../lib/targetCalculator";
 import { StockPortfolio } from "./StockPortfolio";
 import { parseCsvCandles } from "../../lib/csvCandleParser";
-import { accountMetrics, GROUP_TABS, groupSymbolTabs, type GroupPageParams } from "../../lib/groupPageView";
+import { accountMetrics, GROUP_TABS, groupSymbolTabs, realSymbolName, type GroupPageParams } from "../../lib/groupPageView";
 import { formatIdr, formatUsd } from "../../lib/historyPageView";
 import { formatPrice } from "../../lib/tickSize";
 import type { RiskGroupId } from "../../lib/riskGroup";
@@ -57,6 +57,11 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
   );
   const active = tabs.some((t) => t.symbol === selected) ? selected : (tabs[0]?.symbol ?? "");
   const liveKey = `${broker}|${active}`;
+  // F1: nama asli (mis. MIFX "SP.m") untuk API harga & candle.
+  const activeReal = realSymbolName(active, [
+    ...(book?.broker === broker ? book.symbols : []),
+    ...positions.map((p) => p.symbol),
+  ]);
 
   // Harga live simbol aktif, tiap 3 detik. Muat awal 5000 tick (bahan candle
   // jam berjalan), selanjutnya tick terbaru ditambahkan (G2b).
@@ -68,7 +73,7 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
     const load = (): void => {
       const limit = first ? 5000 : 20;
       first = false;
-      fetch(`${API_BASE_URL}/api/quotes/${encodeURIComponent(active)}?broker=${broker}&limit=${limit}`)
+      fetch(`${API_BASE_URL}/api/quotes/${encodeURIComponent(activeReal)}?broker=${broker}&limit=${limit}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((j: { data?: { timestamp?: unknown; bid?: unknown; ask?: unknown }[] } | null) => {
           const data = (j?.data ?? []).filter(
@@ -93,7 +98,7 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [broker, active]);
+  }, [broker, active, activeReal]);
   const liveNow = live !== null && live.key === liveKey ? live : null;
   const activePositions = positions.filter((p) => p.symbol.trim().toUpperCase() === active);
 
@@ -102,7 +107,7 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
     if (active === "") return;
     let cancelled = false;
     const load = (): void => {
-      fetch(`${API_BASE_URL}/api/candles/${encodeURIComponent(active)}`)
+      fetch(`${API_BASE_URL}/api/candles/${encodeURIComponent(activeReal)}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((j: { csv?: unknown } | null) => {
           if (cancelled) return;
@@ -119,7 +124,7 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [active]);
+  }, [active, activeReal]);
   const chartNow = chart !== null && chart.symbol === active ? chart : null;
   // G3: garis Entry/SL/TP/Amankan untuk tiap posisi terbuka simbol aktif.
   const posLines: ChartLine[] = [];

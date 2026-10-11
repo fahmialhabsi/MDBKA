@@ -8,6 +8,7 @@ import {
   symbolOptions,
   type CalculatorPrefill,
 } from "../../lib/calculatorPageView";
+import { realSymbolName } from "../../lib/groupPageView";
 import { useBrokerPositions } from "../../hooks/useBrokerPositions";
 import { formatIdr, formatUsd } from "../../lib/historyPageView";
 import { calculateTargets, secureReadiness, type CalcDirection } from "../../lib/targetCalculator";
@@ -39,6 +40,8 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
   const [copied, setCopied] = useState(false);
   const [live, setLive] = useState<{ key: string; bid: number; ask: number } | null>(null);
   const liveKey = `${broker}|${symbol.trim().toUpperCase()}`;
+  // F1: nama asli Market Watch (mis. MIFX "EURUSD.m") untuk API harga live.
+  const realSym = realSymbolName(symbol, symbolBook?.broker === broker ? symbolBook.symbols : []);
 
   // C4c: harga live simbol terpilih (GET /api/quotes/:symbol?broker=&limit=1), tiap 3 detik.
   useEffect(() => {
@@ -46,7 +49,7 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
     if (sym === "") return;
     let cancelled = false;
     const load = (): void => {
-      fetch(`${API_BASE_URL}/api/quotes/${encodeURIComponent(sym)}?broker=${broker}&limit=1`)
+      fetch(`${API_BASE_URL}/api/quotes/${encodeURIComponent(realSym)}?broker=${broker}&limit=1`)
         .then((r) => (r.ok ? r.json() : null))
         .then((j: { data?: { bid?: unknown; ask?: unknown }[] } | null) => {
           const q = j?.data?.[j.data.length - 1];
@@ -61,7 +64,7 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [broker, symbol]);
+  }, [broker, symbol, realSym]);
   const liveNow = live !== null && live.key === liveKey ? live : null;
 
   const copySl = (text: string): void => {

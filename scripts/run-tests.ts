@@ -52,7 +52,7 @@ import { buildHistoryView } from "../server/services/historyView";
 import { accountKind, historyForLogin, listHistoryAccounts } from "../server/routes/historyRoutes";
 import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
 import { calculateTargets, secureReadiness } from "../src/lib/targetCalculator";
-import { accountMetrics, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage } from "../src/lib/groupPageView";
+import { accountMetrics, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage, realSymbolName } from "../src/lib/groupPageView";
 import { candleChartModel, hourKey, LINE_COLOR, positionLines, spreadLabels, withLiveCandles } from "../src/lib/candleChart";
 import { readCandleCsv } from "../server/routes/candlesRoutes";
 import { findSessionHold, serverNowText, serverToWitLabel, sessionNotice, sessionState, weeklyIntervals } from "../src/lib/sessionGuard";
@@ -8459,6 +8459,17 @@ test("659. E2c MIFX: script margin mengenali Monex, backtest MIFX butuh file spr
   const salah = parseBacktestArgs(["--broker", "xyz", "--equity", "100"]);
   assert(!salah.ok && salah.error.includes("finex, otb, atau mifx"), salah.ok ? "" : salah.error);
   assert(readSrc("scripts/backtest.ts").includes("File spread tidak ada: ${marginFile}"), "file Margin MIFX tak ada → berhenti dengan pesan, tanpa spread tebakan");
+});
+
+test("660. F1 nama asli simbol untuk harga live: MIFX 'SP.m' (bukan 'SP.M'), Finex/OTB tetap", () => {
+  const mw = ["EURUSD.m", "SP.m", "XAUUSD.m"];
+  assert(realSymbolName("SP.M", mw) === "SP.m" && realSymbolName("sp.m", mw) === "SP.m" && realSymbolName(" eurusd.M ", mw) === "EURUSD.m", "MIFX: huruf kecil .m dipulihkan");
+  assert(realSymbolName("GBPUSD_ORB", ["GBPUSD_ORB"]) === "GBPUSD_ORB" && realSymbolName("#AAPL", ["#AAPL"]) === "#AAPL", "Finex/OTB tetap");
+  assert(realSymbolName("NQ.M", []) === "NQ.M" && realSymbolName("", mw) === "", "tak ketemu = apa adanya (perilaku lama)");
+  const gp = readSrc("src/components/group/GroupPage.tsx");
+  assert(gp.includes("/api/quotes/${encodeURIComponent(activeReal)}") && gp.includes("/api/candles/${encodeURIComponent(activeReal)}"), "halaman Golongan pakai nama asli");
+  const cp = readSrc("src/components/analysis/CalculatorPage.tsx");
+  assert(cp.includes("/api/quotes/${encodeURIComponent(realSym)}") && cp.includes("[broker, symbol, realSym]"), "Kalkulator pakai nama asli");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

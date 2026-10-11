@@ -73,6 +73,17 @@ export function groupSymbolTabs(
     .sort((a, b) => (b.openCount > 0 ? 1 : 0) - (a.openCount > 0 ? 1 : 0) || a.symbol.localeCompare(b.symbol));
 }
 
+/**
+ * F1 (12 Okt 2026): nama ASLI simbol (huruf besar/kecil persis Market Watch)
+ * untuk meminta harga live. Tab/kalkulator memakai huruf besar ("SP.M"),
+ * padahal MIFX menamai "SP.m" dan data harga membedakan huruf besar/kecil.
+ * Tidak ketemu → nama apa adanya (perilaku lama).
+ */
+export function realSymbolName(symbol: string, candidates: readonly string[]): string {
+  const want = symbol.trim().toUpperCase();
+  return candidates.map((c) => c.trim()).find((c) => c.toUpperCase() === want) ?? symbol.trim();
+}
+
 export interface AccountMetric {
   readonly label: string;
   readonly usd: number | null;
