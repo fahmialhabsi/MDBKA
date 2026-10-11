@@ -244,7 +244,8 @@ import {
 } from "../src/services/fxRateService";
 import { withUsdPointValue } from "../src/lib/usdPointValue";
 import { resolveCsvBidAsk } from "../src/lib/csvQuote";
-import { BACKTEST_SKIPPED_GUARDS, BACKTEST_WINDOW, runBacktest, simulateTrade } from "../src/lib/backtest";
+import { BACKTEST_SKIPPED_GUARDS, BACKTEST_WINDOW, runBacktest, simulateTrade, type BacktestRun, type BacktestTrade } from "../src/lib/backtest";
+import { buildBacktestReport, summarizeTrades } from "../src/lib/backtestReport";
 import {
   calculateSwapWithTriple,
   getTripleSwapLabel,
@@ -8047,6 +8048,64 @@ test("636. B2 runBacktest: data kurang/rusak jujur, tanpa mengintip masa depan, 
   }
   assert(BACKTEST_SKIPPED_GUARDS.length === 6, "daftar satpam yang dilewati wajib tampil di rapor");
   assert(readSrc("src/lib/backtest.ts").includes("scanSymbol({") && !readSrc("src/lib/backtest.ts").includes("analyzeMarket"), "wajib lewat pemindai yang sama, tanpa jalur keputusan lain");
+});
+
+function btTrade(day: number, hour: number, netUsd: number, outcome: BacktestTrade["outcome"] = netUsd > 0 ? "TP" : "SL"): BacktestTrade {
+  const t = (h: number) => `2026.01.${String(day).padStart(2, "0")} ${String(h).padStart(2, "0")}:00`;
+  return {
+    direction: "BELI", entry: 1.1, stopLoss: 1.099, takeProfit: 1.102,
+    signalTime: t(hour), exitTime: t(hour + 1), exitPrice: 1.1, outcome, bars: 1,
+    priceResult: 0, rMultiple: netUsd > 0 ? 2 : -1, lot: 0.01, netUsd,
+  };
+}
+
+function btRun(trades: BacktestTrade[], start = "2026.01.01 00:00", end = "2026.01.31 00:00"): BacktestRun {
+  return { symbol: "GBPUSD", candles: 1000, evaluated: 800, statusCount: {}, trades, startTime: start, endTime: end, error: null };
+}
+
+test("637. B3 rapor: menang vs titik impas, Rupiah, rugi beruntun, turun terdalam, TERBUKA tak dihitung", () => {
+  const trades = [btTrade(2, 1, 2), btTrade(2, 3, -1), btTrade(2, 5, -1), btTrade(2, 7, -1), btTrade(2, 9, 3), btTrade(2, 11, 5, "TERBUKA")];
+  const s = summarizeTrades(trades, 16000);
+  assert(s.n === 5 && s.wins === 2 && s.winRate === 0.4, `n/menang: ${JSON.stringify(s)}`);
+  // rata menang 2.5, rata rugi 1 → titik impas 1/3.5
+  assert(s.breakEvenWinRate !== null && Math.abs(s.breakEvenWinRate - 1 / 3.5) < 1e-9, String(s.breakEvenWinRate));
+  assert(s.totalUsd === 2 && s.totalIdr === 32000 && s.expectancyIdr === 6400, `${s.totalUsd} ${s.totalIdr} ${s.expectancyIdr}`);
+  assert(s.worstLosingStreak === 3 && s.maxDrawdownIdr === 48000, `beruntun ${s.worstLosingStreak}, turun ${s.maxDrawdownIdr}`);
+  assert(s.outcomes.TP === 2 && s.outcomes.SL === 3 && s.outcomes.WAKTU === 0, JSON.stringify(s.outcomes));
+  assert(s.verdict === "BELUM_CUKUP", "5 trade < 20 = belum cukup bukti");
+  const tanpaKurs = summarizeTrades(trades, null);
+  assert(tanpaKurs.totalIdr === null && tanpaKurs.avgWinIdr === null && tanpaKurs.totalUsd === 2, "tanpa kurs: Rupiah null, bukan tebakan");
+});
+
+test("638. B3 rapor: data latih/ujian dibagi menurut waktu; layak demo hanya bila untung di keduanya", () => {
+  const latih = Array.from({ length: 20 }, (_, k) => btTrade(2 + Math.floor(k / 10), 1 + (k % 10) * 2, k % 2 === 0 ? 2 : -1));
+  const ujianUntung = Array.from({ length: 20 }, (_, k) => btTrade(25 + Math.floor(k / 10), 1 + (k % 10) * 2, k % 2 === 0 ? 2 : -1));
+  const ujianRugi = ujianUntung.map((t) => ({ ...t, netUsd: -1 }));
+  const bagus = buildBacktestReport([btRun([...ujianUntung, ...latih])], 16000);
+  assert(bagus.splitTime === "2026.01.22 00:00" && bagus.latih.n === 20 && bagus.ujian.n === 20, `${bagus.splitTime} ${bagus.latih.n}/${bagus.ujian.n}`);
+  assert(bagus.verdict === "LAYAK_DEMO" && bagus.verdictText.includes("demo"), bagus.verdictText);
+  const jelek = buildBacktestReport([btRun([...latih, ...ujianRugi])], 16000);
+  assert(jelek.verdict === "TIDAK_LAYAK" && jelek.latih.verdict === "UNTUNG" && jelek.ujian.verdict === "RUGI", jelek.verdict);
+  const sedikit = buildBacktestReport([btRun(latih.slice(0, 5))], 16000);
+  assert(sedikit.verdict === "BELUM_CUKUP", sedikit.verdict);
+  const gagal = buildBacktestReport([btRun(latih), { ...btRun([]), symbol: "EURUSD", error: "Candle kurang (10, butuh > 200)" }], null);
+  assert(gagal.symbols.length === 2 && gagal.notes.some((n) => n.startsWith("EURUSD: Candle kurang")) && gagal.notes.some((n) => n.includes("hanya dalam USD")), JSON.stringify(gagal.notes));
+  assert(gagal.skippedGuards.length === 6, "satpam yang dilewati wajib ikut di rapor");
+});
+
+test("639. B3 runBacktest: tiap trade punya lot + hasil bersih USD (komisi dipotong), rentang waktu terisi", () => {
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const gelombang = (i: number) => 1.3 + 0.004 * Math.sin(i / 40) + 0.0006 * Math.sin(i / 3);
+  const run = runBacktest({ symbol: "GBPUSD", brokerId: "finex", csv: btCsv(500, gelombang), equity: 10000, fxRates: rates, spread: 0.00012 });
+  assert(run.trades.length > 0 && run.startTime !== "" && run.endTime > run.startTime, `${run.trades.length} ${run.startTime} ${run.endTime}`);
+  for (const t of run.trades) {
+    assert(t.lot >= 0.01, `lot: ${t.lot}`);
+    // Finex GBPUSD: nilai poin 100000 USD/lot, komisi 1.00/lot
+    const harap = Math.round((t.priceResult * 100000 - 1) * t.lot * 100) / 100;
+    assert(Math.abs(t.netUsd - harap) < 0.011, `netUsd ${t.netUsd} vs ${harap}`);
+  }
+  const rapor = buildBacktestReport([run], 17000);
+  assert(rapor.all.n + rapor.openAtEnd === run.trades.length, "semua trade terhitung");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

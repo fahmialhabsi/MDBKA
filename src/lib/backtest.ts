@@ -23,10 +23,13 @@
  */
 import type { Candle } from "../calculations/swingDetector";
 import type { ExchangeRates } from "../services/fxRateService";
+import type { BrokerSettings } from "../types/analysis";
 import type { BrokerId } from "../types/broker";
 import { canonicalSymbolForBroker } from "./brokerSymbols";
 import { parseCsvCandles } from "./csvCandleParser";
 import { timeStopApplies, TIME_STOP_HOURS } from "./exitMonitor";
+import { applyBrokerPreset } from "./marketReset";
+import { withUsdPointValue } from "./usdPointValue";
 import { candleTimeMs, scanSymbol, type ScanStatus } from "./symbolScanner";
 
 /** Jumlah candle yang dilihat mesin tiap jam (= CSV live AutoExport). */
@@ -69,6 +72,10 @@ export interface BacktestTrade extends BacktestPlan {
   readonly priceResult: number;
   /** Hasil dalam kelipatan risiko (1R = jarak entry→SL). */
   readonly rMultiple: number;
+  /** B3: lot yang dipakai (saran mesin; tanpa saran = lot minimum broker). */
+  readonly lot: number;
+  /** B3: hasil bersih USD = (selisih harga × nilai poin − komisi) × lot. */
+  readonly netUsd: number;
 }
 
 export interface BacktestInput {
@@ -91,6 +98,9 @@ export interface BacktestRun {
   /** Hitungan status pemindai per jam yang dinilai (tanpa jam saat posisi terbuka). */
   readonly statusCount: Readonly<Partial<Record<ScanStatus, number>>>;
   readonly trades: readonly BacktestTrade[];
+  /** B3: jam candle pertama & terakhir yang dinilai mesin ("" bila gagal). */
+  readonly startTime: string;
+  readonly endTime: string;
   /** Pesan jujur bila data tidak bisa diuji (null = berjalan). */
   readonly error: string | null;
 }
@@ -143,6 +153,12 @@ export function simulateTrade(
   };
 }
 
+const ZERO_BROKER: BrokerSettings = {
+  equity: 0, riskPercent: 0, minLot: 0, lotStep: 0, pointValue: 0,
+  contractSize: 0, commission: 0, slippage: 0, buffer: 0,
+  atrMultiplier: 0, targetRR: 0,
+};
+
 function round12(v: number): number {
   return Number(v.toPrecision(12));
 }
@@ -152,7 +168,8 @@ export function runBacktest(input: BacktestInput): BacktestRun {
   const window = input.window ?? BACKTEST_WINDOW;
   const symbol = canonicalSymbolForBroker(input.symbol, input.brokerId);
   const fail = (error: string, candles = 0): BacktestRun => ({
-    symbol: symbol || input.symbol, candles, evaluated: 0, statusCount: {}, trades: [], error,
+    symbol: symbol || input.symbol, candles, evaluated: 0, statusCount: {}, trades: [],
+    startTime: "", endTime: "", error,
   });
   if (symbol === "") return fail("Simbol tidak dikenal");
 
@@ -173,6 +190,13 @@ export function runBacktest(input: BacktestInput): BacktestRun {
     ? { timestamp: "2000.01.01 00:00:00", symbol, bid: 1, ask: round12(1 + input.spread) }
     : null;
   const timeStop = timeStopApplies(symbol) ? TIME_STOP_HOURS : null;
+  // B3: angka broker dari jalur yang SAMA dengan pemindai (preset + nilai poin USD).
+  const broker: BrokerSettings = withUsdPointValue(
+    applyBrokerPreset({ ...ZERO_BROKER, equity: input.equity }, symbol, input.brokerId),
+    symbol,
+    input.brokerId,
+    input.fxRates,
+  );
 
   const statusCount: Partial<Record<ScanStatus, number>> = {};
   const trades: BacktestTrade[] = [];
@@ -199,6 +223,8 @@ export function runBacktest(input: BacktestInput): BacktestRun {
     const priceResult = round12(
       plan.direction === "BELI" ? exit.exitPrice - plan.entry : plan.entry - exit.exitPrice,
     );
+    const lot = plan.suggestedLot !== null && plan.suggestedLot > 0 ? plan.suggestedLot : broker.minLot;
+    const netUsd = Math.round((priceResult * broker.pointValue - broker.commission) * lot * 100) / 100;
     trades.push({
       direction: plan.direction,
       entry: plan.entry,
@@ -211,10 +237,17 @@ export function runBacktest(input: BacktestInput): BacktestRun {
       bars: exit.exitIndex + 1,
       priceResult,
       rMultiple: risk > 0 ? Math.round((priceResult / risk) * 100) / 100 : 0,
+      lot,
+      netUsd,
     });
     if (exit.outcome === "TERBUKA") break;
     // Sinyal berikutnya paling cepat di close candle tempat posisi tutup.
     i = exitAt;
   }
-  return { symbol, candles: candles.length, evaluated, statusCount, trades, error: null };
+  return {
+    symbol, candles: candles.length, evaluated, statusCount, trades,
+    startTime: String(candles[window - 1].time ?? ""),
+    endTime: String(candles[candles.length - 1].time ?? ""),
+    error: null,
+  };
 }
