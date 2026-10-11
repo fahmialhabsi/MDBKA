@@ -62,6 +62,7 @@ async function main(): Promise<number> {
         fxRates: rates,
         spread: spreads.get(symbol) ?? 0,
         strategy: opt.strategy,
+        ...(opt.timeStopHours !== undefined ? { timeStopHours: opt.timeStopHours } : {}),
       });
       if (log) console.log(`  ${symbol.padEnd(12)} ${run.error ?? `${run.trades.length} trade`}`);
       return run;
@@ -90,6 +91,12 @@ async function main(): Promise<number> {
     equity: opt.equity,
     extraNotes,
     strategy: getStrategy(opt.strategy).label,
+    timeStop:
+      opt.timeStopHours === undefined
+        ? "3 jam (aturan live)"
+        : opt.timeStopHours === null
+          ? "TANPA batas (percobaan)"
+          : `${opt.timeStopHours} jam (percobaan)`,
     topUp,
     retestEquityUsd,
     judged,

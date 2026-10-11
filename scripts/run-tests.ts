@@ -8390,6 +8390,27 @@ test("654. B5d pengaman: strategi TIDAK LAYAK saat modal cukup → JANGAN menamb
   assert(src.includes("judged = { verdict: retest.verdict, totalIdr: retest.all.totalIdr }") && src.includes("judged,"), "vonis uji ulang dipakai untuk saran dana");
 });
 
+test("655. E1 percobaan batas waktu: default 3 jam (live), angka lain/0=tanpa batas hanya di alat uji", () => {
+  const def = parseBacktestArgs(["--broker", "finex", "--equity", "100"]);
+  assert(def.ok && def.options.timeStopHours === undefined, "default tanpa opsi");
+  const enam = parseBacktestArgs(["--broker", "finex", "--equity", "100", "--batas-waktu", "6"]);
+  assert(enam.ok && enam.options.timeStopHours === 6, JSON.stringify(enam));
+  const nol = parseBacktestArgs(["--broker", "finex", "--equity", "100", "--batas-waktu", "0"]);
+  assert(nol.ok && nol.options.timeStopHours === null, JSON.stringify(nol));
+  const salah = parseBacktestArgs(["--broker", "finex", "--equity", "100", "--batas-waktu", "2,5"]);
+  assert(!salah.ok && salah.error.includes("Batas waktu"), "jam tidak bulat ditolak");
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const gelombang = (i: number) => 1.3 + 0.004 * Math.sin(i / 40) + 0.0006 * Math.sin(i / 3);
+  const base = { symbol: "GBPUSD", brokerId: "finex" as const, csv: btCsv(700, gelombang), equity: 10000, fxRates: rates, spread: 0.00012 };
+  const live = runBacktest(base);
+  assert(JSON.stringify(live) === JSON.stringify(runBacktest({ ...base, timeStopHours: 3 })), "3 jam = perilaku default");
+  const bebas = runBacktest({ ...base, timeStopHours: null });
+  assert(bebas.trades.every((t) => t.outcome !== "WAKTU") && live.trades.some((t) => t.outcome === "WAKTU"), "tanpa batas = tidak ada WAKTU");
+  const enamJam = runBacktest({ ...base, timeStopHours: 6 });
+  assert(enamJam.trades.every((t) => t.outcome !== "WAKTU" || t.bars <= 6), "WAKTU maks 6 candle");
+  assert(readSrc("src/lib/exitMonitor.ts").includes("export const TIME_STOP_HOURS = 3;"), "aturan live tetap 3 jam");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

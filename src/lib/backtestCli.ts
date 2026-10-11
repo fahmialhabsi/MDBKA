@@ -19,6 +19,8 @@ export interface BacktestCliOptions {
   readonly symbols: readonly string[] | null;
   /** S2: strategi yang diuji (default "skor"). */
   readonly strategy: StrategyId;
+  /** E1: percobaan batas waktu Forex (jam); absen = 3 jam (live); null = tanpa batas. */
+  readonly timeStopHours?: number | null;
 }
 
 export type ParsedArgs =
@@ -26,7 +28,7 @@ export type ParsedArgs =
   | { readonly ok: false; readonly error: string };
 
 export const BACKTEST_USAGE =
-  "Pakai: npm run backtest -- --broker finex|otb --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD] [--strategi skor]";
+  "Pakai: npm run backtest -- --broker finex|otb --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD] [--strategi skor] [--batas-waktu 3|6|12|0]";
 
 const GROUP_IDS: readonly RiskGroupId[] = [
   "FOREX", "FOREX_JPY", "FOREX_TIDAK_LAZIM", "LOGAM", "MINYAK", "INDEKS",
@@ -71,7 +73,22 @@ export function parseBacktestArgs(argv: readonly string[]): ParsedArgs {
   if (strategy === null) {
     return { ok: false, error: `Strategi tidak dikenal: ${strategyRaw ?? ""}. Pilihan: ${STRATEGY_IDS.join(", ")}` };
   }
-  return { ok: true, options: { brokerId, marginTag, equity, groups, symbols: list(get("--simbol")), strategy } };
+  const tsRaw = get("--batas-waktu");
+  let timeStopHours: number | null | undefined;
+  if (tsRaw !== null) {
+    const h = Number(tsRaw);
+    if (!Number.isInteger(h) || h < 0 || h > 240) {
+      return { ok: false, error: `Batas waktu wajib bilangan jam 0–240 (0 = tanpa batas). ${BACKTEST_USAGE}` };
+    }
+    timeStopHours = h === 0 ? null : h;
+  }
+  return {
+    ok: true,
+    options: {
+      brokerId, marginTag, equity, groups, symbols: list(get("--simbol")), strategy,
+      ...(timeStopHours !== undefined ? { timeStopHours } : {}),
+    },
+  };
 }
 
 /** Spread per simbol (Ask − Bid) dari MDBKA_Margin_<broker>.csv. */
@@ -206,6 +223,8 @@ export function formatBacktestReport(
     readonly extraNotes: readonly string[];
     /** S2: nama strategi yang diuji (absen = tidak ditulis). */
     readonly strategy?: string;
+    /** E1: teks batas waktu percobaan (absen = tidak ditulis). */
+    readonly timeStop?: string;
     /** B5d: dana tambahan (absen = baris modal tidak ditulis). */
     readonly topUp?: CapitalTopUp | null;
     readonly retestEquityUsd?: number | null;
@@ -216,6 +235,7 @@ export function formatBacktestReport(
     "=================== RAPOR UJI DATA LAMA MDBKA ===================",
     `Broker ${head.broker} · equity anggapan $${head.equity} · ${report.symbols.length} simbol`,
     ...(head.strategy !== undefined ? [`Strategi: ${head.strategy}`] : []),
+    ...(head.timeStop !== undefined ? [`Batas waktu Forex: ${head.timeStop}`] : []),
     `Periode ${report.startTime} s/d ${report.endTime} · batas latih|ujian ${report.splitTime}`,
     "",
     ...segmentLines("DATA LATIH (bagian awal)", report.latih),

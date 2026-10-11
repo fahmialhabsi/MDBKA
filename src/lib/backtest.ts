@@ -98,6 +98,12 @@ export interface BacktestInput {
   readonly window?: number;
   /** S2: strategi yang diuji; absen = default "skor". */
   readonly strategy?: StrategyId;
+  /**
+   * E1 (12 Okt 2026) — PERCOBAAN batas waktu (jam) untuk golongan yang
+   * memakai time-stop (Forex & Forex JPY). absen = aturan live (3 jam);
+   * null = tanpa batas waktu. Golongan lain tetap tanpa batas.
+   */
+  readonly timeStopHours?: number | null;
 }
 
 export interface BacktestRun {
@@ -210,7 +216,13 @@ export function runBacktest(input: BacktestInput): BacktestRun {
   const quote = input.spread > 0
     ? { timestamp: "2000.01.01 00:00:00", symbol, bid: 1, ask: round12(1 + input.spread) }
     : null;
-  const timeStop = timeStopApplies(symbol) ? TIME_STOP_HOURS : null;
+  const timeStop = !timeStopApplies(symbol)
+    ? null
+    : input.timeStopHours === undefined
+      ? TIME_STOP_HOURS
+      : input.timeStopHours !== null && input.timeStopHours > 0
+        ? input.timeStopHours
+        : null;
   // B3: angka broker dari jalur yang SAMA dengan pemindai (preset + nilai poin USD).
   const broker: BrokerSettings = withUsdPointValue(
     applyBrokerPreset({ ...ZERO_BROKER, equity: input.equity }, symbol, input.brokerId),
