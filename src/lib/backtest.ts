@@ -20,15 +20,17 @@
  * Satpam tanpa data historis (berita, sesi, pembukaan bursa, posisi lain,
  * jeda rugi beruntun, spesifikasi) TIDAK ikut dinilai — dilaporkan jujur.
  * Spread = angka tetap dari pemanggil (spread masa lalu tidak tercatat).
+ * B5c: swap menginap ikut dipotong (estimateSwap: Finex mati, OTB/MIFX % tahunan).
  */
 import type { Candle } from "../calculations/swingDetector";
-import type { ExchangeRates } from "../services/fxRateService";
+import { convertToUSD, type ExchangeRates } from "../services/fxRateService";
 import type { BrokerSettings } from "../types/analysis";
 import type { BrokerId } from "../types/broker";
 import { canonicalSymbolForBroker } from "./brokerSymbols";
 import { parseCsvCandles } from "./csvCandleParser";
 import { timeStopApplies, TIME_STOP_HOURS } from "./exitMonitor";
 import { applyBrokerPreset } from "./marketReset";
+import { estimateSwap } from "./swapEstimate";
 import { withUsdPointValue } from "./usdPointValue";
 import { candleTimeMs, scanSymbol, type ScanStatus } from "./symbolScanner";
 import type { StrategyId } from "./strategyRegistry";
@@ -75,8 +77,13 @@ export interface BacktestTrade extends BacktestPlan {
   readonly rMultiple: number;
   /** B3: lot yang dipakai (saran mesin; tanpa saran = lot minimum broker). */
   readonly lot: number;
-  /** B3: hasil bersih USD = (selisih harga × nilai poin − komisi) × lot. */
+  /** B3: hasil bersih USD = (selisih harga × nilai poin − komisi) × lot + swap. */
   readonly netUsd: number;
+  /**
+   * B5c: swap menginap USD (negatif = biaya) dari mode broker (Finex mati = 0).
+   * null = tidak bisa dihitung (spesifikasi/kurs tidak ada) → tidak masuk netUsd.
+   */
+  readonly swapUsd?: number | null;
 }
 
 export interface BacktestInput {
@@ -162,6 +169,15 @@ const ZERO_BROKER: BrokerSettings = {
   atrMultiplier: 0, targetRR: 0,
 };
 
+/** "2026.01.05 13:00" + n jam → format jam server yang sama. */
+function addHours(time: string, hours: number): string {
+  const ms = candleTimeMs(time);
+  if (ms === null) return time;
+  const d = new Date(ms + hours * 3_600_000);
+  const p = (v: number): string => String(v).padStart(2, "0");
+  return `${d.getUTCFullYear()}.${p(d.getUTCMonth() + 1)}.${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
 function round12(v: number): number {
   return Number(v.toPrecision(12));
 }
@@ -228,7 +244,23 @@ export function runBacktest(input: BacktestInput): BacktestRun {
       plan.direction === "BELI" ? exit.exitPrice - plan.entry : plan.entry - exit.exitPrice,
     );
     const lot = plan.suggestedLot !== null && plan.suggestedLot > 0 ? plan.suggestedLot : broker.minLot;
-    const netUsd = Math.round((priceResult * broker.pointValue - broker.commission) * lot * 100) / 100;
+    // B5c: masuk di tutup candle sinyal, keluar dianggap di tutup candle keluar (hati-hati).
+    const swap = estimateSwap(
+      {
+        symbol, broker: input.brokerId, direction: plan.direction, lot, price: plan.entry,
+        entryServer: addHours(String(candles[i].time ?? ""), 1),
+        nowServer: addHours(String(candles[exitAt].time ?? ""), 1),
+      },
+      (amount, currency) => {
+        if (currency === "USD") return amount;
+        const rate = input.fxRates?.[currency as keyof ExchangeRates];
+        return input.fxRates !== null && typeof rate === "number" && rate > 0
+          ? convertToUSD(amount, currency, input.fxRates)
+          : null;
+      },
+    );
+    const swapUsd = swap === null ? null : swap.value;
+    const netUsd = Math.round(((priceResult * broker.pointValue - broker.commission) * lot + (swapUsd ?? 0)) * 100) / 100;
     trades.push({
       direction: plan.direction,
       entry: plan.entry,
@@ -243,6 +275,7 @@ export function runBacktest(input: BacktestInput): BacktestRun {
       rMultiple: risk > 0 ? Math.round((priceResult / risk) * 100) / 100 : 0,
       lot,
       netUsd,
+      swapUsd,
     });
     if (exit.outcome === "TERBUKA") break;
     // Sinyal berikutnya paling cepat di close candle tempat posisi tutup.

@@ -12,8 +12,9 @@
 import type { Candle } from "../calculations/swingDetector";
 import { scoreSetup, type StrategySetup } from "../calculations/decisionEngine";
 import type { BrokerSettings, MarketData } from "../types/analysis";
+import { candleSetup } from "./candleStrategy";
 
-export type StrategyId = "skor";
+export type StrategyId = "skor" | "candle";
 
 export interface StrategyContext {
   readonly market: MarketData;
@@ -37,6 +38,12 @@ export const STRATEGIES: Readonly<Record<StrategyId, Strategy>> = {
     label: "Skor indikator",
     description: "MA50 + CCI + MACD + RSI (skor >= 3 searah MA50); SL support/resistance atau ATR, TP = R:R broker.",
     propose: ({ market, broker }) => scoreSetup(market, broker),
+  },
+  candle: {
+    id: "candle",
+    label: "Pola candle (tren → mundur → penolakan)",
+    description: "C1: tren HH/HL dari swing, mundur >= 1×ATR tanpa menembus lembah/puncak, lalu wick penolakan atau engulfing; SL di ujung wick, TP = R:R broker.",
+    propose: ({ market, broker, candles }) => candleSetup(market, broker, candles),
   },
 };
 

@@ -131,11 +131,11 @@ function segmentLines(label: string, s: BacktestSegment): string[] {
   return [
     `${label}`,
     `  Trade tutup        : ${s.n} (TP ${s.outcomes.TP} · SL ${s.outcomes.SL} · batas waktu ${s.outcomes.WAKTU})`,
-    `  Tingkat menang     : ${pct(s.winRate)}  |  titik impas: ${pct(s.breakEvenWinRate)}`,
+    `  Tingkat menang     : ${pct(s.winRate)}  |  titik impas: ${pct(s.breakEvenWinRate)}  |  selisih: ${s.edge === null ? "-" : `${s.edge >= 0 ? "+" : "−"}${(Math.abs(s.edge) * 100).toFixed(1).replace(".", ",")} poin`}`,
     `  Hasil bersih       : ${rp(s.totalIdr)}  (rata-rata ${rp(s.expectancyIdr)} per trade)`,
     `  Rata menang / rugi : ${rp(s.avgWinIdr)} / ${rp(s.avgLossIdr)}`,
     `  Rugi beruntun maks : ${s.worstLosingStreak} kali  |  turun terdalam: ${rp(s.maxDrawdownIdr)}`,
-    `  Penilaian          : ${s.verdict === "UNTUNG" ? "UNTUNG" : s.verdict === "RUGI" ? "RUGI" : "BELUM CUKUP BUKTI"}`,
+    `  Penilaian          : ${s.verdict === "UNTUNG" ? "UNTUNG" : s.verdict === "RUGI" ? "RUGI" : s.verdict === "TIPIS" ? "UNTUNG TIPIS (bisa kebetulan)" : "BELUM CUKUP BUKTI"}`,
   ];
 }
 
@@ -159,8 +159,9 @@ export function formatBacktestReport(
     "",
     ...segmentLines("DATA UJIAN (bagian akhir)", report.ujian),
     "",
-    `VONIS: ${report.verdict === "LAYAK_DEMO" ? "LAYAK DICOBA DI DEMO" : report.verdict === "TIDAK_LAYAK" ? "TIDAK LAYAK" : "BELUM CUKUP BUKTI"}`,
+    `VONIS: ${report.verdict === "LAYAK_DEMO" ? "LAYAK DICOBA DI DEMO" : report.verdict === "TIDAK_LAYAK" ? "TIDAK LAYAK" : report.verdict === "MODAL_KURANG" ? "MODAL KURANG" : "BELUM CUKUP BUKTI"}`,
     `  ${report.verdictText}`,
+    `Modal minimal (turun terdalam ≤ 25% modal): ${rp(report.requiredCapitalIdr)}  |  modal dinilai: ${rp(report.capitalIdr)}`,
     "",
     `Posisi masih terbuka saat data habis (tidak dihitung): ${report.openAtEnd}`,
     `Satpam TIDAK ikut diuji: ${report.skippedGuards.join(", ")}`,

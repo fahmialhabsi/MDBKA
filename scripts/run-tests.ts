@@ -248,8 +248,9 @@ import {
 import { withUsdPointValue } from "../src/lib/usdPointValue";
 import { resolveCsvBidAsk } from "../src/lib/csvQuote";
 import { BACKTEST_SKIPPED_GUARDS, BACKTEST_WINDOW, runBacktest, simulateTrade, type BacktestRun, type BacktestTrade } from "../src/lib/backtest";
-import { buildBacktestReport, summarizeTrades } from "../src/lib/backtestReport";
+import { buildBacktestReport, MAX_DRAWDOWN_SHARE_OF_CAPITAL, MIN_EDGE_OVER_BREAKEVEN, summarizeTrades } from "../src/lib/backtestReport";
 import { DEFAULT_STRATEGY_ID, getStrategy, parseStrategyId, STRATEGIES, STRATEGY_IDS } from "../src/lib/strategyRegistry";
+import { bearishRejection, bullishRejection, CANDLE_PARAMS, candleSetup, trendFromSwings } from "../src/lib/candleStrategy";
 import { formatBacktestReport, parseBacktestArgs, parseSpreadsFromMargin, pickBacktestSymbols } from "../src/lib/backtestCli";
 import {
   calculateSwapWithTriple,
@@ -8180,8 +8181,8 @@ test("643. S1 colokan strategi: analyzeMarket = applyRiskGates(scoreSetup) dan s
 });
 
 test("644. S2 rak strategi: default skor, pemindai & alat uji identik tanpa/dengan pilihan skor", () => {
-  assert(DEFAULT_STRATEGY_ID === "skor" && STRATEGY_IDS.join(",") === "skor" && getStrategy(undefined).id === "skor", "default skor");
-  assert(parseStrategyId(" SKOR ") === "skor" && parseStrategyId("candle") === null && parseStrategyId(null) === null, "parse jujur");
+  assert(DEFAULT_STRATEGY_ID === "skor" && STRATEGY_IDS[0] === "skor" && getStrategy(undefined).id === "skor", "default skor"); // C1: rak kini juga berisi "candle"
+  assert(parseStrategyId(" SKOR ") === "skor" && parseStrategyId("ajaib") === null && parseStrategyId(null) === null, "parse jujur"); // C1: "candle" kini strategi sah
   assert(STRATEGIES.skor.label === "Skor indikator" && STRATEGIES.skor.description.includes("MA50"), "label/deskripsi");
   const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
   const tanpa = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: scanCsv(80), quote: null, equity: 10000, fxRates: rates });
@@ -8209,6 +8210,134 @@ test("645. S2 perintah backtest: --strategi (default skor, tak dikenal ditolak) 
   assert(text.includes("Strategi: Skor indikator"), "nama strategi di rapor");
   assert(!formatBacktestReport(report, { broker: "Finex", equity: 100, extraNotes: [] }).includes("Strategi:"), "tanpa nama → tidak ditulis");
   assert(readSrc("scripts/backtest.ts").includes("strategy: opt.strategy"), "perintah meneruskan strategi");
+});
+
+function zigCandles(segs: Array<[number, number]>, start = 1.3): Candle[] {
+  const out: Candle[] = [];
+  let p = start;
+  for (const [n, step] of segs) {
+    for (let i = 0; i < n; i++) {
+      const o = p;
+      const c = p + step;
+      const naik = c > o;
+      out.push({ time: `t${out.length}`, open: o, high: naik ? c + 0.0001 : o + 0.00005, low: naik ? o - 0.00005 : c - 0.0001, close: c });
+      p = c;
+    }
+  }
+  return out;
+}
+
+function candleCase(segs: Array<[number, number]>, last: (c: number) => Candle, atr = 0.002) {
+  const cs = zigCandles(segs);
+  const pin = last(cs[cs.length - 1].close);
+  cs.push(pin);
+  const market: MarketData = {
+    symbol: "GBPUSD", timeframe: "H1", bid: pin.close, ask: pin.close + 0.0001, close: pin.close, open: pin.open,
+    high: pin.high, low: pin.low, ma50: 0, cci: 0, rsi: 0, macd: 0, macdSignal: 0, atr, support: 0, resistance: 0,
+  };
+  const broker: BrokerSettings = {
+    equity: 10000, riskPercent: 1, minLot: 0.01, lotStep: 0.01, pointValue: 100000, contractSize: 100000,
+    commission: 1, slippage: 0, buffer: 0.0002, atrMultiplier: 1.5, targetRR: 2,
+  };
+  return { pin, setup: candleSetup(market, broker, cs) };
+}
+
+const NAIK_MUNDUR: Array<[number, number]> = [[8, 0.001], [5, -0.001], [8, 0.001], [5, -0.001], [8, 0.001], [4, -0.001]];
+const PIN_BAWAH = (c: number): Candle => ({ time: "pin", open: c, high: c + 0.0002, low: c - 0.0015, close: c + 0.0001 });
+
+test("646. C1 pembaca candle: tren dari swing, wick penolakan & engulfing (BELI/JUAL)", () => {
+  const sp = (price: number): { index: number; time: string; price: number; type: "swing-high" } => ({ index: 0, time: "", price, type: "swing-high" });
+  assert(trendFromSwings([sp(1), sp(2)], [sp(0.5), sp(0.7)]) === "NAIK" && trendFromSwings([sp(2), sp(1)], [sp(0.7), sp(0.5)]) === "TURUN", "naik/turun");
+  assert(trendFromSwings([sp(1), sp(2)], [sp(0.7), sp(0.5)]) === "TIDAK_JELAS" && trendFromSwings([sp(1)], [sp(0.5), sp(0.7)]) === "TIDAK_JELAS", "campur/kurang = tidak jelas");
+  const pin = { time: "", open: 1.1, high: 1.1003, low: 1.098, close: 1.1002 };
+  assert(bullishRejection(undefined, pin) !== null && bearishRejection(undefined, pin) === null, "pin bar bawah");
+  const merah = { time: "", open: 1.101, high: 1.1012, low: 1.0998, close: 1.1 };
+  const telan = { time: "", open: 1.0999, high: 1.1015, low: 1.0997, close: 1.1012 };
+  assert(bullishRejection(merah, telan)?.includes("engulfing") === true, "bullish engulfing");
+  assert(bearishRejection(telan, { time: "", open: 1.1013, high: 1.1014, low: 1.0995, close: 1.0998 })?.includes("engulfing") === true, "bearish engulfing");
+  const biasa = { time: "", open: 1.1, high: 1.1004, low: 1.0998, close: 1.1003 };
+  assert(bullishRejection(undefined, biasa) === null, "candle biasa bukan penolakan");
+  assert(CANDLE_PARAMS.swingStrength === 3 && CANDLE_PARAMS.minPullbackAtr === 1 && CANDLE_PARAMS.minWickToBody === 2, "parameter yang disetujui");
+});
+
+test("647. C1 setup BELI/JUAL: SL di ujung wick − buffer, TP = 2×; tren rusak/mundur kurang/tanpa penolakan = TUNGGU", () => {
+  const beli = candleCase(NAIK_MUNDUR, PIN_BAWAH);
+  const { stopLoss: sl, takeProfit: tp, riskDistance: rd } = beli.setup;
+  if (beli.setup.decision !== "BELI" || sl === null || tp === null || rd === null) throw new Error(JSON.stringify(beli.setup));
+  assert(Math.abs(sl - (beli.pin.low - 0.0002)) < 1e-12, "SL = ujung wick − buffer");
+  assert(Math.abs(tp - (beli.setup.entry + 2 * rd)) < 1e-12 && beli.setup.entry === beli.pin.close + 0.0001, "TP 2× dari ask");
+  assert(beli.setup.factors.some((f) => f.startsWith("Wick bawah panjang")), JSON.stringify(beli.setup.factors));
+  const jual = candleCase([[8, -0.001], [5, 0.001], [8, -0.001], [5, 0.001], [8, -0.001], [4, 0.001]], (c) => ({ time: "pin", open: c, high: c + 0.0015, low: c - 0.0002, close: c - 0.0001 }));
+  assert(jual.setup.decision === "JUAL" && jual.setup.stopLoss !== null && Math.abs(jual.setup.stopLoss - (jual.pin.high + 0.0002)) < 1e-12, JSON.stringify(jual.setup));
+  const rusak = candleCase([[8, 0.001], [5, -0.001], [8, 0.001], [5, -0.001], [8, 0.001], [9, -0.001]], PIN_BAWAH);
+  assert(rusak.setup.decision === "TUNGGU" && rusak.setup.factors.some((f) => f.includes("tertembus")), JSON.stringify(rusak.setup.factors));
+  const kurang = candleCase([[8, 0.001], [5, -0.001], [8, 0.001], [5, -0.001], [8, 0.001], [1, -0.001]], PIN_BAWAH, 0.004);
+  assert(kurang.setup.decision === "TUNGGU" && kurang.setup.factors.some((f) => f.startsWith("Mundur baru")), JSON.stringify(kurang.setup.factors));
+  const tanpa = candleCase(NAIK_MUNDUR, (c) => ({ time: "x", open: c, high: c + 0.0003, low: c - 0.0003, close: c - 0.0002 }));
+  assert(tanpa.setup.decision === "TUNGGU" && tanpa.setup.factors.some((f) => f.includes("menunggu candle penolakan")) && tanpa.setup.stopLoss === null, JSON.stringify(tanpa.setup.factors));
+  const datar = candleCase([[40, 0]], PIN_BAWAH);
+  assert(datar.setup.decision === "TUNGGU", "pasar datar = TUNGGU");
+});
+
+test("648. C1 terpasang di rak: --strategi candle jalan lewat gerbang bersama, tanpa mengintip masa depan", () => {
+  assert(parseStrategyId("candle") === "candle" && STRATEGIES.candle.label.startsWith("Pola candle") && DEFAULT_STRATEGY_ID === "skor", "rak");
+  const pilih = parseBacktestArgs(["--broker", "finex", "--equity", "100", "--strategi", "candle"]);
+  assert(pilih.ok && pilih.options.strategy === "candle", JSON.stringify(pilih));
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const gelombang = (i: number) => 1.3 + 0.006 * Math.sin(i / 25) + 0.001 * Math.sin(i / 4) + 0.0004 * Math.sin(i * 1.7);
+  const base = { symbol: "GBPUSD", brokerId: "finex" as const, equity: 10000, fxRates: rates, spread: 0.00012, strategy: "candle" as const };
+  const full = runBacktest({ ...base, csv: btCsv(900, gelombang) });
+  const potong = runBacktest({ ...base, csv: btCsv(650, gelombang) });
+  assert(full.error === null && Object.values(full.statusCount).reduce((a, b) => a + (b ?? 0), 0) === full.evaluated, String(full.error));
+  const tutup = potong.trades.filter((t) => t.outcome !== "TERBUKA");
+  assert(tutup.every((t, k) => JSON.stringify(t) === JSON.stringify(full.trades[k])), "strategi candle tidak boleh mengintip masa depan");
+  const skor = runBacktest({ ...base, strategy: "skor", csv: btCsv(900, gelombang) });
+  assert(JSON.stringify(skor.statusCount) !== JSON.stringify(full.statusCount), "strategi candle benar-benar berbeda dari skor");
+  const cs = readSrc("src/lib/candleStrategy.ts");
+  assert(!cs.includes("suggestedLot") && !cs.includes("pointValue") && !cs.includes("commission") && readSrc("src/lib/symbolScanner.ts").includes("applyRiskGates("), "lot/risiko tetap rumus bersama, bukan salinan");
+});
+
+test("649. B5a ambang ketat: untung tapi < 3 poin di atas titik impas = TIPIS → TIDAK LAYAK", () => {
+  assert(MIN_EDGE_OVER_BREAKEVEN === 0.03, "ambang 3 poin");
+  // 10 menang × 1,1 & 10 rugi × 1 → menang 50%, titik impas 1/2,1 = 47,6% → selisih 2,4 poin (tipis)
+  const tipis = (day0: number) => Array.from({ length: 20 }, (_, k) => btTrade(day0 + Math.floor(k / 10), 1 + (k % 10) * 2, k % 2 === 0 ? 1.1 : -1));
+  const s = summarizeTrades(tipis(2), 16000);
+  assert(s.totalUsd > 0 && s.edge !== null && s.edge > 0 && s.edge < 0.03 && s.verdict === "TIPIS", JSON.stringify({ e: s.edge, v: s.verdict }));
+  const r = buildBacktestReport([btRun([...tipis(2), ...tipis(25)])], 16000);
+  assert(r.verdict === "TIDAK_LAYAK" && r.verdictText.includes("TIPIS"), r.verdictText);
+  const jelas = summarizeTrades(Array.from({ length: 20 }, (_, k) => btTrade(2 + Math.floor(k / 10), 1 + (k % 10) * 2, k % 2 === 0 ? 2 : -1)), 16000);
+  assert(jelas.verdict === "UNTUNG" && jelas.edge !== null && jelas.edge >= 0.03, "selisih besar tetap UNTUNG");
+});
+
+test("650. B5b cek modal: modal minimal = turun terdalam ÷ 25%; modal kecil = MODAL KURANG", () => {
+  assert(MAX_DRAWDOWN_SHARE_OF_CAPITAL === 0.25, "25%");
+  const latih = Array.from({ length: 20 }, (_, k) => btTrade(2 + Math.floor(k / 10), 1 + (k % 10) * 2, k % 2 === 0 ? 2 : -1));
+  const ujian = Array.from({ length: 20 }, (_, k) => btTrade(25 + Math.floor(k / 10), 1 + (k % 10) * 2, k % 2 === 0 ? 2 : -1));
+  // turun terdalam = 1 USD (sekali rugi) → Rp16.000 → modal minimal Rp64.000
+  const kaya = buildBacktestReport([btRun([...latih, ...ujian])], 16000, undefined, 10);
+  assert(kaya.requiredCapitalIdr === 64000 && kaya.capitalIdr === 160000 && kaya.verdict === "LAYAK_DEMO", JSON.stringify([kaya.requiredCapitalIdr, kaya.capitalIdr, kaya.verdict]));
+  const miskin = buildBacktestReport([btRun([...latih, ...ujian])], 16000, undefined, 2);
+  assert(miskin.verdict === "MODAL_KURANG" && miskin.verdictText.includes("Rp64.000") && miskin.verdictText.includes("JANGAN"), miskin.verdictText);
+  const tanpa = buildBacktestReport([btRun([...latih, ...ujian])], 16000);
+  assert(tanpa.capitalIdr === null && tanpa.verdict === "LAYAK_DEMO" && tanpa.notes.some((n) => n.startsWith("Cek modal dilewati")), "tanpa modal = dicatat jujur");
+  const text = formatBacktestReport(miskin, { broker: "Finex", equity: 2, extraNotes: [] });
+  assert(text.includes("VONIS: MODAL KURANG") && text.includes("Modal minimal") && text.includes("selisih: +"), text);
+  assert(readSrc("scripts/backtest.ts").includes("buildBacktestReport(runs, kurs?.rate ?? null, undefined, opt.equity)"), "perintah menilai modal");
+});
+
+test("651. B5c swap menginap: Finex mati = 0, MIFX/OTB dihitung & masuk hasil bersih; catatan rapor jujur", () => {
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const emas = (i: number) => 2650 + 12 * Math.sin(i / 40) + 3 * Math.sin(i / 3);
+  const finex = runBacktest({ symbol: "XAUUSD", brokerId: "finex", csv: btCsv(900, emas), equity: 100000, fxRates: rates, spread: 0.3 });
+  assert(finex.trades.length > 0 && finex.trades.every((t) => t.swapUsd === 0), JSON.stringify(finex.trades.map((t) => t.swapUsd)));
+  const mifx = runBacktest({ symbol: "XAUUSD.m", brokerId: "mifx", csv: btCsv(900, emas), equity: 100000, fxRates: rates, spread: 0.3 });
+  assert(mifx.trades.some((t) => typeof t.swapUsd === "number" && t.swapUsd !== 0), JSON.stringify(mifx.trades.map((t) => t.swapUsd)));
+  const src = readSrc("src/lib/backtest.ts");
+  assert(src.includes("estimateSwap(") && src.includes("+ (swapUsd ?? 0)"), "swap dari estimateSwap yang sama, masuk netUsd");
+  const r = buildBacktestReport([mifx], 17000);
+  assert(r.notes.some((n) => n.includes("swap menginap dihitung")) && !r.notes.some((n) => n.includes("swap menginap tidak dihitung")), JSON.stringify(r.notes));
+  const tanpaKurs = runBacktest({ symbol: "XAUUSD.m", brokerId: "mifx", csv: btCsv(900, emas), equity: 100000, fxRates: { ...rates, IDR: undefined }, spread: 0.3 });
+  assert(tanpaKurs.trades.every((t) => t.swapUsd === null || typeof t.swapUsd === "number"), "swap tak terhitung = null, bukan tebakan");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

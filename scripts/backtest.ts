@@ -66,7 +66,7 @@ async function main(): Promise<number> {
     runs.push(run);
     console.log(`  ${symbol.padEnd(12)} ${run.error ?? `${run.trades.length} trade`}`);
   }
-  const report = buildBacktestReport(runs, kurs?.rate ?? null);
+  const report = buildBacktestReport(runs, kurs?.rate ?? null, undefined, opt.equity);
   console.log("");
   console.log(formatBacktestReport(report, {
     broker: opt.marginTag,

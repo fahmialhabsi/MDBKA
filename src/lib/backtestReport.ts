@@ -25,8 +25,20 @@ import {
 /** Porsi waktu untuk data latih (sisanya data ujian). */
 export const BACKTEST_TRAIN_FRACTION = 0.7;
 
-export type SegmentVerdict = "BELUM_CUKUP" | "UNTUNG" | "RUGI";
-export type BacktestVerdict = "BELUM_CUKUP" | "LAYAK_DEMO" | "TIDAK_LAYAK";
+/**
+ * B5a (12 Okt 2026): tingkat menang wajib MINIMAL sekian di atas titik impas
+ * (0,03 = 3 poin persen). Untung tapi di bawah ini = "TIPIS" (bisa kebetulan).
+ */
+export const MIN_EDGE_OVER_BREAKEVEN = 0.03;
+
+/**
+ * B5b (12 Okt 2026): turun terdalam maksimal 25% modal → modal minimal =
+ * turun terdalam ÷ 0,25 (= 4×). Modal di bawahnya = "MODAL_KURANG".
+ */
+export const MAX_DRAWDOWN_SHARE_OF_CAPITAL = 0.25;
+
+export type SegmentVerdict = "BELUM_CUKUP" | "UNTUNG" | "TIPIS" | "RUGI";
+export type BacktestVerdict = "BELUM_CUKUP" | "LAYAK_DEMO" | "TIDAK_LAYAK" | "MODAL_KURANG";
 
 export interface BacktestSegment {
   /** Trade yang sudah tutup (TERBUKA tidak dihitung). */
@@ -36,6 +48,8 @@ export interface BacktestSegment {
   readonly winRate: number | null;
   /** Tingkat menang minimum agar tidak rugi (0..1); null bila belum bisa dihitung. */
   readonly breakEvenWinRate: number | null;
+  /** B5a: tingkat menang − titik impas (0..1); null bila belum bisa dihitung. */
+  readonly edge: number | null;
   readonly outcomes: Readonly<Record<Exclude<BacktestOutcome, "TERBUKA">, number>>;
   readonly totalUsd: number;
   /** null bila kurs Rupiah tidak tersedia. */
@@ -61,6 +75,10 @@ export interface BacktestReport {
   readonly ujian: BacktestSegment;
   /** Posisi yang masih terbuka saat data habis (tidak dihitung). */
   readonly openAtEnd: number;
+  /** B5b: modal minimal (Rp) agar turun terdalam <= 25% modal; null bila tak terhitung. */
+  readonly requiredCapitalIdr: number | null;
+  /** B5b: modal yang dinilai (Rp); null = tidak dicek. */
+  readonly capitalIdr: number | null;
   readonly verdict: BacktestVerdict;
   readonly verdictText: string;
   readonly skippedGuards: readonly string[];
@@ -101,11 +119,14 @@ export function summarizeTrades(
   }
   const count = (o: BacktestOutcome): number => closed.filter((t) => t.outcome === o).length;
   const expectancyUsd = n > 0 ? totalUsd / n : null;
+  const winRate = n > 0 ? winsList.length / n : null;
+  const edge = winRate !== null && breakEvenWinRate !== null ? winRate - breakEvenWinRate : null;
   return {
     n,
     wins: winsList.length,
-    winRate: n > 0 ? winsList.length / n : null,
+    winRate,
     breakEvenWinRate,
+    edge,
     outcomes: { TP: count("TP"), SL: count("SL"), WAKTU: count("WAKTU") },
     totalUsd,
     totalIdr: rupiah(totalUsd, usdIdr),
@@ -114,7 +135,14 @@ export function summarizeTrades(
     avgLossIdr: avgLossUsd === null ? null : rupiah(avgLossUsd, usdIdr),
     worstLosingStreak: worst,
     maxDrawdownIdr: rupiah(Math.round(drawdown * 100) / 100, usdIdr),
-    verdict: n < MIN_PROVEN_TRADES ? "BELUM_CUKUP" : totalUsd > 0 ? "UNTUNG" : "RUGI",
+    verdict:
+      n < MIN_PROVEN_TRADES
+        ? "BELUM_CUKUP"
+        : totalUsd <= 0
+          ? "RUGI"
+          : edge === null || edge < MIN_EDGE_OVER_BREAKEVEN
+            ? "TIPIS"
+            : "UNTUNG",
   };
 }
 
@@ -129,6 +157,8 @@ export function buildBacktestReport(
   runs: readonly BacktestRun[],
   usdIdr: number | null,
   trainFraction: number = BACKTEST_TRAIN_FRACTION,
+  /** B5b: modal (USD) yang dinilai; absen/null = cek modal dilewati (dicatat). */
+  equityUsd: number | null = null,
 ): BacktestReport {
   const ok = runs.filter((r) => r.error === null);
   const kurs = usdIdr !== null && Number.isFinite(usdIdr) && usdIdr > 0 ? usdIdr : null;
@@ -147,25 +177,42 @@ export function buildBacktestReport(
   const latih = summarizeTrades(trades.filter(isTrain), kurs);
   const ujian = summarizeTrades(trades.filter((t) => !isTrain(t)), kurs);
 
+  const all = summarizeTrades(trades, kurs);
+  const requiredCapitalIdr =
+    all.maxDrawdownIdr === null ? null : Math.ceil(all.maxDrawdownIdr / MAX_DRAWDOWN_SHARE_OF_CAPITAL);
+  const capitalIdr = equityUsd !== null && kurs !== null ? Math.round(equityUsd * kurs) : null;
+  const tipis = latih.verdict === "TIPIS" || ujian.verdict === "TIPIS";
   const verdict: BacktestVerdict =
     latih.verdict === "BELUM_CUKUP" || ujian.verdict === "BELUM_CUKUP"
       ? "BELUM_CUKUP"
-      : latih.verdict === "UNTUNG" && ujian.verdict === "UNTUNG"
-        ? "LAYAK_DEMO"
-        : "TIDAK_LAYAK";
+      : latih.verdict !== "UNTUNG" || ujian.verdict !== "UNTUNG"
+        ? "TIDAK_LAYAK"
+        : capitalIdr !== null && requiredCapitalIdr !== null && capitalIdr < requiredCapitalIdr
+          ? "MODAL_KURANG"
+          : "LAYAK_DEMO";
+  const pct = (v: number): string => `${Math.round(v * 100)} poin`;
   const verdictText =
     verdict === "LAYAK_DEMO"
-      ? "Untung di data latih DAN data ujian — layak dicoba di akun demo (belum di akun live)."
-      : verdict === "TIDAK_LAYAK"
-        ? "Rugi di data latih atau data ujian — jangan dipakai; tetap TUNGGU."
-        : `Bukti belum cukup (minimal ${MIN_PROVEN_TRADES} trade di latih DAN ujian) — belum bisa dinilai.`;
+      ? `Untung jelas (≥ ${pct(MIN_EDGE_OVER_BREAKEVEN)} di atas titik impas) di data latih DAN data ujian — layak dicoba di akun demo (belum di akun live).`
+      : verdict === "MODAL_KURANG"
+        ? `Strategi lulus, tetapi modal terlalu kecil: turun terdalam butuh modal minimal Rp${(requiredCapitalIdr ?? 0).toLocaleString("id-ID")} — JANGAN dipakai dengan modal ini.`
+        : verdict === "TIDAK_LAYAK"
+          ? tipis && latih.verdict !== "RUGI" && ujian.verdict !== "RUGI"
+            ? `Untung terlalu TIPIS (< ${pct(MIN_EDGE_OVER_BREAKEVEN)} di atas titik impas) — bisa kebetulan; jangan dipakai, tetap TUNGGU.`
+            : "Rugi atau untung terlalu tipis di data latih/ujian — jangan dipakai; tetap TUNGGU."
+          : `Bukti belum cukup (minimal ${MIN_PROVEN_TRADES} trade di latih DAN ujian) — belum bisa dinilai.`;
 
   const notes: string[] = [
     "Spread dianggap tetap (spread masa lalu tidak tercatat MT5).",
-    "Slippage dan swap menginap tidak dihitung.",
+    "Slippage tidak dihitung; swap menginap dihitung dari mode broker (Finex: swap mati = 0).",
+    ...(() => {
+      const unknown = trades.filter((t) => t.outcome !== "TERBUKA" && t.swapUsd === null).length;
+      return unknown > 0 ? [`Swap tidak bisa dihitung untuk ${unknown} trade (dianggap 0).`] : [];
+    })(),
     kurs === null
       ? "Kurs Rupiah tidak tersedia — hasil hanya dalam USD."
       : `Kurs tetap Rp${Math.round(kurs).toLocaleString("id-ID")}/USD untuk semua trade.`,
+    ...(capitalIdr === null ? ["Cek modal dilewati (modal/kurs tidak diberikan)."] : []),
   ];
   for (const r of runs) {
     if (r.error !== null) notes.push(`${r.symbol}: ${r.error}`);
@@ -177,10 +224,12 @@ export function buildBacktestReport(
     endTime: endMs === null ? "" : formatMs(endMs),
     splitTime: splitMs === null ? "" : formatMs(splitMs),
     usdIdr: kurs,
-    all: summarizeTrades(trades, kurs),
+    all,
     latih,
     ujian,
     openAtEnd: trades.filter((t) => t.outcome === "TERBUKA").length,
+    requiredCapitalIdr,
+    capitalIdr,
     verdict,
     verdictText,
     skippedGuards: BACKTEST_SKIPPED_GUARDS,
