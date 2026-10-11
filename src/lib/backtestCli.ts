@@ -4,7 +4,7 @@
  * menyusun teks rapor. Baca/tulis file ada di scripts/backtest.ts.
  */
 import type { BrokerId } from "../types/broker";
-import type { BacktestReport, BacktestSegment } from "./backtestReport";
+import type { BacktestReport, BacktestSegment, BacktestVerdict, CapitalTopUp } from "./backtestReport";
 import { riskGroupOf, type RiskGroupId } from "./riskGroup";
 import { DEFAULT_STRATEGY_ID, parseStrategyId, STRATEGY_IDS, type StrategyId } from "./strategyRegistry";
 
@@ -127,6 +127,65 @@ function pct(v: number | null): string {
   return v === null ? "-" : `${(v * 100).toFixed(1).replace(".", ",")}%`;
 }
 
+const STATUS_LABEL: Readonly<Record<string, string>> = {
+  LOLOS: "lolos (jadi trade)",
+  TUNGGU: "tunggu (tak ada pola)",
+  DITAHAN_RISIKO: "ditahan risiko/modal",
+  DITAHAN_BIAYA: "ditahan biaya",
+  DATA: "data belum lengkap",
+  PASAR_TUTUP: "pasar tutup",
+};
+
+function usd(v: number): string {
+  return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** B5d: baris "jam per status" + modal yang dibutuhkan + dana tambahan. */
+export function capitalLines(
+  report: BacktestReport,
+  equityUsd: number,
+  topUp: CapitalTopUp | null,
+  retestEquityUsd: number | null,
+  /**
+   * Vonis strategi SAAT modal cukup (uji ulang bila ada, selain itu rapor utama).
+   * TIDAK_LAYAK → dana tambahan TIDAK disarankan (hanya memperbesar rugi).
+   */
+  judged: { readonly verdict: BacktestVerdict; readonly totalIdr: number | null } | null = null,
+): string[] {
+  const totals = Object.entries(report.statusTotals)
+    .filter(([, v]) => (v ?? 0) > 0)
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
+    .map(([k, v]) => `${STATUS_LABEL[k] ?? k} ${(v ?? 0).toLocaleString("id-ID")}`);
+  const sc = report.signalCapital;
+  const lines = [`Jam per status      : ${totals.length > 0 ? totals.join(" · ") : "-"}`];
+  if (sc.signalCapitalUsd !== null) {
+    lines.push(`Modal agar 80% sinyal tak ditahan risiko: ${usd(sc.signalCapitalUsd)} (dari ${sc.fixableHolds.toLocaleString("id-ID")} jam ditahan)`);
+  }
+  if (sc.unfixableHolds > 0) {
+    lines.push(`${sc.unfixableHolds.toLocaleString("id-ID")} jam ditahan BATAS GOLONGAN Rupiah — tidak bisa diatasi dengan menambah modal.`);
+  }
+  if (retestEquityUsd !== null) {
+    lines.push(`(Diuji ulang otomatis dengan modal ${usd(retestEquityUsd)} untuk menghitung turun terdalam.)`);
+  }
+  if (judged !== null && judged.verdict === "TIDAK_LAYAK") {
+    lines.push(
+      `DANA TAMBAHAN       : JANGAN menambah dana. Dengan modal cukup pun strategi ini ${judged.totalIdr !== null && judged.totalIdr > 0 ? "UNTUNG TERLALU TIPIS (bisa kebetulan)" : "RUGI"}${judged.totalIdr !== null ? ` (hasil uji ${rp(judged.totalIdr)})` : ""} —`,
+      "                      menambah dana hanya memperbesar kerugian. Tetap TUNGGU.",
+    );
+  } else if (topUp === null) {
+    lines.push("DANA TAMBAHAN       : belum bisa dihitung (tidak ada sinyal maupun trade).");
+  } else if (topUp.topUpUsd <= 0) {
+    lines.push(`DANA TAMBAHAN       : tidak perlu — modal ${usd(equityUsd)} sudah >= kebutuhan ${usd(topUp.neededUsd)}.`);
+  } else {
+    lines.push(
+      `DANA TAMBAHAN       : Anda perlu menambah modal ${usd(topUp.topUpUsd)} (${rp(topUp.topUpIdr)})`,
+      `                      → total modal ${usd(topUp.neededUsd)} (${rp(topUp.neededIdr)}).`,
+      "                      Catatan: modal cukup BUKAN berarti strategi untung — lihat VONIS.",
+    );
+  }
+  return lines;
+}
+
 function segmentLines(label: string, s: BacktestSegment): string[] {
   return [
     `${label}`,
@@ -147,6 +206,10 @@ export function formatBacktestReport(
     readonly extraNotes: readonly string[];
     /** S2: nama strategi yang diuji (absen = tidak ditulis). */
     readonly strategy?: string;
+    /** B5d: dana tambahan (absen = baris modal tidak ditulis). */
+    readonly topUp?: CapitalTopUp | null;
+    readonly retestEquityUsd?: number | null;
+    readonly judged?: { readonly verdict: BacktestVerdict; readonly totalIdr: number | null } | null;
   },
 ): string {
   const lines = [
@@ -162,6 +225,7 @@ export function formatBacktestReport(
     `VONIS: ${report.verdict === "LAYAK_DEMO" ? "LAYAK DICOBA DI DEMO" : report.verdict === "TIDAK_LAYAK" ? "TIDAK LAYAK" : report.verdict === "MODAL_KURANG" ? "MODAL KURANG" : "BELUM CUKUP BUKTI"}`,
     `  ${report.verdictText}`,
     `Modal minimal (turun terdalam ≤ 25% modal): ${rp(report.requiredCapitalIdr)}  |  modal dinilai: ${rp(report.capitalIdr)}`,
+    ...(head.topUp !== undefined ? capitalLines(report, head.equity, head.topUp, head.retestEquityUsd ?? null, head.judged ?? null) : []),
     "",
     `Posisi masih terbuka saat data habis (tidak dihitung): ${report.openAtEnd}`,
     `Satpam TIDAK ikut diuji: ${report.skippedGuards.join(", ")}`,

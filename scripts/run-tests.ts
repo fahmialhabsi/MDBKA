@@ -248,10 +248,10 @@ import {
 import { withUsdPointValue } from "../src/lib/usdPointValue";
 import { resolveCsvBidAsk } from "../src/lib/csvQuote";
 import { BACKTEST_SKIPPED_GUARDS, BACKTEST_WINDOW, runBacktest, simulateTrade, type BacktestRun, type BacktestTrade } from "../src/lib/backtest";
-import { buildBacktestReport, MAX_DRAWDOWN_SHARE_OF_CAPITAL, MIN_EDGE_OVER_BREAKEVEN, summarizeTrades } from "../src/lib/backtestReport";
+import { buildBacktestReport, capitalForSignals, capitalTopUp, MAX_DRAWDOWN_SHARE_OF_CAPITAL, MIN_EDGE_OVER_BREAKEVEN, SIGNAL_CAPITAL_COVERAGE, summarizeTrades } from "../src/lib/backtestReport";
 import { DEFAULT_STRATEGY_ID, getStrategy, parseStrategyId, STRATEGIES, STRATEGY_IDS } from "../src/lib/strategyRegistry";
 import { bearishRejection, bullishRejection, CANDLE_PARAMS, candleSetup, trendFromSwings } from "../src/lib/candleStrategy";
-import { formatBacktestReport, parseBacktestArgs, parseSpreadsFromMargin, pickBacktestSymbols } from "../src/lib/backtestCli";
+import { capitalLines, formatBacktestReport, parseBacktestArgs, parseSpreadsFromMargin, pickBacktestSymbols } from "../src/lib/backtestCli";
 import {
   calculateSwapWithTriple,
   getTripleSwapLabel,
@@ -8338,6 +8338,56 @@ test("651. B5c swap menginap: Finex mati = 0, MIFX/OTB dihitung & masuk hasil be
   assert(r.notes.some((n) => n.includes("swap menginap dihitung")) && !r.notes.some((n) => n.includes("swap menginap tidak dihitung")), JSON.stringify(r.notes));
   const tanpaKurs = runBacktest({ symbol: "XAUUSD.m", brokerId: "mifx", csv: btCsv(900, emas), equity: 100000, fxRates: { ...rates, IDR: undefined }, spread: 0.3 });
   assert(tanpaKurs.trades.every((t) => t.swapUsd === null || typeof t.swapUsd === "number"), "swap tak terhitung = null, bukan tebakan");
+});
+
+test("652. B5d modal agar sinyal lolos: risiko lot minimum ÷ 1%, persentil 80%, batas golongan dipisah", () => {
+  assert(SIGNAL_CAPITAL_COVERAGE === 0.8, "80%");
+  const holds = [1, 2, 3, 4, 5].map((r) => ({ riskAtMinLotUsd: r, riskPercent: 1, capUsd: 28 }));
+  const need = capitalForSignals([...holds, { riskAtMinLotUsd: 40, riskPercent: 1, capUsd: 28 }, { riskAtMinLotUsd: 2, riskPercent: 1, capUsd: null }]);
+  // butuh 100,200,300,400,500 → persentil 80% = 400; 40 > batas 28 & golongan ditahan = tak bisa
+  assert(need.signalCapitalUsd === 400 && need.fixableHolds === 5 && need.unfixableHolds === 2, JSON.stringify(need));
+  assert(capitalForSignals([]).signalCapitalUsd === null, "tanpa sinyal ditahan = null");
+  const t1 = capitalTopUp(8.5, 2549, 33_179_864, 17_881);
+  // turun terdalam Rp33,18 jt ÷ 17.881 = $1.855,61 < $2.549 → kebutuhan $2.549
+  assert(t1 !== null && t1.neededUsd === 2549 && t1.topUpUsd === 2540.5 && t1.topUpIdr === Math.ceil(2540.5 * 17_881), JSON.stringify(t1));
+  const t2 = capitalTopUp(100, 50, 4_000_000, 16_000);
+  assert(t2 !== null && t2.neededUsd === 250 && t2.topUpUsd === 150, `turun terdalam lebih besar menang: ${JSON.stringify(t2)}`);
+  const cukup = capitalTopUp(10_000, 2549, null, 17_881);
+  assert(cukup !== null && cukup.topUpUsd === 0, "modal cukup = 0");
+  assert(capitalTopUp(8.5, null, null, 17_881) === null, "tanpa data = null");
+});
+
+test("653. B5d rapor: 0 trade karena modal kecil = MODAL KURANG (bukan belum cukup), modal minimal '-', baris dana tambahan", () => {
+  const holds = Array.from({ length: 30 }, () => ({ riskAtMinLotUsd: 25, riskPercent: 1, capUsd: 28 }));
+  const run = { ...btRun([]), statusCount: { DITAHAN_RISIKO: 30, TUNGGU: 50 }, riskHolds: holds };
+  const r = buildBacktestReport([run], 17_881, undefined, 8.5);
+  assert(r.verdict === "MODAL_KURANG" && r.verdictText.includes("DITAHAN") && r.requiredCapitalIdr === null, `${r.verdict} ${r.requiredCapitalIdr}`);
+  assert(r.signalCapital.signalCapitalUsd === 2500 && r.statusTotals.DITAHAN_RISIKO === 30, JSON.stringify(r.signalCapital));
+  const lines = capitalLines(r, 8.5, capitalTopUp(8.5, 2500, null, 17_881), 2500).join("\n");
+  for (const kata of ["ditahan risiko/modal 30", "Modal agar 80% sinyal", "DANA TAMBAHAN", "$2,491.50", "Rp44.550.512", "BUKAN berarti strategi untung"]) {
+    assert(lines.includes(kata), `tanpa "${kata}": ${lines}`);
+  }
+  assert(formatBacktestReport(r, { broker: "Finex", equity: 8.5, extraNotes: [] }).includes("Modal minimal (turun terdalam ≤ 25% modal): -"), "Rp0 tidak boleh muncul sebagai modal minimal");
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const kecil = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: scanCsv(80), quote: null, equity: 8.5, fxRates: rates });
+  if (kecil.status === "DITAHAN_RISIKO") {
+    assert(kecil.riskHold !== undefined && kecil.riskHold.riskPercent === 1 && kecil.riskHold.riskAtMinLotUsd > 0, JSON.stringify(kecil));
+  } else {
+    assert(kecil.riskHold === undefined, "riskHold hanya untuk DITAHAN_RISIKO");
+  }
+  assert(readSrc("scripts/backtest.ts").includes("capitalTopUp(opt.equity, signalCapital, drawdownCapitalIdr, usdIdr)"), "perintah menghitung dana tambahan");
+});
+
+test("654. B5d pengaman: strategi TIDAK LAYAK saat modal cukup → JANGAN menambah dana (tanpa angka setoran)", () => {
+  const holds = Array.from({ length: 30 }, () => ({ riskAtMinLotUsd: 1.5, riskPercent: 1, capUsd: 2 }));
+  const r = buildBacktestReport([{ ...btRun([]), statusCount: { DITAHAN_RISIKO: 30 }, riskHolds: holds }], 17_881, undefined, 8.5);
+  const top = capitalTopUp(8.5, 150, 103_000_000, 17_881);
+  const rugi = capitalLines(r, 8.5, top, 150, { verdict: "TIDAK_LAYAK", totalIdr: -34_000_000 }).join("\n");
+  assert(rugi.includes("JANGAN menambah dana") && rugi.includes("−Rp34.000.000") && !rugi.includes("Anda perlu menambah modal"), rugi);
+  const lulus = capitalLines(r, 8.5, top, 150, { verdict: "LAYAK_DEMO", totalIdr: 5_000_000 }).join("\n");
+  assert(lulus.includes("Anda perlu menambah modal") && !lulus.includes("JANGAN"), lulus);
+  const src = readSrc("scripts/backtest.ts");
+  assert(src.includes("judged = { verdict: retest.verdict, totalIdr: retest.all.totalIdr }") && src.includes("judged,"), "vonis uji ulang dipakai untuk saran dana");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

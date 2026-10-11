@@ -102,6 +102,20 @@ export interface ScanRow {
    * diisi bila status LOLOS; selain itu absen/null (tidak ada angka order).
    */
   readonly plan?: ScanPlan | null;
+  /**
+   * B5d (12 Okt 2026): angka risiko untuk sinyal DITAHAN_RISIKO (absen di
+   * status lain) — bahan "modal yang dibutuhkan" di rapor uji data lama.
+   */
+  readonly riskHold?: ScanRiskHold;
+}
+
+export interface ScanRiskHold {
+  /** Risiko pada lot minimum broker (USD, termasuk spread & komisi). */
+  readonly riskAtMinLotUsd: number;
+  /** Persen risiko per trade dari modal (preset, mis. 1). */
+  readonly riskPercent: number;
+  /** Batas golongan dalam USD; null = golongan ditahan / kurs tidak ada. */
+  readonly capUsd: number | null;
 }
 
 export interface ScanPlan {
@@ -388,6 +402,15 @@ export function scanSymbol(input: ScanInput): ScanRow {
     costShareOfRisk: result.costShareOfRisk ?? null,
     candles: count,
     plan,
+    ...(status === "DITAHAN_RISIKO" && result.riskAtMinLot !== null
+      ? {
+          riskHold: {
+            riskAtMinLotUsd: result.riskAtMinLot,
+            riskPercent: broker.riskPercent,
+            capUsd: broker.riskCap?.usd ?? null,
+          },
+        }
+      : {}),
   };
 }
 

@@ -12,7 +12,7 @@ import { resolveCommonFilesDir } from "../server/routes/marginRoutes";
 import { readUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
 import { FALLBACK_RATES, fetchECBRates } from "../src/services/fxRateService";
 import { runBacktest, type BacktestRun } from "../src/lib/backtest";
-import { buildBacktestReport } from "../src/lib/backtestReport";
+import { buildBacktestReport, capitalTopUp } from "../src/lib/backtestReport";
 import { getStrategy } from "../src/lib/strategyRegistry";
 import {
   formatBacktestReport,
@@ -52,27 +52,47 @@ async function main(): Promise<number> {
   ];
   const rates = kurs === null ? ecb : { ...ecb, IDR: kurs.rate * ecb.USD };
 
-  const runs: BacktestRun[] = [];
-  for (const symbol of picked.symbols) {
-    const run = runBacktest({
-      symbol,
-      brokerId: opt.brokerId,
-      csv: readFileSync(longFile(symbol), "utf8"),
-      equity: opt.equity,
-      fxRates: rates,
-      spread: spreads.get(symbol) ?? 0,
-      strategy: opt.strategy,
+  const runAll = (equity: number, log: boolean): BacktestRun[] =>
+    picked.symbols.map((symbol) => {
+      const run = runBacktest({
+        symbol,
+        brokerId: opt.brokerId,
+        csv: readFileSync(longFile(symbol), "utf8"),
+        equity,
+        fxRates: rates,
+        spread: spreads.get(symbol) ?? 0,
+        strategy: opt.strategy,
+      });
+      if (log) console.log(`  ${symbol.padEnd(12)} ${run.error ?? `${run.trades.length} trade`}`);
+      return run;
     });
-    runs.push(run);
-    console.log(`  ${symbol.padEnd(12)} ${run.error ?? `${run.trades.length} trade`}`);
-  }
+  const usdIdr = kurs?.rate ?? null;
+  const runs = runAll(opt.equity, true);
   const report = buildBacktestReport(runs, kurs?.rate ?? null, undefined, opt.equity);
+
+  // B5d: modal agar sinyal tak ditahan risiko > modal kini → uji ulang dengan modal itu
+  // untuk mengetahui turun terdalam (bahan modal minimal), lalu hitung dana tambahan.
+  const signalCapital = report.signalCapital.signalCapitalUsd;
+  let retestEquityUsd: number | null = null;
+  let drawdownCapitalIdr = report.requiredCapitalIdr;
+  let judged = { verdict: report.verdict, totalIdr: report.all.totalIdr };
+  if (signalCapital !== null && signalCapital > opt.equity) {
+    retestEquityUsd = signalCapital;
+    console.log(`  (uji ulang dengan modal $${signalCapital} ...)`);
+    const retest = buildBacktestReport(runAll(signalCapital, false), usdIdr, undefined, signalCapital);
+    drawdownCapitalIdr = Math.max(drawdownCapitalIdr ?? 0, retest.requiredCapitalIdr ?? 0) || null;
+    judged = { verdict: retest.verdict, totalIdr: retest.all.totalIdr };
+  }
+  const topUp = capitalTopUp(opt.equity, signalCapital, drawdownCapitalIdr, usdIdr);
   console.log("");
   console.log(formatBacktestReport(report, {
     broker: opt.marginTag,
     equity: opt.equity,
     extraNotes,
     strategy: getStrategy(opt.strategy).label,
+    topUp,
+    retestEquityUsd,
+    judged,
   }));
   return 0;
 }

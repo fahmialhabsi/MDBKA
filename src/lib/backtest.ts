@@ -32,7 +32,7 @@ import { timeStopApplies, TIME_STOP_HOURS } from "./exitMonitor";
 import { applyBrokerPreset } from "./marketReset";
 import { estimateSwap } from "./swapEstimate";
 import { withUsdPointValue } from "./usdPointValue";
-import { candleTimeMs, scanSymbol, type ScanStatus } from "./symbolScanner";
+import { candleTimeMs, scanSymbol, type ScanRiskHold, type ScanStatus } from "./symbolScanner";
 import type { StrategyId } from "./strategyRegistry";
 
 /** Jumlah candle yang dilihat mesin tiap jam (= CSV live AutoExport). */
@@ -108,6 +108,8 @@ export interface BacktestRun {
   /** Hitungan status pemindai per jam yang dinilai (tanpa jam saat posisi terbuka). */
   readonly statusCount: Readonly<Partial<Record<ScanStatus, number>>>;
   readonly trades: readonly BacktestTrade[];
+  /** B5d: angka risiko tiap jam yang sinyalnya DITAHAN_RISIKO (bahan modal yang dibutuhkan). */
+  readonly riskHolds?: readonly ScanRiskHold[];
   /** B3: jam candle pertama & terakhir yang dinilai mesin ("" bila gagal). */
   readonly startTime: string;
   readonly endTime: string;
@@ -219,6 +221,7 @@ export function runBacktest(input: BacktestInput): BacktestRun {
 
   const statusCount: Partial<Record<ScanStatus, number>> = {};
   const trades: BacktestTrade[] = [];
+  const riskHolds: ScanRiskHold[] = [];
   let evaluated = 0;
   let i = window - 1;
   while (i < candles.length - 1) {
@@ -230,6 +233,7 @@ export function runBacktest(input: BacktestInput): BacktestRun {
     });
     evaluated += 1;
     statusCount[row.status] = (statusCount[row.status] ?? 0) + 1;
+    if (row.riskHold !== undefined) riskHolds.push(row.riskHold);
     const plan = row.status === "LOLOS" ? (row.plan ?? null) : null;
     if (plan === null) {
       i += 1;
@@ -282,7 +286,7 @@ export function runBacktest(input: BacktestInput): BacktestRun {
     i = exitAt;
   }
   return {
-    symbol, candles: candles.length, evaluated, statusCount, trades,
+    symbol, candles: candles.length, evaluated, statusCount, trades, riskHolds,
     startTime: String(candles[window - 1].time ?? ""),
     endTime: String(candles[candles.length - 1].time ?? ""),
     error: null,

@@ -13,7 +13,7 @@
  * Kurs USD→Rp memakai SATU angka dari pemanggil (kurs ECB terkini), bukan
  * kurs per tanggal — cukup untuk menilai strategi, bukan untuk pajak.
  */
-import { candleTimeMs } from "./symbolScanner";
+import { candleTimeMs, type ScanRiskHold, type ScanStatus } from "./symbolScanner";
 import { MIN_PROVEN_TRADES } from "./evaluationView";
 import {
   BACKTEST_SKIPPED_GUARDS,
@@ -36,6 +36,75 @@ export const MIN_EDGE_OVER_BREAKEVEN = 0.03;
  * turun terdalam ÷ 0,25 (= 4×). Modal di bawahnya = "MODAL_KURANG".
  */
 export const MAX_DRAWDOWN_SHARE_OF_CAPITAL = 0.25;
+
+/**
+ * B5d (12 Okt 2026): "modal agar sinyal tidak ditahan risiko" memakai
+ * persentil 80% — modal yang membuat 80% sinyal tertahan bisa lolos.
+ */
+export const SIGNAL_CAPITAL_COVERAGE = 0.8;
+
+export interface SignalCapitalNeed {
+  /** Modal (USD) agar 80% sinyal yang ditahan risiko bisa lolos; null = tidak ada/ tak bisa. */
+  readonly signalCapitalUsd: number | null;
+  /** Jam ditahan risiko yang BISA diatasi dengan menambah modal. */
+  readonly fixableHolds: number;
+  /** Jam ditahan karena batas golongan Rupiah — modal berapa pun tidak membantu. */
+  readonly unfixableHolds: number;
+}
+
+/** Modal minimal per sinyal = risiko lot minimum ÷ persen risiko (hanya bila <= batas golongan). */
+export function capitalForSignals(holds: readonly ScanRiskHold[]): SignalCapitalNeed {
+  const needs: number[] = [];
+  let unfixable = 0;
+  for (const h of holds) {
+    if (h.capUsd === null || h.riskAtMinLotUsd > h.capUsd || !(h.riskPercent > 0)) {
+      unfixable += 1;
+      continue;
+    }
+    needs.push(h.riskAtMinLotUsd / (h.riskPercent / 100));
+  }
+  needs.sort((a, b) => a - b);
+  const idx = Math.max(0, Math.ceil(needs.length * SIGNAL_CAPITAL_COVERAGE) - 1);
+  return {
+    signalCapitalUsd: needs.length > 0 ? Math.ceil(needs[idx] * 100) / 100 : null,
+    fixableHolds: needs.length,
+    unfixableHolds: unfixable,
+  };
+}
+
+export interface CapitalTopUp {
+  /** Modal total yang dibutuhkan (USD). */
+  readonly neededUsd: number;
+  readonly neededIdr: number | null;
+  /** Dana yang perlu DITAMBAHKAN (0 = modal sudah cukup). */
+  readonly topUpUsd: number;
+  readonly topUpIdr: number | null;
+}
+
+/**
+ * Dana tambahan = yang terbesar dari (a) modal agar sinyal tidak ditahan
+ * risiko, (b) modal agar turun terdalam <= 25% modal — dikurangi modal kini.
+ * null = belum bisa dihitung (tanpa sinyal & tanpa trade).
+ */
+export function capitalTopUp(
+  equityUsd: number,
+  signalCapitalUsd: number | null,
+  drawdownCapitalIdr: number | null,
+  usdIdr: number | null,
+): CapitalTopUp | null {
+  const kurs = usdIdr !== null && usdIdr > 0 ? usdIdr : null;
+  const fromDrawdown = drawdownCapitalIdr !== null && kurs !== null ? drawdownCapitalIdr / kurs : null;
+  const parts = [signalCapitalUsd, fromDrawdown].filter((v): v is number => v !== null && v > 0);
+  if (parts.length === 0) return null;
+  const neededUsd = Math.ceil(Math.max(...parts) * 100) / 100;
+  const topUpUsd = Math.max(0, Math.ceil((neededUsd - equityUsd) * 100) / 100);
+  return {
+    neededUsd,
+    neededIdr: kurs === null ? null : Math.ceil(neededUsd * kurs),
+    topUpUsd,
+    topUpIdr: kurs === null ? null : Math.ceil(topUpUsd * kurs),
+  };
+}
 
 export type SegmentVerdict = "BELUM_CUKUP" | "UNTUNG" | "TIPIS" | "RUGI";
 export type BacktestVerdict = "BELUM_CUKUP" | "LAYAK_DEMO" | "TIDAK_LAYAK" | "MODAL_KURANG";
@@ -79,6 +148,10 @@ export interface BacktestReport {
   readonly requiredCapitalIdr: number | null;
   /** B5b: modal yang dinilai (Rp); null = tidak dicek. */
   readonly capitalIdr: number | null;
+  /** B5d: jumlah jam per status pemindai (semua simbol). */
+  readonly statusTotals: Readonly<Partial<Record<ScanStatus, number>>>;
+  /** B5d: modal agar sinyal yang ditahan risiko bisa lolos. */
+  readonly signalCapital: SignalCapitalNeed;
   readonly verdict: BacktestVerdict;
   readonly verdictText: string;
   readonly skippedGuards: readonly string[];
@@ -179,11 +252,26 @@ export function buildBacktestReport(
 
   const all = summarizeTrades(trades, kurs);
   const requiredCapitalIdr =
-    all.maxDrawdownIdr === null ? null : Math.ceil(all.maxDrawdownIdr / MAX_DRAWDOWN_SHARE_OF_CAPITAL);
+    all.maxDrawdownIdr === null || all.n === 0 ? null : Math.ceil(all.maxDrawdownIdr / MAX_DRAWDOWN_SHARE_OF_CAPITAL);
+  const statusTotals: Partial<Record<ScanStatus, number>> = {};
+  for (const r of ok) {
+    for (const [k, v] of Object.entries(r.statusCount) as Array<[ScanStatus, number | undefined]>) {
+      statusTotals[k] = (statusTotals[k] ?? 0) + (v ?? 0);
+    }
+  }
+  const signalCapital = capitalForSignals(ok.flatMap((r) => r.riskHolds ?? []));
+  // Tanpa bukti trade karena sinyal ditahan modal kecil → vonis MODAL_KURANG (bukan "belum cukup").
+  const heldByCapital =
+    all.n < MIN_PROVEN_TRADES &&
+    signalCapital.signalCapitalUsd !== null &&
+    equityUsd !== null &&
+    signalCapital.signalCapitalUsd > equityUsd;
   const capitalIdr = equityUsd !== null && kurs !== null ? Math.round(equityUsd * kurs) : null;
   const tipis = latih.verdict === "TIPIS" || ujian.verdict === "TIPIS";
   const verdict: BacktestVerdict =
-    latih.verdict === "BELUM_CUKUP" || ujian.verdict === "BELUM_CUKUP"
+    heldByCapital
+      ? "MODAL_KURANG"
+      : latih.verdict === "BELUM_CUKUP" || ujian.verdict === "BELUM_CUKUP"
       ? "BELUM_CUKUP"
       : latih.verdict !== "UNTUNG" || ujian.verdict !== "UNTUNG"
         ? "TIDAK_LAYAK"
@@ -194,6 +282,8 @@ export function buildBacktestReport(
   const verdictText =
     verdict === "LAYAK_DEMO"
       ? `Untung jelas (≥ ${pct(MIN_EDGE_OVER_BREAKEVEN)} di atas titik impas) di data latih DAN data ujian — layak dicoba di akun demo (belum di akun live).`
+      : verdict === "MODAL_KURANG" && heldByCapital
+        ? `Sinyal ada (${signalCapital.fixableHolds} jam) tetapi DITAHAN: modal terlalu kecil untuk lot minimum broker — strategi belum bisa dinilai dengan modal ini.`
       : verdict === "MODAL_KURANG"
         ? `Strategi lulus, tetapi modal terlalu kecil: turun terdalam butuh modal minimal Rp${(requiredCapitalIdr ?? 0).toLocaleString("id-ID")} — JANGAN dipakai dengan modal ini.`
         : verdict === "TIDAK_LAYAK"
@@ -230,6 +320,8 @@ export function buildBacktestReport(
     openAtEnd: trades.filter((t) => t.outcome === "TERBUKA").length,
     requiredCapitalIdr,
     capitalIdr,
+    statusTotals,
+    signalCapital,
     verdict,
     verdictText,
     skippedGuards: BACKTEST_SKIPPED_GUARDS,
