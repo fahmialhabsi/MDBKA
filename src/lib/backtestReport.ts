@@ -283,7 +283,7 @@ export function buildBacktestReport(
     verdict === "LAYAK_DEMO"
       ? `Untung jelas (≥ ${pct(MIN_EDGE_OVER_BREAKEVEN)} di atas titik impas) di data latih DAN data ujian — layak dicoba di akun demo (belum di akun live).`
       : verdict === "MODAL_KURANG" && heldByCapital
-        ? `Sinyal ada (${signalCapital.fixableHolds} jam) tetapi DITAHAN: modal terlalu kecil untuk lot minimum broker — strategi belum bisa dinilai dengan modal ini.`
+        ? `Sinyal ada (${signalCapital.fixableHolds} candle) tetapi DITAHAN: modal terlalu kecil untuk lot minimum broker — strategi belum bisa dinilai dengan modal ini.`
       : verdict === "MODAL_KURANG"
         ? `Strategi lulus, tetapi modal terlalu kecil: turun terdalam butuh modal minimal Rp${(requiredCapitalIdr ?? 0).toLocaleString("id-ID")} — JANGAN dipakai dengan modal ini.`
         : verdict === "TIDAK_LAYAK"

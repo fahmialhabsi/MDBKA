@@ -14,6 +14,7 @@ import { FALLBACK_RATES, fetchECBRates } from "../src/services/fxRateService";
 import { runBacktest, type BacktestRun } from "../src/lib/backtest";
 import { buildBacktestReport, capitalTopUp } from "../src/lib/backtestReport";
 import { getStrategy } from "../src/lib/strategyRegistry";
+import { aggregateCandleCsv } from "../src/lib/candleAggregate";
 import {
   formatBacktestReport,
   parseBacktestArgs,
@@ -57,7 +58,10 @@ async function main(): Promise<number> {
       const run = runBacktest({
         symbol,
         brokerId: opt.brokerId,
-        csv: readFileSync(longFile(symbol), "utf8"),
+        csv: opt.timeframe === "H4"
+          ? aggregateCandleCsv(readFileSync(longFile(symbol), "utf8"), 4)
+          : readFileSync(longFile(symbol), "utf8"),
+        ...(opt.timeframe === "H4" ? { barHours: 4 } : {}),
         equity,
         fxRates: rates,
         spread: spreads.get(symbol) ?? 0,
@@ -97,6 +101,7 @@ async function main(): Promise<number> {
         : opt.timeStopHours === null
           ? "TANPA batas (percobaan)"
           : `${opt.timeStopHours} jam (percobaan)`,
+    timeframe: opt.timeframe === "H4" ? "H4 (dirakit dari 4 candle H1)" : "H1",
     topUp,
     retestEquityUsd,
     judged,

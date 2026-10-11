@@ -251,6 +251,7 @@ import { BACKTEST_SKIPPED_GUARDS, BACKTEST_WINDOW, runBacktest, simulateTrade, t
 import { buildBacktestReport, capitalForSignals, capitalTopUp, MAX_DRAWDOWN_SHARE_OF_CAPITAL, MIN_EDGE_OVER_BREAKEVEN, SIGNAL_CAPITAL_COVERAGE, summarizeTrades } from "../src/lib/backtestReport";
 import { DEFAULT_STRATEGY_ID, getStrategy, parseStrategyId, STRATEGIES, STRATEGY_IDS } from "../src/lib/strategyRegistry";
 import { bearishRejection, bullishRejection, CANDLE_PARAMS, candleSetup, trendFromSwings } from "../src/lib/candleStrategy";
+import { aggregateCandleCsv } from "../src/lib/candleAggregate";
 import { capitalLines, formatBacktestReport, parseBacktestArgs, parseSpreadsFromMargin, pickBacktestSymbols } from "../src/lib/backtestCli";
 import {
   calculateSwapWithTriple,
@@ -8409,6 +8410,38 @@ test("655. E1 percobaan batas waktu: default 3 jam (live), angka lain/0=tanpa ba
   const enamJam = runBacktest({ ...base, timeStopHours: 6 });
   assert(enamJam.trades.every((t) => t.outcome !== "WAKTU" || t.bars <= 6), "WAKTU maks 6 candle");
   assert(readSrc("src/lib/exitMonitor.ts").includes("export const TIME_STOP_HOURS = 3;"), "aturan live tetap 3 jam");
+});
+
+test("656. E2 perakit H4 dari H1: blok jam 00/04/08…, OHLC benar, blok terakhir belum tutup dibuang", () => {
+  const rows = ["time,open,high,low,close,tick_volume"];
+  // Senin 00:00–09:00 (10 candle H1) → blok 00 (lengkap), 04 (lengkap), 08 (baru 2 candle = belum tutup)
+  for (let hr = 0; hr < 10; hr++) {
+    const o = 1 + hr / 100;
+    rows.push(`2026.01.05 ${String(hr).padStart(2, "0")}:00,${o},${o + 0.005},${o - 0.002},${o + 0.001},10`);
+  }
+  const h4 = aggregateCandleCsv(rows.join("\n"), 4).split("\n");
+  assert(h4.length === 3 && h4[0] === rows[0], h4.join(" | "));
+  assert(h4[1] === "2026.01.05 00:00,1,1.035,0.998,1.031,40", h4[1]);
+  assert(h4[2] === "2026.01.05 04:00,1.04,1.075,1.038,1.071,40", h4[2]);
+  // Blok tengah yang bolong (buka pasar 02:00) tetap dipakai
+  const bolong = aggregateCandleCsv(["time,open,high,low,close,tick_volume", "2026.01.05 02:00,1,1.1,0.9,1.05,5", "2026.01.05 03:00,1.05,1.2,1,1.1,5", "2026.01.05 04:00,1.1,1.1,1.1,1.1,1", "2026.01.05 05:00,1.1,1.1,1.1,1.1,1", "2026.01.05 06:00,1.1,1.1,1.1,1.1,1", "2026.01.05 07:00,1.1,1.1,1.1,1.1,1"].join("\n"), 4).split("\n");
+  assert(bolong.length === 3 && bolong[1] === "2026.01.05 00:00,1,1.2,0.9,1.1,10", bolong.join(" | "));
+  assert(aggregateCandleCsv(rows.join("\n"), 5) === rows.join("\n"), "jam yang tidak membagi 24 = tidak dirakit");
+});
+
+test("657. E2 alat uji H4: default H1 identik, --timeframe H4 diteruskan dengan barHours 4", () => {
+  const def = parseBacktestArgs(["--broker", "finex", "--equity", "100"]);
+  assert(def.ok && def.options.timeframe === "H1", JSON.stringify(def));
+  const h4 = parseBacktestArgs(["--broker", "finex", "--equity", "100", "--timeframe", "h4"]);
+  assert(h4.ok && h4.options.timeframe === "H4", JSON.stringify(h4));
+  const salah = parseBacktestArgs(["--broker", "finex", "--equity", "100", "--timeframe", "M5"]);
+  assert(!salah.ok && salah.error.includes("Timeframe"), "M5 ditolak (data tidak ada)");
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const gelombang = (i: number) => 1.3 + 0.004 * Math.sin(i / 40) + 0.0006 * Math.sin(i / 3);
+  const base = { symbol: "GBPUSD", brokerId: "finex" as const, csv: btCsv(700, gelombang), equity: 10000, fxRates: rates, spread: 0.00012 };
+  assert(JSON.stringify(runBacktest(base)) === JSON.stringify(runBacktest({ ...base, barHours: 1 })), "barHours 1 = default");
+  const src = readSrc("scripts/backtest.ts");
+  assert(src.includes("aggregateCandleCsv(readFileSync(longFile(symbol), \"utf8\"), 4)") && src.includes("{ barHours: 4 }"), "H4 dirakit & lama candle 4 jam");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

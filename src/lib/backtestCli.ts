@@ -21,6 +21,8 @@ export interface BacktestCliOptions {
   readonly strategy: StrategyId;
   /** E1: percobaan batas waktu Forex (jam); absen = 3 jam (live); null = tanpa batas. */
   readonly timeStopHours?: number | null;
+  /** E2: timeframe uji (H1 = data asli; H4 = dirakit dari H1). */
+  readonly timeframe: "H1" | "H4";
 }
 
 export type ParsedArgs =
@@ -28,7 +30,7 @@ export type ParsedArgs =
   | { readonly ok: false; readonly error: string };
 
 export const BACKTEST_USAGE =
-  "Pakai: npm run backtest -- --broker finex|otb --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD] [--strategi skor] [--batas-waktu 3|6|12|0]";
+  "Pakai: npm run backtest -- --broker finex|otb --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD] [--strategi skor] [--batas-waktu 3|6|12|0] [--timeframe H1|H4]";
 
 const GROUP_IDS: readonly RiskGroupId[] = [
   "FOREX", "FOREX_JPY", "FOREX_TIDAK_LAZIM", "LOGAM", "MINYAK", "INDEKS",
@@ -82,10 +84,15 @@ export function parseBacktestArgs(argv: readonly string[]): ParsedArgs {
     }
     timeStopHours = h === 0 ? null : h;
   }
+  const tfRaw = (get("--timeframe") ?? "H1").toUpperCase();
+  if (tfRaw !== "H1" && tfRaw !== "H4") {
+    return { ok: false, error: `Timeframe wajib H1 atau H4. ${BACKTEST_USAGE}` };
+  }
+  const timeframe: "H1" | "H4" = tfRaw;
   return {
     ok: true,
     options: {
-      brokerId, marginTag, equity, groups, symbols: list(get("--simbol")), strategy,
+      brokerId, marginTag, equity, groups, symbols: list(get("--simbol")), strategy, timeframe,
       ...(timeStopHours !== undefined ? { timeStopHours } : {}),
     },
   };
@@ -174,12 +181,12 @@ export function capitalLines(
     .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
     .map(([k, v]) => `${STATUS_LABEL[k] ?? k} ${(v ?? 0).toLocaleString("id-ID")}`);
   const sc = report.signalCapital;
-  const lines = [`Jam per status      : ${totals.length > 0 ? totals.join(" · ") : "-"}`];
+  const lines = [`Candle per status   : ${totals.length > 0 ? totals.join(" · ") : "-"}`];
   if (sc.signalCapitalUsd !== null) {
-    lines.push(`Modal agar 80% sinyal tak ditahan risiko: ${usd(sc.signalCapitalUsd)} (dari ${sc.fixableHolds.toLocaleString("id-ID")} jam ditahan)`);
+    lines.push(`Modal agar 80% sinyal tak ditahan risiko: ${usd(sc.signalCapitalUsd)} (dari ${sc.fixableHolds.toLocaleString("id-ID")} candle ditahan)`);
   }
   if (sc.unfixableHolds > 0) {
-    lines.push(`${sc.unfixableHolds.toLocaleString("id-ID")} jam ditahan BATAS GOLONGAN Rupiah — tidak bisa diatasi dengan menambah modal.`);
+    lines.push(`${sc.unfixableHolds.toLocaleString("id-ID")} candle ditahan BATAS GOLONGAN Rupiah — tidak bisa diatasi dengan menambah modal.`);
   }
   if (retestEquityUsd !== null) {
     lines.push(`(Diuji ulang otomatis dengan modal ${usd(retestEquityUsd)} untuk menghitung turun terdalam.)`);
@@ -225,6 +232,8 @@ export function formatBacktestReport(
     readonly strategy?: string;
     /** E1: teks batas waktu percobaan (absen = tidak ditulis). */
     readonly timeStop?: string;
+    /** E2: timeframe uji (absen = tidak ditulis). */
+    readonly timeframe?: string;
     /** B5d: dana tambahan (absen = baris modal tidak ditulis). */
     readonly topUp?: CapitalTopUp | null;
     readonly retestEquityUsd?: number | null;
@@ -236,6 +245,7 @@ export function formatBacktestReport(
     `Broker ${head.broker} · equity anggapan $${head.equity} · ${report.symbols.length} simbol`,
     ...(head.strategy !== undefined ? [`Strategi: ${head.strategy}`] : []),
     ...(head.timeStop !== undefined ? [`Batas waktu Forex: ${head.timeStop}`] : []),
+    ...(head.timeframe !== undefined ? [`Timeframe: ${head.timeframe}`] : []),
     `Periode ${report.startTime} s/d ${report.endTime} · batas latih|ujian ${report.splitTime}`,
     "",
     ...segmentLines("DATA LATIH (bagian awal)", report.latih),

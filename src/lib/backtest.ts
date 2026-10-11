@@ -104,6 +104,8 @@ export interface BacktestInput {
    * null = tanpa batas waktu. Golongan lain tetap tanpa batas.
    */
   readonly timeStopHours?: number | null;
+  /** E2: lama satu candle (jam). absen = 1 (H1); 4 = H4 (dirakit dari H1). */
+  readonly barHours?: number;
 }
 
 export interface BacktestRun {
@@ -264,8 +266,8 @@ export function runBacktest(input: BacktestInput): BacktestRun {
     const swap = estimateSwap(
       {
         symbol, broker: input.brokerId, direction: plan.direction, lot, price: plan.entry,
-        entryServer: addHours(String(candles[i].time ?? ""), 1),
-        nowServer: addHours(String(candles[exitAt].time ?? ""), 1),
+        entryServer: addHours(String(candles[i].time ?? ""), input.barHours ?? 1),
+        nowServer: addHours(String(candles[exitAt].time ?? ""), input.barHours ?? 1),
       },
       (amount, currency) => {
         if (currency === "USD") return amount;
