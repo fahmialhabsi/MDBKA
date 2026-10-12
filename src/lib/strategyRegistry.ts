@@ -14,8 +14,9 @@ import { scoreSetup, type StrategySetup } from "../calculations/decisionEngine";
 import type { BrokerSettings, MarketData } from "../types/analysis";
 import { candleSetup } from "./candleStrategy";
 import { scalpSetup } from "./scalpStrategy";
+import { abcSetup } from "./abcStrategy";
 
-export type StrategyId = "skor" | "candle" | "scalping";
+export type StrategyId = "skor" | "candle" | "scalping" | "abc";
 
 export interface StrategyContext {
   readonly market: MarketData;
@@ -51,6 +52,12 @@ export const STRATEGIES: Readonly<Record<StrategyId, Strategy>> = {
     label: "Scalping MIFX (MA9×MA120 + Stochastic + engulfing)",
     description: "P1: tren MA9/MA120 + crossing baru (<= 24 candle) + Stochastic 14,3 sempat <= 20 / >= 80 + engulfing; SL ujung 2 candle, TP = 2× SL (PDF MIFX).",
     propose: ({ market, broker, candles }) => scalpSetup(market, broker, candles),
+  },
+  abc: {
+    id: "abc",
+    label: "Koreksi ABC emas H4 (tren → A-B-C → penolakan)",
+    description: "P2: dorongan L0→P0 >= 3×ATR, koreksi A-B-C (C lewat A, L0 utuh), candle penolakan di ujung C; SL ujung C, TP = 2× SL (PDF ABC gold).",
+    propose: ({ market, broker, candles }) => abcSetup(market, broker, candles),
   },
 };
 

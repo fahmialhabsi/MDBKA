@@ -252,6 +252,7 @@ import { buildBacktestReport, capitalForSignals, capitalTopUp, MAX_DRAWDOWN_SHAR
 import { DEFAULT_STRATEGY_ID, getStrategy, parseStrategyId, STRATEGIES, STRATEGY_IDS } from "../src/lib/strategyRegistry";
 import { bearishRejection, bullishRejection, CANDLE_PARAMS, candleSetup, trendFromSwings } from "../src/lib/candleStrategy";
 import { isBearishEngulfing, isBullishEngulfing, scalpSetup, SCALP_PARAMS, smaSeries, stochasticK } from "../src/lib/scalpStrategy";
+import { ABC_PARAMS, abcSetup, findBullishAbc } from "../src/lib/abcStrategy";
 import { aggregateCandleCsv } from "../src/lib/candleAggregate";
 import { capitalLines, formatBacktestReport, parseBacktestArgs, parseSpreadsFromMargin, pickBacktestSymbols } from "../src/lib/backtestCli";
 import {
@@ -8625,6 +8626,61 @@ test("669. E3 alat uji M15 (scalping): --timeframe M15 diterima, file asli MT5 M
   const spreads = new Map([["GBPUSD.m", 0.0002]]);
   const pick = pickBacktestSymbols(spreads, () => false, { groups: null, symbols: ["GBPUSD.m"], timeframe: "M15" });
   assert(pick.notes.some((n) => n.includes("MDBKA_GBPUSD.m_M15_LONG.csv belum ada")), JSON.stringify(pick.notes));
+});
+
+function abcCase(opts: { cBelowA?: boolean; breakL0?: boolean; reject?: boolean; mirror?: boolean } = {}) {
+  const { cBelowA = true, breakL0 = false, reject = true, mirror = false } = opts;
+  const cs: Candle[] = [];
+  let p = 3900;
+  const leg = (n: number, step: number) => {
+    for (let i = 0; i < n; i++) {
+      const o = p, c = p + step;
+      cs.push({ time: `t${cs.length}`, open: o, high: Math.max(o, c) + (c > o ? 2 : 0.5), low: Math.min(o, c) - (c < o ? 2 : 0.5), close: c });
+      p = c;
+    }
+  };
+  // L0 → P0 naik 150, A turun 60, B naik 28, C turun (lewat A / tidak / tembus L0)
+  leg(6, -5); leg(10, 15); leg(6, -10); leg(4, 7); leg(breakL0 ? 14 : 5, cBelowA ? -10 : -4);
+  const wick = cBelowA ? 25 : 3; // C belum lewat A: wick pendek agar ujung C tetap di atas A
+  cs.push(reject ? { time: `t${cs.length}`, open: p, high: p + (cBelowA ? 4 : 1.5), low: p - wick, close: p + (cBelowA ? 3 : 1) } : { time: `t${cs.length}`, open: p, high: p + 1, low: p - 25, close: p - 20 });
+  const k = 8000;
+  const data = mirror ? cs.map((c) => ({ time: c.time, open: k - c.open, high: k - c.low, low: k - c.high, close: k - c.close })) : cs;
+  const last = data[data.length - 1];
+  const market: MarketData = {
+    symbol: "XAUUSD.m", timeframe: "H4", bid: last.close, ask: last.close + 0.3, close: last.close, open: last.open,
+    high: last.high, low: last.low, ma50: 0, cci: 0, rsi: 0, macd: 0, macdSignal: 0, atr: 20, support: 0, resistance: 0,
+  };
+  const broker: BrokerSettings = {
+    equity: 10000, riskPercent: 1, minLot: 0.01, lotStep: 0.01, pointValue: 100, contractSize: 100,
+    commission: 1, slippage: 0, buffer: 0.5, atrMultiplier: 1.5, targetRR: 2,
+  };
+  return { market, broker, data, setup: abcSetup(market, broker, data) };
+}
+
+test("670. P2 ABC emas H4: tren L0→P0 >= 3×ATR, C lewat A tanpa tembus L0, candle penolakan → BELI; SL ujung C, TP 2× SL", () => {
+  assert(ABC_PARAMS.swingStrength === 3 && ABC_PARAMS.minImpulseAtr === 3 && ABC_PARAMS.rewardRisk === 2, "angka dikunci");
+  const { setup, data } = abcCase();
+  assert(setup.decision === "BELI", `decision=${setup.decision} ${setup.factors.join(" | ")}`);
+  const c = data[data.length - 1].low;
+  assert(Math.abs((setup.stopLoss ?? 0) - (c - 0.5)) < 1e-9, "SL = ujung C − buffer");
+  assert(Math.abs((setup.targetDistance ?? 0) - 2 * (setup.riskDistance ?? 0)) < 1e-9, "TP = 2× SL (pilihan B1)");
+  const pat = findBullishAbc(data, 20).pattern;
+  assert(pat !== null && pat.c < pat.a && pat.a > pat.l0 && pat.b < pat.p0 && pat.c > pat.l0, "urutan L0 < C < A < B < P0");
+  const noRej = abcCase({ reject: false }).setup;
+  assert(noRej.decision === "TUNGGU" && noRej.factors[0].includes("penolakan"), `tanpa penolakan → TUNGGU (${noRej.factors[0]})`);
+  const flat = abcCase({ cBelowA: false }).setup;
+  assert(flat.decision === "TUNGGU" && flat.stopLoss === null && flat.factors[0].includes("di bawah A"), `C belum lewat A → TUNGGU (${flat.factors[0]})`);
+  const broken = abcCase({ breakL0: true }).setup;
+  assert(broken.decision === "TUNGGU" && broken.factors[0].includes("L0"), `L0 tertembus → TUNGGU (${broken.factors[0]})`);
+});
+
+test("671. P2 ABC: JUAL = cermin BELI (alasan candle merah); terdaftar di rak (--strategi abc), default tetap skor", () => {
+  const { setup } = abcCase({ mirror: true });
+  assert(setup.decision === "JUAL" && (setup.stopLoss ?? 0) > setup.entry && (setup.takeProfit ?? 1e9) < setup.entry, `JUAL ${setup.decision}`);
+  assert(setup.factors.some((f) => f.includes("tutup merah")), setup.factors.join(" | "));
+  assert(parseStrategyId("abc") === "abc" && STRATEGIES.abc.label.startsWith("Koreksi ABC") && DEFAULT_STRATEGY_ID === "skor", "rak");
+  const k = abcCase();
+  assert(getStrategy("abc").propose({ market: k.market, broker: k.broker, candles: k.data }).decision === "BELI", "lewat rak = sama");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
