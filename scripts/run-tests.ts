@@ -8555,6 +8555,12 @@ test("665. F4/F5 terpasang di semua layar: pemindai, detail sinyal, kartu atas, 
   assert(readSrc("src/components/result/AnalysisResult.tsx").includes('data-testid="held-bukti"'), "penjelasan di Hasil analisa");
 });
 
+test("666. F6 pindah ke MIFX: simbol awal GBPUSD.m (bukan GBPUSD Finex yang tak ada di MIFX)", () => {
+  const form = readSrc("src/components/extraction/ExtractedDataForm.tsx");
+  assert(form.includes('brokerId === "orbitraderberjangka" ? "GBPUSD_ORB" : brokerId === "mifx" ? "GBPUSD.m" : "GBPUSD"'), "simbol awal per broker");
+  assert(canonicalSymbolForBroker("GBPUSD.m", "mifx") === "GBPUSD.m" && canonicalSymbolForBroker("GBPUSD", "mifx") === "", "GBPUSD tanpa .m memang tidak dikenal MIFX (akar masalah)");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

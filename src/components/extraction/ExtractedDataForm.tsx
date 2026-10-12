@@ -92,11 +92,12 @@ export default function ExtractedDataForm({
 
   // Auto-set symbol berdasarkan broker:
   // - orbitraderberjangka → GBPUSD_ORB (dari MT5 EA)
+  // - mifx → GBPUSD.m (F6, 12 Okt 2026: nama MIFX berakhiran .m; "GBPUSD" tidak ada di MIFX)
   // - finex / lainnya → GBPUSD (live forex)
   // onChange broker → setSymbol otomatis, tanpa input manual ulang.
   useEffect(() => {
     const targetSymbol =
-      brokerId === "orbitraderberjangka" ? "GBPUSD_ORB" : "GBPUSD";
+      brokerId === "orbitraderberjangka" ? "GBPUSD_ORB" : brokerId === "mifx" ? "GBPUSD.m" : "GBPUSD";
     if (market.symbol !== targetSymbol) {
       updateSymbol(targetSymbol);
       // Symbol lama berganti: hasil analisa lama (symbol lama) tidak boleh
