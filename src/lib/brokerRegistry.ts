@@ -95,7 +95,11 @@ export const BROKER_PROFILES: readonly BrokerProfile[] = Object.freeze([
 /** True bila value adalah id broker yang didukung. */
 export function isSupportedBrokerId(value: string): value is BrokerId {
   return (
-    value === FINEX_BROKER_ID || value === ORBITRADER_BROKER_ID || value === MIFX_BROKER_ID
+    value === FINEX_BROKER_ID ||
+    value === ORBITRADER_BROKER_ID ||
+    value === MIFX_BROKER_ID ||
+    // X4c-2: Exness aktif di halaman (History / Kalkulator / Golongan via ?broker=exness).
+    value === EXNESS_BROKER_ID
   );
 }
 
@@ -169,7 +173,7 @@ export const BROKER_SHORT_LABEL: Readonly<Record<BrokerId, string>> = Object.fre
 });
 
 /** M4b-3: urutan broker di tombol halaman (History, Kalkulator, Golongan). */
-export const BROKER_IDS: readonly BrokerId[] = Object.freeze(["finex", "orbitraderberjangka", "mifx"]);
+export const BROKER_IDS: readonly BrokerId[] = Object.freeze(["finex", "orbitraderberjangka", "mifx", "exness"]);
 
 /** Query `broker=` → BrokerId; tak dikenal/kosong → null. */
 export function parseBrokerParam(value: string | null): BrokerId | null {

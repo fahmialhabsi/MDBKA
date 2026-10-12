@@ -70,7 +70,15 @@ export interface HistoryView {
   readonly sisa: SisaSetoran | null;
   /** Jumlah baris tanpa kurs (transaksi > 7 hari dari kurs yang tersimpan). */
   readonly missingRates: number;
+  /**
+   * X4c-2: jumlah SEMUA transaksi. `rows` hanya memuat HISTORY_MAX_ROWS terakhir
+   * (akun Exness ±36.700 deal membekukan browser); ringkasan tetap dari semua deal.
+   */
+  readonly totalRows: number;
 }
+
+/** X4c-2: batas baris tabel yang dikirim ke layar (transaksi terbaru). */
+export const HISTORY_MAX_ROWS = 1000;
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 const roundIdr = (n: number): number => Math.round(n);
@@ -85,13 +93,17 @@ export function buildHistoryView(deals: readonly HistoryDeal[], book: UsdIdrBook
   const t = { net: 0, credit: 0, deposit: 0, withdrawal: 0, commission: 0, profit: 0, swap: 0 };
   const r = { net: 0, credit: 0, deposit: 0, withdrawal: 0, commission: 0, profit: 0, swap: 0 };
   let missing = 0;
-  let currency = "";
+  let currency = sorted.find((d) => d.accountCurrency !== "")?.accountCurrency ?? "";
+  // X4c-2: akun ber-mata-uang Rupiah (Exness demo) — angka MT5 SUDAH Rupiah;
+  // kolom Rupiah = angka asli (tanpa kurs, tidak pernah "kurang kurs").
+  const idrAccount = currency.toUpperCase() === "IDR";
 
   for (const d of sorted) {
     if (currency === "" && d.accountCurrency !== "") currency = d.accountCurrency;
-    const kurs = usdIdrOn(book, d.serverTime);
-    if (kurs === null) missing += 1;
-    const toIdr = (usd: number): number | null => (kurs === null ? null : roundIdr(usd * kurs.rate));
+    const kurs = idrAccount ? null : usdIdrOn(book, d.serverTime);
+    if (kurs === null && !idrAccount) missing += 1;
+    const toIdr = (usd: number): number | null =>
+      idrAccount ? roundIdr(usd) : kurs === null ? null : roundIdr(usd * kurs.rate);
 
     let changePct: number | null = null;
     if (TRADE.has(d.type) && d.entry === "IN") opened.set(d.positionId, d);
@@ -189,5 +201,13 @@ export function buildHistoryView(deals: readonly HistoryDeal[], book: UsdIdrBook
           sisaIdr: totalsIdr.balance,
           pct: totalsIdr.deposit > 0 ? round2((totalsIdr.net / totalsIdr.deposit) * 100) : null,
         };
-  return { currency, rows, totals, totalsIdr, sisa, missingRates: missing };
+  return {
+    currency,
+    rows: rows.length > HISTORY_MAX_ROWS ? rows.slice(rows.length - HISTORY_MAX_ROWS) : rows,
+    totals,
+    totalsIdr,
+    sisa,
+    missingRates: missing,
+    totalRows: rows.length,
+  };
 }

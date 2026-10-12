@@ -53,6 +53,8 @@ interface View {
     readonly pct: number | null;
   } | null;
   readonly missingRates: number;
+  /** X4c-2: jumlah semua transaksi (tabel hanya memuat yang terbaru). */
+  readonly totalRows?: number;
 }
 
 const BROKER_NAME: Record<BrokerId, string> = {
@@ -141,6 +143,17 @@ export function HistoryPage({ broker }: { broker: BrokerId }) {
 
         {view !== null && t !== undefined && (
           <>
+            {(view.totalRows ?? view.rows.length) > view.rows.length && (
+              <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300" data-testid="history-trimmed">
+                Menampilkan {view.rows.length.toLocaleString("id-ID")} transaksi terakhir dari{" "}
+                {(view.totalRows ?? 0).toLocaleString("id-ID")}. Ringkasan di bawah tetap dihitung dari SEMUA transaksi.
+              </p>
+            )}
+            {view.currency.toUpperCase() === "IDR" && (
+              <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-3 text-sm text-emerald-100" data-testid="history-idr">
+                Akun bermata uang Rupiah: kolom Komisi/Profit sudah Rupiah asli MT5 — kolom (Rp) sama persis, tanpa kurs ECB.
+              </p>
+            )}
             <div className="overflow-x-clip rounded-2xl border border-white/10" data-testid="history-scroll">
               <table className="w-full min-w-[1100px] text-left text-sm" data-testid="history-table">
                 <thead className="sticky top-0 z-10 bg-slate-900 text-xs uppercase text-slate-400 shadow-[0_1px_0_rgba(255,255,255,0.1)]">
@@ -213,11 +226,18 @@ export function HistoryPage({ broker }: { broker: BrokerId }) {
                     <span className={`ml-2 text-sm ${color(view.sisa.pct)}`}>({view.sisa.pct > 0 ? "+" : ""}{formatUsd(view.sisa.pct)}% dari setoran)</span>
                   )}
                 </p>
+                {view.currency.toUpperCase() === "IDR" ? (
+                <p className="mt-2 text-xs text-slate-400">
+                  Akun Rupiah: angka asli MT5 tanpa kurs. Selisih puluhan rupiah dengan baris Balance MT5 berasal dari
+                  pembulatan tiap transaksi ke rupiah penuh.
+                </p>
+                ) : (
                 <p className="mt-2 text-xs text-slate-400">
                   Rupiah tiap baris memakai kurs ECB pada tanggal transaksi (akhir pekan → hari kerja sebelumnya). Karena itu
                   angka ini bisa sedikit berbeda dari header (Balance USD × kurs hari ini). Arahkan mouse ke angka Rupiah untuk
                   melihat kurs yang dipakai.
                 </p>
+                )}
               </div>
             )}
           </>

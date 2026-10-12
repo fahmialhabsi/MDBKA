@@ -48,7 +48,7 @@ import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
 import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
-import { buildHistoryView } from "../server/services/historyView";
+import { buildHistoryView, HISTORY_MAX_ROWS } from "../server/services/historyView";
 import { accountKind, historyForLogin, listHistoryAccounts } from "../server/routes/historyRoutes";
 import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
 import { calculateTargets, floatingProfit, secureReadiness } from "../src/lib/targetCalculator";
@@ -7989,7 +7989,8 @@ test("632. M4b-2 monitor posisi: tab MIFX + posisi MT5 MIFX", () => {
 
 test("633. M4b-3 History/Kalkulator/Golongan MIFX + parser broker=", () => {
   assert(parseBrokerParam("mifx") === "mifx" && parseBrokerParam("finex") === "finex" && parseBrokerParam("xyz") === null && parseBrokerParam(null) === null, "parseBrokerParam");
-  assert(BROKER_IDS.join(",") === "finex,orbitraderberjangka,mifx" && BROKER_SHORT_LABEL.mifx === "MIFX" && BROKER_SHORT_LABEL.orbitraderberjangka === "OTB", "daftar & label broker");
+  // X4c-2 (12 Okt 2026): diubah sengaja — tombol halaman kini juga Exness (urutan 3 broker lama tetap).
+  assert(BROKER_IDS.join(",") === "finex,orbitraderberjangka,mifx,exness" && BROKER_SHORT_LABEL.mifx === "MIFX" && BROKER_SHORT_LABEL.orbitraderberjangka === "OTB", "daftar & label broker");
   assert(parseHistoryPage("?halaman=history&broker=mifx")?.broker === "mifx", "history mifx");
   const c = parseCalculatorPage("?halaman=kalkulator&broker=mifx&symbol=eurusd.m");
   assert(c?.broker === "mifx" && c.symbol === "EURUSD.m", JSON.stringify(c));
@@ -8690,8 +8691,9 @@ test("671. P2 ABC: JUAL = cermin BELI (alasan candle merah); terdaftar di rak (-
 });
 
 test("672. X1a Exness terdaftar sebagai BrokerId (laci kosong, belum aktif): 3 broker lama tetap, ?broker=exness belum diterima", () => {
-  assert(BROKER_SHORT_LABEL.exness === "Exness" && BROKER_IDS.join(",") === "finex,orbitraderberjangka,mifx", "label ada, tombol belum");
-  assert(parseBrokerParam("exness") === null && parseBrokerParam("mifx") === "mifx", "belum aktif di URL halaman");
+  // X4c-2 (12 Okt 2026): diubah sengaja — Exness kini aktif di tombol & URL halaman (History/Kalkulator/Golongan).
+  assert(BROKER_SHORT_LABEL.exness === "Exness" && BROKER_IDS.join(",") === "finex,orbitraderberjangka,mifx,exness", "label & tombol");
+  assert(parseBrokerParam("exness") === "exness" && parseBrokerParam("mifx") === "mifx", "aktif di URL halaman (X4c-2)");
   // X1b (12 Okt 2026): diubah sengaja — server kini mengenal ?broker=exness (harga & posisi); equity tetap 404 sampai X2.
   assert(resolveLiveBroker("exness") === "exness", "server mengenal Exness (X1b)");
   assert(createWorkspaceStore().exness === null, "laci workspace Exness kosong");
@@ -8806,6 +8808,24 @@ test("681. X4c-1 Monitor posisi tab Exness: posisi live XAUUSDm + SL wajib (golo
   assert(ms.kind === "PASANG", JSON.stringify(ms));
   // batas Rp500.000 = $27,96 → 0.02 lot × 100 = $2 per 1,00 → jarak 13,981 → SL 4170,881.
   assert(ms.kind === "PASANG" && Math.abs(ms.sl - 4170.881) < 1e-6 && ms.lossIdr <= 500000, JSON.stringify(ms));
+});
+
+test("682. X4c-2 History akun Rupiah (Exness): kolom Rp = angka asli (tanpa kurs, tidak 'kurang kurs'); tabel dibatasi 1.000 deal terakhir, ringkasan dari SEMUA", () => {
+  const head = "DealTicket,PositionId,OrderTicket,ServerTime,Symbol,Type,Entry,Volume,Price,Commission,Swap,Profit,Fee,Magic,Comment,Login,Company,AccountCurrency,SL,TP";
+  const lines = [head, "1,0,0,2026.06.20 12:30:22,,BALANCE,IN,0.00,0.00000,0.00,0.00,1000000.00,0.00,0,D-trial-IDR,413925678,Exness Technologies Ltd,IDR,0,0"];
+  for (let i = 0; i < 1200; i++) {
+    const t = `2026.10.${String(1 + (i % 9)).padStart(2, "0")} 0${i % 9}:00:00`;
+    lines.push(`${100 + 2 * i},${5000 + i},0,${t},XAUUSDm,BUY,IN,0.02,4180.000,0.00,0.00,0.00,0.00,0,,413925678,Exness Technologies Ltd,IDR,0,0`);
+    lines.push(`${101 + 2 * i},${5000 + i},0,${t},XAUUSDm,SELL,OUT,0.02,4179.000,0.00,0.00,-35761.10,0.00,0,,413925678,Exness Technologies Ltd,IDR,0,0`);
+  }
+  const v = buildHistoryView(parseHistoryCsv(lines.join("\n")), {});
+  assert(v.currency === "IDR" && v.missingRates === 0 && v.totalsIdr !== null, "akun IDR tidak butuh kurs ECB");
+  const out = v.rows.find((r) => r.profit !== 0 && r.type === "SELL");
+  assert(out !== undefined && out.profitIdr === -35761 && out.kurs === null, "Rp = angka asli (dibulatkan), bukan dikali kurs");
+  assert(v.rows.length === HISTORY_MAX_ROWS && v.totalRows === 2401, `baris ${v.rows.length}/${v.totalRows}`);
+  assert(Math.abs(v.totals.profit - 1200 * -35761.1) < 0.01 && v.sisa !== null && v.sisa.setoranIdr === 1000000, "ringkasan dari semua deal");
+  const page = readSrc("src/components/history/HistoryPage.tsx");
+  assert(page.includes('data-testid="history-trimmed"') && page.includes('data-testid="history-idr"'), "catatan layar");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
