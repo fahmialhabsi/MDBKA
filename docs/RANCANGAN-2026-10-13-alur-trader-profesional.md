@@ -32,6 +32,7 @@
 5. Fungsi lama tidak dihapus atau diganti nama; test lama hanya ditambah.
 6. Strategi `skor` tetap default sampai strategi baru lulus pembuktian.
 7. MDBKA tetap tidak pernah menempatkan atau menutup order.
+8. **Bukti dan rapor dipisah per golongan** (disetujui Fahmi 13 Okt 2026). Rumus indikator, deteksi swing, pola candle, dan hitung lot boleh dipakai bersama. Parameter, bukti n ≥ 20, dan rapor backtest dinilai terpisah untuk Forex, Forex JPY, Logam, Minyak, Indeks, dan Saham AS, supaya untung di satu golongan tidak menutupi rugi di golongan lain.
 
 ## 3. Rancangan per tahap
 
@@ -117,6 +118,7 @@
 | P3 | Pola double top/bottom dan breakout-retest, murni | Tidak |
 | P4 | Strategi `topdown` di registry, backtest saja | Tidak |
 | P5 | Rapor backtest latih/ujian per golongan | Tidak |
+| P5a | Bukti n ≥ 20 di panel Evaluasi dipecah per golongan (tampilan dulu). Penahan bukti F5 (`DITAHAN_BUKTI`) yang kini dinilai per broker baru diubah ke per golongan lewat langkah dan test tersendiri, karena itu mengubah perilaku sinyal Live | Tampilan dulu; penahan F5 butuh keputusan terpisah |
 | P6 | Bila layak: ekspor live D1/W1/M15 (MQL) + status SIAGA di pemindai sebagai mode uji | Tampilan saja |
 | P7 | Kumpulkan bukti n ≥ 20 di demo, kelompok terpisah | Tidak |
 
