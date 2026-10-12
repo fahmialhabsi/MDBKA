@@ -13,8 +13,9 @@ import type { Candle } from "../calculations/swingDetector";
 import { scoreSetup, type StrategySetup } from "../calculations/decisionEngine";
 import type { BrokerSettings, MarketData } from "../types/analysis";
 import { candleSetup } from "./candleStrategy";
+import { scalpSetup } from "./scalpStrategy";
 
-export type StrategyId = "skor" | "candle";
+export type StrategyId = "skor" | "candle" | "scalping";
 
 export interface StrategyContext {
   readonly market: MarketData;
@@ -44,6 +45,12 @@ export const STRATEGIES: Readonly<Record<StrategyId, Strategy>> = {
     label: "Pola candle (tren → mundur → penolakan)",
     description: "C1: tren HH/HL dari swing, mundur >= 1×ATR tanpa menembus lembah/puncak, lalu wick penolakan atau engulfing; SL di ujung wick, TP = R:R broker.",
     propose: ({ market, broker, candles }) => candleSetup(market, broker, candles),
+  },
+  scalping: {
+    id: "scalping",
+    label: "Scalping MIFX (MA9×MA120 + Stochastic + engulfing)",
+    description: "P1: tren MA9/MA120 + crossing baru (<= 24 candle) + Stochastic 14,3 sempat <= 20 / >= 80 + engulfing; SL ujung 2 candle, TP = 2× SL (PDF MIFX).",
+    propose: ({ market, broker, candles }) => scalpSetup(market, broker, candles),
   },
 };
 

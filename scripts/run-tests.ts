@@ -251,6 +251,7 @@ import { BACKTEST_SKIPPED_GUARDS, BACKTEST_WINDOW, runBacktest, simulateTrade, t
 import { buildBacktestReport, capitalForSignals, capitalTopUp, MAX_DRAWDOWN_SHARE_OF_CAPITAL, MIN_EDGE_OVER_BREAKEVEN, SIGNAL_CAPITAL_COVERAGE, summarizeTrades } from "../src/lib/backtestReport";
 import { DEFAULT_STRATEGY_ID, getStrategy, parseStrategyId, STRATEGIES, STRATEGY_IDS } from "../src/lib/strategyRegistry";
 import { bearishRejection, bullishRejection, CANDLE_PARAMS, candleSetup, trendFromSwings } from "../src/lib/candleStrategy";
+import { isBearishEngulfing, isBullishEngulfing, scalpSetup, SCALP_PARAMS, smaSeries, stochasticK } from "../src/lib/scalpStrategy";
 import { aggregateCandleCsv } from "../src/lib/candleAggregate";
 import { capitalLines, formatBacktestReport, parseBacktestArgs, parseSpreadsFromMargin, pickBacktestSymbols } from "../src/lib/backtestCli";
 import {
@@ -8559,6 +8560,57 @@ test("666. F6 pindah ke MIFX: simbol awal GBPUSD.m (bukan GBPUSD Finex yang tak 
   const form = readSrc("src/components/extraction/ExtractedDataForm.tsx");
   assert(form.includes('brokerId === "orbitraderberjangka" ? "GBPUSD_ORB" : brokerId === "mifx" ? "GBPUSD.m" : "GBPUSD"'), "simbol awal per broker");
   assert(canonicalSymbolForBroker("GBPUSD.m", "mifx") === "GBPUSD.m" && canonicalSymbolForBroker("GBPUSD", "mifx") === "", "GBPUSD tanpa .m memang tidak dikenal MIFX (akar masalah)");
+});
+
+function scalpCase(engulf: boolean, mirror = false) {
+  const cs: Candle[] = [];
+  let p = 1.3;
+  const add = (o: number, c: number) => { cs.push({ time: `t${cs.length}`, open: o, high: Math.max(o, c) + 0.0002, low: Math.min(o, c) - 0.0002, close: c }); };
+  for (let i = 0; i < 140; i++) { const c = 1.3 + (i % 2 ? 0.0001 : -0.0001); add(p, c); p = c; }
+  for (let i = 0; i < 10; i++) { add(p, p + 0.001); p += 0.001; }
+  for (let i = 0; i < 5; i++) { add(p, p - 0.0015); p -= 0.0015; }
+  add(p + 0.0001, p - 0.0004); p -= 0.0004;
+  if (engulf) add(p - 0.0001, p + 0.0012); else add(p - 0.0001, p + 0.0002);
+  const k = 2.6;
+  const data = mirror ? cs.map((c) => ({ time: c.time, open: k - c.open, high: k - c.low, low: k - c.high, close: k - c.close })) : cs;
+  const last = data[data.length - 1];
+  const market: MarketData = {
+    symbol: "GBPUSD.m", timeframe: "H1", bid: last.close, ask: last.close + 0.0001, close: last.close, open: last.open,
+    high: last.high, low: last.low, ma50: 0, cci: 0, rsi: 0, macd: 0, macdSignal: 0, atr: 0.002, support: 0, resistance: 0,
+  };
+  const broker: BrokerSettings = {
+    equity: 10000, riskPercent: 1, minLot: 0.01, lotStep: 0.01, pointValue: 100000, contractSize: 100000,
+    commission: 1, slippage: 0, buffer: 0.0002, atrMultiplier: 1.5, targetRR: 2,
+  };
+  return { market, broker, data, setup: scalpSetup(market, broker, data) };
+}
+
+test("667. P1 scalping PDF MIFX: tren MA9>MA120 + crossing baru + Stochastic <=20 + bullish engulfing → BELI, SL ujung 2 candle, TP 2× SL", () => {
+  assert(JSON.stringify(smaSeries([1, 2, 3, 4], 2)) === JSON.stringify([null, 1.5, 2.5, 3.5]), "SMA");
+  const flat: Candle[] = [0, 1, 2].map((i) => ({ time: `t${i}`, open: 1, high: 1, low: 1, close: 1 }));
+  assert(stochasticK(flat, 2, 1).every((v) => v === null), "rentang 0 = null (jujur)");
+  const up: Candle = { time: "a", open: 1.0, high: 1.2, low: 0.9, close: 1.1 };
+  const dn: Candle = { time: "b", open: 1.05, high: 1.06, low: 1.0, close: 1.02 };
+  assert(isBullishEngulfing(dn, { time: "c", open: 1.01, high: 1.08, low: 1.0, close: 1.07 }) && !isBullishEngulfing(up, up) && !isBearishEngulfing(dn, dn), "engulfing");
+  assert(SCALP_PARAMS.fast === 9 && SCALP_PARAMS.slow === 120 && SCALP_PARAMS.oversold === 20 && SCALP_PARAMS.overbought === 80 && SCALP_PARAMS.rewardRisk === 2, "angka PDF");
+  const { setup, data } = scalpCase(true);
+  const n = data.length;
+  assert(setup.decision === "BELI", `decision=${setup.decision} ${setup.factors.join(" | ")}`);
+  const sl = Math.min(data[n - 1].low, data[n - 2].low) - 0.0002;
+  assert(Math.abs((setup.stopLoss ?? 0) - sl) < 1e-9, "SL = ujung 2 candle − buffer");
+  assert(Math.abs((setup.targetDistance ?? 0) - 2 * (setup.riskDistance ?? 0)) < 1e-9, "TP = 2× SL");
+  const no = scalpCase(false).setup;
+  assert(no.decision === "TUNGGU" && no.stopLoss === null && no.factors.some((f) => f.includes("engulfing")), "tanpa engulfing → TUNGGU");
+  const short = scalpSetup(scalpCase(true).market, scalpCase(true).broker, data.slice(-100));
+  assert(short.decision === "TUNGGU" && short.factors[0].includes("MA120"), "candle < 145 → TUNGGU jujur");
+});
+
+test("668. P1 scalping: JUAL = cermin BELI; terdaftar di rak strategi (--strategi scalping), default tetap skor", () => {
+  const { setup } = scalpCase(true, true);
+  assert(setup.decision === "JUAL" && (setup.stopLoss ?? 0) > setup.entry && (setup.takeProfit ?? 9) < setup.entry, `JUAL ${setup.decision}`);
+  assert(parseStrategyId("scalping") === "scalping" && STRATEGIES.scalping.label.startsWith("Scalping MIFX") && DEFAULT_STRATEGY_ID === "skor", "rak");
+  const via = getStrategy("scalping").propose({ market: scalpCase(true).market, broker: scalpCase(true).broker, candles: scalpCase(true).data });
+  assert(via.decision === "BELI", "lewat rak = sama");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
