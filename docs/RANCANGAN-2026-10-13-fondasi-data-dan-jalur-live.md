@@ -93,7 +93,70 @@ Akibatnya, untuk simbol dan jam yang sama, Hasil analisa bisa menampilkan BELI/J
 | A7-5 | Hasil analisa memakai `scanSymbol` lewat snapshot bila datanya dari live/CSV; tanda "manual" bila tidak | Ya, langkah dan test tersendiri |
 | A7-6 | Test kembar untuk semua jalur | Tidak |
 
-**Perlu keputusan Fahmi:** aturan mutlak 1 menyebut "hasil analisis Finex tidak boleh berubah". Langkah A7-2 dan A7-3 tidak menyentuh rumus `decisionEngine.ts`, tetapi bisa mengubah apa yang tampil di Hasil analisa (lebih sering TUNGGU). Perlu dipastikan ini diizinkan.
+**Keputusan Fahmi (13 Okt 2026):**
+
+- A7-2 dan A7-3 **TIDAK diizinkan** mengubah Hasil analisa Finex yang terlihat. Walaupun rumus tidak berubah, perubahan dari BELI/JUAL menjadi TUNGGU tetap perubahan hasil, sehingga bertentangan dengan aturan mutlak 1.
+- **Boleh sekarang:** A7-1, yaitu test yang hanya membuktikan perbedaan penjaga sesi, tanpa mengubah tampilan atau keputusan.
+- **A7-2 dan A7-3 hanya sebagai shadow:** dihitung dan dicatat sebagai "seharusnya TUNGGU" untuk evaluasi, sementara hasil Finex tetap seperti sekarang (A8).
+- Untuk menerapkannya pada hasil yang terlihat, aturan mutlak 1 harus lebih dulu diubah atau diberi pengecualian yang disetujui secara eksplisit (draf di A9).
+
+### A8. Rancangan uji shadow untuk A7-2 dan A7-3
+
+**Tujuan:** mengumpulkan bukti berapa kali, dan pada kondisi apa, Hasil analisa Finex berbeda dari pemindai, serta bagaimana hasil trade-nya. Tampilan dan keputusan Finex tidak berubah sedikit pun.
+
+**Cara kerja:**
+
+1. **Fungsi murni terpisah** `hitungShadowHasilAnalisa(hasilTerlihat, konteks)`. Masukannya hasil yang sudah tampil sekarang (`shownResult`) ditambah data sesi dan jam server yang sama. Keluarannya: keputusan terlihat, keputusan shadow (dengan penjaga sesi dan urutan pemindai), apakah berbeda, kode alasan shadow, dan arah asli.
+2. **Satu arah saja:** shadow hanya membaca `shownResult`, tidak pernah menulis kembali. `shownResult` tidak dijadikan masukan apa pun yang tampil di layar.
+3. **Aman bila gagal:** shadow dibungkus `try/catch`. Bila gagal atau data sesi tidak ada, tidak ada yang dicatat dan tampilan tetap utuh.
+4. **Pencatatan lewat server:** App mengirim hasil shadow ke endpoint baru (usulan `POST /api/keputusan/shadow`). Server menulisnya ke `data/keputusan/` dengan `jalur: "hasil-shadow"` (format di G5).
+5. **Kapan dicatat:** hanya bila keputusan shadow berbeda dari keputusan terlihat, maksimal sekali per simbol per candle H1. Tidak setiap render.
+6. **Tidak ada perubahan layar** di Hasil analisa. Ringkasan hasil shadow nanti dibaca dari laporan terpisah, bukan dari kotak Hasil analisa.
+7. **Evaluasi:** catatan shadow dipasangkan dengan trade yang dibuka pada simbol dan jam yang sama (lewat `entries` dan History). Yang dibandingkan: hasil trade saat shadow berkata "seharusnya TUNGGU (sesi)" dibanding trade lainnya. Penilaian dilakukan per golongan dengan n ≥ 20.
+
+**Test pengaman (wajib lolos):**
+
+- Untuk kumpulan masukan contoh, `shownResult` dengan dan tanpa shadow identik: keputusan, SL, TP, lot, alasan, dan peringatan.
+- Shadow yang melempar error tidak mengubah `shownResult`.
+- Test lama (sampai nomor 686) tetap hijau tanpa perubahan.
+
+**Langkah:**
+
+| Langkah | Isi | Mengubah tampilan? |
+| --- | --- | --- |
+| A7-1 | Test yang membuktikan penjaga sesi tidak ada di Hasil analisa | Tidak |
+| S1 | Fungsi murni `hitungShadowHasilAnalisa` + test pengaman | Tidak |
+| S2 | Penulis JSONL keputusan (G5) + endpoint shadow di server | Tidak |
+| S3 | App memanggil shadow setelah `shownResult`, tanpa render | Tidak |
+| S4 | Laporan shadow (halaman/panel terpisah dari Hasil analisa) | Tidak mengubah Hasil analisa |
+
+**Pertanyaan terbuka:** aturan mutlak 1 hanya menyebut Finex. Apakah broker lain (OTB, MIFX, Exness) juga cukup shadow, atau boleh langsung menerapkan A7-2 di tampilannya? Usulan Claude: shadow untuk semua broker dulu, supaya bukti dan perilakunya seragam.
+
+### A9. Draf perubahan klausul aturan mutlak 1 — BELUM BERLAKU
+
+Bunyi sekarang (`HANDOVER-CLAUDE.md`, bagian 5, butir 1):
+
+> 1. Finex tetap broker default; hasil analisis Finex tidak boleh berubah.
+
+**Draf usulan** (hanya berlaku bila disetujui eksplisit oleh Fahmi dan ditulis ke `HANDOVER-CLAUDE.md` dalam commit tersendiri):
+
+> 1. Finex tetap broker default. Rumus dan hasil analisis Finex tidak boleh berubah, kecuali melalui pengecualian tertulis di bawah ini.
+>
+> 1a. **Pengecualian Penjaga Sesi.** Hasil analisa Finex boleh berubah dari BELI/JUAL menjadi TUNGGU **hanya** bila penjaga sesi (`sessionGuard.ts`) menyatakan pasar simbol itu sedang tutup atau akan tutup dalam batas yang berlaku (60 menit; saham jelang libur 240 menit), berdasarkan jam sesi resmi dari terminal broker. Syarat:
+> - (i) Perubahan hanya ke arah lebih aman: BELI/JUAL → TUNGGU. Tidak pernah TUNGGU → BELI/JUAL.
+> - (ii) Rumus `decisionEngine.ts` tidak diubah. SL, TP, dan lot pada sinyal yang tidak ditahan tetap sama persis.
+> - (iii) Alasan tampil jelas ("Ditahan: sesi …"), dan arah asli tetap terlihat (`heldDecision`).
+> - (iv) Bila data sesi tidak tersedia atau gagal dibaca, hasil tetap seperti sebelum pengecualian ini.
+> - (v) Baru diaktifkan setelah uji shadow (A8) mencatat ≥ 20 kasus berbeda per golongan dan hasilnya ditinjau Fahmi.
+> - (vi) Bisa dimatikan dengan satu saklar, yang mengembalikan perilaku lama secara persis.
+>
+> 1b. **Penyelarasan urutan penahan (opsional, disetujui terpisah).** Urutan penahan Hasil analisa boleh disamakan dengan pemindai bila keputusan, SL, TP, dan lot tetap sama persis. Yang boleh berbeda hanya teks dan kode alasan saat dua penahan berlaku bersamaan.
+>
+> 1c. Pengecualian lain di luar 1a dan 1b membutuhkan persetujuan eksplisit baru.
+>
+> Disetujui oleh: ______ Tanggal: ______
+
+**Status:** draf. Aturan mutlak 1 yang berlaku tetap bunyi lama sampai baris persetujuan diisi.
 
 ### Langkah Fondasi Data
 
@@ -105,7 +168,7 @@ Akibatnya, untuk simbol dan jam yang sama, Hasil analisa bisa menampilkan BELI/J
 | F4 | Versi spesifikasi bertanggal | Tidak |
 | F5 | Ekspor candle D1, W1, M15 live | Tidak |
 | F6 | Cek DST sesudah pergantian jam musim | Tidak |
-| F7 | Satu kontrak keputusan untuk semua jalur (A7-1 sampai A7-6) | Lihat A7 |
+| F7 | Satu kontrak keputusan untuk semua jalur: A7-1 sekarang; A7-2/A7-3 hanya shadow (A8, langkah S1–S4); penerapan tampilan menunggu A9 | Lihat A7–A9 |
 
 ## B. Konteks per golongan (prioritas P1, sesudah A)
 
@@ -281,6 +344,50 @@ Agar file tidak membengkak, pemindai hanya mencatat saat **status simbol berubah
 - `sidikJariSnapshot` memastikan putar ulang memakai masukan yang persis sama.
 - Retensi: `keputusan` non-LOLOS disimpan 120 hari, sama dengan arsip tick. `keputusan` LOLOS/entry, `rangkaian`, dan `kartu_pola` disimpan selamanya.
 - Baris yang rusak dilewati saat dibaca, tidak membuat aplikasi berhenti (pola yang sama dengan `readTradeEntries`).
+
+### G5. Spesifikasi teknis format JSONL
+
+**Aturan berkas:**
+
+| Hal | Ketentuan |
+| --- | --- |
+| Encoding | UTF-8 tanpa BOM; akhir baris LF (`\n`) |
+| Satu baris | Tepat satu objek JSON lengkap, tanpa baris kosong di tengah |
+| Penulisan | Hanya oleh proses server (satu penulis). Satu baris ditulis dalam satu panggilan `appendFileSync(baris + "\n")`. UI tidak menulis langsung; UI mengirim ke endpoint server |
+| Rotasi | `keputusan`: satu berkas per broker per bulan (`keputusan-<broker>-<YYYY-MM>.jsonl`). `rangkaian` dan `kartu_pola`: satu berkas per broker |
+| Pembacaan | Baris yang tidak bisa diurai dilewati dan dihitung sebagai "baris rusak" (tampil di layar), tidak menghentikan aplikasi |
+| Perubahan | Tidak ada baris yang diubah atau dihapus. Koreksi = baris baru dengan `mengoreksi: "<id lama>"` |
+| Versi format | Setiap baris punya `skema` (misalnya `"keputusan/1"`). Kolom baru boleh ditambah tanpa menaikkan versi; mengganti arti atau tipe kolom wajib menaikkan versi |
+
+**Tipe nilai:**
+
+| Jenis | Format |
+| --- | --- |
+| ID | `keputusanId`, `rangkaianId`: UUID v4 huruf kecil. `nomor` kartu: `"<Label> #NNNN"`, urut per label per broker, tidak pernah dipakai ulang |
+| Waktu UTC | ISO 8601 dengan `Z`, presisi detik: `"2026-10-12T00:27:27Z"` |
+| Waktu server | Teks asli MT5 apa adanya: `"2026.10.12 02:27:27"` |
+| Harga | Angka JSON (bukan teks), sesuai digit simbol |
+| USD | Angka, 2 desimal |
+| Rupiah | Bilangan bulat |
+| R | Angka, 2 desimal |
+| Tidak diketahui | `null` (bukan 0, bukan teks kosong). Tidak ada angka karangan |
+| Enum | Huruf besar: `"LULUS"`, `"GAGAL"`, `"TIDAK_DINILAI"`, `"DITAHAN_SESI"`, `"KASBI_BAKAR"`, … |
+
+**Sidik jari snapshot (`sidikJariSnapshot`):** SHA-256 heksadesimal dari JSON kanonik isi snapshot. JSON kanonik = kunci diurutkan abjad, tanpa spasi, angka apa adanya. Dua snapshot dengan isi yang sama selalu menghasilkan sidik jari yang sama.
+
+**Contoh baris `keputusan`** (kerangka; angka harga dan lot dari trade nyata AUDJPY Finex 12 Okt 2026; nilai yang tidak diketahui ditulis `null`):
+
+```json
+{"skema":"keputusan/1","keputusanId":"<uuid>","jalur":"entry","waktuUtc":null,"waktuServer":"2026.10.12 02:27:27","waktuDiterima":null,"broker":"finex","login":null,"jenisAkun":null,"setaraLive":null,"simbol":"AUDJPY","golongan":"FOREX_JPY","versiSpesifikasi":null,"aturanId":"skor","versi":"1","sidikJariSnapshot":null,"masukan":{"bid":null,"ask":null,"umurKuotasiDetik":null,"candleTerakhir":null,"jumlahCandle":null,"ma50":null,"rsi":null,"cci":null,"macd":null,"atr":null,"kursUsdIdr":null,"tanggalKurs":null,"equity":null},"kualitasData":[],"penjaga":[{"nama":"sesi","hasil":"TIDAK_DINILAI","kodeAlasan":null,"sumberData":null,"umurDataDetik":null}],"hasil":{"status":null,"keputusan":"BELI","arahAsli":"BELI","entry":110.528,"sl":110.379,"tp":110.759,"lot":0.01,"risikoUsd":null,"risikoRp":null,"porsiBiaya":null,"kodeAlasanUtama":null},"sumber":"live","diubahManual":[],"mengoreksi":null}
+```
+
+**Contoh baris `kartu_pola`** (trade yang sama; ditutup di SL pukul 19:42:24 jam server, hasil −$0,94 ≈ −Rp16.808 dengan kurs ECB 9 Okt Rp17.880,55):
+
+```json
+{"skema":"kartu_pola/1","nomor":"Pupare Rebus #0001","label":"PUPARE_REBUS","rangkaianId":"<uuid>","broker":"finex","asal":null,"setaraLive":null,"aturanId":"skor","versi":"1","versiSpesifikasi":null,"waktuUtc":null,"sidikJari":{"golongan":"FOREX_JPY","arah":"BELI","arahD1":null,"posisiMa50":null,"rentangSkor":null,"pola":null,"sesi":null,"kondisiAtr":null},"hasil":{"r":-1.0,"usd":-0.94,"rp":-16808,"kategori":"RUGI_PENUH"},"catatanTim":{"tim3":null,"tim4":{"rrRencana":1.55,"catatan":"RR di bawah batas 2"},"tim5":null,"tim6":null,"tim6b":null,"tim7":{"komisiUsd":-0.01}},"dataTidakLengkap":true,"mengoreksi":null}
+```
+
+Catatan contoh: `r: -1.0` karena posisi ditutup tepat di SL (komisi belum dihitung ke R). `dataTidakLengkap: true` karena trade ini dibuka sebelum pencatat tim ada.
 
 ### Langkah penyimpanan
 
