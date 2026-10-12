@@ -29,6 +29,8 @@ import { useBrokerPositions } from "./hooks/useBrokerPositions";
 import { applyDoubleBetHold } from "./lib/correlationGuard";
 import { applyLossPauseHold } from "./lib/lossStreakGuard";
 import { useLossPause } from "./hooks/useLossPause";
+import { useLolosProof } from "./hooks/useLolosProof";
+import { applyProofHold, proofHoldReason } from "./lib/evaluationView";
 import { useNewsCalendar } from "./hooks/useNewsCalendar";
 import { useSpecHolds } from "./hooks/useSpecHolds";
 import { useNowMs } from "./hooks/useNowMs";
@@ -517,11 +519,14 @@ export default function App() {
   const specHolds = useSpecHolds(activeBrokerId);
   // O2b: pembukaan bursa indeks/saham (jam nyata, diperbarui tiap 30 dtk).
   const nowMs = useNowMs();
+  // F5: "Lolos" yang terbukti rugi di History MT5 broker aktif → tahan.
+  const lolosProof = useLolosProof(activeBrokerId);
   const shownResult = useMemo(
     () =>
       result === null
         ? null
-        : applyDoubleBetHold(
+        // F5: bungkus luar — "Lolos" yang terbukti rugi di History MT5 ikut ditahan.
+        : applyProofHold(applyDoubleBetHold(
             applyOpeningHold(
               applyNewsHold(
                 applyLossPauseHold(applySpecHold(result, market.symbol, specHolds), lossPause),
@@ -534,8 +539,8 @@ export default function App() {
             ),
             market.symbol,
             openPositionsAll,
-          ),
-    [result, market.symbol, openPositionsAll, lossPause, newsEvents, newsMinute, specHolds, nowMs],
+          ), proofHoldReason(lolosProof)),
+    [result, market.symbol, openPositionsAll, lossPause, newsEvents, newsMinute, specHolds, nowMs, lolosProof],
   );
 
   // Langkah E: klik status LOLOS di pemindai → pilih simbol (data dimuat
@@ -927,6 +932,7 @@ export default function App() {
               symbol={market.symbol}
               result={shownResult}
               bid={liveQuote?.bid ?? null}
+              proof={lolosProof}
             />
           )}
         </div>

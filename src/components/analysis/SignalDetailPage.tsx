@@ -5,6 +5,7 @@ import { calculatorPageUrl } from "../../lib/calculatorPageView";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
 import type { OpenPositionLike } from "../../lib/correlationGuard";
 import { checkLossStreak, tradesForBroker, type StreakAccount } from "../../lib/lossStreakGuard";
+import { mergeGroupStats, type EvalAccount } from "../../lib/evaluationView";
 import type { NewsEventLike } from "../../lib/newsGuard";
 import type { TradeSession } from "../../lib/sessionGuard";
 import { specHoldMap } from "../../lib/specCompare";
@@ -87,6 +88,8 @@ export function SignalDetailPage({ broker, symbol, equity }: { broker: BrokerId;
         specHolds: specBook?.available === true && Array.isArray(specBook.diffs) ? specHoldMap(specBook.diffs) : null,
         // O2b: pembukaan bursa (jam nyata saat dihitung).
         openingNowMs: Date.now(),
+        // F5: respons /api/evaluation memuat byGroup (tipe lengkap = EvalAccount).
+        proof: mergeGroupStats((evaluation?.accounts ?? []) as unknown as EvalAccount[], broker, "LOLOS"),
       }),
     );
     setError(null);

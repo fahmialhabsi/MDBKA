@@ -681,6 +681,29 @@ function BeginnerGuide({ result }: { result: ResultType }) {
     );
   }
 
+  // F5: sinyal "Lolos" sudah terbukti rugi di History MT5.
+  if (result.decision === "TUNGGU" && result.heldBy === "bukti") {
+    return (
+      <div className="rounded-2xl border border-red-400/25 bg-red-400/5 p-5" data-testid="held-bukti">
+        <p className="font-semibold text-red-200">
+          Artinya gampang: sinyal seperti ini SUDAH terbukti rugi di akun Anda.
+          JANGAN entry dulu.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-300">
+          <li>{result.heldReason ?? "Ditahan: terbukti rugi di History MT5"}.</li>
+          <li>
+            Angka ini dari trade sungguhan Anda (demo + live) di broker ini yang
+            dulu dibuka saat status pemindai &quot;Lolos&quot;.
+          </li>
+          <li>
+            Penahanan otomatis dibuka kembali bila hasil rata-rata per trade
+            membaik (di atas 0) pada data History berikutnya.
+          </li>
+        </ul>
+      </div>
+    );
+  }
+
   // Langkah F: jeda setelah 3 kali rugi berturut-turut.
   if (result.decision === "TUNGGU" && result.heldBy === "jeda") {
     return (

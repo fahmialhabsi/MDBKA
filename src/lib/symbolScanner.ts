@@ -16,6 +16,7 @@ import { resolveCsvBidAsk, type LiveQuoteLike } from "./csvQuote";
 import { riskCapFor } from "./riskGroup";
 import { applyBrokerPreset, createEmptyMarketForSymbol } from "./marketReset";
 import { signalReason } from "./signalReason";
+import { proofHoldReason, type EvalTradeStats } from "./evaluationView";
 import { getStrategy, type StrategyId } from "./strategyRegistry";
 import { tickSizeForSymbol } from "./tickSize";
 import { buildBlockedReasons } from "./validationView";
@@ -39,6 +40,7 @@ export type ScanStatus =
   | "DITAHAN_SESI"
   | "DITAHAN_SPEK"
   | "DITAHAN_BUKA"
+  | "DITAHAN_BUKTI"
   | "TUNGGU"
   | "PASAR_TUTUP"
   | "DATA";
@@ -81,6 +83,11 @@ export interface ScanInput {
    * & saham AS (−30/+60 mnt). null/absen = satpam diabaikan.
    */
   readonly openingNowMs?: number | null;
+  /**
+   * F4/F5 (12 Okt 2026): bukti History MT5 kelompok LOLOS broker ini (demo + live).
+   * Terbukti rugi → DITAHAN_BUKTI; absen = tanpa satpam bukti (perilaku lama).
+   */
+  readonly proof?: EvalTradeStats | null;
   /** S2: strategi pengusul setup; absen = "skor" (identik analyzeMarket). */
   readonly strategy?: StrategyId;
 }
@@ -268,6 +275,21 @@ export function scanSymbol(input: ScanInput): ScanRow {
       candles: count,
     };
   }
+  // F5: "Lolos" yang sudah terbukti rugi di History MT5 → tahan (TUNGGU, tanpa SL/TP).
+  const buktiReason = proofHoldReason(input.proof);
+  if (status === "LOLOS" && (result.decision === "BELI" || result.decision === "JUAL") && buktiReason !== null) {
+    return {
+      symbol,
+      status: "DITAHAN_BUKTI",
+      decision: "TUNGGU",
+      direction: result.decision,
+      held: true,
+      score: result.score,
+      reason: buktiReason,
+      costShareOfRisk: result.costShareOfRisk ?? null,
+      candles: count,
+    };
+  }
   // Langkah F: jeda setelah 3 rugi beruntun menahan semua sinyal lolos.
   if (
     status === "LOLOS" &&
@@ -391,7 +413,7 @@ export function scanSymbol(input: ScanInput): ScanRow {
           targetDistance: result.targetDistance,
         }
       : null;
-  return {
+  const row: ScanRow = {
     symbol,
     status,
     decision: result.decision,
@@ -412,6 +434,8 @@ export function scanSymbol(input: ScanInput): ScanRow {
         }
       : {}),
   };
+  // F4: teks Alasan memuat bukti History MT5 yang sama dengan badge status.
+  return input.proof === undefined ? row : { ...row, reason: signalReason(result, input.proof) };
 }
 
 const STATUS_ORDER: Record<ScanStatus, number> = {
@@ -424,9 +448,10 @@ const STATUS_ORDER: Record<ScanStatus, number> = {
   DITAHAN_SESI: 6,
   DITAHAN_SPEK: 7,
   DITAHAN_BUKA: 8,
-  TUNGGU: 9,
-  PASAR_TUTUP: 10,
-  DATA: 11,
+  DITAHAN_BUKTI: 9,
+  TUNGGU: 10,
+  PASAR_TUTUP: 11,
+  DATA: 12,
 };
 
 /** Urutan tampil: LOLOS dulu, lalu yang paling dekat lolos; skor kuat di atas. */

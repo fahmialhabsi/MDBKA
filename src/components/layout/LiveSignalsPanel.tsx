@@ -1,6 +1,7 @@
 import { Pause, TrendingDown, TrendingUp } from "lucide-react";
 import type { AnalysisResult } from "../../types/analysis";
 import { signalReason } from "../../lib/signalReason";
+import type { EvalTradeStats } from "../../lib/evaluationView";
 
 /**
  * Ringkasan keputusan di header (Mode Aman, 8 Okt 2026).
@@ -14,9 +15,11 @@ interface LiveSignalsPanelProps {
   readonly symbol: string;
   readonly result: AnalysisResult;
   readonly bid: number | null;
+  /** F4: bukti History MT5 kelompok LOLOS broker aktif (teks sama dengan pemindai). */
+  readonly proof?: EvalTradeStats | null;
 }
 
-export function LiveSignalsPanel({ symbol, result, bid }: LiveSignalsPanelProps) {
+export function LiveSignalsPanel({ symbol, result, bid, proof }: LiveSignalsPanelProps) {
   const { decision, score } = result;
   const color =
     decision === "BELI"
@@ -44,7 +47,7 @@ export function LiveSignalsPanel({ symbol, result, bid }: LiveSignalsPanelProps)
         <span>B: {bid === null ? "-" : bid}</span>
         <span>Skor {score}/5</span>
       </div>
-      <div className="whitespace-normal text-[10px] leading-4 text-slate-400">{signalReason(result)}</div>
+      <div className="whitespace-normal text-[10px] leading-4 text-slate-400">{signalReason(result, proof ?? null)}</div>
     </div>
   );
 }

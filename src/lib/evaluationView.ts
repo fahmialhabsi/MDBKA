@@ -6,6 +6,7 @@
  * Prinsip: hasil disebut "terbukti" hanya bila sampel cukup (n ≥ 20) —
  * sebelum itu angka ditampilkan apa adanya tanpa klaim.
  */
+import type { AnalysisResult } from "../types/analysis";
 import { priceDigits } from "./tickSize";
 
 export interface EvalTradeStats {
@@ -182,6 +183,46 @@ export function mergeGroupStats(
     expectancy: n > 0 ? Math.round((net / n) * 100) / 100 : null,
     avgR: null,
     rCount: 0,
+  };
+}
+
+/**
+ * F5 (12 Okt 2026, penetapan Fahmi) — sinyal "Lolos" yang SUDAH terbukti rugi
+ * (History MT5 broker itu, demo + live, n ≥ 20, rata-rata per trade ≤ 0)
+ * ditahan: TUNGGU, tanpa SL/TP/lot, sampai buktinya membaik. null = tidak ditahan.
+ */
+export function proofHoldReason(stats: EvalTradeStats | null | undefined): string | null {
+  if (stats === null || stats === undefined || proofStatus(stats) !== "TERBUKTI_NEGATIF") return null;
+  return `Ditahan: terbukti rugi di History MT5 (win rate ${formatWinRate(stats.winRate)}, n=${stats.n})`;
+}
+
+/** F4: catatan bukti untuk teks "Lolos biaya & risiko · …" (kartu atas & kolom Alasan). */
+export function proofNote(stats: EvalTradeStats | null | undefined): string {
+  const n = stats?.n ?? 0;
+  if (stats === null || stats === undefined || proofStatus(stats) === "BELUM_CUKUP") {
+    return `belum terbukti (${n}/${MIN_PROVEN_TRADES})`;
+  }
+  return proofStatus(stats) === "TERBUKTI_POSITIF"
+    ? `terbukti untung, win rate ${formatWinRate(stats.winRate)} (n=${n})`
+    : `terbukti rugi, win rate ${formatWinRate(stats.winRate)} (n=${n})`;
+}
+
+/** F5: tahan hasil analisa BELI/JUAL bila terbukti rugi (pola sama satpam jeda). */
+export function applyProofHold<T extends AnalysisResult>(result: T, reason: string | null): T {
+  if (reason === null) return result;
+  if (result.decision !== "BELI" && result.decision !== "JUAL") return result;
+  return {
+    ...result,
+    decision: "TUNGGU",
+    heldBy: "bukti",
+    heldDecision: result.decision,
+    heldReason: reason,
+    stopLoss: null,
+    takeProfit: null,
+    suggestedLot: null,
+    warnings: [`Mode Aman: ${reason}. Setup ditahan.`, ...result.warnings],
+    explanation:
+      "Mode Aman: sinyal seperti ini sudah terbukti rugi di History MT5 Anda. Tunggu sampai buktinya membaik.",
   };
 }
 

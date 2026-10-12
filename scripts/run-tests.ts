@@ -329,8 +329,11 @@ import {
   formatUsd,
   formatWinRate,
   isLegacyGroup,
+  applyProofHold,
   lolosLabel,
   mergeGroupStats,
+  proofHoldReason,
+  proofNote,
   proofLabel,
   proofStatus,
   sortGroups,
@@ -8500,6 +8503,56 @@ test("662. F3 profit berjalan di label harga biru = kolom Profit MT5 (kotor), Ru
   assert(floatingProfitText({ usd: -0.88, idr: -15734 }) === "P/L -0,88 USD · -Rp15.734", floatingProfitText({ usd: -0.88, idr: -15734 }));
   assert(floatingProfitText({ usd: 2.5, idr: null }) === "P/L +2,50 USD · kurs ECB belum ada", "untung bertanda + , kurs kosong jujur");
   assert(readSrc("src/components/group/GroupPage.tsx").includes('data-testid="pnl-live"'), "label di chart");
+});
+
+function proofStats(n: number, wins: number, net: number): EvalTradeStats {
+  return { n, wins, losses: n - wins, winRate: n > 0 ? wins / n : null, net, avgWin: null, avgLoss: null, expectancy: n > 0 ? Math.round((net / n) * 100) / 100 : null, avgR: null, rCount: 0 };
+}
+
+test("663. F5 bukti History: 'Lolos' terbukti rugi (n>=20) → alasan tahan; belum cukup/untung → tidak ditahan", () => {
+  const rugi = proofStats(20, 10, -3.4);
+  assert(proofHoldReason(rugi) === "Ditahan: terbukti rugi di History MT5 (win rate 50,0%, n=20)", String(proofHoldReason(rugi)));
+  assert(proofHoldReason(proofStats(19, 2, -30)) === null, "n<20 belum terbukti = tidak ditahan");
+  assert(proofHoldReason(proofStats(25, 15, 4)) === null && proofHoldReason(null) === null && proofHoldReason(undefined) === null, "untung/tanpa data = tidak ditahan");
+  assert(proofNote(rugi) === "terbukti rugi, win rate 50,0% (n=20)" && proofNote(proofStats(25, 15, 4)) === "terbukti untung, win rate 60,0% (n=25)" && proofNote(null) === "belum terbukti (0/20)", proofNote(proofStats(25, 15, 4)));
+  const market: MarketData = { symbol: "GBPUSD", timeframe: "H1", bid: 1.3, ask: 1.30012, close: 1.301, open: 1.3, high: 1.302, low: 1.299, ma50: 1.29, cci: 150, rsi: 60, macd: 0.001, macdSignal: 0, atr: 0.002, support: 1.297, resistance: 1.305 };
+  const broker: BrokerSettings = { equity: 10000, riskPercent: 1, minLot: 0.01, lotStep: 0.01, pointValue: 100000, contractSize: 100000, commission: 1, slippage: 0, buffer: 0.0002, atrMultiplier: 1.5, targetRR: 2 };
+  const base = analyzeMarket(market, broker);
+  assert(base.decision === "BELI" && base.stopLoss !== null, "kasus dasar BELI");
+  const held = applyProofHold(base, proofHoldReason(rugi));
+  assert(held.decision === "TUNGGU" && held.heldBy === "bukti" && held.heldDecision === "BELI" && held.stopLoss === null && held.takeProfit === null && held.suggestedLot === null, JSON.stringify(held));
+  assert(signalReason(held) === "Ditahan: terbukti rugi di History MT5 (win rate 50,0%, n=20)", signalReason(held));
+  assert(applyProofHold(base, null) === base, "tanpa alasan = hasil sama persis");
+  assert(signalReason(base, proofStats(25, 15, 4)) === "Lolos biaya & risiko · terbukti untung, win rate 60,0% (n=25)" && signalReason(base) === "Lolos biaya & risiko · belum terbukti", "F4 teks + teks lama tanpa bukti");
+});
+
+test("664. F5 pemindai: Lolos + terbukti rugi = DITAHAN_BUKTI tanpa rencana SL/TP; tanpa bukti = perilaku lama", () => {
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const gelombang = (i: number) => 1.3 + 0.004 * Math.sin(i / 40) + 0.0006 * Math.sin(i / 3);
+  const csv = btCsv(700, gelombang);
+  const lines = csv.split("\n");
+  let lolos: { csv: string; row: ScanRow } | null = null;
+  for (let end = 260; end < lines.length && lolos === null; end++) {
+    const c = [lines[0], ...lines.slice(end - 200, end)].join("\n");
+    const row = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: c, quote: null, equity: 10000, fxRates: rates });
+    if (row.status === "LOLOS") lolos = { csv: c, row };
+  }
+  if (lolos === null) throw new Error("data uji harus memuat satu sinyal LOLOS");
+  const held = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: lolos.csv, quote: null, equity: 10000, fxRates: rates, proof: proofStats(20, 10, -3.4) });
+  assert(held.status === "DITAHAN_BUKTI" && held.decision === "TUNGGU" && held.held && (held.plan ?? null) === null && held.reason.includes("terbukti rugi di History MT5"), JSON.stringify(held));
+  const untung = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: lolos.csv, quote: null, equity: 10000, fxRates: rates, proof: proofStats(25, 15, 4) });
+  assert(untung.status === "LOLOS" && untung.plan !== null && untung.plan !== undefined && untung.reason.includes("terbukti untung"), JSON.stringify(untung.reason));
+  assert(JSON.stringify(lolos.row) === JSON.stringify(scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: lolos.csv, quote: null, equity: 10000, fxRates: rates })), "tanpa bukti = identik");
+});
+
+test("665. F4/F5 terpasang di semua layar: pemindai, detail sinyal, kartu atas, Hasil analisa (3 broker, demo+live)", () => {
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes("proof: lolosStats,") && panel.includes('DITAHAN_BUKTI: { label: "Terbukti rugi · ditahan"'), "pemindai");
+  assert(readSrc("src/components/analysis/SignalDetailPage.tsx").includes('proof: mergeGroupStats('), "detail sinyal (Salin SL/TP)");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("applyProofHold(applyDoubleBetHold(") && app.includes("proofHoldReason(lolosProof)") && app.includes("useLolosProof(activeBrokerId)") && app.includes("proof={lolosProof}"), "kartu atas & Hasil analisa");
+  assert(readSrc("src/hooks/useLolosProof.ts").includes('mergeGroupStats(accounts, brokerId, "LOLOS")'), "per broker, semua akun (demo+live)");
+  assert(readSrc("src/components/result/AnalysisResult.tsx").includes('data-testid="held-bukti"'), "penjelasan di Hasil analisa");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

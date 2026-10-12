@@ -63,6 +63,7 @@ const STATUS_VIEW: Record<ScanStatus, { label: string; className: string }> = {
   DITAHAN_SESI: { label: "Sesi tutup", className: "bg-rose-400/15 text-rose-300" },
   DITAHAN_SPEK: { label: "Spesifikasi berubah", className: "bg-violet-400/15 text-violet-300" },
   DITAHAN_BUKA: { label: "Pembukaan bursa", className: "bg-yellow-400/15 text-yellow-300" },
+  DITAHAN_BUKTI: { label: "Terbukti rugi · ditahan", className: "bg-red-400/15 text-red-200" },
   TUNGGU: { label: "Tunggu", className: "bg-white/10 text-slate-300" },
   PASAR_TUTUP: { label: "Pasar tutup / basi", className: "bg-white/5 text-slate-500" },
   DATA: { label: "Data kurang", className: "bg-white/5 text-slate-500" },
@@ -128,7 +129,8 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
           }),
     [positionsKey],
   );
-  const lolosStats = mergeGroupStats(evalAccounts, brokerId, "LOLOS");
+  // F5: memo agar pemindai tidak dihitung ulang tiap render.
+  const lolosStats = useMemo(() => mergeGroupStats(evalAccounts, brokerId, "LOLOS"), [evalAccounts, brokerId]);
   const lolosView = {
     label: lolosLabel(lolosStats),
     className:
@@ -247,8 +249,10 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         sessions,
         specHolds,
         openingNowMs: scanAtMs,
+        // F4/F5: bukti History MT5 kelompok LOLOS broker ini (demo + live).
+        proof: lolosStats,
       }),
-    [brokerId, equity, fxRates, reference, openPositions, pauseReason, newsEvents, nowServer, sessions, specHolds, scanAtMs],
+    [brokerId, equity, fxRates, reference, openPositions, pauseReason, newsEvents, nowServer, sessions, specHolds, scanAtMs, lolosStats],
   );
   const rows = useMemo(
     () => sortScanRows(source.map((item) => scanItem(item, item.quote))),
@@ -266,7 +270,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
 
   const counts = rows.reduce<Record<ScanStatus, number>>(
     (acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }),
-    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, DITAHAN_JEDA: 0, DITAHAN_BERITA: 0, DITAHAN_SESI: 0, DITAHAN_SPEK: 0, DITAHAN_BUKA: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
+    { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, DITAHAN_JEDA: 0, DITAHAN_BERITA: 0, DITAHAN_SESI: 0, DITAHAN_SPEK: 0, DITAHAN_BUKA: 0, DITAHAN_BUKTI: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
   );
   const visible = showAll ? rows : rows.slice(0, COLLAPSED_ROWS);
   const loading =
@@ -289,6 +293,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
               {counts.DITAHAN_SESI} sesi tutup/jelang tutup ·{" "}
               {counts.DITAHAN_SPEK} spesifikasi berubah ·{" "}
               {counts.DITAHAN_BUKA} pembukaan bursa ·{" "}
+              {counts.DITAHAN_BUKTI} terbukti rugi ·{" "}
               {counts.TUNGGU} tunggu · {counts.PASAR_TUTUP} pasar
               tutup · {counts.DATA} data kurang
             </p>
