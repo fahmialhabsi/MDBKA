@@ -8,6 +8,7 @@ import type { BrokerId } from "../types/broker";
 import { parseBrokerParam } from "./brokerRegistry";
 import { formatIdr, formatUsd } from "./historyPageView";
 import { getMifxSpec } from "./mifxSpecs";
+import { getExnessSpec } from "./exnessSpecs";
 import { riskGroupOf, type RiskGroupId } from "./riskGroup";
 
 export const GROUP_TABS: readonly { readonly id: RiskGroupId; readonly label: string }[] = [
@@ -39,7 +40,13 @@ export function parseGroupPage(search: string): GroupPageParams | null {
   const g = q.get("grup");
   const group = GROUP_TABS.find((t) => t.id === g)?.id ?? "FOREX";
   const rawSymbol = (q.get("symbol") ?? "").trim();
-  const symbol = broker === "mifx" ? (getMifxSpec(rawSymbol)?.symbol ?? rawSymbol) : rawSymbol.toUpperCase();
+  // X4c-3: Exness juga nama persis ("XAUUSDm").
+  const symbol =
+    broker === "mifx"
+      ? (getMifxSpec(rawSymbol)?.symbol ?? rawSymbol)
+      : broker === "exness"
+        ? (getExnessSpec(rawSymbol)?.symbol ?? rawSymbol)
+        : rawSymbol.toUpperCase();
   return { broker, group, symbol };
 }
 

@@ -22,7 +22,7 @@ const harga = (n: number | null, symbol: string): string => (n === null ? "-" : 
  * (dibeli/terjual/dipegang + lembar); lainnya → buka BELI/JUAL, ditutup, terbuka.
  */
 export function StockPortfolio({ broker, group }: { broker: BrokerId; group: RiskGroupId }) {
-  const [data, setData] = useState<{ broker: BrokerId; items: { account: Account; deals: DealLike[] }[] } | null>(null);
+  const [data, setData] = useState<{ broker: BrokerId; items: { account: Account; deals: DealLike[]; totalRows: number; currency: string }[] } | null>(null);
   const isStock = group === "SAHAM_AS";
 
   useEffect(() => {
@@ -35,8 +35,10 @@ export function StockPortfolio({ broker, group }: { broker: BrokerId; group: Ris
         const items = await Promise.all(
           mine.map(async (account) => {
             const r = await fetch(`${API_BASE_URL}/api/history/${account.login}`);
-            const b = r.ok ? ((await r.json()) as { view?: { rows?: DealLike[] } }) : {};
-            return { account, deals: b.view?.rows ?? [] };
+            const b = r.ok ? ((await r.json()) as { view?: { rows?: DealLike[]; totalRows?: number; currency?: string } }) : {};
+            const deals = b.view?.rows ?? [];
+            // X4c-3: History besar (Exness) dikirim terpotong ke 1.000 deal terakhir.
+            return { account, deals, totalRows: b.view?.totalRows ?? deals.length, currency: b.view?.currency ?? "USD" };
           }),
         );
         if (!cancelled) setData({ broker, items });
@@ -54,13 +56,14 @@ export function StockPortfolio({ broker, group }: { broker: BrokerId; group: Ris
     .map((i) => ({ account: i.account, rows: buildTradeSummary(i.deals, (s) => riskGroupOf(s).id === group) }))
     .filter((i) => i.rows.length > 0);
   const tone = (n: number): string => (n < 0 ? "text-rose-300" : n > 0 ? "text-sky-300" : "text-slate-300");
-  const hasil = (r: StockHolding) => (
+  // X4c-3: satuan kolom kedua = mata uang akun (Exness = IDR, bukan "USD").
+  const hasil = (r: StockHolding, ccy = "USD") => (
     <td className={`px-2 py-1 text-right ${tone(r.realizedUsd)}`}>
       {formatIdr(r.realizedIdr)}
-      <span className="block text-xs">{formatUsd(r.realizedUsd)} USD</span>
+      <span className="block text-xs">{formatUsd(r.realizedUsd)} {ccy}</span>
       {r.openEntryCostUsd !== 0 && (
         <span className="block text-xs text-amber-300" data-testid="komisi-masuk">
-          komisi masuk (posisi terbuka): {formatIdr(r.openEntryCostIdr)} · {formatUsd(r.openEntryCostUsd)} USD
+          komisi masuk (posisi terbuka): {formatIdr(r.openEntryCostIdr)} · {formatUsd(r.openEntryCostUsd)} {ccy}
         </span>
       )}
     </td>
@@ -84,6 +87,12 @@ export function StockPortfolio({ broker, group }: { broker: BrokerId; group: Ris
         filled.map(({ account, rows }) => (
           <div key={account.login} className="mb-3 overflow-x-auto">
             <p className="mb-1 text-sm font-semibold text-slate-200">{account.label} ({account.login})</p>
+            {(now?.items.find((i) => i.account.login === account.login)?.totalRows ?? 0) >
+              (now?.items.find((i) => i.account.login === account.login)?.deals.length ?? 0) && (
+              <p className="mb-1 text-xs text-amber-300" data-testid="ringkasan-terpotong">
+                Hanya dari 1.000 transaksi terakhir (History akun ini sangat panjang); total lengkap ada di halaman History.
+              </p>
+            )}
             <table className="w-full text-sm">
               <thead className="text-xs uppercase text-slate-400">
                 {isStock ? (
@@ -117,7 +126,7 @@ export function StockPortfolio({ broker, group }: { broker: BrokerId; group: Ris
                       <td className="px-2 py-1 text-right">{r.soldLot} lot<span className="block text-xs text-slate-400">{lembar(r.soldShares)}</span></td>
                       <td className="px-2 py-1 text-right font-mono">{harga(r.avgSell, r.symbol)}</td>
                       <td className="px-2 py-1 text-right">{r.heldLot} lot<span className="block text-xs text-slate-400">{lembar(r.heldShares)}</span></td>
-                      {hasil(r)}
+                      {hasil(r, now?.items.find((i) => i.account.login === account.login)?.currency)}
                     </tr>
                   ) : (
                     <tr key={r.symbol} className="border-t border-white/5">
@@ -126,7 +135,7 @@ export function StockPortfolio({ broker, group }: { broker: BrokerId; group: Ris
                       <td className="px-2 py-1 text-right">{r.openSellLot}<span className="block text-xs text-slate-400">{harga(r.avgOpenSell, r.symbol)}</span></td>
                       <td className="px-2 py-1 text-right">{r.closedLot}</td>
                       <td className={`px-2 py-1 text-right ${r.openLot > 0 ? "font-bold text-amber-200" : ""}`}>{r.openLot}</td>
-                      {hasil(r)}
+                      {hasil(r, now?.items.find((i) => i.account.login === account.login)?.currency)}
                     </tr>
                   ),
                 )}

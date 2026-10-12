@@ -132,8 +132,16 @@ export function riskCapFor(
   };
 }
 
+/** Nama baku yang dikenal golongan bernama (bukan saham/lainnya). */
+const isKnownBase = (s: string): boolean =>
+  FOREX.has(s) || FOREX_JPY.has(s) || FOREX_TIDAK_LAZIM.has(s) || LOGAM.has(s) || MINYAK.has(s) || INDEKS.has(s);
+
 export function riskGroupOf(symbol: string): RiskGroup {
-  const s = baseRiskSymbol(symbol);
+  const raw = baseRiskSymbol(symbol);
+  // X4c-3 (12 Okt 2026): nama Exness yang SUDAH dihurufbesarkan pemanggil ("XAUUSDM")
+  // kehilangan "m" kecil. Akhiran M dibuang hanya bila nama tanpa M dikenal dan nama
+  // utuhnya tidak — #IBM / saham tetap utuh.
+  const s = raw.endsWith("M") && !isKnownBase(raw) && isKnownBase(raw.slice(0, -1)) ? raw.slice(0, -1) : raw;
   if (FOREX.has(s)) return RISK_GROUPS.FOREX;
   if (FOREX_JPY.has(s)) return RISK_GROUPS.FOREX_JPY;
   if (FOREX_TIDAK_LAZIM.has(s)) return RISK_GROUPS.FOREX_TIDAK_LAZIM;

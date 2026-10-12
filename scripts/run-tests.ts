@@ -8828,6 +8828,27 @@ test("682. X4c-2 History akun Rupiah (Exness): kolom Rp = angka asli (tanpa kurs
   assert(page.includes('data-testid="history-trimmed"') && page.includes('data-testid="history-idr"'), "catatan layar");
 });
 
+test("683. X4c-3 Kalkulator & Golongan: pilihan Exness; URL ?broker=exness&symbol=XAUUSDm tetap nama persis (akhiran m tidak hilang)", () => {
+  assert(readSrc("src/components/analysis/CalculatorPage.tsx").includes('<option value="exness">Exness</option>'), "kalkulator Exness");
+  assert(readSrc("src/components/group/GroupPage.tsx").includes('setBroker("exness")'), "golongan Exness");
+  const c = parseCalculatorPage(calculatorPageUrl({ broker: "exness", symbol: "XAUUSDm", direction: "BELI", lot: "0.02", entry: "4184.727", sl: "4170.746", tp: "" }).slice(1));
+  assert(c !== null && c.broker === "exness" && c.symbol === "XAUUSDm" && c.sl === "4170.746", JSON.stringify(c));
+  assert(parseCalculatorPage("halaman=kalkulator&broker=exness&symbol=XAUUSDM")?.symbol === "XAUUSDm", "huruf besar dari URL → nama persis");
+  const g = parseGroupPage(groupPageUrl({ broker: "exness", group: "LOGAM", symbol: "XAUUSDm" }).slice(1));
+  assert(g !== null && g.broker === "exness" && g.group === "LOGAM" && g.symbol === "XAUUSDm", JSON.stringify(g));
+  assert(parseCalculatorPage("halaman=kalkulator&broker=finex&symbol=xauusd")?.symbol === "XAUUSD", "Finex tetap huruf besar");
+});
+
+test("684. X4c-3 Golongan Exness: XAUUSDm (juga bila sudah dihurufbesarkan jadi XAUUSDM) masuk Logam — tab simbol & ringkasan transaksi terisi; #IBM tetap saham", () => {
+  assert(riskGroupOf("XAUUSDM").id === "LOGAM" && riskGroupOf("EURUSDM").id === "FOREX" && riskGroupOf("XAUUSDm").id === "LOGAM", "Exness huruf besar");
+  assert(riskGroupOf("#IBM").id === "SAHAM_AS" && riskGroupOf("XAUUSD").id === "LOGAM" && riskGroupOf("BTCUSDM").id === "LAINNYA", "lainnya tidak berubah");
+  const tabs = groupSymbolTabs(["XAUUSDm", "BTCUSDm", "EURUSDm"], ["XAUUSDm", "XAUUSDm"], "LOGAM");
+  assert(tabs.length === 1 && tabs[0].symbol === "XAUUSDM" && tabs[0].openCount === 2, JSON.stringify(tabs));
+  assert(realSymbolName(tabs[0].symbol, ["XAUUSDm"]) === "XAUUSDm", "nama asli untuk harga live");
+  const sp = readSrc("src/components/group/StockPortfolio.tsx");
+  assert(sp.includes('data-testid="ringkasan-terpotong"') && sp.includes("{formatUsd(r.realizedUsd)} {ccy}</span>"), "catatan terpotong & satuan mata uang akun");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

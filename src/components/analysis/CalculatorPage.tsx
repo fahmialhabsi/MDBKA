@@ -164,6 +164,7 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
               <option value="finex">Finex</option>
               <option value="orbitraderberjangka">OTB</option>
               <option value="mifx">MIFX</option>
+              <option value="exness">Exness</option>
             </select>
           </label>
           <label className="text-xs text-slate-400">Simbol

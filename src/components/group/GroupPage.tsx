@@ -181,6 +181,7 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
             <button type="button" className={pill(broker === "finex")} onClick={() => { setBroker("finex"); setSelected(""); }}>Finex</button>
             <button type="button" className={pill(broker === "orbitraderberjangka")} onClick={() => { setBroker("orbitraderberjangka"); setSelected(""); }}>OTB</button>
             <button type="button" className={pill(broker === "mifx")} onClick={() => { setBroker("mifx"); setSelected(""); }}>MIFX</button>
+            <button type="button" className={pill(broker === "exness")} onClick={() => { setBroker("exness"); setSelected(""); }}>Exness</button>
           </div>
         </div>
 

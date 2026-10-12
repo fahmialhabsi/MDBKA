@@ -6,6 +6,7 @@
 import type { BrokerId } from "../types/broker";
 import { parseBrokerParam } from "./brokerRegistry";
 import { getMifxSpec } from "./mifxSpecs";
+import { getExnessSpec } from "./exnessSpecs";
 import type { CalcDirection } from "./targetCalculator";
 
 export interface CalculatorPrefill {
@@ -37,7 +38,13 @@ export function parseCalculatorPage(search: string): CalculatorPrefill | null {
   return {
     broker,
     // M4b-3: MIFX memakai nama persis ("EURUSD.m"), lainnya huruf besar seperti dulu.
-    symbol: broker === "mifx" ? (getMifxSpec(rawSymbol)?.symbol ?? rawSymbol) : rawSymbol.toUpperCase(),
+    // X4c-3: Exness juga nama persis ("XAUUSDm"; huruf besar menghapus akhiran m kecil).
+    symbol:
+      broker === "mifx"
+        ? (getMifxSpec(rawSymbol)?.symbol ?? rawSymbol)
+        : broker === "exness"
+          ? (getExnessSpec(rawSymbol)?.symbol ?? rawSymbol)
+          : rawSymbol.toUpperCase(),
     direction: q.get("arah") === "JUAL" ? "JUAL" : "BELI",
     lot: q.get("lot") ?? "0.01",
     entry: q.get("entry") ?? "",
