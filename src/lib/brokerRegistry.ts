@@ -152,6 +152,7 @@ export const BROKER_SHORT_LABEL: Readonly<Record<BrokerId, string>> = Object.fre
   finex: "Finex",
   orbitraderberjangka: "OTB",
   mifx: "MIFX",
+  exness: "Exness",
 });
 
 /** M4b-3: urutan broker di tombol halaman (History, Kalkulator, Golongan). */

@@ -7885,7 +7885,8 @@ test("623. O3 kartu posisi: peringatan BURSA SEGERA BUKA 60 menit sebelum pembuk
 test("624. M1a broker ketiga MIFX terdaftar (BrokerId mifx), belum aktif di runtime", () => {
   const store = createWorkspaceStore();
   assert(store.mifx === null && store.finex === null && store.orbitraderberjangka === null, JSON.stringify(store));
-  assert(readSrc("src/types/broker.ts").includes('export type BrokerId = "finex" | "orbitraderberjangka" | "mifx";'), "tipe");
+  // X1a (12 Okt 2026): diubah sengaja — BrokerId kini juga "exness" (broker ke-4); inti uji (mifx terdaftar) tetap.
+  assert(readSrc("src/types/broker.ts").includes('export type BrokerId = "finex" | "orbitraderberjangka" | "mifx" | "exness";'), "tipe");
   assert(readSrc("src/lib/serverClock.ts").includes("mifx: 3,"), "jam server perkiraan");
   assert(readSrc("src/components/holdings/HoldingsMonitor.tsx").includes('mifx: autoMifx.positions.map((position) => toAutoHolding(position, "mifx")),'), "posisi live MIFX (M4b-2)");
 });
@@ -8681,6 +8682,15 @@ test("671. P2 ABC: JUAL = cermin BELI (alasan candle merah); terdaftar di rak (-
   assert(parseStrategyId("abc") === "abc" && STRATEGIES.abc.label.startsWith("Koreksi ABC") && DEFAULT_STRATEGY_ID === "skor", "rak");
   const k = abcCase();
   assert(getStrategy("abc").propose({ market: k.market, broker: k.broker, candles: k.data }).decision === "BELI", "lewat rak = sama");
+});
+
+test("672. X1a Exness terdaftar sebagai BrokerId (laci kosong, belum aktif): 3 broker lama tetap, ?broker=exness belum diterima", () => {
+  assert(BROKER_SHORT_LABEL.exness === "Exness" && BROKER_IDS.join(",") === "finex,orbitraderberjangka,mifx", "label ada, tombol belum");
+  assert(parseBrokerParam("exness") === null && parseBrokerParam("mifx") === "mifx", "belum aktif di URL halaman");
+  assert(resolveLiveBroker("exness") === null, "server belum melayani Exness (400 jujur, bukan data broker lain)");
+  assert(createWorkspaceStore().exness === null, "laci workspace Exness kosong");
+  assert(readSrc("src/lib/serverClock.ts").includes("exness: 0,"), "jam server Exness UTC+0 (terverifikasi dari Market Watch)");
+  assert(readSrc("src/types/broker.ts").includes('"mifx" | "exness"'), "BrokerId exness");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

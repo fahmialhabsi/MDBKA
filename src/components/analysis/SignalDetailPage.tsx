@@ -20,7 +20,7 @@ interface CandleItem {
   readonly quote: LiveQuoteLike | null;
 }
 
-const BROKER_NAME: Record<BrokerId, string> = { finex: "Finex", orbitraderberjangka: "OTB", mifx: "MIFX" };
+const BROKER_NAME: Record<BrokerId, string> = { finex: "Finex", orbitraderberjangka: "OTB", mifx: "MIFX", exness: "Exness" };
 
 async function getJson<T>(path: string): Promise<T | null> {
   try {

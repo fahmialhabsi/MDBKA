@@ -59,6 +59,7 @@ const BROKER_NAME: Record<BrokerId, string> = {
   finex: "Finex",
   orbitraderberjangka: "OTB (Orbi Trade Berjangka)",
   mifx: "MIFX (Monex Investindo Futures)",
+  exness: "Exness (Exness Technologies)",
 };
 
 /** Kolom yang dirapatkan (permintaan Fahmi 9 Okt) agar tabel muat satu layar. */

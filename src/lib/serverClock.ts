@@ -15,6 +15,8 @@ export const DEFAULT_SERVER_UTC_OFFSET: Readonly<Record<BrokerId, number>> = {
   orbitraderberjangka: 2,
   // M1a: perkiraan awal (belum terverifikasi; dideteksi dari quote segar saat pasar buka).
   mifx: 3,
+  // X1a: Exness server = UTC+0 (Market Watch 05:51 saat WIT 14:5x, 12 Okt 2026).
+  exness: 0,
 };
 
 /**

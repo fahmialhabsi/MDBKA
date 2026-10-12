@@ -17,6 +17,7 @@ const BROKER_LABEL: Record<BrokerId, string> = {
   finex: "Finex",
   orbitraderberjangka: "OTB",
   mifx: "MIFX",
+  exness: "Exness",
 };
 
 /** Jam server MT5 broker aktif + jam WIT, berdetak tiap detik (12 jam). */

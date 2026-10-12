@@ -19,7 +19,7 @@ import type { BrokerId } from "../../types/broker";
 const STORAGE_KEY = "mdbka-holdings-v1";
 
 const TABS: readonly BrokerId[] = ["finex", "orbitraderberjangka", "mifx"];
-const TAB_LABEL: Record<BrokerId, string> = { finex: "Finex", orbitraderberjangka: "OTB", mifx: "MIFX" };
+const TAB_LABEL: Record<BrokerId, string> = { finex: "Finex", orbitraderberjangka: "OTB", mifx: "MIFX", exness: "Exness" };
 
 function makeId(): string {
   return `h${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
@@ -103,6 +103,8 @@ export function HoldingsMonitor({
     ),
     // M4b-2: posisi MT5 MIFX (EA ExportPositions di terminal MIFX).
     mifx: autoMifx.positions.map((position) => toAutoHolding(position, "mifx")),
+    // X1a: Exness terdaftar; posisi live menyusul (X1b).
+    exness: [],
   };
 
 
