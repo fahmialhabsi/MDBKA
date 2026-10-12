@@ -33,6 +33,8 @@
 6. Strategi `skor` tetap default sampai strategi baru lulus pembuktian.
 7. MDBKA tetap tidak pernah menempatkan atau menutup order.
 8. **Bukti dan rapor dipisah per golongan** (disetujui Fahmi 13 Okt 2026). Rumus indikator, deteksi swing, pola candle, dan hitung lot boleh dipakai bersama. Parameter, bukti n ≥ 20, dan rapor backtest dinilai terpisah untuk Forex, Forex JPY, Logam, Minyak, Indeks, dan Saham AS, supaya untung di satu golongan tidak menutupi rugi di golongan lain.
+9. **Gerbang kualitas data yang terlihat** (13 Okt 2026). Candle hilang atau dobel, kuotasi basi, jam tidak urut, atau spesifikasi kedaluwarsa menghasilkan status DATA/TUNGGU beserta alasannya. Ketiadaan data tidak boleh dianggap "tidak ada risiko". Rinciannya di `docs/RANCANGAN-2026-10-13-fondasi-data-dan-jalur-live.md`.
+10. **Skor indikator bukan empat bukti terpisah** (13 Okt 2026). MA50, RSI, CCI, dan MACD dihitung dari harga yang sama, jadi skor yang kompak adalah aturan pemilah, bukan peluang menang. Untuk sidik jari kartu pola dan pengujian, dipakai jenis data yang berbeda: tren, momentum, volatilitas (ATR), waktu/sesi, dan biaya.
 
 ## 3. Rancangan per tahap
 
@@ -106,7 +108,14 @@
 2. Backtest memakai data panjang: H1 panjang dirakit menjadi H4 dan D1. W1 belum bisa dirakit, jadi tahap awal cukup D1.
 3. Rapor latih/ujian per golongan memakai kriteria `backtestReport.ts` yang sudah ada: untung jelas di data latih DAN ujian.
 4. Bila layak: masuk pemindai sebagai mode uji di demo, dicatat dan dikelompokkan terpisah dari strategi `skor`, sampai bukti n ≥ 20.
-5. Baru setelah itu boleh dibahas sebagai default dan untuk Live, mengikuti definisi "3 lampu hijau" yang masih perlu ditulis.
+5. Baru setelah itu boleh dibahas sebagai default dan untuk Live, mengikuti jalur demo → Live di `docs/RANCANGAN-2026-10-13-fondasi-data-dan-jalur-live.md`.
+
+**Bukti diperketat (13 Okt 2026):**
+
+- n ≥ 20 hanya syarat **minimum**, bukan bukti keunggulan.
+- Uji bergulir (walk-forward): data dibagi beberapa periode berurutan; aturan harus tetap untung di sebagian besar periode, bukan hanya rata-rata keseluruhan.
+- Rapor wajib memuat: hasil bersih setelah biaya, rugi terbesar per trade/rangkaian, penurunan modal terdalam (drawdown), rata-rata per trade (R dan Rupiah), jumlah sampel.
+- Peringatan "terlalu banyak yang diuji": semakin banyak pola atau sidik jari yang diuji, semakin banyak yang tampak bagus karena kebetulan. Semua kandidat yang diuji dicatat, termasuk yang gagal, dan pemenang wajib lolos data ujian yang belum pernah dipakai untuk memilih.
 
 ## 5. Urutan langkah usulan (satu langkah kecil per giliran)
 
@@ -266,10 +275,11 @@ Sejak open 1, beberapa "tim" bekerja bersamaan. Setiap tim adalah modul aturan m
 | Tim 4 — Penguji titik lemah | Setelah rangkaian selesai, mencari kenapa TP tidak tercapai atau SL kena | Jarak SL dibanding ATR, MFE dibanding jarak TP (misalnya sempat 70% ke TP lalu berbalik), MAE sejak menit awal |
 | Tim 5 — Pembaca pola | Mencatat pola yang muncul selama posisi berjalan dan arah gerak sesudahnya | Pola (penolakan, engulfing, breakout-retest), arah sesudahnya; catatan untuk open berikutnya |
 | Tim 6 — Pencatat konteks (tambahan Claude) | Keadaan pasar saat entry | Golongan, arah D1, sesi dan jam, hari, jarak ke berita, kondisi ATR |
+| Tim 6b — Pencatat respons berita (13 Okt 2026) | Untuk berita yang terjadi selama rangkaian: selisih Actual dibanding Forecast (sudah ada di `MDBKA_Calendar_<login>.csv`) dan gerak harga/spread sesudahnya | Nama berita, Actual, Forecast, Previous, gerak harga 5/15/30 menit sesudahnya, spread |
 | Tim 7 — Pencatat biaya (tambahan Claude) | Biaya nyata | Spread saat entry, komisi, swap, selisih harga analisa vs harga entry |
 | Tim 8 — Penggabung dan pemberi label | Menggabungkan semua catatan menjadi satu kartu pola dan memberi label | Label + hasil akhir (R dan Rupiah) |
 
-**Label pola (nama dari Fahmi) — usulan pembagian, perlu dipastikan Fahmi:**
+**Label pola (nama dari Fahmi) — pembagian disetujui Fahmi 13 Okt 2026:**
 
 | Label | Hasil rangkaian |
 | --- | --- |
@@ -280,6 +290,7 @@ Sejak open 1, beberapa "tim" bekerja bersamaan. Setiap tim adalah modul aturan m
 
 **Aturan penyimpanan:**
 
+- Setiap kartu menyimpan jam UTC, jam server, jam diterima MDBKA, versi aturan/strategi, dan versi spesifikasi simbol yang berlaku saat itu (13 Okt 2026).
 - Setiap rangkaian menghasilkan kartu baru dengan nomor sendiri (misalnya "Kasbi Bakar #0001"). Kartu tidak pernah digabung, ditimpa, atau dihapus; disimpan bertambah terus (append-only, seperti `entries-<broker>.jsonl`).
 - Kartu lama dari trade sebelum alur ini hanya boleh dibuat dari data yang memang ada, dan diberi tanda "data tidak lengkap". Tidak ada angka yang dikarang.
 
@@ -300,3 +311,7 @@ Sejak open 1, beberapa "tim" bekerja bersamaan. Setiap tim adalah modul aturan m
 | K4 | Tim 4 dan 5: penguji titik lemah dan pembaca pola, dari data MFE/MAE dan candle | Tidak |
 | K5 | Tampilan kartu pola dan catatan sidik jari di layar | Tampilan saja |
 | K6 | Penahan berdasarkan kartu (setelah ≥ 20 per sidik jari), demo dulu | Demo dulu |
+
+## 8. Pekerjaan tertunda dan dokumen terkait
+
+Pekerjaan yang belum diimplementasikan (termasuk daftar "Tidak perlu sekarang") dicatat di `docs/RANCANGAN-2026-10-13-fondasi-data-dan-jalur-live.md`, bagian D. **Selama bagian D belum diimplementasikan, MDBKA dianggap belum selesai** (penetapan Fahmi, 13 Okt 2026).
