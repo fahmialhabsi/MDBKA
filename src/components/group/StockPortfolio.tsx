@@ -58,6 +58,11 @@ export function StockPortfolio({ broker, group }: { broker: BrokerId; group: Ris
     <td className={`px-2 py-1 text-right ${tone(r.realizedUsd)}`}>
       {formatIdr(r.realizedIdr)}
       <span className="block text-xs">{formatUsd(r.realizedUsd)} USD</span>
+      {r.openEntryCostUsd !== 0 && (
+        <span className="block text-xs text-amber-300" data-testid="komisi-masuk">
+          komisi masuk (posisi terbuka): {formatIdr(r.openEntryCostIdr)} · {formatUsd(r.openEntryCostUsd)} USD
+        </span>
+      )}
     </td>
   );
 

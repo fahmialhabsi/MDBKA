@@ -20,6 +20,8 @@ export interface DealLike {
   readonly commissionIdr: number | null;
   readonly profitIdr: number | null;
   readonly swapIdr: number | null;
+  /** F2: nomor posisi MT5 (absen = data lama; komisi masuk tidak dipisah). */
+  readonly positionId?: string;
 }
 
 /** Contract size saham yang SUDAH diverifikasi dari MT5 Specification. */
@@ -56,6 +58,12 @@ export interface StockHolding {
   readonly realizedIdr: number | null;
   /** Ada transaksi jual-buka (short) yang tidak masuk hitungan sisa lot. */
   readonly hasShort: boolean;
+  /**
+   * F2 (12 Okt 2026): komisi/fee deal MASUK milik posisi yang belum ditutup
+   * (mis. MIFX memotong komisi saat buka). Tidak termasuk "hasil ditutup".
+   */
+  readonly openEntryCostUsd: number;
+  readonly openEntryCostIdr: number | null;
 }
 
 const r2 = (n: number): number => Math.round(n * 100) / 100;
@@ -98,11 +106,22 @@ export function buildTradeSummary(
     const digits = priceDigits(symbol);
     const avg = (xs: DealLike[], total: number): number | null =>
       total > 0 ? Number((xs.reduce((s, d) => s + d.volume * d.price, 0) / total).toFixed(digits)) : null;
+    // F2: posisi masih terbuka = punya deal IN tetapi belum ada deal OUT (butuh positionId).
+    const closedIds = new Set(outs.map((d) => d.positionId).filter((id): id is string => id !== undefined && id !== ""));
+    const isOpenEntry = (d: DealLike): boolean =>
+      entry(d) === "IN" && d.positionId !== undefined && d.positionId !== "" && !closedIds.has(d.positionId);
     let usd = 0;
     let idr: number | null = 0;
+    let openCostUsd = 0;
+    let openCostIdr: number | null = 0;
     for (const d of list) {
-      usd += d.profit + d.swap + d.commission + d.fee;
       const parts = [d.profit === 0 ? 0 : d.profitIdr, d.swap === 0 ? 0 : d.swapIdr, d.commission === 0 ? 0 : d.commissionIdr];
+      if (isOpenEntry(d)) {
+        openCostUsd += d.profit + d.swap + d.commission + d.fee;
+        if (openCostIdr !== null) openCostIdr = parts.some((p) => p === null) ? null : openCostIdr + parts.reduce<number>((s, p) => s + (p ?? 0), 0);
+        continue;
+      }
+      usd += d.profit + d.swap + d.commission + d.fee;
       if (idr !== null) idr = parts.some((p) => p === null) ? null : idr + parts.reduce<number>((s, p) => s + (p ?? 0), 0);
     }
     const heldLot = lot(Math.max(0, boughtLot - soldLot));
@@ -125,6 +144,8 @@ export function buildTradeSummary(
       realizedUsd: r2(usd) === 0 ? 0 : r2(usd),
       realizedIdr: idr === null ? null : Math.round(idr),
       hasShort: list.some((d) => entry(d) === "IN" && type(d) === "SELL"),
+      openEntryCostUsd: r2(openCostUsd) === 0 ? 0 : r2(openCostUsd),
+      openEntryCostIdr: openCostIdr === null ? null : Math.round(openCostIdr),
     });
   }
   return out.sort((a, b) => b.openLot - a.openLot || a.symbol.localeCompare(b.symbol));

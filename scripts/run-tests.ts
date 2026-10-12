@@ -8472,6 +8472,18 @@ test("660. F1 nama asli simbol untuk harga live: MIFX 'SP.m' (bukan 'SP.M'), Fin
   assert(cp.includes("/api/quotes/${encodeURIComponent(realSym)}") && cp.includes("[broker, symbol, realSym]"), "Kalkulator pakai nama asli");
 });
 
+test("661. F2 komisi masuk posisi terbuka dipisah dari 'hasil ditutup' (MIFX potong komisi saat buka)", () => {
+  const d = (positionId: string | undefined, type: string, entry: string, commission: number, profit = 0) =>
+    ({ symbol: "SP.m", type, entry, volume: 0.01, price: 7881.5, commission, swap: 0, profit, fee: 0, commissionIdr: Math.round(commission * 17880), profitIdr: Math.round(profit * 17880), swapIdr: 0, ...(positionId !== undefined ? { positionId } : {}) });
+  const buka = buildTradeSummary([d("103475113", "BUY", "IN", -0.05)], () => true)[0];
+  assert(buka.realizedUsd === 0 && buka.realizedIdr === 0 && buka.openEntryCostUsd === -0.05 && buka.openEntryCostIdr === -894 && buka.openLot === 0.01, JSON.stringify(buka));
+  const tutup = buildTradeSummary([d("103475113", "BUY", "IN", -0.05), d("103475113", "SELL", "OUT", -0.05, 1.2)], () => true)[0];
+  assert(tutup.realizedUsd === 1.1 && tutup.openEntryCostUsd === 0 && tutup.openLot === 0, `sudah ditutup: komisi masuk ikut hasil ${JSON.stringify(tutup)}`);
+  const lama = buildTradeSummary([d(undefined, "BUY", "IN", -0.05)], () => true)[0];
+  assert(lama.realizedUsd === -0.05 && lama.openEntryCostUsd === 0, "data tanpa positionId = perilaku lama");
+  assert(readSrc("src/components/group/StockPortfolio.tsx").includes("komisi masuk (posisi terbuka)"), "label di layar");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
