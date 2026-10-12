@@ -206,3 +206,28 @@ export function secureReadiness(
   const remaining = Math.max(0, Number(gap.toFixed(digits)));
   return { ready: remaining <= 0, ref, remaining };
 }
+
+/**
+ * F3 (12 Okt 2026) — profit berjalan posisi terbuka, SAMA dengan kolom
+ * Profit MT5: (harga tutup − entry) × kontrak × lot, KOTOR (belum komisi).
+ * BELI dinilai di Bid, JUAL di Ask. Rupiah = USD × kurs ECB. null = spesifikasi
+ * simbol / kurs mata uang kuotasi tidak dikenal (tanpa angka tebakan).
+ */
+export function floatingProfit(
+  pos: { readonly symbol: string; readonly direction: CalcDirection; readonly lot: number; readonly entry: number },
+  quote: { readonly bid: number; readonly ask: number },
+  convertToUsd: (amount: number, currency: string) => number | null,
+  usdIdr: number | null,
+): { readonly usd: number; readonly idr: number | null } | null {
+  const spec = getInstrumentSpec32(pos.symbol.trim());
+  if (spec === null || !(spec.leverage > 0) || !(pos.lot > 0) || !(pos.entry > 0)) return null;
+  const usdPerUnit = convertToUsd(spec.leverage * pos.lot, spec.quoteCurrency);
+  if (usdPerUnit === null || !Number.isFinite(usdPerUnit) || usdPerUnit <= 0) return null;
+  const buy = pos.direction === "BELI";
+  const close = buy ? quote.bid : quote.ask;
+  if (!(close > 0)) return null;
+  // Pembulatan 2 desimal MENJAUHI NOL seperti MT5 (-0,875 → -0,88), bukan Math.round (→ -0,87).
+  const raw = (close - pos.entry) * (buy ? 1 : -1) * usdPerUnit;
+  const usd = (Math.sign(raw) * Math.round(Math.abs(raw) * 100 + 1e-9)) / 100;
+  return { usd: usd === 0 ? 0 : usd, idr: usdIdr === null ? null : Math.round(usd * usdIdr) };
+}

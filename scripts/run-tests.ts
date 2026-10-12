@@ -51,8 +51,8 @@ import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, us
 import { buildHistoryView } from "../server/services/historyView";
 import { accountKind, historyForLogin, listHistoryAccounts } from "../server/routes/historyRoutes";
 import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
-import { calculateTargets, secureReadiness } from "../src/lib/targetCalculator";
-import { accountMetrics, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage, realSymbolName } from "../src/lib/groupPageView";
+import { calculateTargets, floatingProfit, secureReadiness } from "../src/lib/targetCalculator";
+import { accountMetrics, floatingProfitText, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage, realSymbolName, sumFloatingProfit } from "../src/lib/groupPageView";
 import { candleChartModel, hourKey, LINE_COLOR, positionLines, spreadLabels, withLiveCandles } from "../src/lib/candleChart";
 import { readCandleCsv } from "../server/routes/candlesRoutes";
 import { findSessionHold, serverNowText, serverToWitLabel, sessionNotice, sessionState, weeklyIntervals } from "../src/lib/sessionGuard";
@@ -8482,6 +8482,24 @@ test("661. F2 komisi masuk posisi terbuka dipisah dari 'hasil ditutup' (MIFX pot
   const lama = buildTradeSummary([d(undefined, "BUY", "IN", -0.05)], () => true)[0];
   assert(lama.realizedUsd === -0.05 && lama.openEntryCostUsd === 0, "data tanpa positionId = perilaku lama");
   assert(readSrc("src/components/group/StockPortfolio.tsx").includes("komisi masuk (posisi terbuka)"), "label di layar");
+});
+
+test("662. F3 profit berjalan di label harga biru = kolom Profit MT5 (kotor), Rupiah kurs ECB", () => {
+  const usd = (amount: number, currency: string): number | null => (currency === "USD" ? amount : null);
+  // Bukti MT5 MIFX 12 Okt: SP.m BELI 0,01 @7881,5 — Bid 7879,75 → Profit -0,88; Bid 7880,50 → -0,50
+  const a = floatingProfit({ symbol: "sp.m", direction: "BELI", lot: 0.01, entry: 7881.5 }, { bid: 7879.75, ask: 7880.5 }, usd, 17880);
+  assert(a !== null && a.usd === -0.88 && a.idr === Math.round(-0.88 * 17880), JSON.stringify(a));
+  const b = floatingProfit({ symbol: "SP.m", direction: "BELI", lot: 0.01, entry: 7881.5 }, { bid: 7880.5, ask: 7881.25 }, usd, 17880);
+  assert(b !== null && b.usd === -0.5, JSON.stringify(b));
+  const jual = floatingProfit({ symbol: "SP.m", direction: "JUAL", lot: 0.01, entry: 7881.5 }, { bid: 7870, ask: 7871 }, usd, null);
+  assert(jual !== null && jual.usd === 5.25 && jual.idr === null, `JUAL dinilai di Ask: ${JSON.stringify(jual)}`);
+  assert(floatingProfit({ symbol: "TIDAKADA", direction: "BELI", lot: 0.01, entry: 1 }, { bid: 1, ask: 1 }, usd, 17880) === null, "spesifikasi tak dikenal = null");
+  assert(floatingProfit({ symbol: "EURJPY", direction: "BELI", lot: 0.01, entry: 170 }, { bid: 171, ask: 171.1 }, usd, 17880) === null, "kurs JPY tak ada = null, bukan tebakan");
+  const total = sumFloatingProfit([a, b]);
+  assert(total !== null && total.usd === -1.38 && sumFloatingProfit([a, null]) === null && sumFloatingProfit([]) === null, JSON.stringify(total));
+  assert(floatingProfitText({ usd: -0.88, idr: -15734 }) === "P/L -0,88 USD · -Rp15.734", floatingProfitText({ usd: -0.88, idr: -15734 }));
+  assert(floatingProfitText({ usd: 2.5, idr: null }) === "P/L +2,50 USD · kurs ECB belum ada", "untung bertanda + , kurs kosong jujur");
+  assert(readSrc("src/components/group/GroupPage.tsx").includes('data-testid="pnl-live"'), "label di chart");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

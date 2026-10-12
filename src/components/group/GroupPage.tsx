@@ -3,10 +3,10 @@ import { ArrowLeft, LayoutGrid } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import { calculatorUrlFromHolding } from "../../lib/calculatorPageView";
 import { candleChartModel, LINE_COLOR, positionLines, withLiveCandles, type ChartLine, type OhlcLike } from "../../lib/candleChart";
-import { calculateTargets } from "../../lib/targetCalculator";
+import { calculateTargets, floatingProfit } from "../../lib/targetCalculator";
 import { StockPortfolio } from "./StockPortfolio";
 import { parseCsvCandles } from "../../lib/csvCandleParser";
-import { accountMetrics, GROUP_TABS, groupSymbolTabs, realSymbolName, type GroupPageParams } from "../../lib/groupPageView";
+import { accountMetrics, floatingProfitText, GROUP_TABS, groupSymbolTabs, realSymbolName, sumFloatingProfit, type GroupPageParams } from "../../lib/groupPageView";
 import { formatIdr, formatUsd } from "../../lib/historyPageView";
 import { formatPrice } from "../../lib/tickSize";
 import type { RiskGroupId } from "../../lib/riskGroup";
@@ -140,6 +140,20 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
     }
     posLines.push(...positionLines({ priceOpen: p.priceOpen, sl: p.sl, tp: p.tp, secureAt }));
   }
+  // F3: profit berjalan semua posisi simbol aktif (sama kolom Profit MT5) + Rupiah kurs ECB.
+  const pnl =
+    liveNow === null
+      ? null
+      : sumFloatingProfit(
+          activePositions.map((p) =>
+            floatingProfit(
+              { symbol: activeReal, direction: p.side === "SELL" ? "JUAL" : "BELI", lot: p.volume, entry: p.priceOpen },
+              liveNow,
+              buildUsdConverter(fx),
+              kurs,
+            ),
+          ),
+        );
   const model =
     chartNow === null
       ? null
@@ -247,6 +261,12 @@ export function GroupPage({ params }: { params: GroupPageParams }) {
                         )}
                         {Math.abs(l.labelY - l.y) > 1 && (
                           <line x1={model.plotRight - 6} x2={model.plotRight} y1={l.y} y2={l.labelY} stroke={LINE_COLOR[l.kind]} strokeWidth={1} />
+                        )}
+                        {l.kind === "bid" && pnl !== null && (
+                          <g data-testid="pnl-live">
+                            <rect x={model.plotRight - 262} y={l.labelY - 10} width={256} height={20} rx={4} fill="#0f172a" stroke={pnl.usd < 0 ? "#f43f5e" : pnl.usd > 0 ? "#10b981" : "#64748b"} />
+                            <text x={model.plotRight - 12} y={l.labelY + 4} textAnchor="end" fill={pnl.usd < 0 ? "#fda4af" : pnl.usd > 0 ? "#6ee7b7" : "#cbd5e1"} fontSize={12} fontFamily="monospace" fontWeight="bold">{floatingProfitText(pnl)}</text>
+                          </g>
                         )}
                         <rect x={model.plotRight} y={l.labelY - 9} width={78} height={18} fill={LINE_COLOR[l.kind]} />
                         <text x={model.plotRight + 4} y={l.labelY + 4} fill={l.kind === "entry" ? "#0f172a" : "#f8fafc"} fontSize={11} fontFamily="monospace">{formatPrice(l.price, active)}</text>

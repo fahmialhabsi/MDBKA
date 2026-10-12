@@ -6,6 +6,7 @@
  */
 import type { BrokerId } from "../types/broker";
 import { parseBrokerParam } from "./brokerRegistry";
+import { formatIdr, formatUsd } from "./historyPageView";
 import { getMifxSpec } from "./mifxSpecs";
 import { riskGroupOf, type RiskGroupId } from "./riskGroup";
 
@@ -82,6 +83,26 @@ export function groupSymbolTabs(
 export function realSymbolName(symbol: string, candidates: readonly string[]): string {
   const want = symbol.trim().toUpperCase();
   return candidates.map((c) => c.trim()).find((c) => c.toUpperCase() === want) ?? symbol.trim();
+}
+
+/**
+ * F3 (12 Okt 2026): jumlah profit berjalan beberapa posisi + teks label di
+ * samping harga biru (Bid). Satu posisi tak terhitung → null (tanpa tebakan).
+ */
+export function sumFloatingProfit(
+  parts: readonly ({ readonly usd: number; readonly idr: number | null } | null)[],
+): { readonly usd: number; readonly idr: number | null } | null {
+  if (parts.length === 0 || parts.some((p) => p === null)) return null;
+  const ok = parts as readonly { readonly usd: number; readonly idr: number | null }[];
+  const usd = Math.round(ok.reduce((s, p) => s + p.usd, 0) * 100) / 100;
+  const idr = ok.some((p) => p.idr === null) ? null : ok.reduce((s, p) => s + (p.idr ?? 0), 0);
+  return { usd: usd === 0 ? 0 : usd, idr };
+}
+
+export function floatingProfitText(pnl: { readonly usd: number; readonly idr: number | null }): string {
+  const sign = pnl.usd > 0 ? "+" : "";
+  const idr = pnl.idr === null ? "kurs ECB belum ada" : `${pnl.idr > 0 ? "+" : ""}${formatIdr(pnl.idr)}`;
+  return `P/L ${sign}${formatUsd(pnl.usd)} USD · ${idr}`;
 }
 
 export interface AccountMetric {
