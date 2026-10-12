@@ -7978,7 +7978,8 @@ test("631. M4b-1 tab MIFX di dashboard: broker terdaftar, tombol, nama file .m d
 
 test("632. M4b-2 monitor posisi: tab MIFX + posisi MT5 MIFX", () => {
   const mon = readSrc("src/components/holdings/HoldingsMonitor.tsx");
-  assert(mon.includes('const TABS: readonly BrokerId[] = ["finex", "orbitraderberjangka", "mifx"];') && mon.includes('useBrokerPositions("mifx")'), "tab + hook");
+  // X4c-1 (12 Okt 2026): diubah sengaja — tab monitor kini juga "exness"; inti uji (tab + hook MIFX) tetap.
+  assert(mon.includes('const TABS: readonly BrokerId[] = ["finex", "orbitraderberjangka", "mifx", "exness"];') && mon.includes('useBrokerPositions("mifx")'), "tab + hook");
   assert(mon.includes("{TAB_LABEL[broker]} · POSISI OPEN"), "label tab");
   const h = toAutoHolding({ ticket: "9", symbol: "NQ.m", side: "SELL", volume: 0.01, priceOpen: 31108.5, sl: 31217.36, tp: 30976.45, timeOpen: "2026.10.12 10:00:00" }, "mifx");
   assert(h.brokerId === "mifx" && h.direction === "JUAL" && h.symbol === "NQ.m", JSON.stringify(h));
@@ -8794,6 +8795,17 @@ test("679. X4b tombol Exness di dasbor: simbol awal XAUUSDm, dropdown simbol Exn
 test("680. X4b-fix klik Exness tidak membuat layar hitam: profil broker Exness terdaftar (getBrokerProfile tidak melempar)", () => {
   assert(getBrokerProfile("exness").label === "Exness" && BROKER_PROFILES.some((p) => p.id === "exness"), "profil Exness");
   assert(readSrc("src/App.tsx").includes("getBrokerProfile("), "App memanggil getBrokerProfile untuk broker aktif");
+});
+
+test("681. X4c-1 Monitor posisi tab Exness: posisi live XAUUSDm + SL wajib (golongan Logam Rp500 rb, kontrak 100, komisi 0)", () => {
+  const mon = readSrc("src/components/holdings/HoldingsMonitor.tsx");
+  assert(mon.includes('useBrokerPositions("exness")') && mon.includes('exness: autoExness.positions.map((position) => toAutoHolding(position, "exness"))'), "posisi live Exness");
+  assert(readSrc("src/components/holdings/HoldingsForm.tsx").includes('const defaultSymbol = brokerId === "exness" ? "XAUUSDm" : baseDefault;'), "simbol awal form");
+  // Posisi nyata 12 Okt: BUY 0.02 XAUUSDm @4184.862 tanpa SL; kurs 17.880,55.
+  const ms = mandatoryStop({ symbol: "XAUUSDm", direction: "BELI", lot: 0.02, entryPrice: 4184.862, sl: 0 }, 4180.5, 4180.7, (v) => v, 17880.55);
+  assert(ms.kind === "PASANG", JSON.stringify(ms));
+  // batas Rp500.000 = $27,96 → 0.02 lot × 100 = $2 per 1,00 → jarak 13,981 → SL 4170,881.
+  assert(ms.kind === "PASANG" && Math.abs(ms.sl - 4170.881) < 1e-6 && ms.lossIdr <= 500000, JSON.stringify(ms));
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

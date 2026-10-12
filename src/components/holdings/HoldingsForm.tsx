@@ -36,8 +36,10 @@ export function HoldingsForm({
   readonly onAdd: (holding: NewHolding) => void;
 }): JSX.Element {
   const symbols: readonly string[] = getAvailableSymbols(brokerId);
-  const defaultSymbol =
+  const baseDefault =
     brokerId === "orbitraderberjangka" ? "GBPUSD_ORB" : brokerId === "mifx" ? "EURUSD.m" : "USDCHF";
+  // X4c-1: Exness → XAUUSDm (satu-satunya simbol Exness terverifikasi).
+  const defaultSymbol = brokerId === "exness" ? "XAUUSDm" : baseDefault;
   const resolveInitialSymbol = (): string => {
     const cleaned = (activeSymbol ?? "").trim().toUpperCase();
     // M4b-2: cocokkan tanpa peka huruf (MIFX "EURUSD.m"), kembalikan nama persis daftar.
