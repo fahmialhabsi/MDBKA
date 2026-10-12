@@ -7934,7 +7934,9 @@ test("628. M3a server: sumber live MIFX (equity/quotes/positions/candles) dari .
   assert(idx.includes("process.env.QUOTES_LOG_PATH_MIFX") && idx.includes("process.env.POSITIONS_LOG_PATH_MIFX") && idx.includes("process.env.MT5_LOG_PATH_MIFX"), "env MIFX");
   assert(idx.includes('{ broker: "mifx" as const, positions: positionsReaderMifx'), "catatan entry MIFX");
   const app = readSrc("server/app.ts");
-  for (const s of ["createEquityRoutes(reader, readerFinex, mifx?.equity ?? null)", "createQuotesRoutes(quotesReader, quotesReaderFinex, mifx?.quotes ?? null)", "createPositionsRoutes(positionsReader, positionsReaderFinex, mifx?.positions ?? null)", "mifx?.quotes ?? null)"]) {
+  // X1b (12 Okt 2026): diubah sengaja — quotes/positions/candles kini juga menerima sumber Exness sesudah MIFX,
+  // jadi ")" penutup dilepas; inti uji (sumber MIFX terpasang) tetap.
+  for (const s of ["createEquityRoutes(reader, readerFinex, mifx?.equity ?? null)", "createQuotesRoutes(quotesReader, quotesReaderFinex, mifx?.quotes ?? null", "createPositionsRoutes(positionsReader, positionsReaderFinex, mifx?.positions ?? null", "mifx?.quotes ?? null"]) {
     assert(app.includes(s), s);
   }
   assert(readSrc(".env.example").includes("QUOTES_LOG_PATH_MIFX="), ".env.example");
@@ -8687,10 +8689,25 @@ test("671. P2 ABC: JUAL = cermin BELI (alasan candle merah); terdaftar di rak (-
 test("672. X1a Exness terdaftar sebagai BrokerId (laci kosong, belum aktif): 3 broker lama tetap, ?broker=exness belum diterima", () => {
   assert(BROKER_SHORT_LABEL.exness === "Exness" && BROKER_IDS.join(",") === "finex,orbitraderberjangka,mifx", "label ada, tombol belum");
   assert(parseBrokerParam("exness") === null && parseBrokerParam("mifx") === "mifx", "belum aktif di URL halaman");
-  assert(resolveLiveBroker("exness") === null, "server belum melayani Exness (400 jujur, bukan data broker lain)");
+  // X1b (12 Okt 2026): diubah sengaja — server kini mengenal ?broker=exness (harga & posisi); equity tetap 404 sampai X2.
+  assert(resolveLiveBroker("exness") === "exness", "server mengenal Exness (X1b)");
   assert(createWorkspaceStore().exness === null, "laci workspace Exness kosong");
   assert(readSrc("src/lib/serverClock.ts").includes("exness: 0,"), "jam server Exness UTC+0 (terverifikasi dari Market Watch)");
   assert(readSrc("src/types/broker.ts").includes('"mifx" | "exness"'), "BrokerId exness");
+});
+
+test("673. X1b server melayani Exness dari terminalnya sendiri: harga & posisi; equity IDR belum (404 jujur); tidak jatuh ke OTB", () => {
+  const def = { name: "otb" };
+  const fin = { name: "finex" };
+  const mifx = { name: "mifx" };
+  const ex = { name: "exness" };
+  assert(pickLiveSource("exness", def, fin, mifx) === null, "Exness belum dikonfigurasi = null (404), BUKAN data OTB");
+  assert(pickLiveSource("exness", def, fin, mifx, ex) === ex && pickLiveSource("mifx", def, fin, mifx, ex) === mifx, "sumber per broker terpisah");
+  const app = readSrc("server/app.ts");
+  assert(app.includes("mifx?.quotes ?? null, exness?.quotes ?? null") && app.includes("mifx?.positions ?? null, exness?.positions ?? null"), "harga, candle & posisi Exness");
+  assert(app.includes('createEquityRoutes(reader, readerFinex, mifx?.equity ?? null)'), "equity Exness SENGAJA tidak dipasang (akun IDR, menunggu X2)");
+  const idx = readSrc("server/index.ts");
+  assert(idx.includes("QUOTES_LOG_PATH_EXNESS") && idx.includes("POSITIONS_LOG_PATH_EXNESS") && !idx.includes("MT5_LOG_PATH_EXNESS"), "env Exness tanpa equity");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

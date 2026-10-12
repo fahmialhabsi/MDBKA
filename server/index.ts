@@ -92,6 +92,16 @@ const quotesReaderMifx =
 const positionsReaderMifx =
   mifxPositionsLogPath.trim() !== "" ? new PositionsLogReader(mifxPositionsLogPath) : null;
 
+// X1b (12 Okt 2026): sumber live Exness (opsional) dari terminal Exness SENDIRI
+// (folder data berbeda dari OTB). Hanya harga & posisi; equity.csv Exness dalam
+// Rupiah sengaja belum dibaca sampai konversi IDR→USD (X2). Kosong → 404 jujur.
+const exnessQuotesLogPath = process.env.QUOTES_LOG_PATH_EXNESS ?? "";
+const exnessPositionsLogPath = process.env.POSITIONS_LOG_PATH_EXNESS ?? "";
+const quotesReaderExness =
+  exnessQuotesLogPath.trim() !== "" ? new QuotesLogReader(exnessQuotesLogPath) : null;
+const positionsReaderExness =
+  exnessPositionsLogPath.trim() !== "" ? new PositionsLogReader(exnessPositionsLogPath) : null;
+
 const stopWatching = reader.startWatching();
 if (readerMifx !== null) readerMifx.startWatching();
 if (readerFinex !== null) readerFinex.startWatching();
@@ -158,6 +168,9 @@ const app = createApp(reader, quotesReader, readerFinex, quotesReaderFinex, {
   equity: readerMifx,
   quotes: quotesReaderMifx,
   positions: positionsReaderMifx,
+}, {
+  quotes: quotesReaderExness,
+  positions: positionsReaderExness,
 });
 
 // Polling startup: tunggu data pertama kali tersedia
@@ -209,6 +222,18 @@ async function startServer() {
   if (positionsReaderMifx !== null) {
     await positionsReaderMifx.init().catch(() => {
       console.log(`⚠ Positions MIFX init ditunda (file terkunci/hilang)`);
+    });
+  }
+  if (quotesReaderExness !== null) {
+    await quotesReaderExness.init().catch(() => {
+      console.log(`⚠ Exness quotes reader will retry when file unlocks`);
+    });
+  } else {
+    console.log(`⚠ Exness source not configured (QUOTES_LOG_PATH_EXNESS empty): ?broker=exness answers 404`);
+  }
+  if (positionsReaderExness !== null) {
+    await positionsReaderExness.init().catch(() => {
+      console.log(`⚠ Positions Exness init ditunda (file terkunci/hilang)`);
     });
   }
 
@@ -322,6 +347,8 @@ function shutdown(): void {
   if (readerMifx !== null) readerMifx.stopWatching();
   if (quotesReaderMifx !== null) quotesReaderMifx.destroy();
   if (positionsReaderMifx !== null) positionsReaderMifx.destroy();
+  if (quotesReaderExness !== null) quotesReaderExness.destroy();
+  if (positionsReaderExness !== null) positionsReaderExness.destroy();
   excursionSchedule?.stop();
   serverPromise
     .then((server) => {

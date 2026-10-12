@@ -57,6 +57,14 @@ export function createApp(
     readonly quotes: QuotesLogReader | null;
     readonly positions: PositionsLogReader | null;
   } | null = null,
+  /**
+   * X1b (12 Okt 2026): sumber live Exness — harga & posisi saja. Equity SENGAJA
+   * belum dilayani (akun IDR; tanpa konversi X2 angka Rupiah terbaca sebagai USD).
+   */
+  exness: {
+    readonly quotes: QuotesLogReader | null;
+    readonly positions: PositionsLogReader | null;
+  } | null = null,
 ): Express {
   const app = express();
   app.use(cors({ origin: FRONTEND_ORIGIN }));
@@ -67,7 +75,7 @@ export function createApp(
   });
 
   app.use("/api/equity", createEquityRoutes(reader, readerFinex, mifx?.equity ?? null));
-  app.use("/api/quotes", createQuotesRoutes(quotesReader, quotesReaderFinex, mifx?.quotes ?? null));
+  app.use("/api/quotes", createQuotesRoutes(quotesReader, quotesReaderFinex, mifx?.quotes ?? null, exness?.quotes ?? null));
   app.use("/api/fx", createFxRoutes());
   // Item (e): margin per lot dari OrderCalcMargin MT5 (Common\Files).
   app.use("/api/margin", createMarginRoutes());
@@ -79,7 +87,7 @@ export function createApp(
   app.use("/api/pajak", createPajakRoutes());
   // Langkah 3a Mode Aman: CSV candle H1 + quote terakhir per simbol broker
   // (bahan pemindai simbol di frontend).
-  app.use("/api/candles", createCandlesRoutes(quotesReader, quotesReaderFinex, undefined, mifx?.quotes ?? null));
+  app.use("/api/candles", createCandlesRoutes(quotesReader, quotesReaderFinex, undefined, mifx?.quotes ?? null, exness?.quotes ?? null));
   // Backup data MDBKA (pengingat + tombol "Backup sekarang").
   app.use("/api/backup", createBackupRoutes());
   // Langkah 4c: evaluasi trade tertutup (History MT5 + catatan entry).
@@ -92,7 +100,7 @@ export function createApp(
   app.use("/api/history", createHistoryRoutes());
   app.use(
     "/api/positions",
-    createPositionsRoutes(positionsReader, positionsReaderFinex, mifx?.positions ?? null),
+    createPositionsRoutes(positionsReader, positionsReaderFinex, mifx?.positions ?? null, exness?.positions ?? null),
   );
 
   // Tahap HIST-1: cakupan arsip tick (per broker/simbol/rentang).
