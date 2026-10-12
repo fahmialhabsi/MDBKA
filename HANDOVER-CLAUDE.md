@@ -234,3 +234,81 @@ file ini.
   manual > CSV > OCR; S/R dimentahkan hanya saat ganti simbol/clear;
   `BrokerSettings` = parameter akun/risiko (bukan identitas broker —
   itu `BrokerId`/`BrokerProfile`).
+
+---
+
+## 11. PEMBARUAN 12 OKT 2026 — BROKER KE-4 EXNESS (baca ini dulu)
+
+Test terakhir: **686** (`npm test` = 682 lolos). HEAD: `305b65c`. Langkah
+X1a–X5 + K1 (commit `b356858` … `305b65c`).
+
+### 11.1 Empat terminal MT5 = empat folder data (JANGAN dicampur)
+
+| Broker | Akun | Folder `AppData\Roaming\MetaQuotes\Terminal\…` | Mata uang | Akhiran simbol |
+|---|---|---|---|---|
+| OTB (Orbi) | demo 70930952 | `D0E8209F77C8CF37AD8BF550E51FF075` | USD | `_ORB` |
+| Finex | live 91811209 / demo 61823011 | `C84535A6B43B3F94C032314C1C9A9F5B` | USD | (tanpa) |
+| MIFX (Monex) | demo 1003997005 | `9CF14355DB10DCA27FBE7DA11B54CB92` | USD | `.m` |
+| **Exness** | demo 413925678 (server Exness-MT5Trial6) | `53785E099C927DB68A545C249CDBCE06` | **IDR** | **`m` kecil** (XAUUSDm) |
+
+**Pelajaran 12 Okt:** akun Exness sempat login DI TERMINAL OTB → EA menulis
+equity/quotes/positions Exness ke folder OTB → tab OTB MDBKA tampil data
+Rupiah sebagai dolar. Aturan: **satu broker = satu instalasi MT5 sendiri**
+(installer broker → *Settings* → folder instalasi baru). Login ulang lewat
+File → Login TIDAK membuat folder baru. Cek dengan File → Open Data Folder.
+
+Tiap terminal wajib: EA `MDBKAMultiLive` + `ExportPositions` (MQL5\Experts,
+dipasang di chart, Algo Trading hijau) dan Service `AutoExportMDBKAService`,
+`MDBKACalendarService`, `MDBKAHistoryService` (MQL5\Services). Jangan pasang
+`MDBKAEquityLogger` bersama `MDBKAMultiLive` (adu tulis file yang sama).
+
+### 11.2 `.env` (tidak di-commit)
+
+```
+QUOTES_LOG_PATH_EXNESS=…\53785E…\MQL5\Files\quotes.csv
+POSITIONS_LOG_PATH_EXNESS=…\53785E…\MQL5\Files\positions.csv
+MT5_LOG_PATH_EXNESS=…\53785E…\MQL5\Files\equity.csv
+MT5_ACCOUNT_CURRENCY_EXNESS=IDR      # WAJIB; kosong = equity TIDAK dilayani
+ACCOUNT_LABELS=…,413925678:Exness demo
+```
+
+### 11.3 Aturan khusus Exness di kode
+
+* **Akun IDR:** `equity.csv` tidak mencatat mata uang. Server membungkus
+  dengan `IdrEquitySource` (`server/services/convertedEquity.ts`) → saldo,
+  equity, profit, margin ÷ kurs ECB (`data/fx/ecb-usdidr.json`). Kurs tak
+  ada → 404 jujur. Saldo header (`accountBalanceView`) & History
+  (`historyView`) memakai angka Rupiah ASLI (tidak dikali kurs lagi).
+* **Nama simbol:** `XAUUSDm` (m kecil). `baseRiskSymbol` membuang m kecil;
+  `riskGroupOf` juga mengenali bentuk huruf besar `XAUUSDM` (hanya bila nama
+  tanpa M dikenal — `#IBM` tetap saham). `getExnessSpec` tidak peka huruf.
+* **Spesifikasi:** `src/lib/exnessSpecs.ts` — baru **XAUUSDm** (kontrak 100,
+  tick 0.001, komisi 0 terbukti 33.487 deal, lot 0.01). EURUSDm/USDJPYm belum
+  (komisi belum terbukti); kripto ditahan (tanpa golongan, Trade Disabled).
+* **Swap Exness = 0** (`swapModeForBroker` → MATI): 74 posisi XAUUSDm menginap
+  semuanya swap 0,00 walau Specification SwapMode 1 / long −523,3.
+* **Jam server UTC+0.** Bukti Mode Aman (proof) mulai 0/20 — trade lama
+  saudara Fahmi dibuka tanpa sinyal MDBKA, tidak ikut dihitung.
+* **History besar** (±36.700 deal): tabel & ringkasan Golongan memuat
+  1.000 deal terakhir (`HISTORY_MAX_ROWS`); total halaman History tetap semua.
+* Backtest: `npm run backtest -- --broker exness --equity 560 --simbol XAUUSDm`
+  (spread `MDBKA_Margin_Exness.csv`, script margin kenal "Exness").
+
+### 11.4 Hasil uji strategi PDF (12 Okt)
+
+* Scalping MIFX (MA9×MA120 + Stochastic 80/20 + engulfing): H1 belum cukup
+  bukti (20 trade); **M15 TIDAK LAYAK** (90 trade, rugi di latih & ujian).
+* ABC emas H4: MIFX belum cukup bukti (20 trade, selisih tipis +2,7 poin);
+  Exness modal $560 = MODAL KURANG (13 sinyal ditahan lot minimum).
+* Strategi tersedia: `skor` (default), `candle`, `scalping`, `abc`;
+  timeframe `H1|H4|M15`. Tidak ada yang layak uang sungguhan.
+
+### 11.5 Kebiasaan kerja yang disepakati Fahmi
+
+* Analisa akar masalah dulu; satu langkah kecil; tanpa auto-commit.
+* Penjelasan tiap langkah: analogi, contoh data asli, kegunaan, batasan,
+  perubahan layar, lalu teknis singkat.
+* Perintah dipisah per baris: `npm test; npm run build` lalu
+  `git add -A; git commit -m "…"; git push` (jangan sisipkan kata "lalu").
+* Test lama hanya ditambah; bila TERPAKSA diubah, beri komentar alasan.
+  File `scripts/run-tests.ts` ber-CRLF; beberapa .tsx ber-BOM + CRLF.
