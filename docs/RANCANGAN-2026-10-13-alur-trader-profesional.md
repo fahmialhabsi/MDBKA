@@ -194,7 +194,7 @@ Catatan: RR AUDJPY di bawah batas MDBKA (minimal 2), dan time-stop 3 jam Forex s
     3. Maksimal posisi per simbol dibatasi (usulan: 2).
     4. Hanya untuk simbol yang SAMA. Simbol lain yang berkaitan (misalnya AUDJPY dan AUDUSD) tetap dinilai penjaga korelasi seperti sekarang.
     5. Dicatat sebagai kelompok bukti tersendiri ("TAMBAH") per golongan. Berlaku di demo dulu; Live tetap seperti sekarang sampai ada bukti n ≥ 20, sesuai arah audit.
-- **Perlu dipastikan Fahmi:** apakah syarat 1 (posisi pertama sudah aman) diterima, dan apakah perubahan ini berlaku di demo saja dulu.
+- **Dipastikan Fahmi (13 Okt 2026):** syarat 1 (posisi pertama sudah aman) DITERIMA. Berlaku di SEMUA akun demo dulu; Live tetap seperti sekarang.
 
 ### 7.5 Langkah usulan
 
@@ -204,3 +204,99 @@ Catatan: RR AUDJPY di bawah batas MDBKA (minimal 2), dan time-stop 3 jam Forex s
 | T2 | Pengecualian taruhan ganda untuk simbol yang sama, dengan syarat 7.4; di demo lewat saklar mode dari audit | Tidak (demo dulu) |
 | T3 | Ekspor candle M15 live (MQL, dipasang manual) | Tidak |
 | T4 | Bukti kelompok "TAMBAH" per golongan di panel Evaluasi | Tidak |
+
+### 7.6 Siklus 30 menit (permintaan Fahmi, 13 Okt 2026)
+
+Permintaan: analisa open pertama memperhitungkan jangka maksimal 30 menit. Tim 2 mulai bekerja di menit ke-20, menilai selama 10 menit, lalu menyampaikan hasil untuk open berikutnya. Siklus diulang sampai total 3 jam per simbol.
+
+| Waktu sejak open pertama | Kegiatan |
+| --- | --- |
+| 00:00 | Open 1 (dari analisa biasa, lewat semua penjaga) |
+| 00:20–00:30 | Tim 2 menilai: struktur masih utuh? harga sudah ≥ +0,5R? |
+| 00:30 | Hasil: tahan / geser SL ke titik impas / keluar lebih awal / **open 2** (hanya bila semua posisi sebelumnya sudah aman) |
+| 00:50–01:00 | Tim 2 menilai lagi; hasil di 01:00 |
+| … | Siklus berulang setiap 30 menit |
+| 03:00 | Jendela selesai: aba-aba tutup semua posisi dalam rangkaian ini, untuk semua golongan |
+
+Akibat syarat "semua posisi sebelumnya sudah aman": hanya posisi TERBARU yang masih berisiko, sehingga risiko total rangkaian tetap ≤ 1% equity dan batas golongan. Jumlah posisi tetap dibatasi oleh margin (maks 50% free margin, `marginGuard.ts`) dan batas jumlah per simbol (usulan 3, perlu dibuktikan).
+
+**Dua cara membaca "maksimal 30 menit" — perlu dipastikan Fahmi:**
+
+1. **30 menit = siklus tinjau (usulan Claude).** Posisi boleh berjalan lebih lama; setiap 30 menit Tim 2 menilai ulang. TP tetap dari struktur (level berikutnya, RR ≥ 2). Ini cocok dengan keputusan 1 dan 5 di bagian 6 (setup H4/H1, emas).
+2. **30 menit = jangka trade.** TP harus tercapai dalam 30 menit, jadi TP kecil dan pemicu dari M5/M15. Data MDBKA menunjukkan risikonya: scalping M15 TIDAK LAYAK (90 trade, rugi di latih dan ujian), TP kecil butuh win rate ±67% untuk impas, dan gerbang biaya 10% akan sering menahan. Bila dipilih, ini strategi tersendiri yang diuji terpisah.
+
+**Data yang dibutuhkan:** penilaian tiap 30 menit butuh candle M15 live (dan M5 bila cara 2 dipilih). Sekarang hanya H1 dan kuotasi `quotes.csv` yang live (langkah T3).
+
+### 7.7 Rekomendasi alur rangkaian (diterima Fahmi, 13 Okt 2026)
+
+"30 menit" dibaca sebagai **siklus tinjau**: posisi boleh berjalan lebih lama, dan setiap 30 menit Tim 2 menilai ulang.
+
+**A. Alur satu rangkaian**
+
+1. **Open 1:** dari analisa biasa; lot dari risiko 1%; TP dari struktur dengan RR ≥ 2. Rugi maksimal = 1R (batas risiko).
+2. **Tim 2 menilai di menit 20–30 setiap siklus:**
+    - Harga ≥ +0,5R dan struktur utuh → saran geser SL ke titik impas + komisi.
+    - Struktur rusak atau arah berbalik → saran tutup lebih awal (rugi < 1R).
+    - Semua posisi sudah aman dan ada sinyal baru yang lolos penjaga → open berikutnya.
+    - Selain itu → tahan.
+3. **Arah berlawanan** hanya setelah posisi lama ditutup (tidak membuka Beli dan Jual bersamaan di simbol yang sama).
+4. **Jam ke-3:** aba-aba tutup semua posisi dalam rangkaian.
+
+Rugi terbesar satu rangkaian = 1R. Rugi mendekati nol tidak bisa dijamin; yang dirancang adalah sebanyak mungkin rangkaian berakhir di titik impas.
+
+**B. Papan nilai (per golongan, setelah ≥ 20 rangkaian)**
+
+- Kategori tiap rangkaian: rugi penuh (−1R), rugi kecil (keluar lebih awal), impas (±0,1R), untung kecil, untung penuh.
+- Angka kunci: rata-rata hasil per rangkaian (R dan Rupiah), rugi terbesar, persentase rangkaian berakhir impas.
+
+**C. Belajar dari rugi**
+
+- Setiap rangkaian rugi diberi label sebab dari data MFE/MAE: langsung melawan sejak awal (pemicu lemah); sempat +0,5R lalu berbalik (titik impas terlambat); SL < 0,5 × ATR (SL terlalu dekat); dekat berita, sesi tutup, atau melawan arah D1 (penjaga/penyaring kurang ketat).
+- Aturan TIDAK diubah setelah satu kali rugi. Perbaikan hanya bila satu sebab berulang (n ≥ 20 per golongan), disetel di data latih, lalu dicek di data ujian.
+
+### 7.8 Tim-tim pencatat dan label pola (permintaan Fahmi, 13 Okt 2026)
+
+Sejak open 1, beberapa "tim" bekerja bersamaan. Setiap tim adalah modul aturan murni (tanpa AI) yang memantau, mencatat, dan memberi label. Hasil semua tim digabung menjadi **satu kartu pola** per rangkaian.
+
+| Tim | Tugas | Data yang dicatat |
+| --- | --- | --- |
+| Tim 1 — Analisa | Membuat sinyal open 1 (pemindai yang sudah ada) | Status, skor, arah, entry/SL/TP, alasan |
+| Tim 2 — Monitor posisi | Saran tiap siklus 30 menit (7.6, 7.7) | Keputusan tiap siklus dan alasannya |
+| Tim 3 — Pemantau indikator | Memotret semua indikator saat entry dan tiap siklus | MA50, RSI, CCI, MACD, ATR, posisi harga terhadap MA50 (H1; M15 bila sudah ada) |
+| Tim 4 — Penguji titik lemah | Setelah rangkaian selesai, mencari kenapa TP tidak tercapai atau SL kena | Jarak SL dibanding ATR, MFE dibanding jarak TP (misalnya sempat 70% ke TP lalu berbalik), MAE sejak menit awal |
+| Tim 5 — Pembaca pola | Mencatat pola yang muncul selama posisi berjalan dan arah gerak sesudahnya | Pola (penolakan, engulfing, breakout-retest), arah sesudahnya; catatan untuk open berikutnya |
+| Tim 6 — Pencatat konteks (tambahan Claude) | Keadaan pasar saat entry | Golongan, arah D1, sesi dan jam, hari, jarak ke berita, kondisi ATR |
+| Tim 7 — Pencatat biaya (tambahan Claude) | Biaya nyata | Spread saat entry, komisi, swap, selisih harga analisa vs harga entry |
+| Tim 8 — Penggabung dan pemberi label | Menggabungkan semua catatan menjadi satu kartu pola dan memberi label | Label + hasil akhir (R dan Rupiah) |
+
+**Label pola (nama dari Fahmi) — usulan pembagian, perlu dipastikan Fahmi:**
+
+| Label | Hasil rangkaian |
+| --- | --- |
+| Kasbi Bakar | Untung penuh (≥ +1R) |
+| Popeda Sagu | Untung kecil (> +0,1R sampai < +1R) |
+| Sagu Tumang | Impas (−0,1R sampai +0,1R) |
+| Pupare Rebus | Rugi (< −0,1R), dengan catatan rugi kecil atau rugi penuh |
+
+**Aturan penyimpanan:**
+
+- Setiap rangkaian menghasilkan kartu baru dengan nomor sendiri (misalnya "Kasbi Bakar #0001"). Kartu tidak pernah digabung, ditimpa, atau dihapus; disimpan bertambah terus (append-only, seperti `entries-<broker>.jsonl`).
+- Kartu lama dari trade sebelum alur ini hanya boleh dibuat dari data yang memang ada, dan diberi tanda "data tidak lengkap". Tidak ada angka yang dikarang.
+
+**Kartu pola sebagai bahan bakar analisa baru:**
+
+- Setiap kartu punya "sidik jari": golongan, arah, arah D1, posisi terhadap MA50, rentang skor indikator, pola, sesi. Analisa baru mencari kartu dengan sidik jari yang sama.
+- Sebelum ada ≥ 20 kartu dengan sidik jari yang sama di golongan yang sama, hasilnya hanya ditampilkan sebagai catatan ("pola ini pernah 3× Kasbi Bakar, 5× Pupare Rebus"), belum mengubah keputusan.
+- Setelah ≥ 20: sidik jari yang kebanyakan Pupare Rebus dipakai lebih dulu sebagai **penahan** (TUNGGU). Sidik jari yang kebanyakan Kasbi Bakar/Popeda Sagu baru boleh menjadi alasan membuka posisi setelah lolos uji data latih dan ujian.
+- Alasannya: sedikit kartu mudah menipu (kebetulan). Mode Aman tetap: TUNGGU default.
+
+**Langkah usulan:**
+
+| Langkah | Isi | Menyentuh Live? |
+| --- | --- | --- |
+| K1 | Bentuk kartu pola + penyimpanan append-only (modul murni) | Tidak |
+| K2 | Fungsi pemberi label (4 label di atas) | Tidak |
+| K3 | Tim 3, 6, 7: pencatat indikator, konteks, biaya saat entry | Tidak |
+| K4 | Tim 4 dan 5: penguji titik lemah dan pembaca pola, dari data MFE/MAE dan candle | Tidak |
+| K5 | Tampilan kartu pola dan catatan sidik jari di layar | Tampilan saja |
+| K6 | Penahan berdasarkan kartu (setelah ≥ 20 per sidik jari), demo dulu | Demo dulu |
