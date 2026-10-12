@@ -11,7 +11,7 @@ import { DEFAULT_STRATEGY_ID, parseStrategyId, STRATEGY_IDS, type StrategyId } f
 export interface BacktestCliOptions {
   readonly brokerId: BrokerId;
   /** Nama file Margin MT5: MDBKA_Margin_<tag>.csv. */
-  readonly marginTag: "Finex" | "OTB" | "MIFX";
+  readonly marginTag: "Finex" | "OTB" | "MIFX" | "Exness";
   readonly equity: number;
   /** null = semua golongan. */
   readonly groups: readonly RiskGroupId[] | null;
@@ -30,7 +30,7 @@ export type ParsedArgs =
   | { readonly ok: false; readonly error: string };
 
 export const BACKTEST_USAGE =
-  "Pakai: npm run backtest -- --broker finex|otb|mifx --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD] [--strategi skor] [--batas-waktu 3|6|12|0] [--timeframe H1|H4|M15]";
+  "Pakai: npm run backtest -- --broker finex|otb|mifx|exness --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD] [--strategi skor] [--batas-waktu 3|6|12|0] [--timeframe H1|H4|M15]";
 
 const GROUP_IDS: readonly RiskGroupId[] = [
   "FOREX", "FOREX_JPY", "FOREX_TIDAK_LAZIM", "LOGAM", "MINYAK", "INDEKS",
@@ -44,7 +44,7 @@ export function parseBacktestArgs(argv: readonly string[]): ParsedArgs {
   };
   const broker = (get("--broker") ?? "").toLowerCase();
   let brokerId: BrokerId;
-  let marginTag: "Finex" | "OTB" | "MIFX";
+  let marginTag: "Finex" | "OTB" | "MIFX" | "Exness";
   if (broker === "finex") {
     brokerId = "finex";
     marginTag = "Finex";
@@ -55,8 +55,12 @@ export function parseBacktestArgs(argv: readonly string[]): ParsedArgs {
     // E2c (12 Okt 2026): spread dari MDBKA_Margin_MIFX.csv (ExportMarginMDBKA di terminal MIFX).
     brokerId = "mifx";
     marginTag = "MIFX";
+  } else if (broker === "exness") {
+    // X5 (12 Okt 2026): spread dari MDBKA_Margin_Exness.csv (ExportMarginMDBKA di terminal Exness).
+    brokerId = "exness";
+    marginTag = "Exness";
   } else {
-    return { ok: false, error: `Broker wajib finex, otb, atau mifx. ${BACKTEST_USAGE}` };
+    return { ok: false, error: `Broker wajib finex, otb, atau mifx (atau exness). ${BACKTEST_USAGE}` };
   }
   const equity = Number(get("--equity") ?? "");
   if (!Number.isFinite(equity) || equity <= 0) {

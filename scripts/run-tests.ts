@@ -8862,6 +8862,16 @@ test("685. K1 Kalkulator dari posisi TANPA SL: S/L otomatis = SL wajib MDBKA (ba
   assert(page.includes('data-testid="calc-auto-sl"') && page.includes("sl: parseInputNumber(slEffective)"), "catatan & hitungan memakai SL efektif");
 });
 
+test("686. X5 backtest --broker exness: spread MDBKA_Margin_Exness.csv, script margin kenal Exness, swap Exness 0 (74 posisi menginap terbukti 0)", () => {
+  const ok = parseBacktestArgs(["--broker", "exness", "--equity", "560", "--simbol", "XAUUSDm"]);
+  assert(ok.ok && ok.options.brokerId === "exness" && ok.options.marginTag === "Exness" && ok.options.symbols?.join() === "XAUUSDm", JSON.stringify(ok));
+  assert(readSrc("ea/ExportMarginMDBKA.mq5").includes('StringFind(company, "Exness") >= 0) tag = "Exness"'), "tag Exness otomatis");
+  const sw = estimateSwap({ symbol: "XAUUSDm", broker: "exness", direction: "BELI", lot: 0.02, price: 4180, entryServer: "2026.09.14 13:09", nowServer: "2026.09.16 01:00" }, (v) => v);
+  assert(sw !== null && sw.mode === "MATI" && sw.value === 0 && sw.chargeDays === 2, JSON.stringify(sw));
+  const mifx = estimateSwap({ symbol: "XAUUSD.m", broker: "mifx", direction: "BELI", lot: 0.02, price: 4180, entryServer: "2026.09.14 13:09", nowServer: "2026.09.16 01:00" }, (v) => v);
+  assert(mifx !== null && mifx.mode === "PERSEN_TAHUNAN" && mifx.value !== 0, "MIFX tetap bayar swap");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

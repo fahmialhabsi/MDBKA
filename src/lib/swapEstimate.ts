@@ -19,8 +19,13 @@ import { isStockSymbol } from "./stockPortfolio";
 
 export type BrokerSwapMode = "MATI" | "PERSEN_TAHUNAN";
 
+/**
+ * X5 (12 Okt 2026): Exness demo 413925678 — swap 0,00 di SEMUA 74 posisi XAUUSDm
+ * yang menginap (History Juni–Okt; BUY & SELL), walau Specification SwapMode 1
+ * (points, long −523,3). Akun ini terbukti bebas swap → MATI.
+ */
 export function swapModeForBroker(broker: BrokerId): BrokerSwapMode {
-  return broker === "finex" ? "MATI" : "PERSEN_TAHUNAN";
+  return broker === "finex" || broker === "exness" ? "MATI" : "PERSEN_TAHUNAN";
 }
 
 const SERVER_TIME = /^(\d{4})\.(\d{2})\.(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/;
