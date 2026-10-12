@@ -31,6 +31,9 @@ export const EXNESS_SPECS: Readonly<Record<string, InstrumentSpec>> = Object.fre
   }),
 });
 
+/** X4b: daftar simbol Exness terverifikasi (dropdown & pengenal nama file CSV). */
+export const EXNESS_SPEC_SYMBOLS: readonly string[] = Object.freeze(Object.keys(EXNESS_SPECS));
+
 /** Lookup nama persis; null bila bukan simbol Exness terdaftar. */
 export function getExnessSpec(symbol: string): InstrumentSpec | null {
   return EXNESS_SPECS[symbol.trim()] ?? null;

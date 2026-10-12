@@ -3500,7 +3500,7 @@ test("175. object registry tidak boleh dimutasi oleh pemanggil", () => {
     "registry berhasil dimutasi via push",
   );
   assert(
-    BROKER_PROFILES.length === 3, // M4b-1: + MIFX
+    BROKER_PROFILES.length === 4, // M4b-1: + MIFX; X4b (12 Okt 2026) diubah sengaja: + Exness
     `jumlah profil=${BROKER_PROFILES.length}`,
   );
 
@@ -7970,7 +7970,7 @@ test("630. M4a-2 aturan broker MIFX: kontrak/komisi/lot dari Specification, nila
 });
 
 test("631. M4b-1 tab MIFX di dashboard: broker terdaftar, tombol, nama file .m dikenali", () => {
-  assert(isSupportedBrokerId("mifx") && getBrokerProfile("mifx").label === "MIFX" && BROKER_PROFILES.length === 3, "registry");
+  assert(isSupportedBrokerId("mifx") && getBrokerProfile("mifx").label === "MIFX" && BROKER_PROFILES.length === 4, "registry"); // X4b: diubah sengaja (3 → 4, + Exness)
   const app = readSrc("src/App.tsx");
   assert(app.includes('data-testid="broker-tab-mifx"') && app.includes('onClick={() => handleBrokerChange("mifx")}'), "tombol MIFX");
   assert(app.includes("longestFirst(MIFX_SPEC_SYMBOLS).find((candidate) =>") && app.includes("upperName.includes(candidate.toUpperCase())"), "nama file CSV .m");
@@ -8780,6 +8780,20 @@ test("678. X4a saldo header akun Rupiah (Exness): angka History sudah Rupiah, TI
   assert(otb !== undefined && otb.balanceText === "Rp88.801.000", "akun USD tetap dikali kurs");
   const noKurs = buildBalanceRows([{ login: "1", label: "Exness demo", balance: info(10464706.5, 0, "IDR") }], null);
   assert(noKurs[0].balanceText === "Rp10.465.000" && noKurs[0].balanceUsdText === "-", "tanpa kurs: Rupiah tetap tampil, USD '-'");
+});
+
+test("679. X4b tombol Exness di dasbor: simbol awal XAUUSDm, dropdown simbol Exness, nama file CSV XAUUSDm tidak terbaca XAUUSD Finex", () => {
+  const app = readSrc("src/App.tsx");
+  assert(app.includes('data-testid="broker-tab-exness"') && app.includes('onClick={() => handleBrokerChange("exness")}'), "tombol Exness");
+  assert(app.includes("longestFirst(EXNESS_SPEC_SYMBOLS)") && app.includes("Broker aktif: Exness (demo, akun Rupiah)"), "nama file & pemberitahuan");
+  const form = readSrc("src/components/extraction/ExtractedDataForm.tsx");
+  assert(form.includes('const targetSymbol = brokerId === "exness" ? "XAUUSDm" : baseTarget;'), "simbol awal Exness");
+  assert(getAvailableSymbols("exness").join(",") === "XAUUSDm" && getAvailableSymbols("mifx").includes("GBPUSD.m"), "dropdown per broker");
+});
+
+test("680. X4b-fix klik Exness tidak membuat layar hitam: profil broker Exness terdaftar (getBrokerProfile tidak melempar)", () => {
+  assert(getBrokerProfile("exness").label === "Exness" && BROKER_PROFILES.some((p) => p.id === "exness"), "profil Exness");
+  assert(readSrc("src/App.tsx").includes("getBrokerProfile("), "App memanggil getBrokerProfile untuk broker aktif");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

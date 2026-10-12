@@ -53,6 +53,7 @@ import { detectScaleMismatch } from "./calculations/scaleValidator";
 import { validateAnalysisInputs } from "./calculations/inputValidator";
 import { SUPPORTED_SYMBOLS } from "./lib/instrumentConfig";
 import { MIFX_SPEC_SYMBOLS } from "./lib/mifxSpecs";
+import { EXNESS_SPEC_SYMBOLS } from "./lib/exnessSpecs";
 import { parseCsvCandles } from "./lib/csvCandleParser";
 import { resolveSwingLevels } from "./calculations/swingDetector";
 import { computeIndicators } from "./calculations/indicators";
@@ -408,6 +409,12 @@ export default function App() {
             upper.includes(candidate.toUpperCase()),
           )
         : undefined) ??
+      // X4b: Exness dicek dulu agar "XAUUSDm" tidak terbaca "XAUUSD" Finex.
+      (activeBrokerId === "exness"
+        ? longestFirst(EXNESS_SPEC_SYMBOLS).find((candidate) =>
+            upper.includes(candidate.toUpperCase()),
+          )
+        : undefined) ??
       longestFirst(OTB_ALL_SYMBOLS).find((candidate) =>
         upper.includes(candidate),
       ) ??
@@ -651,6 +658,11 @@ export default function App() {
               upperName.includes(candidate.toUpperCase()),
             )
           : undefined) ??
+        (activeBrokerId === "exness"
+          ? longestFirst(EXNESS_SPEC_SYMBOLS).find((candidate) =>
+              upperName.includes(candidate.toUpperCase()),
+            )
+          : undefined) ??
         longestFirst(OTB_ALL_SYMBOLS).find((candidate) =>
           upperName.includes(candidate),
         ) ??
@@ -865,7 +877,9 @@ export default function App() {
           ? "Broker aktif: OrbiTraderBerjangka. Preset instrumen belum diaktifkan. Verifikasi simbol dan parameter broker dari Specification OrbiTraderBerjangka terlebih dahulu."
           : nextBrokerId === "mifx"
             ? "Broker aktif: MIFX (demo). Simbol berakhiran .m; aturan dari Specification MT5 MIFX, komisi 10 USD/lot pulang-pergi."
-            : "Broker aktif: Finex. Gunakan CSV dan parameter dari terminal Finex.",
+            : nextBrokerId === "exness"
+              ? "Broker aktif: Exness (demo, akun Rupiah). Simbol berakhiran m; saldo dikonversi ke USD kurs ECB; komisi 0 (terbukti History)."
+              : "Broker aktif: Finex. Gunakan CSV dan parameter dari terminal Finex.",
       );
       clearAnalysisOutput();
     },
@@ -998,6 +1012,19 @@ export default function App() {
                   }`}
                 >
                   MIFX
+                </button>
+                <button
+                  type="button"
+                  data-testid="broker-tab-exness"
+                  aria-pressed={activeBrokerId === "exness"}
+                  onClick={() => handleBrokerChange("exness")}
+                  className={`px-4 py-1.5 text-xs font-bold ${
+                    activeBrokerId === "exness"
+                      ? "bg-emerald-400 text-slate-950"
+                      : "bg-transparent text-slate-300 hover:bg-white/10"
+                  }`}
+                >
+                  Exness
                 </button>
               </div>
             </div>

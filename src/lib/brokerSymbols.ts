@@ -6,7 +6,7 @@ import { ORBITRADER_BROKER_ID } from "./brokerRegistry";
 import { getOtbInstrumentProfile } from "./otbInstrumentConfig";
 import type { BrokerId } from "../types/broker";
 import { getMifxSpec, MIFX_SPEC_SYMBOLS } from "./mifxSpecs";
-import { getExnessSpec } from "./exnessSpecs";
+import { EXNESS_SPEC_SYMBOLS, getExnessSpec } from "./exnessSpecs";
 
 /**
  * Tahap 4C/5A — daftar simbol & kanonikalisasi per broker (UI/wiring only).
@@ -208,6 +208,10 @@ export function getAvailableSymbols(brokerId?: BrokerId): string[] {
   // M4b-2: daftar simbol MIFX (nama persis Specification, akhiran .m).
   if (brokerId === "mifx") {
     return [...MIFX_SPEC_SYMBOLS];
+  }
+  // X4b: daftar simbol Exness terverifikasi (nama persis, akhiran m kecil).
+  if (brokerId === "exness") {
+    return [...EXNESS_SPEC_SYMBOLS];
   }
 
   return [...SUPPORTED_SYMBOLS];

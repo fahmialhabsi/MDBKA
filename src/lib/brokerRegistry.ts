@@ -64,6 +64,18 @@ function buildMifxProfile(): BrokerProfile {
   };
 }
 
+export const EXNESS_BROKER_ID = "exness" as const;
+
+/** X4b-fix (12 Okt 2026): Exness — aturan simbol di exnessSpecs.ts; akun IDR (equity dikonversi USD). */
+function buildExnessProfile(): BrokerProfile {
+  return {
+    id: EXNESS_BROKER_ID,
+    label: "Exness",
+    instruments: [],
+    note: "Exness Technologies Ltd (demo 413925678, akun Rupiah). Simbol akhiran m; aturan dari Specification MT5 Exness.",
+  };
+}
+
 function freezeProfile(profile: BrokerProfile): BrokerProfile {
   Object.freeze(profile.instruments);
   return Object.freeze(profile);
@@ -77,6 +89,7 @@ export const BROKER_PROFILES: readonly BrokerProfile[] = Object.freeze([
   freezeProfile(buildFinexProfile()),
   freezeProfile(buildOrbitraderProfile()),
   freezeProfile(buildMifxProfile()),
+  freezeProfile(buildExnessProfile()),
 ]);
 
 /** True bila value adalah id broker yang didukung. */

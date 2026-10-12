@@ -64,7 +64,7 @@ export default function ExtractedDataForm({
   // OTB), tampilkan nilai aktif agar select tidak kosong, tetapi value
   // tetap kode simbol.
   const symbolOptions: string[] =
-    brokerId === "orbitraderberjangka" || brokerId === "mifx"
+    brokerId === "orbitraderberjangka" || brokerId === "mifx" || brokerId === "exness"
       ? [...getAvailableSymbols(brokerId)]
       : [...SUPPORTED_SYMBOLS];
   if (market.symbol && !symbolOptions.includes(market.symbol)) {
@@ -96,8 +96,10 @@ export default function ExtractedDataForm({
   // - finex / lainnya → GBPUSD (live forex)
   // onChange broker → setSymbol otomatis, tanpa input manual ulang.
   useEffect(() => {
-    const targetSymbol =
+    const baseTarget =
       brokerId === "orbitraderberjangka" ? "GBPUSD_ORB" : brokerId === "mifx" ? "GBPUSD.m" : "GBPUSD";
+    // X4b: exness → XAUUSDm (satu-satunya simbol Exness terverifikasi; GBPUSD tidak ada di akun ini).
+    const targetSymbol = brokerId === "exness" ? "XAUUSDm" : baseTarget;
     if (market.symbol !== targetSymbol) {
       updateSymbol(targetSymbol);
       // Symbol lama berganti: hasil analisa lama (symbol lama) tidak boleh
