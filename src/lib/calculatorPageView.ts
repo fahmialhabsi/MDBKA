@@ -8,6 +8,7 @@ import { parseBrokerParam } from "./brokerRegistry";
 import { getMifxSpec } from "./mifxSpecs";
 import { getExnessSpec } from "./exnessSpecs";
 import type { CalcDirection } from "./targetCalculator";
+import { mandatoryStop, type MandatoryStop } from "./mandatoryStop";
 
 export interface CalculatorPrefill {
   readonly broker: BrokerId;
@@ -117,4 +118,25 @@ export function calculatorUrlFromHolding(h: {
     sl: h.sl > 0 ? String(h.sl) : "",
     tp: h.tp > 0 ? String(h.tp) : "",
   });
+}
+
+/**
+ * K1 (12 Okt 2026): SL otomatis kalkulator untuk posisi TANPA SL = SL wajib MDBKA
+ * (batas Rupiah golongan, mandatoryStop). Hanya dipakai bila kolom SL kosong;
+ * MURNI. bid/ask boleh null (tanpa cek "SL sudah terlewati").
+ */
+export function autoStopLoss(
+  input: { readonly symbol: string; readonly direction: CalcDirection; readonly lot: string; readonly entry: string },
+  bid: number | null,
+  ask: number | null,
+  convertToUsd: (amount: number, currency: string) => number | null,
+  usdIdr: number | null,
+): MandatoryStop {
+  return mandatoryStop(
+    { symbol: input.symbol, direction: input.direction, lot: parseInputNumber(input.lot), entryPrice: parseInputNumber(input.entry), sl: 0 },
+    bid,
+    ask,
+    convertToUsd,
+    usdIdr,
+  );
 }

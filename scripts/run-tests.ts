@@ -58,7 +58,7 @@ import { readCandleCsv } from "../server/routes/candlesRoutes";
 import { findSessionHold, serverNowText, serverToWitLabel, sessionNotice, sessionState, weeklyIntervals } from "../src/lib/sessionGuard";
 import { parseSessionsCsv } from "../server/services/sessionReader";
 import { buildStockPortfolio, buildTradeSummary, isStockSymbol } from "../src/lib/stockPortfolio";
-import { calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
+import { autoStopLoss, calculatorPageUrl, calculatorUrlFromHolding, parseCalculatorPage, parseInputNumber, positionOptionLabel, prefillFromPosition, symbolOptions } from "../src/lib/calculatorPageView";
 import { accountsForBroker, formatIdr, formatUsd as formatUsdHistory, historyPageUrl, mt5DirectionText, parseHistoryPage } from "../src/lib/historyPageView";
 import { applyNewsHold, findNewsHold, newsCurrenciesOf, newsMinutesBefore, NEWS_WINDOW_MINUTES, upcomingHighNews } from "../src/lib/newsGuard";
 import { formatClock12, serverUtcOffsetHours, WIT_UTC_OFFSET } from "../src/lib/serverClock";
@@ -8847,6 +8847,19 @@ test("684. X4c-3 Golongan Exness: XAUUSDm (juga bila sudah dihurufbesarkan jadi 
   assert(realSymbolName(tabs[0].symbol, ["XAUUSDm"]) === "XAUUSDm", "nama asli untuk harga live");
   const sp = readSrc("src/components/group/StockPortfolio.tsx");
   assert(sp.includes('data-testid="ringkasan-terpotong"') && sp.includes("{formatUsd(r.realizedUsd)} {ccy}</span>"), "catatan terpotong & satuan mata uang akun");
+});
+
+test("685. K1 Kalkulator dari posisi TANPA SL: S/L otomatis = SL wajib MDBKA (batas golongan); diketik sendiri = dipakai apa adanya", () => {
+  const usd = (v: number) => v;
+  // Posisi nyata Exness 12 Okt: BELI 0.02 XAUUSDM @4184.727 tanpa SL (nama huruf besar dari URL).
+  const ms = autoStopLoss({ symbol: "XAUUSDM", direction: "BELI", lot: "0.02", entry: "4184.727" }, null, null, usd, 17880.55);
+  assert(ms.kind === "PASANG" && ms.slText === "4170.746" && ms.lossIdr <= 500000, JSON.stringify(ms));
+  // Harga sudah melewati SL wajib → bukan diisi, tapi peringatan.
+  const lewat = autoStopLoss({ symbol: "XAUUSDm", direction: "BELI", lot: "0.02", entry: "4184.727" }, 4165, 4165.3, usd, 17880.55);
+  assert(lewat.kind === "LEWAT_BATAS", JSON.stringify(lewat));
+  const page = readSrc("src/components/analysis/CalculatorPage.tsx");
+  assert(page.includes('useState(prefill.entry.trim() !== "" && prefill.sl.trim() === "")') && page.includes("setAutoSlOn(false); setSl(e.target.value);"), "hanya posisi tanpa SL; mengetik SL mematikan otomatis");
+  assert(page.includes('data-testid="calc-auto-sl"') && page.includes("sl: parseInputNumber(slEffective)"), "catatan & hitungan memakai SL efektif");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

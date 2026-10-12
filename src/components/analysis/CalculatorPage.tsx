@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Calculator, Copy } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import {
+  autoStopLoss,
   parseInputNumber,
   positionOptionLabel,
   prefillFromPosition,
@@ -38,6 +39,8 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
   const [symbolBook, setSymbolBook] = useState<{ broker: BrokerId; symbols: string[] } | null>(null);
   const [pickedTicket, setPickedTicket] = useState("");
   const [copied, setCopied] = useState(false);
+  // K1: posisi MT5 tanpa SL (URL posisi / pilih posisi) → SL wajib MDBKA dipakai sampai SL diketik sendiri.
+  const [autoSlOn, setAutoSlOn] = useState(prefill.entry.trim() !== "" && prefill.sl.trim() === "");
   const [live, setLive] = useState<{ key: string; bid: number; ask: number } | null>(null);
   const liveKey = `${broker}|${symbol.trim().toUpperCase()}`;
   // F1: nama asli Market Watch (mis. MIFX "EURUSD.m") untuk API harga live.
@@ -115,24 +118,36 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
     setEntry(p.entry);
     setSl(p.sl);
     setTp(p.tp);
+    setAutoSlOn(p.sl.trim() === "");
   }
 
   const kurs = usdIdrRate(fx);
+
+  // K1: SL wajib MDBKA (batas Rupiah golongan) untuk posisi tanpa SL — turunan, bukan state.
+  const autoSl = useMemo(
+    () =>
+      autoSlOn && sl.trim() === "" && kurs !== null && symbol.trim() !== "" && entry.trim() !== ""
+        ? autoStopLoss({ symbol, direction, lot, entry }, liveNow?.bid ?? null, liveNow?.ask ?? null, buildUsdConverter(fx), kurs)
+        : null,
+    [autoSlOn, sl, kurs, symbol, direction, lot, entry, liveNow, fx],
+  );
+  const slEffective = autoSl?.kind === "PASANG" ? autoSl.slText : sl;
+
   const result = useMemo(() => {
-    if (symbol.trim() === "" || entry.trim() === "" || sl.trim() === "" || tp.trim() === "") return null;
+    if (symbol.trim() === "" || entry.trim() === "" || slEffective.trim() === "" || tp.trim() === "") return null;
     return calculateTargets(
       {
         symbol: symbol.trim().toUpperCase(),
         direction,
         lot: parseInputNumber(lot),
         entry: parseInputNumber(entry),
-        sl: parseInputNumber(sl),
+        sl: parseInputNumber(slEffective),
         tp: parseInputNumber(tp),
       },
       buildUsdConverter(fx),
       kurs,
     );
-  }, [symbol, direction, lot, entry, sl, tp, fx, kurs]);
+  }, [symbol, direction, lot, entry, slEffective, tp, fx, kurs]);
 
   const field = "w-full rounded-xl border border-white/15 bg-slate-900 px-3 py-2 font-mono text-white";
   return (
@@ -158,6 +173,14 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
           </select>
         </label>
 
+        {autoSl !== null && autoSl.kind !== "ADA_SL" && (
+          <p
+            className={`rounded-xl border p-3 text-sm ${autoSl.kind === "PASANG" ? "border-amber-300/30 bg-amber-300/10 text-amber-100" : "border-rose-400/30 bg-rose-400/10 text-rose-200"}`}
+            data-testid="calc-auto-sl"
+          >
+            {autoSl.kind === "PASANG" ? `Posisi ini tanpa SL — kolom S/L diisi otomatis SL wajib MDBKA. ${autoSl.message}` : autoSl.message}
+          </p>
+        )}
         <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:grid-cols-4" data-testid="calc-form">
           <label className="text-xs text-slate-400">Broker
             <select value={broker} onChange={(e) => changeBroker(e.target.value as BrokerId)} className={field}>
@@ -188,7 +211,7 @@ export function CalculatorPage({ prefill }: { prefill: CalculatorPrefill }) {
             <input value={entry} onChange={(e) => setEntry(e.target.value)} inputMode="decimal" className={field} />
           </label>
           <label className="text-xs text-rose-300">Stop Loss (S/L)
-            <input value={sl} onChange={(e) => setSl(e.target.value)} inputMode="decimal" className={field} />
+            <input value={slEffective} onChange={(e) => { setAutoSlOn(false); setSl(e.target.value); }} inputMode="decimal" className={field} />
           </label>
           <label className="text-xs text-sky-300">Take Profit (T/P)
             <input value={tp} onChange={(e) => setTp(e.target.value)} inputMode="decimal" className={field} />
