@@ -8737,6 +8737,14 @@ test("674. X2 equity akun IDR (Exness) dikonversi ke USD kurs ECB; kurs tak ada 
   assert(src.getLatest() === null && got.join(",") === "680.34", "kurs hilang → tidak ada angka (404 jujur), bukan Rupiah sebagai USD");
 });
 
+test("675. X3a nama simbol Exness (akhiran m kecil) dikenal golongan risiko & berita; #IBM / META.US / .m MIFX tidak rusak", () => {
+  assert(baseRiskSymbol("XAUUSDm") === "XAUUSD" && riskGroupOf("XAUUSDm").id === "LOGAM", "emas Exness = Logam");
+  assert(riskGroupOf("EURUSDm").id === "FOREX" && riskGroupOf("USDJPYm").id === "FOREX_JPY", "forex Exness");
+  assert(newsCurrenciesOf("EURUSDm").join(",") === "EUR,USD" && newsCurrenciesOf("XAUUSDm").join(",") === "USD", "berita ikut mata uang aslinya");
+  assert(baseRiskSymbol("#IBM") === "#IBM" && baseRiskSymbol("META.US") === "META.US" && baseRiskSymbol("XAUUSD.m") === "XAUUSD" && baseRiskSymbol("NQ.m") === "US100", "broker lain tidak rusak");
+  assert(baseRiskSymbol("BTCUSDm") === "BTCUSD" && riskGroupOf("BTCUSDm").capIdr === null, "kripto Exness belum punya golongan → ditahan");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

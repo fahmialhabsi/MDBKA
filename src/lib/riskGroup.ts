@@ -78,8 +78,8 @@ export interface RiskGroupRow {
  */
 export function riskGroupTable(): RiskGroupRow[] {
   return [
-    { group: RISK_GROUPS.FOREX, symbols: [...FOREX], note: "OTB: nama sama + akhiran _ORB; MIFX: + .m" },
-    { group: RISK_GROUPS.FOREX_JPY, symbols: [...FOREX_JPY], note: "OTB: nama sama + akhiran _ORB; MIFX: + .m" },
+    { group: RISK_GROUPS.FOREX, symbols: [...FOREX], note: "OTB: nama sama + akhiran _ORB; MIFX: + .m; Exness: + m" },
+    { group: RISK_GROUPS.FOREX_JPY, symbols: [...FOREX_JPY], note: "OTB: nama sama + akhiran _ORB; MIFX: + .m; Exness: + m" },
     { group: RISK_GROUPS.LOGAM, symbols: [...LOGAM], note: "XAU = emas, XAG = perak; OTB + _ORB; MIFX: + .m" },
     { group: RISK_GROUPS.MINYAK, symbols: [...MINYAK], note: "MIFX: CLS10.m, OIL_NEXT" },
     { group: RISK_GROUPS.INDEKS, symbols: [...INDEKS], note: "OTB: US30/US100/US500 juga .DEC; MIFX: DJ.m=US30, NQ.m=US100, SP.m=US500, NK.m=JP225, HK.m=HK50" },
@@ -99,9 +99,18 @@ const INDEX_ALIASES: Readonly<Record<string, string>> = {
   DJ: "US30", NQ: "US100", SP: "US500", NK: "JP225", HK: "HK50",
 };
 
-/** Buang akhiran broker: _ORB (OTB), .DEC (kontrak OTB), .m (MIFX); alias indeks MIFX. Huruf besar. */
+/**
+ * X3a (12 Okt 2026): akhiran Exness = huruf "m" KECIL tanpa titik (XAUUSDm,
+ * EURUSDm). Dibuang hanya bila sisa nama huruf besar/angka — saham Finex yang
+ * memang berakhir M besar (#IBM) tidak tersentuh.
+ */
+const EXNESS_SUFFIX = /^([A-Z0-9#_]+)m$/;
+
+/** Buang akhiran broker: _ORB (OTB), .DEC (kontrak OTB), .m (MIFX), m kecil (Exness); alias indeks MIFX. Huruf besar. */
 export function baseRiskSymbol(symbol: string): string {
-  const s = symbol.trim().toUpperCase().replace(/_ORB$/, "").replace(/\.DEC$/, "").replace(/\.M$/, "");
+  const t = symbol.trim();
+  const ex = EXNESS_SUFFIX.exec(t);
+  const s = (ex !== null ? ex[1] : t).toUpperCase().replace(/_ORB$/, "").replace(/\.DEC$/, "").replace(/\.M$/, "");
   return INDEX_ALIASES[s] ?? s;
 }
 
