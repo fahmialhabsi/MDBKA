@@ -2,7 +2,7 @@
 
 13 Okt 2026 · Fahmi Alhabsi
 
-> **Status:** DRAF DISKUSI. Belum ada kode yang diubah. Posisi repo saat ditulis: branch `main`, HEAD `7c02ef7`, test terakhir 686 (test berikutnya 687).
+> **Status:** DRAF DISKUSI, keputusan awal diisi di bagian 6. Belum ada kode yang diubah. Posisi repo saat ditulis: branch `main`, HEAD `7c02ef7`, test terakhir 686 (test berikutnya 687).
 > **Terkait:** `docs/AUDIT-2026-10-13-analisa-dan-pembatasan-risiko.md` (mode demo/live, penjaga, bukti n ≥ 20).
 > **Sifat:** sistem berbasis aturan, tanpa AI. Mode Aman tetap: TUNGGU adalah default; BELI/JUAL hanya bila terbukti. Uang sungguhan hanya setelah 3 lampu hijau.
 
@@ -47,7 +47,7 @@
 - **Draf aturan:** arah D1 = posisi close D1 terhadap MA50 D1, ditambah kemiringan MA50 D1. BELI hanya bila arah D1 naik; JUAL hanya bila turun.
 - **W1** dipakai sebagai penanda level kunci (high/low swing W1), bukan penentu arah.
 - **Status baru yang diusulkan:** `DITAHAN_ARAH` (sinyal melawan arah besar).
-- **Perlu diputuskan:** apakah arah D1 "netral" (close di sekitar MA50) menahan semua sinyal atau dibiarkan.
+- **Diputuskan (bagian 6):** arah D1 ketat; D1 "netral" (close di sekitar MA50) menahan semua sinyal.
 
 ### 3.3 Struktur (H4/H1)
 
@@ -122,12 +122,25 @@
 
 Setiap langkah dicek dengan `npm test`, `tsc -b`, dan lint, tanpa auto-commit.
 
-## 6. Pertanyaan untuk diskusi
+## 6. Keputusan awal (diisi 13 Okt 2026)
 
-- [ ] Pasangan timeframe: H1 setup + M15 pemicu, atau H4 setup + H1 pemicu (lebih sedikit biaya dan gangguan)?
-- [ ] Arah D1: wajib searah, atau "netral" boleh lewat?
-- [ ] Pola mana yang dikerjakan dulu: double top/bottom atau breakout-retest?
-- [ ] Angka awal: toleransi pola, jarak SL minimum/maksimum dalam ATR, RR minimum 1,5 atau 2.
-- [ ] Instrumen pertama yang diuji: emas H4 (sudah ada ABC) atau Forex mayor?
-- [ ] Jam sesi London/New York dalam jam server tiap broker: dari mana sumber resminya?
-- [ ] Urutan kerja dengan pekerjaan mode demo/live dari audit: dikerjakan dulu, bergantian, atau ditunda?
+Fahmi meminta Claude memutuskan ketujuh pertanyaan berdasarkan data MDBKA. Ini **hipotesis awal untuk diuji**, bukan bukti. Backtest latih/ujian dan bukti n ≥ 20 yang menentukan apakah dipakai; bila hasilnya buruk, keputusan diganti.
+
+**Data yang dipakai sebagai dasar:**
+
+- Evaluasi sebelum Mode Aman: OTB demo 15 trade, win rate 27%, bersih −$183,18; Finex live 19 trade, win rate 21%, bersih −$13,71. Backtest: keunggulan ≈ 0, negatif setelah biaya; TP kecil butuh win rate ±67% untuk impas.
+- Uji 12 Okt: scalping M15 TIDAK LAYAK (90 trade, rugi di data latih dan ujian); scalping H1 belum cukup bukti (20 trade); ABC emas H4 di MIFX belum cukup bukti (20 trade, selisih tipis +2,7 poin); ABC emas H4 di Exness dengan modal $560 = MODAL KURANG.
+- Kriteria rapor: untung ≥ 3% di atas titik impas di data latih DAN ujian (`MIN_EDGE_OVER_BREAKEVEN`).
+- Aturan berlaku: time-stop 3 jam hanya untuk Forex dan Forex JPY; emas, minyak, indeks tanpa batas waktu.
+
+| # | Pertanyaan | Keputusan | Alasan dari data MDBKA |
+| --- | --- | --- | --- |
+| 1 | Pasangan timeframe | **H4 untuk setup, H1 untuk pemicu.** D1 hanya untuk arah. | M15 terbukti rugi; biaya terlalu besar terhadap SL kecil. Jarak SL H4 lebih lebar, jadi porsi biaya lebih kecil dan gerbang biaya 10% lebih mudah lolos. H4 dan D1 bisa dirakit dari H1 panjang yang sudah ada, jadi backtest bisa mulai tanpa mengubah EA. Kekurangan: sinyal lebih jarang. |
+| 2 | Arah D1 | **Ketat: harus searah. D1 netral = TUNGGU.** | Riwayat menunjukkan keunggulan ≈ 0, jadi lebih baik sedikit sinyal yang lebih bersih. Sejalan dengan Mode Aman (TUNGGU default) dan prinsip fail-safe di bagian 2. |
+| 3 | Pola pertama | **Breakout-retest.** Double top/bottom ditunda. | Breakout-retest searah tren, cocok dengan arah D1 ketat. Double top/bottom adalah pola pembalikan, sehingga bertentangan dengan arah D1 ketat. Breakout-retest juga memakai alat yang sudah ada: level swing (`swingDetector.ts`) dan candle penolakan (`candleStrategy.ts`). |
+| 4 | Angka awal | **Zona pemicu ±0,25 × ATR H1. SL minimum 0,5 × ATR H4, maksimum 3 × ATR H4. RR minimum 2.** Dikunci sebelum uji. | Win rate historis 21–27%. Dengan RR 2, titik impas sekitar 33% ditambah biaya; dengan RR 1,5 sekitar 40%, terlalu jauh dari riwayat. RR 2 juga sama dengan strategi ABC (TP = 2 × jarak SL), jadi hasilnya bisa dibandingkan. |
+| 5 | Instrumen pertama | **Emas (XAUUSD) H4, data MIFX.** Forex menyusul. | Emas tidak terkena time-stop 3 jam, sedangkan setup H4 butuh waktu lebih dari 3 jam; untuk Forex aturan itu akan memotong trade lebih awal dan harus dibahas dulu. Sudah ada pembanding: ABC emas H4 MIFX (20 trade, +2,7 poin). Batas risiko emas Rp500 rb memberi ruang untuk SL H4 yang lebar. Exness tidak dipakai dulu karena modal $560 terbukti kurang untuk emas H4. |
+| 6 | Jam sesi London/New York | **Ditunda.** Tidak dipakai di versi pertama. | Setup H4 + emas tidak memerlukannya. Bila nanti dibutuhkan, jam sesi dihitung dari jam UTC tetap ditambah selisih jam server tiap broker yang sudah tercatat (misalnya OTB UTC+2, Exness UTC+0). Perubahan jam musim akhir Okt/awal Nov harus dicek, seperti catatan handoff. |
+| 7 | Urutan dengan pekerjaan mode demo/live | **Mode demo/live dulu (2–3 langkah kecil), lalu P1–P5 rancangan ini.** | Permintaan awal hari ini adalah demo tidak terkunci. Langkah awalnya kecil dan dibatasi untuk broker tanpa akun live terdaftar (OTB, MIFX, Exness), sesuai audit. P1–P5 rancangan ini hanya menyentuh backtest, tidak menyentuh Live, jadi aman dikerjakan sesudahnya. |
+
+**Yang tetap butuh keputusan Fahmi** (dari audit, bukan soal trading): pilihan mode A/B, definisi "3 lampu hijau", dan nasib gerbang biaya di demo.
