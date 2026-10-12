@@ -114,7 +114,9 @@
 
 - n ≥ 20 hanya syarat **minimum**, bukan bukti keunggulan.
 - Uji bergulir (walk-forward): data dibagi beberapa periode berurutan; aturan harus tetap untung di sebagian besar periode, bukan hanya rata-rata keseluruhan.
-- Rapor wajib memuat: hasil bersih setelah biaya, rugi terbesar per trade/rangkaian, penurunan modal terdalam (drawdown), rata-rata per trade (R dan Rupiah), jumlah sampel.
+- Rapor wajib memuat: hasil bersih setelah biaya, rugi terbesar per trade/rangkaian, penurunan modal terdalam (drawdown), rata-rata per trade (R dan Rupiah), jumlah sampel, rasio menang/rugi, sebaran hasil (bukan hanya rata-rata), dan rentang ketidakpastian.
+- Hasil dipisah per golongan, per versi aturan, per jenis akun (demo/Live), dan per sesi; kelompok yang berbeda tidak digabung.
+- Ukuran "peluang backtest hanya kebetulan" (Probability of Backtest Overfitting, Bailey dkk.) dipakai sebagai pelengkap, bukan sertifikat bahwa aturan pasti bekerja.
 - Peringatan "terlalu banyak yang diuji": semakin banyak pola atau sidik jari yang diuji, semakin banyak yang tampak bagus karena kebetulan. Semua kandidat yang diuji dicatat, termasuk yang gagal, dan pemenang wajib lolos data ujian yang belum pernah dipakai untuk memilih.
 
 ## 5. Urutan langkah usulan (satu langkah kecil per giliran)
@@ -291,6 +293,8 @@ Sejak open 1, beberapa "tim" bekerja bersamaan. Setiap tim adalah modul aturan m
 **Aturan penyimpanan:**
 
 - Setiap kartu menyimpan jam UTC, jam server, jam diterima MDBKA, versi aturan/strategi, dan versi spesifikasi simbol yang berlaku saat itu (13 Okt 2026).
+- Setiap kartu juga menyimpan semua nilai masukan dan semua penjaga yang lulus atau gagal (bukan hanya yang pertama gagal), sehingga keputusan bisa diputar ulang persis.
+- Kartu hanya dipakai sebagai bahan bakar analisa SETELAH rangkaiannya selesai; rangkaian yang masih berjalan tidak boleh memengaruhi analisa lain.
 - Setiap rangkaian menghasilkan kartu baru dengan nomor sendiri (misalnya "Kasbi Bakar #0001"). Kartu tidak pernah digabung, ditimpa, atau dihapus; disimpan bertambah terus (append-only, seperti `entries-<broker>.jsonl`).
 - Kartu lama dari trade sebelum alur ini hanya boleh dibuat dari data yang memang ada, dan diberi tanda "data tidak lengkap". Tidak ada angka yang dikarang.
 
