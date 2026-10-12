@@ -40,7 +40,10 @@ async function main(): Promise<number> {
   // E2b: H4 asli dari MT5 (ExportLongH1MDBKA InpPeriod=H4) didahulukan; tidak ada → dirakit dari H1.
   const h4File = (s: string): string => join(dir, `MDBKA_${s}_H4_LONG.csv`);
   const h4Native = (s: string): boolean => opt.timeframe === "H4" && existsSync(h4File(s));
-  const picked = pickBacktestSymbols(spreads, (s) => existsSync(longFile(s)), opt);
+  // E3: M15 hanya dari file asli MT5 (ExportLongH1MDBKA InpPeriod=M15) — tidak bisa dirakit dari H1.
+  const m15File = (s: string): string => join(dir, `MDBKA_${s}_M15_LONG.csv`);
+  const hasData = (s: string): boolean => existsSync(opt.timeframe === "M15" ? m15File(s) : longFile(s));
+  const picked = pickBacktestSymbols(spreads, hasData, opt);
   if (picked.symbols.length === 0) {
     console.error("Tidak ada simbol yang bisa diuji.", picked.notes.join("; "));
     return 1;
@@ -64,12 +67,14 @@ async function main(): Promise<number> {
       const run = runBacktest({
         symbol,
         brokerId: opt.brokerId,
-        csv: h4Native(symbol)
+        csv: opt.timeframe === "M15"
+          ? readFileSync(m15File(symbol), "utf8")
+          : h4Native(symbol)
           ? readFileSync(h4File(symbol), "utf8")
           : opt.timeframe === "H4"
             ? aggregateCandleCsv(readFileSync(longFile(symbol), "utf8"), 4)
             : readFileSync(longFile(symbol), "utf8"),
-        ...(opt.timeframe === "H4" ? { barHours: 4 } : {}),
+        ...(opt.timeframe === "H4" ? { barHours: 4 } : opt.timeframe === "M15" ? { barHours: 0.25 } : {}),
         equity,
         fxRates: rates,
         spread: spreads.get(symbol) ?? 0,
@@ -109,7 +114,7 @@ async function main(): Promise<number> {
         : opt.timeStopHours === null
           ? "TANPA batas (percobaan)"
           : `${opt.timeStopHours} jam (percobaan)`,
-    timeframe: opt.timeframe === "H4" ? "H4 (dirakit dari 4 candle H1)" : "H1",
+    timeframe: opt.timeframe === "H4" ? "H4 (dirakit dari 4 candle H1)" : opt.timeframe === "M15" ? "M15 (file asli MT5)" : "H1",
     topUp,
     retestEquityUsd,
     judged,

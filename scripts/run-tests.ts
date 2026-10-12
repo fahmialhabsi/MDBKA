@@ -8613,6 +8613,20 @@ test("668. P1 scalping: JUAL = cermin BELI; terdaftar di rak strategi (--strateg
   assert(via.decision === "BELI", "lewat rak = sama");
 });
 
+test("669. E3 alat uji M15 (scalping): --timeframe M15 diterima, file asli MT5 M15, lama candle 0,25 jam; H1/H4 lama tetap", () => {
+  const m15 = parseBacktestArgs(["--broker", "mifx", "--equity", "10000", "--timeframe", "m15", "--strategi", "scalping"]);
+  assert(m15.ok && m15.options.timeframe === "M15" && m15.options.strategy === "scalping", JSON.stringify(m15));
+  const salah = parseBacktestArgs(["--broker", "finex", "--equity", "100", "--timeframe", "M5"]);
+  assert(!salah.ok && salah.error.includes("M15"), "M5 tetap ditolak (data tidak ada)");
+  const mq = readSrc("ea/ExportLongH1MDBKA.mq5");
+  assert(mq.includes("InpPeriod != PERIOD_H1 && InpPeriod != PERIOD_H4 && InpPeriod != PERIOD_M15") && mq.includes('tf = "M15";'), "script MT5 M15");
+  const src = readSrc("scripts/backtest.ts");
+  assert(src.includes("MDBKA_${s}_M15_LONG.csv") && src.includes("{ barHours: 0.25 }") && src.includes("M15 (file asli MT5)"), "backtest baca M15 asli");
+  const spreads = new Map([["GBPUSD.m", 0.0002]]);
+  const pick = pickBacktestSymbols(spreads, () => false, { groups: null, symbols: ["GBPUSD.m"], timeframe: "M15" });
+  assert(pick.notes.some((n) => n.includes("MDBKA_GBPUSD.m_M15_LONG.csv belum ada")), JSON.stringify(pick.notes));
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

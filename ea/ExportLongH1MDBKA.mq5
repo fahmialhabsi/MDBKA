@@ -7,11 +7,12 @@
 //| Tidak menyentuh file live MDBKA_<simbol>_H1.csv / service lama.  |
 //| E2b (12 Okt 2026): pilihan InpPeriod. H1 (default) = perilaku B1 |
 //| persis; H4 -> Common\Files\MDBKA_<simbol>_H4_LONG.csv.           |
+//| E3 (12 Okt 2026): M15 -> MDBKA_<simbol>_M15_LONG.csv (scalping). |
 //+------------------------------------------------------------------+
 #property script_show_inputs
 
-input ENUM_TIMEFRAMES InpPeriod = PERIOD_H1; // timeframe: H1 (default) atau H4
-input int InpCandleCount = 5000;   // jumlah candle tertutup (H1 ~10 bulan; H4 ~3 tahun)
+input ENUM_TIMEFRAMES InpPeriod = PERIOD_H1; // timeframe: H1 (default), H4, atau M15
+input int InpCandleCount = 5000;   // jumlah candle tertutup (H1 ~10 bulan; H4 ~3 tahun; M15: isi 30000 ~1,2 tahun)
 input int InpRetry       = 5;      // coba ulang bila histori masih diunduh
 
 //--- baca candle (coba ulang selama MT5 mengunduh histori), lalu tulis file
@@ -35,6 +36,8 @@ int ExportLong(const string symbol, const int candleCount)
       }
 
    string tf = (InpPeriod == PERIOD_H4) ? "H4" : "H1";
+   if(InpPeriod == PERIOD_M15)
+      tf = "M15";
    string filename = "MDBKA_" + symbol + "_" + tf + "_LONG.csv";
    int handle = FileOpen(filename, FILE_COMMON | FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
    if(handle == INVALID_HANDLE)
@@ -68,9 +71,9 @@ int ExportLong(const string symbol, const int candleCount)
 
 void OnStart()
    {
-   if(InpPeriod != PERIOD_H1 && InpPeriod != PERIOD_H4)
+   if(InpPeriod != PERIOD_H1 && InpPeriod != PERIOD_H4 && InpPeriod != PERIOD_M15)
       {
-      Print("GAGAL: InpPeriod wajib H1 atau H4 (yang dibaca MDBKA).");
+      Print("GAGAL: InpPeriod wajib H1, H4, atau M15 (yang dibaca MDBKA).");
       return;
       }
    PrintFormat("=== ExportLongH1MDBKA START (%s) | %s | %d candle/simbol ===",

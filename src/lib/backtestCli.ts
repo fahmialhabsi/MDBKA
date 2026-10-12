@@ -21,8 +21,8 @@ export interface BacktestCliOptions {
   readonly strategy: StrategyId;
   /** E1: percobaan batas waktu Forex (jam); absen = 3 jam (live); null = tanpa batas. */
   readonly timeStopHours?: number | null;
-  /** E2: timeframe uji (H1 = data asli; H4 = dirakit dari H1). */
-  readonly timeframe: "H1" | "H4";
+  /** E2: timeframe uji (H1 = data asli; H4 = dirakit dari H1). E3: M15 = file asli MT5 (scalping). */
+  readonly timeframe: "H1" | "H4" | "M15";
 }
 
 export type ParsedArgs =
@@ -30,7 +30,7 @@ export type ParsedArgs =
   | { readonly ok: false; readonly error: string };
 
 export const BACKTEST_USAGE =
-  "Pakai: npm run backtest -- --broker finex|otb|mifx --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD] [--strategi skor] [--batas-waktu 3|6|12|0] [--timeframe H1|H4]";
+  "Pakai: npm run backtest -- --broker finex|otb|mifx --equity 10000 [--grup FOREX,FOREX_JPY] [--simbol GBPUSD,EURUSD] [--strategi skor] [--batas-waktu 3|6|12|0] [--timeframe H1|H4|M15]";
 
 const GROUP_IDS: readonly RiskGroupId[] = [
   "FOREX", "FOREX_JPY", "FOREX_TIDAK_LAZIM", "LOGAM", "MINYAK", "INDEKS",
@@ -87,10 +87,10 @@ export function parseBacktestArgs(argv: readonly string[]): ParsedArgs {
     timeStopHours = h === 0 ? null : h;
   }
   const tfRaw = (get("--timeframe") ?? "H1").toUpperCase();
-  if (tfRaw !== "H1" && tfRaw !== "H4") {
-    return { ok: false, error: `Timeframe wajib H1 atau H4. ${BACKTEST_USAGE}` };
+  if (tfRaw !== "H1" && tfRaw !== "H4" && tfRaw !== "M15") {
+    return { ok: false, error: `Timeframe wajib H1, H4, atau M15. ${BACKTEST_USAGE}` };
   }
-  const timeframe: "H1" | "H4" = tfRaw;
+  const timeframe: "H1" | "H4" | "M15" = tfRaw;
   return {
     ok: true,
     options: {
@@ -121,7 +121,7 @@ export function parseSpreadsFromMargin(text: string): Map<string, number> {
 export function pickBacktestSymbols(
   spreads: ReadonlyMap<string, number>,
   hasLongFile: (symbol: string) => boolean,
-  options: Pick<BacktestCliOptions, "groups" | "symbols">,
+  options: Pick<BacktestCliOptions, "groups" | "symbols"> & { readonly timeframe?: BacktestCliOptions["timeframe"] },
 ): { symbols: string[]; notes: string[] } {
   const notes: string[] = [];
   const wanted = options.symbols?.map((s) => s.toUpperCase()) ?? null;
@@ -130,7 +130,7 @@ export function pickBacktestSymbols(
     if (wanted !== null && !wanted.includes(symbol.toUpperCase())) continue;
     if (options.groups !== null && !options.groups.includes(riskGroupOf(symbol).id)) continue;
     if (!hasLongFile(symbol)) {
-      notes.push(`${symbol}: file MDBKA_${symbol}_H1_LONG.csv belum ada (jalankan ExportLongH1MDBKA)`);
+      notes.push(`${symbol}: file MDBKA_${symbol}_${options.timeframe === "M15" ? "M15" : "H1"}_LONG.csv belum ada (jalankan ExportLongH1MDBKA)`);
       continue;
     }
     symbols.push(symbol);
