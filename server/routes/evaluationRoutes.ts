@@ -50,6 +50,8 @@ export function brokerFromCompany(company: string): BrokerId | null {
   if (/finex/i.test(company)) return "finex";
   // M1b: PT Monex Investindo Futures (MIFX).
   if (/monex/i.test(company)) return "mifx";
+  // X3c (12 Okt 2026): Exness Technologies Ltd — kalender, sesi, spesifikasi & bukti History.
+  if (/exness/i.test(company)) return "exness";
   return null;
 }
 

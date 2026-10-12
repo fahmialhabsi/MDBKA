@@ -278,6 +278,8 @@ async function startServer() {
     { broker: "orbitraderberjangka" as const, positions: positionsReader, quotes: quotesReader, equity: reader },
     { broker: "finex" as const, positions: positionsReaderFinex, quotes: quotesReaderFinex, equity: readerFinex },
     { broker: "mifx" as const, positions: positionsReaderMifx, quotes: quotesReaderMifx, equity: readerMifx },
+    // X3c: catatan entry Exness — equity SUDAH USD (IdrEquitySource), jadi risiko % benar.
+    { broker: "exness" as const, positions: positionsReaderExness, quotes: quotesReaderExness, equity: readerExness },
   ];
   for (const src of entrySources) {
     if (src.positions === null || src.quotes === null) continue;

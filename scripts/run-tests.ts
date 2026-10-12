@@ -8760,6 +8760,13 @@ test("676. X3b spesifikasi Exness XAUUSDm masuk mesin analisa: kontrak 100, tick
   assert(applyBrokerPreset(empty, "BTCUSDm", "exness") === empty, "kripto: tanpa angka tebakan");
 });
 
+test("677. X3c History/kalender/sesi/spesifikasi Exness dikenali (Company Exness → exness); catatan entry Exness memakai equity USD", () => {
+  assert(brokerFromCompany("Exness Technologies Ltd") === "exness", "Exness");
+  assert(brokerFromCompany("PT Monex Investindo Futures") === "mifx" && brokerFromCompany("PT. Orbi Trade Berjangka") === "orbitraderberjangka" && brokerFromCompany("Lain") === null, "broker lain tetap");
+  const idx = readSrc("server/index.ts");
+  assert(idx.includes('{ broker: "exness" as const, positions: positionsReaderExness, quotes: quotesReaderExness, equity: readerExness }'), "entry log Exness (equity terkonversi)");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
