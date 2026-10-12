@@ -23,6 +23,8 @@ import { readSpecsForBroker } from "./services/specReader";
 import { specHoldMap } from "../src/lib/specCompare";
 import { runExcursionPass, startExcursionSchedule } from "./services/excursionJob";
 import { MT5LogReader } from "./services/mt5LogReader";
+import { IdrEquitySource, parseAccountCurrency, type EquitySource } from "./services/convertedEquity";
+import { readUsdIdrBook, usdIdrOn } from "./services/ecbHistory";
 import { QuotesLogReader } from "./services/quotesLogReader";
 import { PositionsLogReader } from "./services/positionsLogReader";
 import {
@@ -102,7 +104,26 @@ const quotesReaderExness =
 const positionsReaderExness =
   exnessPositionsLogPath.trim() !== "" ? new PositionsLogReader(exnessPositionsLogPath) : null;
 
+// X2 (12 Okt 2026): equity Exness. equity.csv tidak mencatat mata uang akun →
+// ditetapkan di .env (MT5_ACCOUNT_CURRENCY_EXNESS=IDR). IDR dibagi kurs ECB hari
+// kerja terakhir (buku data/fx/ecb-usdidr.json); kurs tak ada → 404 jujur.
+// Mata uang tak dikenal → equity TIDAK dilayani (bukan ditebak).
+const exnessLogPath = process.env.MT5_LOG_PATH_EXNESS ?? "";
+const exnessCurrency = parseAccountCurrency(process.env.MT5_ACCOUNT_CURRENCY_EXNESS);
+const rawReaderExness = exnessLogPath.trim() !== "" ? new MT5LogReader(exnessLogPath) : null;
+const ecbBookFile = path.join(process.cwd(), "data", "fx", "ecb-usdidr.json");
+const readerExness: EquitySource | null =
+  rawReaderExness === null || exnessCurrency === null
+    ? null
+    : exnessCurrency === "USD"
+      ? rawReaderExness
+      : new IdrEquitySource(
+          rawReaderExness,
+          () => usdIdrOn(readUsdIdrBook(ecbBookFile), new Date().toISOString().slice(0, 10))?.rate ?? null,
+        );
+
 const stopWatching = reader.startWatching();
+if (rawReaderExness !== null) rawReaderExness.startWatching();
 if (readerMifx !== null) readerMifx.startWatching();
 if (readerFinex !== null) readerFinex.startWatching();
 
@@ -169,6 +190,7 @@ const app = createApp(reader, quotesReader, readerFinex, quotesReaderFinex, {
   quotes: quotesReaderMifx,
   positions: positionsReaderMifx,
 }, {
+  equity: readerExness,
   quotes: quotesReaderExness,
   positions: positionsReaderExness,
 });
@@ -348,6 +370,7 @@ function shutdown(): void {
   if (quotesReaderMifx !== null) quotesReaderMifx.destroy();
   if (positionsReaderMifx !== null) positionsReaderMifx.destroy();
   if (quotesReaderExness !== null) quotesReaderExness.destroy();
+  if (rawReaderExness !== null) rawReaderExness.stopWatching();
   if (positionsReaderExness !== null) positionsReaderExness.destroy();
   excursionSchedule?.stop();
   serverPromise

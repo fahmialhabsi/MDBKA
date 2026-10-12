@@ -8,6 +8,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import type { MT5LogReader } from "./services/mt5LogReader";
+import type { EquitySource } from "./services/convertedEquity";
 import { createEquityRoutes } from "./routes/equityRoutes";
 import { createQuotesRoutes } from "./routes/quotesRoutes";
 import { createFxRoutes } from "./routes/fxRoutes";
@@ -58,10 +59,11 @@ export function createApp(
     readonly positions: PositionsLogReader | null;
   } | null = null,
   /**
-   * X1b (12 Okt 2026): sumber live Exness — harga & posisi saja. Equity SENGAJA
-   * belum dilayani (akun IDR; tanpa konversi X2 angka Rupiah terbaca sebagai USD).
+   * X1b (12 Okt 2026): sumber live Exness — harga & posisi.
+   * X2: equity Exness dilayani SESUDAH dikonversi IDR→USD (IdrEquitySource); null = 404 jujur.
    */
   exness: {
+    readonly equity?: EquitySource | null;
     readonly quotes: QuotesLogReader | null;
     readonly positions: PositionsLogReader | null;
   } | null = null,
@@ -74,7 +76,7 @@ export function createApp(
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  app.use("/api/equity", createEquityRoutes(reader, readerFinex, mifx?.equity ?? null));
+  app.use("/api/equity", createEquityRoutes(reader, readerFinex, mifx?.equity ?? null, exness?.equity ?? null));
   app.use("/api/quotes", createQuotesRoutes(quotesReader, quotesReaderFinex, mifx?.quotes ?? null, exness?.quotes ?? null));
   app.use("/api/fx", createFxRoutes());
   // Item (e): margin per lot dari OrderCalcMargin MT5 (Common\Files).

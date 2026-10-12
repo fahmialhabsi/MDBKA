@@ -311,6 +311,7 @@ import {
 import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
 import { readSpecsForBroker } from "../server/services/specReader";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
+import { convertIdrSnapshot, IdrEquitySource, parseAccountCurrency } from "../server/services/convertedEquity";
 import { getMifxSpec, MIFX_SPEC_SYMBOLS, mifxVolume } from "../src/lib/mifxSpecs";
 import { mandatoryStop } from "../src/lib/mandatoryStop";
 import { estimateSwap, swapChargeDays } from "../src/lib/swapEstimate";
@@ -7936,7 +7937,7 @@ test("628. M3a server: sumber live MIFX (equity/quotes/positions/candles) dari .
   const app = readSrc("server/app.ts");
   // X1b (12 Okt 2026): diubah sengaja — quotes/positions/candles kini juga menerima sumber Exness sesudah MIFX,
   // jadi ")" penutup dilepas; inti uji (sumber MIFX terpasang) tetap.
-  for (const s of ["createEquityRoutes(reader, readerFinex, mifx?.equity ?? null)", "createQuotesRoutes(quotesReader, quotesReaderFinex, mifx?.quotes ?? null", "createPositionsRoutes(positionsReader, positionsReaderFinex, mifx?.positions ?? null", "mifx?.quotes ?? null"]) {
+  for (const s of ["createEquityRoutes(reader, readerFinex, mifx?.equity ?? null", "createQuotesRoutes(quotesReader, quotesReaderFinex, mifx?.quotes ?? null", "createPositionsRoutes(positionsReader, positionsReaderFinex, mifx?.positions ?? null", "mifx?.quotes ?? null"]) {
     assert(app.includes(s), s);
   }
   assert(readSrc(".env.example").includes("QUOTES_LOG_PATH_MIFX="), ".env.example");
@@ -8705,9 +8706,35 @@ test("673. X1b server melayani Exness dari terminalnya sendiri: harga & posisi; 
   assert(pickLiveSource("exness", def, fin, mifx, ex) === ex && pickLiveSource("mifx", def, fin, mifx, ex) === mifx, "sumber per broker terpisah");
   const app = readSrc("server/app.ts");
   assert(app.includes("mifx?.quotes ?? null, exness?.quotes ?? null") && app.includes("mifx?.positions ?? null, exness?.positions ?? null"), "harga, candle & posisi Exness");
-  assert(app.includes('createEquityRoutes(reader, readerFinex, mifx?.equity ?? null)'), "equity Exness SENGAJA tidak dipasang (akun IDR, menunggu X2)");
+  // X2 (12 Okt 2026): diubah sengaja — equity Exness kini dipasang SESUDAH dikonversi IDR→USD (uji 674).
+  assert(app.includes('mifx?.equity ?? null, exness?.equity ?? null'), "equity Exness lewat konversi (X2)");
   const idx = readSrc("server/index.ts");
-  assert(idx.includes("QUOTES_LOG_PATH_EXNESS") && idx.includes("POSITIONS_LOG_PATH_EXNESS") && !idx.includes("MT5_LOG_PATH_EXNESS"), "env Exness tanpa equity");
+  // X2: equity Exness kini dibaca (MT5_LOG_PATH_EXNESS) — wajib lewat konversi mata uang.
+  assert(idx.includes("QUOTES_LOG_PATH_EXNESS") && idx.includes("POSITIONS_LOG_PATH_EXNESS") && idx.includes("new IdrEquitySource("), "env Exness + equity terkonversi");
+});
+
+test("674. X2 equity akun IDR (Exness) dikonversi ke USD kurs ECB; kurs tak ada / mata uang kosong → tidak dilayani", () => {
+  // Data nyata equity.csv Exness 12 Okt: balance 10.464.706,50; equity 12.164.794; margin 1.013.510,51; level 1200,26%.
+  const raw = {
+    timestamp: "2026-10-12T06:43:32Z", balance: 10464706.5, equity: 12164794, profit: 1700087.5,
+    lastModified: "2026-10-12T06:43:32Z", leverage: 2000, margin: 1013510.51, freeMargin: 11151283.49, marginLevel: 1200.26,
+  };
+  const usd = convertIdrSnapshot(raw, 17880.55);
+  assert(usd.balance === 585.26 && usd.equity === 680.34 && usd.profit === 95.08, JSON.stringify(usd));
+  assert(usd.margin === 56.68 && usd.freeMargin === 623.65 && usd.marginLevel === 1200.26 && usd.leverage === 2000, "margin dikonversi, rasio & leverage tetap");
+  assert(parseAccountCurrency("idr") === "IDR" && parseAccountCurrency("USD") === "USD", "IDR/USD");
+  assert(parseAccountCurrency("") === null && parseAccountCurrency(undefined) === null && parseAccountCurrency("EUR") === null, "kosong/tak dikenal TIDAK dianggap USD");
+  let rate: number | null = 17880.55;
+  const listeners: Array<(s: typeof raw) => void> = [];
+  const inner = { getLatest: () => raw, refresh: () => raw, onUpdate: (cb: (s: typeof raw) => void) => { listeners.push(cb); return () => undefined; } };
+  const src = new IdrEquitySource(inner, () => rate);
+  assert(src.getLatest()?.equity === 680.34, "lewat pembungkus");
+  const got: number[] = [];
+  src.onUpdate((s) => got.push(s.equity));
+  listeners[0](raw);
+  rate = null;
+  listeners[0](raw);
+  assert(src.getLatest() === null && got.join(",") === "680.34", "kurs hilang → tidak ada angka (404 jujur), bukan Rupiah sebagai USD");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

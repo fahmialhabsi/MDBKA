@@ -9,6 +9,7 @@
 
 import { Router, type Request, type Response } from "express";
 import type { MT5LogReader } from "../services/mt5LogReader";
+import type { EquitySource } from "../services/convertedEquity";
 import type { EquitySnapshot } from "../types/equity";
 import {
   pickLiveSource,
@@ -26,13 +27,14 @@ function selectReader(
   reader: MT5LogReader,
   readerFinex: MT5LogReader | null,
   readerMifx: MT5LogReader | null = null,
-): MT5LogReader | null {
+  readerExness: EquitySource | null = null,
+): EquitySource | null {
   const broker = resolveLiveBroker(req.query.broker);
   if (broker === null) {
     res.status(400).json({ error: "Unknown broker (use finex|orbitraderberjangka)" });
     return null;
   }
-  const active = pickLiveSource(broker, reader, readerFinex, readerMifx);
+  const active = pickLiveSource<EquitySource>(broker, reader, readerFinex, readerMifx, readerExness);
   if (active === null) {
     res.status(404).json({
       error: `Live source not configured for broker ${broker}`,
@@ -46,12 +48,14 @@ export function createEquityRoutes(
   reader: MT5LogReader,
   readerFinex: MT5LogReader | null = null,
   readerMifx: MT5LogReader | null = null,
+  /** X2: equity Exness SUDAH dikonversi ke USD (IdrEquitySource). */
+  readerExness: EquitySource | null = null,
 ): Router {
   const router = Router();
 
   router.get("/latest", (_req: Request, res: Response) => {
     try {
-      const active = selectReader(_req, res, reader, readerFinex, readerMifx);
+      const active = selectReader(_req, res, reader, readerFinex, readerMifx, readerExness);
       if (active === null) return;
       const snapshot = active.getLatest() ?? active.refresh();
       if (snapshot === null) {
@@ -68,7 +72,7 @@ export function createEquityRoutes(
 
   router.get("/stream", (req: Request, res: Response) => {
     try {
-      const active = selectReader(req, res, reader, readerFinex, readerMifx);
+      const active = selectReader(req, res, reader, readerFinex, readerMifx, readerExness);
       if (active === null) return;
 
       res.writeHead(200, {
