@@ -1,6 +1,7 @@
 import { getInstrumentProfile } from "./instrumentConfig";
 import { getOtbInstrumentProfile } from "./otbInstrumentConfig";
 import { getMifxSpec } from "./mifxSpecs";
+import { getExnessSpec } from "./exnessSpecs";
 
 /**
  * Ukuran 1 tick untuk simbol (dipakai sebagai spread minimal placeholder
@@ -12,6 +13,9 @@ export function tickSizeForSymbol(symbol: string): number {
   // M4a: simbol MIFX (".m", OIL_NEXT) dari Specification MT5 MIFX (NQ.m 0.01, DJ.m 1, USDJPY.m 0.001).
   const mifx = getMifxSpec(symbol);
   if (mifx !== null && mifx.tickSize > 0) return mifx.tickSize;
+  // X3b: Exness (XAUUSDm 0.001).
+  const exness = getExnessSpec(symbol);
+  if (exness !== null && exness.tickSize > 0) return exness.tickSize;
   const otb = getOtbInstrumentProfile(symbol.trim().toUpperCase());
   if (otb !== null && otb.tickSize > 0) return otb.tickSize;
   const profile = getInstrumentProfile(symbol);

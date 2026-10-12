@@ -2223,7 +2223,9 @@ const fallbackProfile: InstrumentProfile = {
 };
 
 export function normalizeSymbol(symbol: string): string {
-  const raw = symbol.trim().toUpperCase();
+  // X3b: akhiran Exness = "m" KECIL (XAUUSDm → XAUUSD); nama huruf besar lain tidak tersentuh.
+  const trimmed = symbol.trim();
+  const raw = (/^[A-Z0-9]+m$/.test(trimmed) ? trimmed.slice(0, -1) : trimmed).toUpperCase();
   if (!raw) return "";
 
   // Ambil kode simbol di depan; buang suffix broker dan sisa label

@@ -9,6 +9,7 @@ import { DEFAULT_BROKER_ID, ORBITRADER_BROKER_ID } from "./brokerRegistry";
 import { exactOtbSymbol } from "./brokerSymbols";
 import { getOtbInstrumentProfile } from "./otbInstrumentConfig";
 import { getMifxSpec, mifxVolume } from "./mifxSpecs";
+import { exnessVolume, getExnessSpec } from "./exnessSpecs";
 import { getSpec32FormDefaults } from "./spec32Wiring";
 import { traceOcrStage } from "./debugTrace";
 
@@ -532,6 +533,32 @@ export function applyBrokerPreset(
     const spec = getMifxSpec(symbol);
     if (spec === null || spec.status !== "VERIFIED") return previous;
     const vol = mifxVolume(symbol);
+    return {
+      ...previous,
+      pointValue: spec.leverage,
+      contractSize: spec.leverage,
+      commission:
+        force || needsFill(previous.commission) || isBrokerDefaultCommission(previous.commission)
+          ? spec.commission
+          : previous.commission,
+      riskPercent: needsFill(previous.riskPercent) ? STRATEGY_DEFAULTS.riskPercent : previous.riskPercent,
+      minLot:
+        needsFill(previous.minLot) || previous.minLot < vol.minVolume || isStockDefaultMinLot(previous.minLot)
+          ? vol.minVolume
+          : previous.minLot,
+      lotStep: vol.volumeStep,
+      buffer: Number((spec.tickSize * 5).toPrecision(10)),
+      atrMultiplier: needsFill(previous.atrMultiplier) ? STRATEGY_DEFAULTS.atrMultiplier : previous.atrMultiplier,
+      targetRR: needsFill(previous.targetRR) ? STRATEGY_DEFAULTS.targetRR : previous.targetRR,
+    };
+  }
+
+  if (brokerId === "exness") {
+    // X3b: Exness dari exnessSpecs.ts — kontrak, komisi 0 (terbukti History), lot 0.01,
+    // buffer 5 tick. Simbol bukan Exness terverifikasi → previous apa adanya.
+    const spec = getExnessSpec(symbol);
+    if (spec === null || spec.status !== "VERIFIED") return previous;
+    const vol = exnessVolume();
     return {
       ...previous,
       pointValue: spec.leverage,

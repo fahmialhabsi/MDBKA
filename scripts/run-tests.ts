@@ -253,6 +253,7 @@ import { DEFAULT_STRATEGY_ID, getStrategy, parseStrategyId, STRATEGIES, STRATEGY
 import { bearishRejection, bullishRejection, CANDLE_PARAMS, candleSetup, trendFromSwings } from "../src/lib/candleStrategy";
 import { isBearishEngulfing, isBullishEngulfing, scalpSetup, SCALP_PARAMS, smaSeries, stochasticK } from "../src/lib/scalpStrategy";
 import { ABC_PARAMS, abcSetup, findBullishAbc } from "../src/lib/abcStrategy";
+import { EXNESS_SPECS, getExnessSpec } from "../src/lib/exnessSpecs";
 import { aggregateCandleCsv } from "../src/lib/candleAggregate";
 import { capitalLines, formatBacktestReport, parseBacktestArgs, parseSpreadsFromMargin, pickBacktestSymbols } from "../src/lib/backtestCli";
 import {
@@ -8743,6 +8744,20 @@ test("675. X3a nama simbol Exness (akhiran m kecil) dikenal golongan risiko & be
   assert(newsCurrenciesOf("EURUSDm").join(",") === "EUR,USD" && newsCurrenciesOf("XAUUSDm").join(",") === "USD", "berita ikut mata uang aslinya");
   assert(baseRiskSymbol("#IBM") === "#IBM" && baseRiskSymbol("META.US") === "META.US" && baseRiskSymbol("XAUUSD.m") === "XAUUSD" && baseRiskSymbol("NQ.m") === "US100", "broker lain tidak rusak");
   assert(baseRiskSymbol("BTCUSDm") === "BTCUSD" && riskGroupOf("BTCUSDm").capIdr === null, "kripto Exness belum punya golongan → ditahan");
+});
+
+test("676. X3b spesifikasi Exness XAUUSDm masuk mesin analisa: kontrak 100, tick 0.001 ($0.1/lot), komisi 0, lot 0.01; simbol lain jujur kosong", () => {
+  const xau = getExnessSpec("XAUUSDm");
+  assert(xau !== null && xau.leverage === 100 && xau.tickSize === 0.001 && xau.commission === 0 && xau.status === "VERIFIED", "spec XAUUSDm");
+  assert(xau !== null && Math.abs(1787.78503 / 17877.8503 - xau.tickValue) < 1e-9, "tickValue IDR CSV → USD dengan kurs tersirat CSV");
+  assert(Object.keys(EXNESS_SPECS).join(",") === "XAUUSDm" && getExnessSpec("BTCUSDm") === null && getExnessSpec("EURUSDm") === null, "hanya yang terverifikasi");
+  assert(getInstrumentSpec32("XAUUSDm")?.broker === "exness" && tickSizeForSymbol("XAUUSDm") === 0.001, "lookup & tick");
+  assert(canonicalSymbolForBroker("XAUUSDm", "exness") === "XAUUSDm" && canonicalSymbolForBroker("BTCUSDm", "exness") === "", "nama persis / tak dikenal");
+  assert(normalizeSymbol("XAUUSDm") === "XAUUSD" && normalizeSymbol("GBPUSD.pro") === "GBPUSD", "skala harga profil XAUUSD");
+  const empty: BrokerSettings = { equity: 585, riskPercent: 0, minLot: 0, lotStep: 0, pointValue: 0, contractSize: 0, commission: 0, slippage: 0, buffer: 0, atrMultiplier: 0, targetRR: 0 };
+  const b = applyBrokerPreset(empty, "XAUUSDm", "exness");
+  assert(b.contractSize === 100 && b.pointValue === 100 && b.commission === 0 && b.minLot === 0.01 && b.lotStep === 0.01 && b.buffer === 0.005, JSON.stringify(b));
+  assert(applyBrokerPreset(empty, "BTCUSDm", "exness") === empty, "kripto: tanpa angka tebakan");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

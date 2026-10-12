@@ -7,6 +7,7 @@ import { ORBITRADER_BROKER_ID } from "../lib/brokerRegistry";
 import { isOtbSymbolVerified } from "../lib/brokerSymbols";
 import { getOtbInstrumentProfile } from "../lib/otbInstrumentConfig";
 import { getMifxSpec } from "../lib/mifxSpecs";
+import { getExnessSpec } from "../lib/exnessSpecs";
 import { getInstrumentProfile } from "../lib/instrumentConfig";
 import { traceOcrStage } from "../lib/debugTrace";
 
@@ -65,7 +66,9 @@ export function validateAnalysisInputs(
       (brokerId === ORBITRADER_BROKER_ID &&
         getOtbInstrumentProfile(market.symbol) !== null) ||
       // M4a-2: simbol MIFX terverifikasi (Specification MIFX).
-      (brokerId === "mifx" && getMifxSpec(market.symbol)?.status === "VERIFIED");
+      (brokerId === "mifx" && getMifxSpec(market.symbol)?.status === "VERIFIED") ||
+      // X3b: simbol Exness terverifikasi (exnessSpecs.ts).
+      (brokerId === "exness" && getExnessSpec(market.symbol)?.status === "VERIFIED");
 
     if (!otbAccepted) {
       errors.push(

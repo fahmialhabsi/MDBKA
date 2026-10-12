@@ -25,8 +25,9 @@
  */
 
 import { getMifxSpec } from "./mifxSpecs";
+import { getExnessSpec } from "./exnessSpecs";
 
-export type SpecBroker = "orbitraderberjangka" | "finex" | "mifx";
+export type SpecBroker = "orbitraderberjangka" | "finex" | "mifx" | "exness";
 
 export type SpecStatus = "VERIFIED" | "PENDING";
 
@@ -2329,7 +2330,8 @@ export const FINEX_SPECS_32: readonly string[] = Object.freeze([
 /** Lookup exact (case-sensitive); null bila simbol tidak terdaftar. */
 export function getInstrumentSpec32(symbol: string): InstrumentSpec | null {
   // M2a: simbol MIFX (".m") disimpan terpisah (mifxSpecs.ts); 150 spesifikasi lama tetap.
-  return INSTRUMENT_SPECS_32[symbol] ?? getMifxSpec(symbol);
+  // X3b: simbol Exness (akhiran "m" kecil) di exnessSpecs.ts.
+  return INSTRUMENT_SPECS_32[symbol] ?? getMifxSpec(symbol) ?? getExnessSpec(symbol);
 }
 
 /** True bila simbol terdaftar dengan status VERIFIED. */
