@@ -118,7 +118,7 @@
 | P3 | Pola double top/bottom dan breakout-retest, murni | Tidak |
 | P4 | Strategi `topdown` di registry, backtest saja | Tidak |
 | P5 | Rapor backtest latih/ujian per golongan | Tidak |
-| P5a | Bukti n ≥ 20 di panel Evaluasi dipecah per golongan (tampilan dulu). Penahan bukti F5 (`DITAHAN_BUKTI`) yang kini dinilai per broker baru diubah ke per golongan lewat langkah dan test tersendiri, karena itu mengubah perilaku sinyal Live | Tampilan dulu; penahan F5 butuh keputusan terpisah |
+| P5a | Bukti n ≥ 20 di panel Evaluasi dipecah per golongan (tampilan dulu). Penahan bukti F5 (`DITAHAN_BUKTI`) yang kini dinilai per broker baru diubah ke per golongan lewat langkah dan test tersendiri, karena itu mengubah perilaku sinyal Live | Tampilan dulu; penahan F5 butuh keputusan terpisah. **Bagian tampilan disetujui Fahmi 13 Okt 2026.** |
 | P6 | Bila layak: ekspor live D1/W1/M15 (MQL) + status SIAGA di pemindai sebagai mode uji | Tampilan saja |
 | P7 | Kumpulkan bukti n ≥ 20 di demo, kelompok terpisah | Tidak |
 
@@ -146,3 +146,61 @@ Fahmi meminta Claude memutuskan ketujuh pertanyaan berdasarkan data MDBKA. Ini *
 | 7 | Urutan dengan pekerjaan mode demo/live | **Mode demo/live dulu (2–3 langkah kecil), lalu P1–P5 rancangan ini.** | Permintaan awal hari ini adalah demo tidak terkunci. Langkah awalnya kecil dan dibatasi untuk broker tanpa akun live terdaftar (OTB, MIFX, Exness), sesuai audit. P1–P5 rancangan ini hanya menyentuh backtest, tidak menyentuh Live, jadi aman dikerjakan sesudahnya. |
 
 **Yang tetap butuh keputusan Fahmi** (dari audit, bukan soal trading): pilihan mode A/B, definisi "3 lampu hijau", dan nasib gerbang biaya di demo.
+
+## 7. Tim 2 — monitor posisi berjalan (draf, 13 Okt 2026)
+
+Selama posisi terbuka, MDBKA terus membaca gerak harga dan memberi saran: geser SL, ubah TP, keluar lebih awal, atau masuk lagi di simbol yang sama. Jendela pemantauan maksimal 3 jam per simbol (permintaan Fahmi). Semua hanya saran; Fahmi yang mengubah posisi di MT5.
+
+**Contoh nyata (Finex, 12 Okt 2026; kurs ECB terakhir 9 Okt, Rp17.880 per USD):**
+
+| Simbol | Arah, lot | Entry | SL | TP | RR | Dibuka → ditutup | Hasil |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| AUDJPY | Beli 0,01 | 110,528 | 110,379 | 110,759 | 1,55 | 02:27:27 → 19:42:24 (17 jam 15 menit, kena SL) | −$0,94 ≈ −Rp16,8 rb |
+| XAUUSD | Beli 0,01 | 4.196,84 | 4.184,03 | 4.242,03 | 3,53 | 07:51:21 → 08:28:42 (37 menit, kena SL) | −$12,81 ≈ −Rp229 rb |
+
+Catatan: RR AUDJPY di bawah batas MDBKA (minimal 2), dan time-stop 3 jam Forex seharusnya memberi aba-aba pukul 05:27.
+
+### 7.1 Yang sudah ada (`exitMonitor.ts`)
+
+- Peringatan dekat TP/SL, harga bergerak melawan posisi, dan harga bergeser dari harga analisa.
+- Saran breakeven di +0,5R (SL = entry + biaya komisi).
+- Time-stop 3 jam untuk Forex dan Forex JPY.
+- Syarat RR minimal 2 (`MIN_REWARD_RISK`).
+- Data MFE/MAE per posisi (`excursion-<broker>.jsonl`) sudah dicatat untuk menguji aturan baru.
+
+### 7.2 Yang ditambah
+
+1. Candle M15 live per simbol (tergantung ekspor EA baru, sama dengan 3.1).
+2. Saran geser SL mengikuti harga (swing M15/H1 atau ATR).
+3. Aba-aba keluar lebih awal saat struktur rusak (contoh untuk Beli: candle H1 tutup di bawah lembah swing terakhir).
+4. Saran ubah TP.
+5. Sinyal masuk lagi di simbol yang sama (7.4).
+
+### 7.3 Batas pengaman
+
+1. SL hanya boleh digeser ke arah untung, tidak pernah dijauhkan (menjauhkan = risiko melewati 1%).
+2. TP baru boleh diperpanjang setelah SL minimal di titik impas.
+3. Semua saran hanya tampilan; tidak ada order otomatis.
+4. Setiap aturan diuji dulu dengan data MFE/MAE dan backtest, dinilai per golongan (prinsip 8).
+5. Setelah jendela 3 jam: Forex dan Forex JPY tetap memakai time-stop yang sudah ada. Untuk emas, minyak, dan indeks, apa yang terjadi setelah 3 jam masih perlu diputuskan.
+
+### 7.4 Masuk lagi di simbol yang sama (keputusan Fahmi, 13 Okt 2026)
+
+- **Keputusan:** masuk lagi di simbol yang sama harus bisa, tidak lagi dianggap taruhan ganda dan tidak diblok. Tujuannya mencari tambahan profit.
+- **Catatan risiko (Claude):** dua posisi searah di simbol yang sama berarti rugi dobel bila keduanya kena SL. Contoh: bila AUDJPY 12 Okt ditambah satu posisi lagi dengan SL yang sama, rugi menjadi ±Rp33,6 rb, bukan Rp16,8 rb.
+- **Syarat yang diusulkan agar risiko total tetap dalam batas** (pola "menambah posisi" yang lazim dipakai):
+    1. Posisi pertama sudah aman: SL-nya minimal di titik impas. Dengan begitu risiko total tetap ≤ 1% equity dan batas golongan.
+    2. Posisi tambahan punya SL dan lot sendiri dari aturan biasa, dan tetap lolos penjaga lain (biaya, risiko, jeda, berita, sesi).
+    3. Maksimal posisi per simbol dibatasi (usulan: 2).
+    4. Hanya untuk simbol yang SAMA. Simbol lain yang berkaitan (misalnya AUDJPY dan AUDUSD) tetap dinilai penjaga korelasi seperti sekarang.
+    5. Dicatat sebagai kelompok bukti tersendiri ("TAMBAH") per golongan. Berlaku di demo dulu; Live tetap seperti sekarang sampai ada bukti n ≥ 20, sesuai arah audit.
+- **Perlu dipastikan Fahmi:** apakah syarat 1 (posisi pertama sudah aman) diterima, dan apakah perubahan ini berlaku di demo saja dulu.
+
+### 7.5 Langkah usulan
+
+| Langkah | Isi | Menyentuh Live? |
+| --- | --- | --- |
+| T1 | Modul murni saran geser SL dan aba-aba struktur rusak; tampilan saja; diuji dengan data MFE/MAE | Tidak |
+| T2 | Pengecualian taruhan ganda untuk simbol yang sama, dengan syarat 7.4; di demo lewat saklar mode dari audit | Tidak (demo dulu) |
+| T3 | Ekspor candle M15 live (MQL, dipasang manual) | Tidak |
+| T4 | Bukti kelompok "TAMBAH" per golongan di panel Evaluasi | Tidak |
