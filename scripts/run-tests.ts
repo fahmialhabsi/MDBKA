@@ -8767,6 +8767,21 @@ test("677. X3c History/kalender/sesi/spesifikasi Exness dikenali (Company Exness
   assert(idx.includes('{ broker: "exness" as const, positions: positionsReaderExness, quotes: quotesReaderExness, equity: readerExness }'), "entry log Exness (equity terkonversi)");
 });
 
+test("678. X4a saldo header akun Rupiah (Exness): angka History sudah Rupiah, TIDAK dikali kurs lagi; akun USD tetap", () => {
+  const info = (balance: number, deposits: number, currency: string) => ({ balance, deposits, withdrawals: 0, depositsIdr: null, currency, lastDealTime: null });
+  const rows = buildBalanceRows([
+    { login: "413925678", label: "Exness demo", balance: info(10464706.5, 11504707000, "IDR") },
+    { login: "70930952", label: "OTB demo", balance: info(4966.33, 5000, "USD") },
+  ], 17880.55);
+  const ex = rows.find((r) => r.login === "413925678");
+  assert(ex !== undefined && ex.balanceText === "Rp10.465.000" && ex.balanceUsdText === "$585,26", JSON.stringify(ex));
+  assert(ex !== undefined && ex.depositText === "Rp11.504.707.000", "setoran Rupiah apa adanya");
+  const otb = rows.find((r) => r.login === "70930952");
+  assert(otb !== undefined && otb.balanceText === "Rp88.801.000", "akun USD tetap dikali kurs");
+  const noKurs = buildBalanceRows([{ login: "1", label: "Exness demo", balance: info(10464706.5, 0, "IDR") }], null);
+  assert(noKurs[0].balanceText === "Rp10.465.000" && noKurs[0].balanceUsdText === "-", "tanpa kurs: Rupiah tetap tampil, USD '-'");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

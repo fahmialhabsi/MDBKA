@@ -50,6 +50,21 @@ export function buildBalanceRows(
     const b = a.balance;
     if (b === undefined) continue;
     const isLive = /live|real/i.test(a.label);
+    // X4a (12 Okt 2026): akun ber-mata-uang Rupiah (Exness demo) — angka History SUDAH
+    // Rupiah; jangan dikali kurs lagi (sebelumnya Rp10,4 jt tampil Rp187 miliar).
+    if (b.currency.toUpperCase() === "IDR") {
+      const toThousand = (v: number): string => idr(Math.round(v / 1000) * 1000);
+      rows.push({
+        login: a.login,
+        label: a.label,
+        isLive,
+        balanceText: toThousand(b.balance),
+        balanceUsdText: kurs !== null && Number.isFinite(kurs) && kurs > 0 ? usd(b.balance / kurs) : "-",
+        depositText: toThousand(b.deposits),
+        lastDealTime: b.lastDealTime,
+      });
+      continue;
+    }
     const depositIdr =
       b.depositsIdr !== null ? idr(b.depositsIdr) : usdToIdrText(b.deposits, kurs);
     rows.push({
