@@ -163,7 +163,7 @@ Fahmi meminta Claude memutuskan ketujuh pertanyaan berdasarkan data MDBKA. Ini *
 
 Selama posisi terbuka, MDBKA terus membaca gerak harga dan memberi saran: geser SL, ubah TP, keluar lebih awal, atau masuk lagi di simbol yang sama. Jendela pemantauan maksimal 3 jam per simbol (permintaan Fahmi). Semua hanya saran; Fahmi yang mengubah posisi di MT5.
 
-**Contoh nyata (Finex, 12 Okt 2026; kurs ECB terakhir 9 Okt, Rp17.880 per USD):**
+**Contoh nyata (akun Finex DEMO 61823011, 12 Okt 2026 — terverifikasi dari `MDBKA_History_61823011.csv`; kurs ECB terakhir 9 Okt, Rp17.880 per USD):**
 
 | Simbol | Arah, lot | Entry | SL | TP | RR | Dibuka → ditutup | Hasil |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -194,7 +194,7 @@ Catatan: RR AUDJPY di bawah batas MDBKA (minimal 2), dan time-stop 3 jam Forex s
 2. TP baru boleh diperpanjang setelah SL minimal di titik impas.
 3. Semua saran hanya tampilan; tidak ada order otomatis.
 4. Setiap aturan diuji dulu dengan data MFE/MAE dan backtest, dinilai per golongan (prinsip 8).
-5. Setelah jendela 3 jam: Forex dan Forex JPY tetap memakai time-stop yang sudah ada. Untuk emas, minyak, dan indeks, apa yang terjadi setelah 3 jam masih perlu diputuskan.
+5. Setelah jendela 3 jam (keputusan K-1, disetujui Fahmi 13 Okt 2026): Forex dan Forex JPY tetap memakai time-stop 3 jam yang sudah ada. Untuk emas, minyak, dan indeks, 3 jam hanya **masa pantau intensif**; sesudahnya posisi tetap berjalan dengan SL/TP-nya, tidak ditutup paksa.
 
 ### 7.4 Masuk lagi di simbol yang sama (keputusan Fahmi, 13 Okt 2026)
 
@@ -207,6 +207,7 @@ Catatan: RR AUDJPY di bawah batas MDBKA (minimal 2), dan time-stop 3 jam Forex s
     4. Hanya untuk simbol yang SAMA. Simbol lain yang berkaitan (misalnya AUDJPY dan AUDUSD) tetap dinilai penjaga korelasi seperti sekarang.
     5. Dicatat sebagai kelompok bukti tersendiri ("TAMBAH") per golongan. Berlaku di demo dulu; Live tetap seperti sekarang sampai ada bukti n ≥ 20, sesuai arah audit.
 - **Dipastikan Fahmi (13 Okt 2026):** syarat 1 (posisi pertama sudah aman) DITERIMA. Berlaku di SEMUA akun demo dulu; Live tetap seperti sekarang.
+- **Keputusan K-2 (disetujui Fahmi 13 Okt 2026):** OTB, MIFX, dan Exness demo boleh lebih dulu. Finex demo menunggu langkah F3 (EA menulis login), karena terminal Finex dipakai bergantian dengan akun Live.
 
 ### 7.5 Langkah usulan
 
@@ -228,7 +229,7 @@ Permintaan: analisa open pertama memperhitungkan jangka maksimal 30 menit. Tim 2
 | 00:30 | Hasil: tahan / geser SL ke titik impas / keluar lebih awal / **open 2** (hanya bila semua posisi sebelumnya sudah aman) |
 | 00:50–01:00 | Tim 2 menilai lagi; hasil di 01:00 |
 | … | Siklus berulang setiap 30 menit |
-| 03:00 | Jendela selesai: aba-aba tutup semua posisi dalam rangkaian ini, untuk semua golongan |
+| 03:00 | Jendela selesai. Forex/Forex JPY: aba-aba tutup (time-stop). Emas, minyak, indeks: masa pantau intensif selesai, posisi tetap berjalan dengan SL/TP (K-1) |
 
 Akibat syarat "semua posisi sebelumnya sudah aman": hanya posisi TERBARU yang masih berisiko, sehingga risiko total rangkaian tetap ≤ 1% equity dan batas golongan. Jumlah posisi tetap dibatasi oleh margin (maks 50% free margin, `marginGuard.ts`) dan batas jumlah per simbol (7.4 mengusulkan 2; angka final menunggu keputusan, lihat audit rancangan).
 
@@ -252,9 +253,9 @@ Akibat syarat "semua posisi sebelumnya sudah aman": hanya posisi TERBARU yang ma
     - Semua posisi sudah aman dan ada sinyal baru yang lolos penjaga → open berikutnya.
     - Selain itu → tahan.
 3. **Arah berlawanan** hanya setelah posisi lama ditutup (tidak membuka Beli dan Jual bersamaan di simbol yang sama).
-4. **Jam ke-3:** aba-aba tutup semua posisi dalam rangkaian.
+4. **Jam ke-3:** Forex/Forex JPY → aba-aba tutup semua posisi rangkaian (time-stop). Emas, minyak, indeks → pantau intensif selesai; posisi tetap berjalan dengan SL/TP (K-1).
 
-Rugi terbesar satu rangkaian = 1R. Rugi mendekati nol tidak bisa dijamin; yang dirancang adalah sebanyak mungkin rangkaian berakhir di titik impas.
+Rugi terbesar satu rangkaian = 1R (R rangkaian: lihat keputusan K-5 di `docs/AUDIT-RANCANGAN-2026-10-13.md`). Rugi mendekati nol tidak bisa dijamin; yang dirancang adalah sebanyak mungkin rangkaian berakhir di titik impas.
 
 **B. Papan nilai (per golongan, setelah ≥ 20 rangkaian)**
 
@@ -274,7 +275,7 @@ Sejak open 1, beberapa "tim" bekerja bersamaan. Setiap tim adalah modul aturan m
 | --- | --- | --- |
 | Tim 1 — Analisa | Membuat sinyal open 1 (pemindai yang sudah ada) | Status, skor, arah, entry/SL/TP, alasan |
 | Tim 2 — Monitor posisi | Saran tiap siklus 30 menit (7.6, 7.7) | Keputusan tiap siklus dan alasannya |
-| Tim 3 — Pemantau indikator | Memotret semua indikator saat entry dan tiap siklus | MA50, RSI, CCI, MACD, ATR, posisi harga terhadap MA50 (H1; M15 bila sudah ada) |
+| Tim 3 — Pemantau indikator (koordinator tim indikator, lihat `docs/RANCANGAN-2026-10-13-tim-akun-tab-indikator.md` bagian 5) | Memotret semua indikator saat entry dan tiap siklus | MA50, RSI, CCI, MACD, ATR, posisi harga terhadap MA50 (H1; M15 bila sudah ada) |
 | Tim 4 — Penguji titik lemah | Setelah rangkaian selesai, mencari kenapa TP tidak tercapai atau SL kena | Jarak SL dibanding ATR, MFE dibanding jarak TP (misalnya sempat 70% ke TP lalu berbalik), MAE sejak menit awal |
 | Tim 5 — Pembaca pola | Mencatat pola yang muncul selama posisi berjalan dan arah gerak sesudahnya | Pola (penolakan, engulfing, breakout-retest), arah sesudahnya; catatan untuk open berikutnya |
 | Tim 6 — Pencatat konteks (tambahan Claude) | Keadaan pasar saat entry | Golongan, arah D1, sesi dan jam, hari, jarak ke berita, kondisi ATR |

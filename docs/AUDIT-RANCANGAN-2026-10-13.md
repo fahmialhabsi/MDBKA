@@ -94,3 +94,33 @@ Setiap fase baru dimulai bila fase sebelumnya yang menjadi syaratnya selesai. Di
 | K-7 | Batas jumlah posisi per simbol | 2 atau 3 | 2 dulu; dinaikkan hanya bila bukti kelompok "TAMBAH" baik |
 | K-8 | Lampu 1 memakai equity akun Live dan tidak boleh MODAL KURANG | Setuju / tidak | Setuju |
 | K-9 | Masih terbuka dari audit: mode A/B, gerbang biaya di demo | — | Mode A dengan penguncian login; gerbang biaya dikeluarkan dari pelonggaran |
+
+## 6. Keputusan dan rekomendasi (13 Okt 2026, lanjutan)
+
+| # | Status | Isi |
+| --- | --- | --- |
+| K-1 | **Disetujui Fahmi** | Emas, minyak, indeks: jam ke-3 hanya akhir masa pantau intensif, posisi tetap berjalan dengan SL/TP. Forex/Forex JPY tetap time-stop 3 jam. Sudah ditulis di rancangan alur 7.3, 7.6, 7.7 |
+| K-2 | **Disetujui Fahmi** | Finex demo menunggu F3; OTB, MIFX, Exness boleh lebih dulu. Sudah ditulis di rancangan alur 7.4 dan fondasi A1 |
+| K-3 | **Diaudit atas permintaan Fahmi** | Enam login ditemukan, satu tidak berlabel: 72159716 (OTB), berisi satu setoran "Demo Deposit Awal" 5.000 USD. Tidak ada akun Live yang tidak berlabel (rincian: rancangan tim, bagian 2). **Rekomendasi:** (1) tambahkan `72159716:OTB demo 2` ke `ACCOUNT_LABELS` di `.env`; (2) aturan akun tanpa label = Live, sebagai jaring pengaman bila kelak ada akun baru yang lupa diberi label |
+| K-4 | Rekomendasi Claude, menunggu persetujuan | Bukti F5 dan jeda Live hanya menghitung entri setara Live |
+| K-5 | Rekomendasi Claude, menunggu persetujuan | R rangkaian = total untung/rugi bersih (termasuk komisi dan swap) ÷ risiko uang open 1. Contoh: open 1 berisiko Rp20 rb; open 1 ditutup impas, open 2 untung Rp30 rb → rangkaian +1,5R (Popeda Sagu) |
+| K-6 | Rekomendasi Claude, menunggu persetujuan | Sidik jari 3 tingkat. Tingkat 1: golongan + arah + arah D1. Tingkat 2: + rezim volatilitas + sesi. Tingkat 3: + pola + rentang skor. Yang dipakai adalah tingkat terdalam yang sudah punya ≥ 20 kartu |
+| K-7 | Rekomendasi Claude, menunggu persetujuan | Maksimal 2 posisi per simbol dulu; naik ke 3 hanya bila bukti kelompok "TAMBAH" baik dan risiko gabungan (E1) tetap dalam batas |
+| K-8 | Rekomendasi Claude, menunggu persetujuan | Lampu 1 wajib dijalankan dengan equity akun Live dan tidak boleh berstatus MODAL KURANG (`backtestReport.ts`). Tanpa ini, lampu 3 bisa macet karena hampir semua sinyal tertahan lot minimum |
+| K-9 | Rekomendasi Claude, menunggu persetujuan | **Mode A dengan penguncian login:** tombol Demo/Live, default Live; tombol Demo hanya aktif untuk login yang terbukti demo (sebelum F3: OTB, MIFX, Exness). **Gerbang biaya tetap aktif di demo** (tidak ikut dilonggarkan), karena melonggarkannya butuh mengubah rumus `decisionEngine.ts` dan biaya adalah sebab rugi yang sudah terbukti |
+
+**Koreksi data (13 Okt 2026):** dua trade 12 Okt di screenshot (AUDJPY dan XAUUSD) berasal dari akun **Finex demo 61823011**, terverifikasi dari `MDBKA_History_61823011.csv`, bukan akun Live. Rancangan alur 7 dan contoh JSONL di fondasi G5 sudah dikoreksi.
+
+## 7. Tambahan ke peta urutan induk
+
+Rancangan baru `docs/RANCANGAN-2026-10-13-tim-akun-tab-indikator.md` menambah langkah TA, TT, TI, dan G-7:
+
+| Fase | Langkah tambahan |
+| --- | --- |
+| 0 | TA-1, TA-2 (tampilan), TT-1, TT-2, TI-1, G-7 |
+| 1 | TT-3 (log Experts/Journal, bersama F2/F3) |
+| 4 | TT-4, TI-2 |
+| 5 | TI-3 |
+| 6 | TA-3, TI-4 |
+
+Total langkah di semua rancangan sekarang 53 + 12 = 65.

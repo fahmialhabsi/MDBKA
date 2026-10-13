@@ -23,6 +23,8 @@
 - **Fakta:** `positions.csv`, `equity.csv`, dan `quotes.csv` tidak memuat login atau jenis akun (audit, temuan 1).
 - **Usulan:** EA menulis `ACCOUNT_LOGIN` dan `ACCOUNT_TRADE_MODE` (demo/kontes/riil) di setiap baris atau di header file. Server mencocokkannya dengan `ACCOUNT_LABELS`. Bila login di file berbeda dengan label, tampil peringatan dan semua sinyal broker itu TUNGGU.
 - **Akun yang tidak terbukti demo:** rekomendasi eksternal dan saran Claude sama-sama memperlakukannya sebagai Live. Pilihan Fahmi di audit ("akun tanpa label = demo") masih berlaku sampai Fahmi memutuskan ulang.
+- **Hasil audit akun (K-3, 13 Okt 2026),** dari file di `Common\Files` dicocokkan dengan `ACCOUNT_LABELS`: ada 6 login. Lima berlabel (91811209 Finex live, 61823011 Finex demo, 70930952 OTB demo, 1003997005 MIFX demo, 413925678 Exness demo). **Satu tidak berlabel: 72159716 (PT. Orbi Trade Berjangka)**, berisi satu deal saja, yaitu setoran 5.000 USD berkomentar "Demo Deposit Awal" pada 2026.10.09 16:59. Bukti menunjukkan demo, tetapi kepastian penuh baru dari `ACCOUNT_TRADE_MODE` (F3). Rinciannya di `docs/RANCANGAN-2026-10-13-tim-akun-tab-indikator.md` bagian 2.
+- **Keputusan K-2 (disetujui Fahmi 13 Okt 2026):** pelonggaran demo untuk Finex demo menunggu F3; OTB, MIFX, dan Exness boleh lebih dulu.
 - **Catatan:** perubahan MQL, dipasang manual di keempat terminal.
 
 ### A2. Arsip tick untuk semua broker
@@ -381,16 +383,16 @@ Agar file tidak membengkak, pemindai hanya mencatat saat **status simbol berubah
 
 **Sidik jari snapshot (`sidikJariSnapshot`):** SHA-256 heksadesimal dari JSON kanonik isi snapshot. JSON kanonik = kunci diurutkan abjad, tanpa spasi, angka apa adanya. Dua snapshot dengan isi yang sama selalu menghasilkan sidik jari yang sama.
 
-**Contoh baris `keputusan`** (kerangka; angka harga dan lot dari trade nyata AUDJPY Finex 12 Okt 2026; nilai yang tidak diketahui ditulis `null`):
+**Contoh baris `keputusan`** (kerangka; angka harga dan lot dari trade nyata AUDJPY akun Finex DEMO 61823011, 12 Okt 2026; nilai yang tidak diketahui ditulis `null`):
 
 ```json
-{"skema":"keputusan/1","keputusanId":"<uuid>","jalur":"entry","waktuUtc":null,"waktuServer":"2026.10.12 02:27:27","waktuDiterima":null,"broker":"finex","login":null,"jenisAkun":null,"setaraLive":null,"simbol":"AUDJPY","golongan":"FOREX_JPY","versiSpesifikasi":null,"aturanId":"skor","versi":"1","sidikJariSnapshot":null,"masukan":{"bid":null,"ask":null,"umurKuotasiDetik":null,"candleTerakhir":null,"jumlahCandle":null,"ma50":null,"rsi":null,"cci":null,"macd":null,"atr":null,"kursUsdIdr":null,"tanggalKurs":null,"equity":null},"kualitasData":[],"penjaga":[{"nama":"sesi","hasil":"TIDAK_DINILAI","kodeAlasan":null,"sumberData":null,"umurDataDetik":null}],"hasil":{"status":null,"keputusan":"BELI","arahAsli":"BELI","entry":110.528,"sl":110.379,"tp":110.759,"lot":0.01,"risikoUsd":null,"risikoRp":null,"porsiBiaya":null,"kodeAlasanUtama":null},"sumber":"live","diubahManual":[],"mengoreksi":null}
+{"skema":"keputusan/1","keputusanId":"<uuid>","jalur":"entry","waktuUtc":null,"waktuServer":"2026.10.12 02:27:27","waktuDiterima":null,"broker":"finex","login":"61823011","jenisAkun":"demo","setaraLive":null,"simbol":"AUDJPY","golongan":"FOREX_JPY","versiSpesifikasi":null,"aturanId":"skor","versi":"1","sidikJariSnapshot":null,"masukan":{"bid":null,"ask":null,"umurKuotasiDetik":null,"candleTerakhir":null,"jumlahCandle":null,"ma50":null,"rsi":null,"cci":null,"macd":null,"atr":null,"kursUsdIdr":null,"tanggalKurs":null,"equity":null},"kualitasData":[],"penjaga":[{"nama":"sesi","hasil":"TIDAK_DINILAI","kodeAlasan":null,"sumberData":null,"umurDataDetik":null}],"hasil":{"status":null,"keputusan":"BELI","arahAsli":"BELI","entry":110.528,"sl":110.379,"tp":110.759,"lot":0.01,"risikoUsd":null,"risikoRp":null,"porsiBiaya":null,"kodeAlasanUtama":null},"sumber":"live","diubahManual":[],"mengoreksi":null}
 ```
 
 **Contoh baris `kartu_pola`** (trade yang sama; ditutup di SL pukul 19:42:24 jam server, hasil −$0,94 ≈ −Rp16.808 dengan kurs ECB 9 Okt Rp17.880,55):
 
 ```json
-{"skema":"kartu_pola/1","nomor":"Pupare Rebus #0001","label":"PUPARE_REBUS","rangkaianId":"<uuid>","broker":"finex","asal":null,"setaraLive":null,"aturanId":"skor","versi":"1","versiSpesifikasi":null,"waktuUtc":null,"sidikJari":{"golongan":"FOREX_JPY","arah":"BELI","arahD1":null,"posisiMa50":null,"rentangSkor":null,"pola":null,"sesi":null,"kondisiAtr":null},"hasil":{"r":-1.0,"usd":-0.94,"rp":-16808,"kategori":"RUGI_PENUH"},"catatanTim":{"tim3":null,"tim4":{"rrRencana":1.55,"catatan":"RR di bawah batas 2"},"tim5":null,"tim6":null,"tim6b":null,"tim7":{"komisiUsd":-0.01}},"dataTidakLengkap":true,"mengoreksi":null}
+{"skema":"kartu_pola/1","nomor":"Pupare Rebus #0001","label":"PUPARE_REBUS","rangkaianId":"<uuid>","broker":"finex","asal":"demo","setaraLive":null,"aturanId":"skor","versi":"1","versiSpesifikasi":null,"waktuUtc":null,"sidikJari":{"golongan":"FOREX_JPY","arah":"BELI","arahD1":null,"posisiMa50":null,"rentangSkor":null,"pola":null,"sesi":null,"kondisiAtr":null},"hasil":{"r":-1.0,"usd":-0.94,"rp":-16808,"kategori":"RUGI_PENUH"},"catatanTim":{"tim3":null,"tim4":{"rrRencana":1.55,"catatan":"RR di bawah batas 2"},"tim5":null,"tim6":null,"tim6b":null,"tim7":{"komisiUsd":-0.01}},"dataTidakLengkap":true,"mengoreksi":null}
 ```
 
 Catatan contoh: `r: -1.0` karena posisi ditutup tepat di SL (komisi belum dihitung ke R). `dataTidakLengkap: true` karena trade ini dibuka sebelum pencatat tim ada.
@@ -416,5 +418,9 @@ Penetapan Fahmi, 13 Okt 2026: item di bawah wajib tercatat sebagai pekerjaan yan
 | D2 | NBBO, VWAP dari transaksi bursa, order book, imbalance lelang, opsi, ETF flow, breadth konstituen, EDGAR | Data berbayar atau berlisensi, bukan data broker CFD | Ada akun/feed resmi yang menyediakannya dan anggaran data | TERTUNDA |
 | D3 | Basis spot–futures emas, kurva futures minyak, selisih Brent–WTI | Butuh data futures CME/ICE | Sumber data futures resmi + pemetaan simbol broker ke kontrak futures | TERTUNDA (tahap paling akhir) |
 | D4 | Fase lelang IDX | MDBKA belum trading indeks/saham IDX | MDBKA mulai mendukung instrumen IDX | TERTUNDA |
+| D5 | Tim tab **News** MT5 | MQL5 tidak menyediakan cara membaca isi tab News | Ada API/ekspor resmi dari terminal atau broker; sementara diganti Calendar + lonjakan ATR/gap | TERTUNDA |
+| D6 | Tim tab **Mailbox** MT5 | Tidak ada cara membaca Mailbox dari program | Ada API/ekspor resmi | TERTUNDA |
+| D7 | Tim tab **Articles** MT5 | Isi artikel bukan data terminal yang bisa dibaca EA | Ada API/ekspor resmi | TERTUNDA |
+| D8 | Tim tab **Alerts** untuk alert yang dipasang manual di terminal | Alert manual di terminal tidak bisa dibaca MQL5 | Ada API/ekspor resmi; sementara tim Alerts mencatat peringatan buatan MDBKA sendiri | TERTUNDA (sebagian) |
 
-Item lain yang belum dikerjakan dilacak di tabel langkah masing-masing rancangan (P0–P7, P5a, T1–T4, K1–K6, F1–F7, A7-1–A7-6, S1–S4, J1–J6, E1–E3, P-F1–P-F2, G-1–G-6), dengan urutan induk di `docs/AUDIT-RANCANGAN-2026-10-13.md`.
+Item lain yang belum dikerjakan dilacak di tabel langkah masing-masing rancangan (P0–P7, P5a, T1–T4, K1–K6, F1–F7, A7-1–A7-6, S1–S4, J1–J6, E1–E3, P-F1–P-F2, G-1–G-6), dengan urutan induk di `docs/AUDIT-RANCANGAN-2026-10-13.md`. Langkah tim per akun, tab, dan indikator (TA, TT, TI) ada di `docs/RANCANGAN-2026-10-13-tim-akun-tab-indikator.md`.
