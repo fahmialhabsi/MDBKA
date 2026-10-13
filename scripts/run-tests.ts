@@ -8872,6 +8872,37 @@ test("686. X5 backtest --broker exness: spread MDBKA_Margin_Exness.csv, script m
   assert(mifx !== null && mifx.mode === "PERSEN_TAHUNAN" && mifx.value !== 0, "MIFX tetap bayar swap");
 });
 
+test("687. A7-1 bukti celah (tanpa ubah tampilan): Hasil analisa tidak punya penjaga sesi — META.US BELI 55 mnt sebelum pasar tutup tetap BELI, padahal pemindai menahan", () => {
+  // A7-1 (13 Okt 2026, docs/RANCANGAN-2026-10-13-fondasi-data-dan-jalur-live.md A7):
+  // test ini HANYA membuktikan perbedaan; tampilan & keputusan Hasil analisa tidak diubah
+  // (aturan mutlak 1). A7-2 (penjaga sesi di Hasil analisa) hanya shadow sampai klausul A9 disahkan.
+  const ses = [1, 2, 3, 4, 5].map((day) => ({ symbol: "META.US", day, fromMin: 930, toMin: 1315 }));
+  const now = "2026.10.09 21:00:00"; // Jumat; pasar tutup 21:55 server = 55 menit lagi (sama dengan test 601)
+  const hold = findSessionHold("META.US", now, ses);
+  assert(hold !== null && hold.closesInMin === 55, `pemindai seharusnya menahan: ${JSON.stringify(hold)}`);
+  const base = analyzeMarket(modeAmanMarket, modeAmanBroker);
+  const beli: ReturnType<typeof analyzeMarket> = { ...base, decision: "BELI", stopLoss: 1, takeProfit: 2, suggestedLot: 0.01, warnings: ["w"] };
+  // Rantai penahan yang sama dengan shownResult di App.tsx; penahan lain dibuat netral.
+  const tanpaJeda = { paused: false, streak: 0, until: null, reason: null };
+  const shown = applyProofHold(
+    applyDoubleBetHold(
+      applyOpeningHold(
+        applyNewsHold(applyLossPauseHold(applySpecHold(beli, "META.US", null), tanpaJeda), "META.US", now, null),
+        "META.US",
+        null,
+      ),
+      "META.US",
+      [],
+    ),
+    null,
+  );
+  assert(shown === beli && shown.decision === "BELI" && shown.stopLoss === 1 && shown.suggestedLot === 0.01, "Hasil analisa tetap BELI, angka tidak berubah");
+  const app = readSrc("src/App.tsx");
+  assert(app.includes("applyProofHold(applyDoubleBetHold(") && app.includes("applyLossPauseHold(applySpecHold(result, market.symbol, specHolds), lossPause)"), "rantai penahan App berubah: tinjau ulang A7-1");
+  assert(!app.includes("findSessionHold") && !app.includes("sessionGuard"), "App sudah memakai penjaga sesi: A7-2 hanya boleh setelah klausul A9 disahkan");
+  assert(readSrc("src/lib/symbolScanner.ts").includes("findSessionHold(symbol"), "pemindai harus tetap memakai penjaga sesi");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
