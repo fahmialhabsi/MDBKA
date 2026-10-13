@@ -24,6 +24,7 @@ import { readSpecsForBroker } from "./services/specReader";
 import { specHoldMap } from "../src/lib/specCompare";
 import { runExcursionPass, startExcursionSchedule } from "./services/excursionJob";
 import { trackSpecVersion } from "./services/specVersion";
+import { createDataQualityService, type DataQualityService } from "./services/dataQuality";
 import { runTabReportsOnce, startTabReportSchedule, type TabReportSource } from "./services/tabReportJob";
 import { createShadowsOnce, settleShadowsOnce, startShadowSchedule, type ShadowSource, type ShadowTickCache } from "./services/shadowRunner";
 import { MT5LogReader } from "./services/mt5LogReader";
@@ -243,6 +244,25 @@ const app = createApp(reader, quotesReader, readerFinex, quotesReaderFinex, {
   positions: positionsReaderExness,
 });
 
+// F2/TT-3 (13 Okt 2026): gerbang kualitas data per broker (diisi saat start).
+/** Path quotes.csv per broker (.env) → folder terminal untuk log Journal/Experts. */
+const QUOTES_PATH_BY_BROKER: Readonly<Record<string, string | undefined>> = {
+  orbitraderberjangka: process.env.QUOTES_LOG_PATH,
+  finex: process.env.QUOTES_LOG_PATH_FINEX,
+  mifx: process.env.QUOTES_LOG_PATH_MIFX,
+  exness: process.env.QUOTES_LOG_PATH_EXNESS,
+};
+const dataQualityByBroker = new Map<string, DataQualityService>();
+app.get("/api/data-quality", (req, res) => {
+  const broker = typeof req.query.broker === "string" ? req.query.broker : "";
+  const dq = dataQualityByBroker.get(broker);
+  if (dq === undefined) {
+    res.json({ broker, lulus: true, alasan: null, pemeriksaan: [], catatan: "Broker belum terpasang — gerbang tidak dinilai" });
+    return;
+  }
+  res.json({ broker, ...dq.quality() });
+});
+
 // Polling startup: tunggu data pertama kali tersedia
 async function startServer() {
   let attempts = 0;
@@ -337,6 +357,9 @@ async function startServer() {
     if (src.positions === null || src.quotes === null) continue;
     const equityReader = src.equity;
     // F3/TA-1 (13 Okt 2026): identitas akun terbukti dari kolom Login/TradeMode EA.
+    // F2/TT-3: gerbang kualitas data (ekspor EA + koneksi terminal dari log Journal).
+    const dq = createDataQualityService({ getEquity: () => equityReader?.getLatest() ?? null, quotesPath: QUOTES_PATH_BY_BROKER[src.broker] });
+    dataQualityByBroker.set(src.broker, dq);
     const identityOf = () =>
       resolveAccountIdentity(equityReader?.getLatest() ?? null, parseAccountLabels(process.env.ACCOUNT_LABELS));
     const log = createTradeEntryLog({
@@ -369,6 +392,7 @@ async function startServer() {
         const id = identityOf();
         return { login: id.login, jenisAkun: id.jenisAkun };
       },
+      getDataQualityReason: () => dq.quality().alasan,
       // A7-4/G-4 (13 Okt 2026): baris `keputusan` jalur entry + sidik jari snapshot.
       decisionDataDir: path.join(process.cwd(), "data"),
     });
@@ -413,6 +437,7 @@ async function startServer() {
           const cal = readCalendarForBroker(resolveCommonFilesDir(), src.broker);
           return cal === null ? null : { events: cal.events, file: cal.file };
         },
+        getLogs: () => dq.logs(),
         getIdentity: () => {
           const id = identityOf();
           return { login: id.login, jenisAkun: id.jenisAkun };
@@ -440,6 +465,7 @@ async function startServer() {
         },
         getOpenPositions: () => positions.getAll().map((p) => ({ symbol: p.symbol, side: p.side })),
         getLogin: () => identityOf().login,
+        getDataQualityReason: () => dq.quality().alasan,
       });
     }
   }

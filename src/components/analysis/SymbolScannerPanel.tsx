@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTradeSessions } from "../../hooks/useTradeSessions";
+import { useDataQuality } from "../../hooks/useDataQuality";
 import { RefreshCw, ScanSearch } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
@@ -217,6 +218,8 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
   const specHolds = specBook !== null && specBook.broker === brokerId ? specBook.holds : null;
   // Satpam Sesi S3: jam trading resmi broker.
   const sessions = useTradeSessions(brokerId);
+  // F2: terminal putus / ekspor EA berhenti → semua sinyal status DATA (lebih aman).
+  const dataQualityReason = useDataQuality(brokerId);
   // K6: berita Tinggi mendatang (jam server broker ini).
   const upcoming = useMemo(() => upcomingHighNews(newsEvents, nowServer), [newsEvents, nowServer]);
 
@@ -251,8 +254,9 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         openingNowMs: scanAtMs,
         // F4/F5: bukti History MT5 kelompok LOLOS broker ini (demo + live).
         proof: lolosStats,
+        dataQualityReason,
       }),
-    [brokerId, equity, fxRates, reference, openPositions, pauseReason, newsEvents, nowServer, sessions, specHolds, scanAtMs, lolosStats],
+    [brokerId, equity, fxRates, reference, openPositions, pauseReason, newsEvents, nowServer, sessions, specHolds, scanAtMs, lolosStats, dataQualityReason],
   );
   const rows = useMemo(
     () => sortScanRows(source.map((item) => scanItem(item, item.quote))),

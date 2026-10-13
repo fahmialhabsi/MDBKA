@@ -88,6 +88,11 @@ export interface ScanInput {
    * Terbukti rugi → DITAHAN_BUKTI; absen = tanpa satpam bukti (perilaku lama).
    */
   readonly proof?: EvalTradeStats | null;
+  /**
+   * F2 (13 Okt 2026): gerbang kualitas data (ekspor EA hidup + koneksi
+   * terminal). Teks alasan = status DATA (tahan, lebih aman); null/absen = lolos.
+   */
+  readonly dataQualityReason?: string | null;
   /** S2: strategi pengusul setup; absen = "skor" (identik analyzeMarket). */
   readonly strategy?: StrategyId;
 }
@@ -197,6 +202,9 @@ export function scanSymbol(input: ScanInput): ScanRow {
 function scanCore(input: ScanInput, sink: { setup: StrategySetup | null }): ScanRow {
   const symbol = canonicalSymbolForBroker(input.symbol, input.brokerId);
   if (symbol === "") return dataRow(input.symbol, "Simbol tidak dikenal", 0);
+  if (input.dataQualityReason !== undefined && input.dataQualityReason !== null) {
+    return dataRow(symbol, input.dataQualityReason, 0);
+  }
 
   const parsed = parseCsvCandles(input.csv);
   const count = parsed.candles.length;

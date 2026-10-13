@@ -12,6 +12,8 @@ import {
 } from "../../src/lib/tabReports";
 import type { BrokerId } from "../../src/types/broker";
 import { appendJsonlRecord } from "./jsonlStore";
+import { journalFindings } from "../../src/lib/mt5Journal";
+import { localStamp, type TerminalLogs } from "./mt5JournalReader";
 
 /**
  * TT-1/TT-2/G-7 (13 Okt 2026) — laporan per jam tim Trade, Exposure, Calendar
@@ -29,6 +31,8 @@ export interface TabReportSource {
   readonly getCalendar: () => { readonly events: readonly TabCalendarEvent[]; readonly file: string } | null;
   /** F3: identitas akun terbukti (EA); absen/gagal = login null, tidak-terbukti. */
   readonly getIdentity?: () => { readonly login: string | null; readonly jenisAkun: "demo" | "live" | "tidak-terbukti" };
+  /** TT-3: log Journal + Experts terminal; null/absen = tim Journal/Experts tidak melapor. */
+  readonly getLogs?: () => TerminalLogs | null;
 }
 
 function safe<T>(fn: () => T, fallback: T): T {
@@ -56,12 +60,18 @@ export function runTabReportsOnce(
     const calendar = safe(src.getCalendar, null);
     const identity = src.getIdentity === undefined ? null : safe(src.getIdentity, null);
     const login = identity?.login ?? null;
+    const logs = src.getLogs === undefined ? null : safe(src.getLogs, null);
+    // Jendela yang sama dalam jam LOKAL komputer (jam di log MT5).
+    const fromLocal = localStamp(new Date(Date.parse(window.start)));
+    const toLocal = localStamp(new Date(Date.parse(window.end)));
     const reports = [
       positions === null
         ? null
         : { tim: "TAB_TRADE" as const, findings: tradeTabFindings(positions, equity, serverNow), berkas: ["positions.csv", "equity.csv"] },
       positions === null ? null : { tim: "TAB_EXPOSURE" as const, findings: exposureTabFindings(positions), berkas: ["positions.csv"] },
       { tim: "TAB_CALENDAR" as const, findings: calendarTabFindings(calendar?.events ?? null, serverNow), berkas: [calendar?.file ?? "MDBKA_Calendar_<login>.csv (tidak ada)"] },
+      logs === null ? null : { tim: "TAB_JOURNAL" as const, findings: journalFindings(logs.journal, login, fromLocal, toLocal, "JOURNAL"), berkas: ["Logs/<YYYYMMDD>.log"] },
+      logs === null ? null : { tim: "TAB_EXPERTS" as const, findings: journalFindings(logs.experts, login, fromLocal, toLocal, "EXPERTS"), berkas: ["MQL5/Logs/<YYYYMMDD>.log"] },
     ];
     for (const r of reports) {
       if (r === null) continue;

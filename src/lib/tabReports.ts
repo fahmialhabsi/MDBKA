@@ -183,7 +183,7 @@ export interface TabReportMeta {
   readonly login: string | null;
   /** F3: dari identitas akun terbukti; absen = tidak-terbukti. */
   readonly jenisAkun?: "demo" | "live" | "tidak-terbukti";
-  readonly tim: "TAB_TRADE" | "TAB_EXPOSURE" | "TAB_CALENDAR";
+  readonly tim: "TAB_TRADE" | "TAB_EXPOSURE" | "TAB_CALENDAR" | "TAB_JOURNAL" | "TAB_EXPERTS";
   readonly jendelaMulaiUtc: string;
   readonly jendelaSelesaiUtc: string;
   readonly sumberData: readonly { readonly berkas: string; readonly umurDetik: number | null }[];
@@ -194,6 +194,8 @@ const HANDOFF: Readonly<Record<TabReportMeta["tim"], readonly string[]>> = {
   TAB_TRADE: ["T-MONITOR", "RISIKO_GABUNGAN"],
   TAB_EXPOSURE: ["RISIKO_GABUNGAN", "T-PENJAGA"],
   TAB_CALENDAR: ["T-PENJAGA", "TIM_6B"],
+  TAB_JOURNAL: ["T-GERBANG", "T-AKUN"],
+  TAB_EXPERTS: ["T-GERBANG"],
 };
 
 export function buildTabReport(meta: TabReportMeta, findings: TabFindings): LaporanTimRecord {

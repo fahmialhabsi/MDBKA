@@ -330,6 +330,9 @@ import { breakoutRetestAt } from "../src/lib/breakoutRetest";
 import { aggregateH4, TOPDOWN_WINDOW, topdownSetup } from "../src/lib/topdownStrategy";
 import { resolveAccountIdentity } from "../src/lib/accountIdentity";
 import { auditCsv, buildDossiers, causeCounts, factorFindings, formatAuditSection, lossCauseOf } from "../src/lib/tradeAudit";
+import { journalFindings, parseJournalText, terminalHealth } from "../src/lib/mt5Journal";
+import { evaluateDataQuality } from "../src/lib/dataQualityGate";
+import { readTerminalLogs, terminalDirFromFilesPath } from "../server/services/mt5JournalReader";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
 import { convertIdrSnapshot, IdrEquitySource, parseAccountCurrency } from "../server/services/convertedEquity";
 import { getMifxSpec, MIFX_SPEC_SYMBOLS, mifxVolume } from "../src/lib/mifxSpecs";
@@ -9907,6 +9910,112 @@ test("729. T-AUDIT wajib: versi strategi turunan di Buku Aturan harus merujuk ha
   assert(parseRuleBook([td, { ...v2, auditRujukan: [] }]).errors.length === 1, "rujukan kosong ditolak");
   const cli = readSrc("scripts/backtest.ts");
   assert(cli.includes("console.log(formatAuditSection(dossiers));") && cli.includes("buildDossiers({ symbol: run.symbol"), "rapor backtest selalu memuat audit");
+});
+const JOURNAL_SAMPLE = [
+  // Contoh berpola log Journal Finex 13 Okt 2026 (IP diganti contoh 10.0.0.1).
+  "MS\t1\t00:02:36.308\tNetwork\t'61823011': connection to FinexBisnisSolusi-Demo lost",
+  "JJ\t0\t00:02:55.592\tNetwork\t'61823011': authorized on FinexBisnisSolusi-Demo through DC-015-Fnx-5D1 (ping: 44.69 ms, build 5830)",
+  "LG\t0\t00:02:55.592\tNetwork\t'61823011': previous successful authorization performed from 10.0.0.1 on 2026.10.12 17:34:51",
+  "MF\t0\t00:02:56.190\tNetwork\t'61823011': trading has been enabled, demo account - hedging mode",
+  "MH\t2\t17:04:55.952\tTrades\t'61823011': failed market buy 1 HK50 [Only position closing is allowed]",
+  "GK\t2\t17:19:38.084\tTrades\t'91811209': failed market buy 1 GBPUSD [No money]",
+  "AB\t0\t17:20:00.000\tTrades\t'61823011': deal #123 buy 0.01 XAUUSD at 4100.10 done (based on order #456)",
+  "CD\t0\t17:21:00.000\tExperts\texpert MDBKAMultiLive (EURJPY,H1) loaded successfully",
+  "baris rusak",
+].join("\r\n");
+test("730. TT-3 pembaca log Journal MT5: jenis kejadian, login, simbol, alasan penolakan; alamat IP dihapus", () => {
+  const ev = parseJournalText(JOURNAL_SAMPLE, "20261013");
+  assert(ev.length === 8, `kejadian ${ev.length}`);
+  assert(ev[0].kind === "KONEKSI_PUTUS" && ev[0].login === "61823011" && ev[0].localTime === "2026.10.13 00:02:36" && ev[0].level === 1, JSON.stringify(ev[0]));
+  assert(ev[1].kind === "KONEKSI_PULIH" && ev[3].kind === "AKUN_AKTIF", "pulih + akun aktif");
+  assert(!ev[2].message.includes("10.0.0.1") && ev[2].message.includes("[IP]"), "IP dihapus");
+  assert(ev[4].kind === "ORDER_DITOLAK" && ev[4].symbol === "HK50" && ev[4].reason === "Only position closing is allowed", JSON.stringify(ev[4]));
+  assert(ev[5].reason === "No money" && ev[5].login === "91811209", "No money");
+  assert(ev[6].kind === "ORDER_TERISI" && ev[6].symbol === "XAUUSD", `terisi: ${ev[6].symbol}`);
+  assert(ev[7].kind === "EA_DIMUAT", "EA dimuat");
+  const experts = parseJournalText("XX\t2\t10:00:00.000\tExportPositions (AUDCAD,H1)\tExportPositions: FileOpen gagal: 5004\nYY\t0\t10:01:00.000\tMDBKACalendarService\tok", "20261013");
+  assert(experts[0].kind === "EA_GALAT" && experts[1].kind === "LAIN", "galat EA");
+  assert(parseJournalText("x", "2026-10-13").length === 0, "nama berkas tidak sah");
+});
+test("731. F2 gerbang kualitas data: ekspor EA ≤ 120 dtk + koneksi terminal (urutan kejadian); tidak diketahui = tidak dinilai", () => {
+  const ev = parseJournalText(JOURNAL_SAMPLE, "20261013");
+  assert(terminalHealth(ev, "61823011").koneksi === "TERSAMBUNG", "putus lalu pulih = tersambung");
+  assert(terminalHealth(ev.slice(0, 1), "61823011").koneksi === "PUTUS", "putus terakhir = putus");
+  assert(terminalHealth([], null).koneksi === "TIDAK_DIKETAHUI", "tanpa kejadian");
+  const lain = parseJournalText("A\t1\t09:00:00.000\tNetwork\t'1': authorization on X-Real failed (Invalid account)", "20261013");
+  assert(terminalHealth([...ev, ...lain], "61823011").koneksi === "TERSAMBUNG", "login gagal akun LAIN tidak memutus");
+  const now = Date.parse("2026-10-13T10:00:00Z");
+  const ok = evaluateDataQuality({ nowMs: now, equityModifiedMs: now - 5000, health: terminalHealth(ev, "61823011") });
+  assert(ok.lulus && ok.alasan === null && ok.pemeriksaan.length === 2 && ok.pemeriksaan[0].umurDataDetik === 5, JSON.stringify(ok));
+  const basi = evaluateDataQuality({ nowMs: now, equityModifiedMs: now - 300_000, health: null });
+  assert(!basi.lulus && basi.alasan !== null && basi.alasan.includes("ekspor EA berhenti 300 dtk") && basi.pemeriksaan[1].hasil === "TIDAK_DINILAI", JSON.stringify(basi));
+  const putus = evaluateDataQuality({ nowMs: now, equityModifiedMs: now, health: terminalHealth(ev.slice(0, 1), "61823011") });
+  assert(!putus.lulus && putus.alasan !== null && putus.alasan.includes("koneksi terminal putus sejak 2026.10.13 00:02:36"), String(putus.alasan));
+  const kosong = evaluateDataQuality({ nowMs: now, equityModifiedMs: null, health: null });
+  assert(kosong.lulus && kosong.pemeriksaan.every((c) => c.hasil === "TIDAK_DINILAI"), "tidak terbaca = tidak menahan");
+});
+test("732. F2 gerbang menahan sinyal (status DATA) di pemindai, pencatat entry, dan trade bayangan; Hasil analisa tidak disentuh", () => {
+  const base = { symbol: "GBPUSD", brokerId: "finex" as const, csv: scanCsv(81), quote: null, equity: 10000, fxRates: null };
+  const held = scanSymbol({ ...base, dataQualityReason: "Data tidak bisa dipercaya: koneksi terminal putus sejak x" });
+  assert(held.status === "DATA" && held.reason.startsWith("Data tidak bisa dipercaya") && held.decision === null, held.status);
+  assert(scanSymbol({ ...base, dataQualityReason: null }).status === scanSymbol(base).status, "null = perilaku lama");
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "dq-"));
+  try {
+    nfs.writeFileSync(npath.join(dir, "MDBKA_GBPUSD_H1.csv"), scanCsv(81));
+    const quote = { timestamp: "2026.10.04 09:00:00", symbol: "GBPUSD", bid: 1.30212, ask: 1.30228 };
+    const src = { broker: "finex" as const, quotes: { getSymbols: () => ["GBPUSD"], getLatestBySymbol: () => [quote] }, commonDir: dir, getEquity: () => 10000, getFxRates: () => null };
+    assert(createShadowsOnce({ ...src, getDataQualityReason: () => "Data tidak bisa dipercaya" }, npath.join(dir, "d1"), new Date("2026-10-04T06:00:00Z"), () => "b") === 0, "gerbang gagal = tanpa bayangan");
+    assert(createShadowsOnce(src, npath.join(dir, "d2"), new Date("2026-10-04T06:00:00Z"), () => "b") === 1, "tanpa gerbang = bayangan seperti biasa");
+    const log = createTradeEntryLog({
+      file: npath.join(dir, "e.jsonl"), broker: "finex", commonDir: dir, quotes: { getSymbols: () => ["GBPUSD"], getLatestBySymbol: () => [] },
+      getEquity: () => 10000, getFxRates: () => null, getDataQualityReason: () => "Data tidak bisa dipercaya: ekspor EA berhenti 300 dtk",
+    });
+    log.ingest([]);
+    const rec = log.ingest([{ ticket: "1", symbol: "GBPUSD", side: "BUY", volume: 0.01, priceOpen: 1.3, sl: 1.29, tp: 1.31, timeOpen: "2026.10.04 09:00:00" }]);
+    assert(rec[0].scan !== null && rec[0].scan.status === "DATA" && rec[0].scan.reason.includes("ekspor EA berhenti"), JSON.stringify(rec[0].scan));
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes("const dataQualityReason = useDataQuality(brokerId);") && panel.includes("        dataQualityReason,"), "pemindai memakai gerbang");
+  assert(!readSrc("src/App.tsx").includes("useDataQuality"), "Hasil analisa tidak disentuh (aturan mutlak 1)");
+  assert(readSrc("server/index.ts").includes('app.get("/api/data-quality"'), "endpoint gerbang");
+});
+test("733. TT-3 laporan tim Journal & Experts per jam (jam lokal log) + pembaca berkas UTF-16LE", () => {
+  const ev = parseJournalText(JOURNAL_SAMPLE, "20261013");
+  const j = journalFindings(ev, "61823011", "2026.10.13 17:00:00", "2026.10.13 18:00:00", "JOURNAL");
+  assert(j.kejadianPenting && j.temuan[0].startsWith("Koneksi TERSAMBUNG") && j.temuan.some((t) => t.includes("Order ditolak 2026.10.13 17:04:55 HK50: Only position closing is allowed")), j.temuan.join(" | "));
+  assert(j.temuan.includes("Order terisi 1"), "order terisi dihitung");
+  const malam = journalFindings(ev, "61823011", "2026.10.13 00:00:00", "2026.10.13 01:00:00", "JOURNAL");
+  assert(malam.temuan.includes("Koneksi putus 1 kali") && !malam.kejadianPenting, malam.temuan.join(" | "));
+  const ex = journalFindings(parseJournalText("XX\t2\t10:00:00.000\tExportPositions (AUDCAD,H1)\tFileOpen gagal: 5004", "20261013"), null, "2026.10.13 10:00:00", "2026.10.13 11:00:00", "EXPERTS");
+  assert(ex.kejadianPenting && ex.temuan[0] === "Galat ExportPositions (AUDCAD,H1): 1 kali", ex.temuan.join(" | "));
+  assert(terminalDirFromFilesPath("C:\\Users\\X\\AppData\\Roaming\\MetaQuotes\\Terminal\\ABC\\MQL5\\Files\\quotes.csv") === "C:/Users/X/AppData/Roaming/MetaQuotes/Terminal/ABC", "folder terminal dari path quotes");
+  assert(terminalDirFromFilesPath("C:\\data\\quotes.csv") === null && terminalDirFromFilesPath(undefined) === null, "path lain = null");
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "mt5log-"));
+  try {
+    nfs.mkdirSync(npath.join(dir, "Logs"));
+    const bom = Buffer.from([0xff, 0xfe]);
+    nfs.writeFileSync(npath.join(dir, "Logs", "20261012.log"), Buffer.concat([bom, Buffer.from(JOURNAL_SAMPLE, "utf16le")]));
+    nfs.writeFileSync(npath.join(dir, "Logs", "20261013.log"), Buffer.concat([bom, Buffer.from("MS\t1\t08:00:00.000\tNetwork\t'61823011': connection to X lost\r\n", "utf16le")]));
+    const logs = readTerminalLogs(dir);
+    assert(logs !== null && logs.journal.length === 9 && logs.experts.length === 0, `baca: ${logs?.journal.length}`);
+    assert(logs !== null && terminalHealth(logs.journal, "61823011").koneksi === "PUTUS", "kemarin + hari ini berurutan");
+    const done = new Set<string>();
+    const n = runTabReportsOnce([{
+      broker: "finex", getPositions: () => [], getEquity: () => null, getServerNow: () => "2026.10.13 11:00:00", getCalendar: () => null,
+      getIdentity: () => ({ login: "61823011", jenisAkun: "demo" }), getLogs: () => logs,
+    }], npath.join(dir, "data"), new Date("2026-10-13T02:30:00Z"), done, () => "L");
+    assert(n === 5 && [...done].some((k) => k.includes("TAB_JOURNAL")) && [...done].some((k) => k.includes("TAB_EXPERTS")), `laporan ${n}`);
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

@@ -85,6 +85,8 @@ export interface TradeEntryLogOptions {
   /** F4 (13 Okt 2026): versi spesifikasi broker saat entry; null / gagal = null. */
   readonly getSpecVersion?: () => string | null;
   /** F3 (13 Okt 2026): identitas akun terbukti (EA); gagal = login null, tidak-terbukti. */
+  /** F2 (13 Okt 2026): alasan gerbang kualitas data; null/absen/gagal = lolos. */
+  readonly getDataQualityReason?: () => string | null;
   readonly getIdentity?: () => { readonly login: string | null; readonly jenisAkun: "demo" | "live" | "tidak-terbukti" };
   readonly now?: () => Date;
 }
@@ -232,6 +234,13 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       specHolds: specHolds(),
       // O2b: pembukaan bursa pada jam nyata posisi pertama terlihat (≈ jam entry).
       openingNowMs: now().getTime(),
+      dataQualityReason: (() => {
+        try {
+          return opts.getDataQualityReason?.() ?? null;
+        } catch {
+          return null;
+        }
+      })(),
     };
     const row = scanSymbol(input);
     recordDecision(input, row, timeOpen, ticket);
