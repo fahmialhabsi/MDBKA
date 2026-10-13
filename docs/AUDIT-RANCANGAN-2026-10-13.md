@@ -131,3 +131,16 @@ Total langkah di semua rancangan sekarang 53 + 12 = 65.
 - Enam koreksi hasil bedah ulang rancangan tim (`docs/RANCANGAN-2026-10-13-tim-akun-tab-indikator.md` bagian 0) **disetujui**.
 - Tujuan jangka panjang sebagai tangga yang dinaiki hanya dengan bukti, termasuk peninjauan batas golongan Rupiah di setiap tangga (rancangan tim, bagian 8), **disetujui**.
 - Tugas, tanggung jawab, dan kewenangan semua tim, beserta SOP dan alur kerjanya, diatur di `docs/SOP-2026-10-13-tim-mdbka.md`.
+
+## 9. Keputusan 13 Okt 2026 (10:27–10:41 WIT)
+
+| Keputusan | Status |
+| --- | --- |
+| T-PELUANG dengan tiga tahap menggantikan usulan "langsung membuka pintu BELI/JUAL" | Disetujui |
+| Tahap 2 T-PELUANG boleh merevisi K-9 | Disetujui |
+| Trade bayangan, demo laboratorium (pembagian penjaga keras/lunak), panel laju bukti | Disetujui |
+| Satu tim baru (T-BAYANGAN); demo laboratorium oleh T-AKUN-DEMO; laju bukti oleh T-EVALUASI; kartu bayangan/uji oleh T-KARTU | Disetujui |
+| T-TITIK-LEMAH diperluas menjadi Tim Pembelajaran Rugi (T-BELAJAR-RUGI) dengan pelacakan rekomendasi | Disetujui |
+| Trade uji dibuka manual oleh Fahmi (Opsi A); MDBKA tetap tidak mengirim order | Disetujui |
+
+**Tambahan ke peta urutan induk:** fase 0: PL-1, TB-1, TB-2 (Finex, OTB), LAB-1, PR-1. Fase 2: LAB-2, LAB-3, LB-1. Fase 5: PR-2. Fase 6: PR-3, PL-3. Mesin bukti ditempatkan di fase awal supaya bukti mulai terkumpul sebelum fitur lain selesai.

@@ -2,7 +2,7 @@
 
 13 Okt 2026 · Fahmi Alhabsi
 
-> **Status:** DRAF DISKUSI. Belum ada kode yang diubah. **Enam koreksi bedah ulang (bagian 0) dan tangga tujuan jangka panjang (bagian 8) disetujui Fahmi 13 Okt 2026.** Tugas, tanggung jawab, kewenangan, dan SOP: `docs/SOP-2026-10-13-tim-mdbka.md`.
+> **Status:** DRAF DISKUSI. Belum ada kode yang diubah. **Enam koreksi bedah ulang (bagian 0) dan tangga tujuan jangka panjang (bagian 8) disetujui Fahmi 13 Okt 2026.** Tugas, tanggung jawab, kewenangan, dan SOP: `docs/SOP-2026-10-13-tim-mdbka.md`. **Bagian 10–13 (T-PELUANG, mesin bukti, demo laboratorium, pembelajaran rugi) disetujui Fahmi 13 Okt 2026.**
 > **Terkait:** `docs/RANCANGAN-2026-10-13-alur-trader-profesional.md`, `docs/RANCANGAN-2026-10-13-fondasi-data-dan-jalur-live.md`, `docs/AUDIT-RANCANGAN-2026-10-13.md`.
 > **Sifat:** "tim" di dokumen ini adalah modul aturan murni (tanpa AI, tanpa orang). TUNGGU tetap default. MDBKA tidak pernah mengirim order.
 
@@ -210,3 +210,111 @@ Tujuan Fahmi adalah MDBKA yang siap Live dan suatu saat mampu mengelola dana san
 | TI-3 | Nilai indikator masuk kartu pola dan catatan keputusan | 5 | Tidak |
 | TI-4 | Gelombang 2 dan 3, hanya bila gelombang sebelumnya terbukti menambah nilai | 6 | Tidak, sampai lolos 3 lampu |
 | G-7 | Tabel `laporan_tim` (bagian 7) | 0 | Tidak |
+
+## 10. Tim Peluang Tertahan (T-PELUANG) — disetujui Fahmi 13 Okt 2026
+
+Menggantikan usulan awal "tim yang langsung membuka pintu BELI/JUAL". Tim ini **tidak menahan dan tidak membuka**; kewenangannya hanya baca, hitung, catat, dan usul.
+
+| Jenis tahanan | Sikap T-PELUANG |
+| --- | --- |
+| Biaya mahal | Diuji lewat tiga tahap di bawah |
+| Risiko > batas | Tidak dibuka di Live; yang diberikan adalah "modal yang dibutuhkan" (perhitungan sudah ada di `backtestReport.ts`) |
+| Terbukti rugi | Tidak dibuka; buktinya sudah ada |
+| Skor belum kompak | Bukan wewenang tim ini; peluang datang dari strategi lain (`candle`, `abc`, `topdown`) |
+
+**Tiga tahap:**
+
+1. **Tahap 1 — hitung "seandainya diambil" (tanpa melanggar apa pun).** Untuk setiap sinyal yang ditahan biaya, SL/TP diambil dari usulan strategi sebelum gerbang (rumus `decisionEngine.ts` tidak disentuh). Hasilnya disimulasikan dengan harga nyata (backtest dan trade bayangan, bagian 11) termasuk biaya nyata. Hasil dikelompokkan per golongan dan per tingkat porsi biaya (10–15%, 15–20%, dan seterusnya). Backtest sekarang hanya menghitung jumlah sinyal yang ditahan biaya, belum hasilnya, jadi ini pekerjaan baru.
+2. **Tahap 2 — demo.** Sinyal yang ditahan biaya boleh dibuka di demo sebagai trade uji (demo laboratorium, bagian 11.2). Ini **merevisi K-9** (disetujui Fahmi 13 Okt 2026).
+3. **Tahap 3 — Live.** Hanya lewat 3 lampu hijau, ditambah pengecualian tertulis untuk aturan mutlak 2: batas biaya per golongan di Buku Aturan, bukan angka tetap 10% di rumus. Drafnya dibuat seperti klausul sesi (fondasi A9) dan baru berlaku setelah ditandatangani Fahmi.
+
+**Ilustrasi pengaruh biaya** (anggapan: biaya dihitung sebagai bagian dari 1R di setiap trade, RR 2): impas pada win rate 33% bila biaya 0%, 37% bila biaya 10%, dan 43% bila biaya 30%. Win rate riwayat MDBKA sejauh ini 21–27%.
+
+## 11. Mesin bukti — disetujui Fahmi 13 Okt 2026
+
+Masalahnya: bila satu-satunya sumber bukti adalah trade yang lolos semua penjaga, bukti tidak pernah terkumpul karena hampir semua sinyal TUNGGU. Karena itu bukti dikumpulkan dari empat sumber dengan bobot berbeda.
+
+| Sumber | Butuh sinyal lolos? | Dipakai untuk | Bobot |
+| --- | --- | --- | --- |
+| Backtest data lama | Tidak | Lampu 1; kartu tingkat 1 | Terendah |
+| Trade bayangan (11.1) | Tidak | Menilai penjaga yang terlalu ketat; kartu berasal "bayangan" | Rendah |
+| Trade uji demo laboratorium (11.2) | Tidak | Bukti eksekusi nyata (spread, slippage); kartu berasal "uji" | Sedang |
+| Trade setara Live | Ya | **Lampu 2 dan 3** | Tertinggi |
+
+Standar untuk uang sungguhan tidak turun: lampu 2 dan 3 tetap hanya memakai trade setara Live. Tiga sumber pertama menunjukkan aturan mana yang layak diuji sampai ke sana.
+
+### 11.1 Trade bayangan (tim baru: T-BAYANGAN)
+
+- **Kapan dibuat:** setiap sinyal yang punya arah (BELI/JUAL) tetapi ditahan penjaga, ditambah setup "hampir" (skor ±2 dengan posisi harga terhadap MA50 yang sesuai) untuk menguji apakah ambang skor 3 terlalu ketat.
+- **Isi:** arah, harga entry (ask untuk BELI, bid untuk JUAL dari kuotasi saat sinyal), SL/TP dari usulan strategi sebelum gerbang, lot teoretis, porsi biaya, dan kode penjaga yang menahan.
+- **Diikuti dengan harga nyata** dari arsip tick sampai kena SL, kena TP, time-stop (Forex/Forex JPY 3 jam), atau batas pengamatan untuk golongan lain (usulan 120 jam; dikunci sebelum dipakai). Yang tidak selesai dicatat "tanpa hasil", tidak dikarang.
+- **Satu bayangan per simbol + arah + candle**, dan tidak dibuat bayangan baru yang sama selama bayangan itu masih berjalan.
+- **Biaya:** spread dari arsip tick saat entry dan komisi dari spesifikasi.
+- **Batas data:** arsip tick sekarang baru ada untuk Finex dan OTB (MIFX dan Exness setelah F1). Arsip tick MDBKA mengikuti frekuensi ekspor EA, bukan semua tick broker, jadi lonjakan yang sangat singkat bisa terlewat.
+- **Hasil:** catatan `bayangan` (format JSONL fondasi G5) dan kartu pola berasal "bayangan".
+
+### 11.2 Demo laboratorium (perluasan T-AKUN-DEMO)
+
+Di akun demo, sinyal yang ditahan penjaga **lunak** boleh dibuka sebagai **trade uji** dengan lot minimum. Penjaga **keras** tetap menahan. Akun Live tidak berubah sama sekali.
+
+| Penjaga keras (tetap menahan di demo) | Penjaga lunak (boleh dibuka sebagai trade uji di demo) |
+| --- | --- |
+| Data rusak / akun tidak jelas | Biaya mahal |
+| Spesifikasi berbeda (hitungan risiko tidak bisa dipercaya) | Risiko > batas |
+| Pasar sedang tutup (order tidak bisa dijalankan) | Jeda 3 rugi |
+| Margin tidak cukup | Berita |
+| Terbukti rugi | Pembukaan bursa |
+| | Korelasi / masuk lagi simbol sama |
+| | Pasar **jelang** tutup (order masih bisa dijalankan) |
+
+- **Skor belum kompak** tidak dibuka (tidak ada setup); hanya menjadi bayangan bila "hampir".
+- **Eksekusi Opsi A (keputusan Fahmi):** MDBKA menampilkan daftar trade uji, dan Fahmi membuka sendiri di MT5. MDBKA tetap tidak mengirim order.
+- **Penanda:** Fahmi mengisi komentar order `MDBKA-UJI` saat membuka. Kolom `Comment` sudah ada di `MDBKA_History_<login>.csv`, sehingga trade uji bisa dikenali setelah ditutup. Selama posisi terbuka, trade uji dicocokkan lewat simbol, arah, dan waktu dengan daftar trade uji.
+- **Finex demo** baru ikut setelah F3 (K-2). OTB, MIFX, dan Exness boleh lebih dulu.
+- Trade uji selalu ditandai **tidak setara Live**, dengan daftar penjaga lunak yang dilewati.
+
+### 11.3 Panel laju bukti (perluasan T-EVALUASI)
+
+Per golongan per minggu: jumlah trade bayangan, trade uji, dan trade setara Live, serta perkiraan kapan setiap golongan mencapai 20. Panel ini menjawab "sampai kapan" dengan angka nyata sejak minggu pertama.
+
+## 12. Tim Pembelajaran Rugi (perluasan T-TITIK-LEMAH) — disetujui Fahmi 13 Okt 2026
+
+Membaca setiap rangkaian, trade bayangan, dan trade uji yang rugi, lalu menghasilkan **rekomendasi tertulis** yang dikirim ke tim penerima yang tepat dan dilacak sampai selesai.
+
+| Sebab rugi | Rekomendasi | Dikirim ke |
+| --- | --- | --- |
+| Langsung melawan sejak masuk | Perketat pemicu | Strategi (T-ANALISA) |
+| Sempat +0,5R lalu berbalik | Titik impas lebih awal / geser SL | T-MONITOR |
+| SL < 0,5 × ATR | Batas SL minimum | Strategi |
+| Dekat berita atau pasar tutup | Jendela penjaga diperlebar untuk golongan itu | T-PENJAGA |
+| Melawan arah D1 | Penyaring arah | Strategi |
+| Biaya atau spread besar saat entry | Data untuk ambang biaya | T-PELUANG, T-BIAYA |
+| Data bermasalah | Perbaikan data | T-GERBANG |
+| Saran tidak dijalankan (misalnya time-stop diabaikan) | Laporan kepatuhan | Fahmi |
+
+**Dua kecepatan:**
+
+- **Cepat:** setelah rugi, simbol + sidik jari itu diberi **catatan waspada** di layar. Hanya peringatan, tidak menahan.
+- **Lambat:** bila sebab yang sama berulang (n ≥ 20 per golongan), rekomendasi diuji dengan backtest dan trade bayangan, disetujui Fahmi, lalu menjadi versi aturan baru di Buku Aturan.
+
+**Status rekomendasi:** DIUSULKAN → DIUJI → DITERIMA / DITOLAK → MENJADI_VERSI (dicatat di tabel `rekomendasi`).
+
+**Contoh dari data nyata:** AUDJPY Finex demo 61823011, 12 Okt 2026. RR 1,55 (di bawah batas 2), dan posisi dibiarkan 17 jam 15 menit padahal time-stop seharusnya berbunyi pukul 05:27. Rekomendasi ke T-ANALISA: tolak setup dengan RR < 2. Laporan kepatuhan ke Fahmi: time-stop tidak dijalankan.
+
+Tidak ada sistem yang bisa menjamin simbol itu tidak rugi lagi. Yang dijamin adalah **sebab rugi yang sama tidak terulang tanpa ketahuan dan tanpa ditangani**.
+
+## 13. Langkah tambahan
+
+| Langkah | Isi | Fase | Mengubah perilaku? |
+| --- | --- | --- | --- |
+| PL-1 | T-PELUANG tahap 1: hasil "seandainya diambil" untuk sinyal tertahan biaya di backtest | 0 | Tidak |
+| TB-1 | Modul murni trade bayangan (buat, ikuti harga, tutup) + test | 0 | Tidak |
+| TB-2 | Pelari trade bayangan di server memakai arsip tick (Finex, OTB dulu; MIFX/Exness setelah F1) | 0–1 | Tidak |
+| LAB-1 | Modul murni pembagian penjaga keras/lunak + test | 0 | Tidak |
+| LAB-2 | Daftar trade uji di layar, khusus akun demo (Opsi A); Finex demo setelah F3 | 2 | Tampilan, demo saja |
+| LAB-3 | Pengenalan trade uji (komentar `MDBKA-UJI` di History + pencocokan saat terbuka) | 2 | Tidak |
+| LB-1 | Panel laju bukti | 2 | Tampilan |
+| PR-1 | Tabel `rekomendasi` + pengiriman ke tim penerima | 0 | Tidak |
+| PR-2 | Catatan waspada per simbol + sidik jari | 5 | Tampilan |
+| PR-3 | Pelacakan status rekomendasi sampai menjadi versi aturan | 6 | Tidak (lewat Buku Aturan) |
+| PL-3 | Draf pengecualian aturan mutlak 2 (batas biaya per golongan) — hanya bila lampu terpenuhi | 6 | Ya, setelah ditandatangani |

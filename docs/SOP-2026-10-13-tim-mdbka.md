@@ -2,7 +2,7 @@
 
 13 Okt 2026 · Fahmi Alhabsi
 
-> **Status:** DRAF, revisi 0. Belum ada kode yang diubah. Setiap SOP berlaku mulai saat komponen yang diaturnya selesai dibangun (kolom "Berlaku saat"). Sampai itu, SOP menjadi acuan pembangunan.
+> **Status:** DRAF, revisi 0 (diperbarui 13 Okt 2026 10:41 WIT: T-PELUANG, T-BAYANGAN, demo laboratorium, laju bukti, Tim Pembelajaran Rugi). Belum ada kode yang diubah. Setiap SOP berlaku mulai saat komponen yang diaturnya selesai dibangun (kolom "Berlaku saat"). Sampai itu, SOP menjadi acuan pembangunan.
 > **Terkait:** `docs/RANCANGAN-2026-10-13-alur-trader-profesional.md`, `docs/RANCANGAN-2026-10-13-fondasi-data-dan-jalur-live.md`, `docs/RANCANGAN-2026-10-13-tim-akun-tab-indikator.md`, `docs/AUDIT-RANCANGAN-2026-10-13.md`.
 > **Format:** mengikuti unsur SOP Administrasi Pemerintahan yang lazim dipakai (rujukan Permenpan RB No. 35 Tahun 2012): identitas SOP dan tabel uraian prosedur dengan pelaksana dan mutu baku (persyaratan/kelengkapan, waktu, output), disesuaikan untuk aplikasi.
 
@@ -26,12 +26,14 @@
 | T-ANALISA | Tim Analisa (Tim 1, pemindai `scanSymbol`) | 3 | Alur 7.8 |
 | T-PENJAGA | Tim Penjaga Mode Aman (biaya, risiko, spesifikasi, bukti, jeda, berita, sesi, pembukaan bursa, korelasi, margin) | 4 | Audit, alur 3.7 |
 | T-SHADOW | Tim Shadow (A7-2/A7-3, hanya mencatat) | 4 | Fondasi A8 |
+| T-BAYANGAN | Tim Trade Bayangan: mengikuti sinyal yang ditahan dengan harga nyata | 8 | Rancangan tim, 11.1 |
+| T-PELUANG | Tim Peluang Tertahan: menilai sinyal yang ditahan biaya | 9 | Rancangan tim, 10 |
 | T-AKUN-DEMO | Tim Akun Demo (per login demo) | 5 | Tim akun, bagian 3 |
 | T-AKUN-LIVE | Tim Akun Live (per login Live) | 5 | Tim akun, bagian 3 |
 | FAHMI | Pemilik: menyetujui dan menempatkan order di MT5 | 6 | — |
 | T-MONITOR | Tim Monitor Posisi (Tim 2, termasuk `exitMonitor`) | 7 | Alur 7 |
 | T-RISIKO | Tim Risiko Gabungan | 7 | Fondasi E |
-| T-TITIK-LEMAH | Tim 4: penguji titik lemah | 8 | Alur 7.8 |
+| T-BELAJAR-RUGI | Tim Pembelajaran Rugi (dulu Tim 4 / T-TITIK-LEMAH): sebab rugi + rekomendasi | 8 | Alur 7.8; rancangan tim, 12 |
 | T-POLA | Tim 5: pembaca pola | 8 | Alur 7.8 |
 | T-KONTEKS | Tim 6: pencatat konteks | 8 | Alur 7.8 |
 | T-BERITA | Tim 6b: pencatat respons berita | 8 | Alur 7.8 |
@@ -71,18 +73,20 @@
 | T-ANALISA | Menilai snapshot dan mengusulkan BELI/JUAL/TUNGGU dengan SL/TP/lot | Satu kontrak keputusan untuk semua jalur (fondasi A7) | B, H, C, **U** | Melewati penjaga; menahan sinyal di luar aturan strategi |
 | T-PENJAGA | Menjalankan penjaga dengan urutan tetap | Setiap sinyal diperiksa semua penjaga; alasan tahanan jelas | B, H, C, **T** | Membuka atau melonggarkan sinyal |
 | T-SHADOW | Menghitung "seharusnya" untuk Hasil analisa | Tidak pernah mengubah tampilan | B, H, C | Menahan atau mengubah apa pun yang tampil |
-| T-AKUN-DEMO | Menyaring sinyal menurut versi aturan yang boleh jalan di demo; mencatat setara Live atau tidak | Eksperimen demo tidak bocor ke Live | B, C, **T** (menurut status versi) | Menulis ke catatan akun Live |
+| T-BAYANGAN | Membuat dan mengikuti trade bayangan sampai SL/TP/time-stop/batas pengamatan | Hasil bayangan memakai harga dan biaya nyata; tidak ada hasil karangan | B, H, C | Menahan atau membuka sinyal; memakai hasil bayangan untuk lampu 2/3 |
+| T-PELUANG | Menghitung "seandainya diambil" untuk sinyal tertahan biaya; mengusulkan ambang biaya per golongan | Usulan selalu disertai bukti per golongan dan tingkat biaya | B, H, C, U | Menahan atau membuka sinyal; mengubah gerbang biaya |
+| T-AKUN-DEMO | Menyaring sinyal menurut versi aturan yang boleh jalan di demo; mencatat setara Live atau tidak; **mode laboratorium**: menampilkan daftar trade uji dari sinyal yang ditahan penjaga lunak (lot minimum) | Eksperimen demo tidak bocor ke Live | B, C, **T** (menurut status versi) | Menulis ke catatan akun Live |
 | T-AKUN-LIVE | Hanya meneruskan sinyal dari versi PERCOBAAN_LIVE/LIVE | Akun Live tidak menerima eksperimen | B, C, **T** | Menjalankan fitur uji |
 | FAHMI | Memutuskan order dan menyetujui perubahan | Order di MT5; persetujuan tertulis | **E**, **P** | — |
 | T-MONITOR | Saran tiap siklus 30 menit: titik impas, keluar lebih awal, open berikutnya, time-stop | Saran tepat waktu dan sesuai batas pengaman (alur 7.3) | B, H, C, U | Membuka posisi; menjauhkan SL; mengirim order |
 | T-RISIKO | Menghitung risiko gabungan dan skenario stres | Rugi gabungan bila semua SL kena selalu terlihat | B, H, C, **T** (sinyal baru bila melewati batas) | Mengubah batas risiko |
-| T-TITIK-LEMAH | Mencari sebab TP tidak tercapai / SL kena setelah rangkaian selesai | Setiap rangkaian rugi punya label sebab | B, H, C | Mengubah aturan |
+| T-BELAJAR-RUGI | Mencari sebab rugi pada rangkaian, trade bayangan, dan trade uji; membuat rekomendasi tertulis ke tim penerima; memberi catatan waspada | Setiap rugi punya label sebab; setiap rekomendasi punya penerima dan status | B, H, C, U | Mengubah aturan; menahan sinyal (catatan waspada hanya peringatan) |
 | T-POLA | Mencatat pola selama posisi berjalan dan arah sesudahnya | Catatan pola dengan candle tertutup saja | B, H, C | Mengusulkan open |
 | T-KONTEKS | Mencatat keadaan pasar saat entry | Konteks lengkap per entry | B, C | — |
 | T-BERITA | Mencatat respons harga/spread terhadap berita | Respons berita tercatat dengan jam yang benar | B, H, C | Menahan sinyal |
 | T-BIAYA | Mencatat spread, komisi, swap, selisih harga analisa vs entry | Biaya nyata per posisi | B, H, C | — |
 | T-KARTU | Menggabungkan catatan menjadi satu kartu dan memberi label sesuai aturan | Satu kartu per rangkaian selesai, tidak pernah digabung | B, C | Menilai di luar aturan label |
-| T-EVALUASI | Menyusun rapor, menilai 3 lampu hijau, mengusulkan naik status; menurunkan status otomatis bila syarat turun terpenuhi | Rapor per golongan, per versi, per jenis akun | B, H, C, U, **S** (turun saja) | Menaikkan status tanpa persetujuan Fahmi |
+| T-EVALUASI | Menyusun rapor, menilai 3 lampu hijau, mengusulkan naik status; menurunkan status otomatis bila syarat turun terpenuhi; panel laju bukti; menguji rekomendasi T-BELAJAR-RUGI | Rapor per golongan, per versi, per jenis akun | B, H, C, U, **S** (turun saja) | Menaikkan status tanpa persetujuan Fahmi |
 | T-PERUBAHAN | Memantau perubahan kondisi per versi aturan | Versi yang berubah besar ditandai "perlu ditinjau" | B, H, C, **S** (menghentikan kenaikan) | Menaikkan status |
 | T-BUKU | Menyimpan Buku Aturan dan riwayat status | Setiap perubahan status tercatat dan di-commit | B, C, **S** (naik, setelah P Fahmi) | Mengubah aturan tanpa persetujuan |
 | PENGEMBANG | Membangun modul sesuai langkah yang disetujui | Test lolos (`npm test`, `tsc -b`, lint), satu langkah kecil, tanpa auto-commit | B, U | Mengubah aturan, rumus `decisionEngine.ts`, atau status tanpa persetujuan; commit otomatis |
@@ -101,10 +105,14 @@
 | 8 | T-EVALUASI ingin menaikkan versi, T-PERUBAHAN menandai "perlu ditinjau" | Tanda T-PERUBAHAN menang: kenaikan berhenti sampai diuji ulang |
 | 9 | Naik status dan turun status punya risiko berbeda | Turun otomatis (lebih aman); naik butuh bukti + persetujuan Fahmi |
 | 10 | Dua tim melaporkan fakta berbeda (misalnya login di Journal ≠ label akun) | T-GERBANG menahan (TUNGGU) dan melapor ke Fahmi; tidak memilih salah satu diam-diam |
-| 11 | T-TITIK-LEMAH menemukan sebab rugi dan "ingin" mengubah aturan | Sebab dicatat; perubahan aturan hanya lewat T-EVALUASI → Fahmi → T-BUKU, setelah sebab berulang n ≥ 20 |
+| 11 | T-BELAJAR-RUGI menemukan sebab rugi dan "ingin" mengubah aturan | Sebab dicatat; perubahan aturan hanya lewat T-EVALUASI → Fahmi → T-BUKU, setelah sebab berulang n ≥ 20 |
 | 12 | Laporan per jam vs kejadian penting | Kejadian penting dilaporkan segera; laporan per jam tetap berjalan |
 | 13 | T-SHADOW dan Hasil analisa memakai data yang sama | T-SHADOW hanya membaca; tidak ada jalur balik ke tampilan |
 | 14 | T-MONITOR (time-stop 3 jam) vs golongan tanpa time-stop | K-1: Forex/Forex JPY time-stop; emas, minyak, indeks hanya akhir masa pantau intensif |
+| 15 | T-PELUANG ingin membuka sinyal yang ditahan biaya, padahal hanya T-PENJAGA yang menahan dan hanya satu jalur yang membuka | T-PELUANG hanya mengusulkan; pembukaan di demo lewat mode laboratorium (T-AKUN-DEMO), di Live hanya lewat 3 lampu + pengecualian tertulis aturan mutlak 2 |
+| 16 | T-BAYANGAN dan T-MONITOR sama-sama mengikuti harga | T-MONITOR hanya untuk posisi nyata; T-BAYANGAN hanya untuk bayangan. Logika SL/TP/time-stop memakai fungsi yang sama |
+| 17 | Trade uji demo bisa dikira bukti setara Live | Trade uji selalu ditandai tidak setara Live; lampu 2 dan 3 hanya memakai trade setara Live |
+| 18 | Rekomendasi T-BELAJAR-RUGI ingin langsung diterapkan | Jalur cepat hanya catatan waspada; jalur lambat lewat T-EVALUASI → Fahmi → T-BUKU |
 
 ### A5. Tujuh aturan wewenang
 
@@ -115,6 +123,7 @@
 5. **Fakta yang bertentangan berarti TUNGGU**, ditambah laporan ke Fahmi.
 6. **Laporan tidak pernah langsung mengubah keputusan**; perubahan hanya lewat Buku Aturan.
 7. **Demo dan Live terpisah**: catatan, jeda, bukti, dan status versi.
+8. **Bukti punya bobot:** backtest < trade bayangan < trade uji < trade setara Live. Hanya trade setara Live yang menyalakan lampu 2 dan 3.
 
 ## B. Matriks kegiatan
 
@@ -132,8 +141,14 @@
 | Menempatkan order | FAHMI | FAHMI | T-TAB-TRADE | — |
 | Saran posisi berjalan | T-MONITOR | T-MONITOR | Fahmi | — |
 | Menahan karena risiko gabungan | T-RISIKO | T-RISIKO | Tim akun, Fahmi | — |
-| Membuat kartu pola | T-KARTU | T-KARTU (dari catatan T-TITIK-LEMAH s.d. T-BIAYA) | T-EVALUASI | — |
+| Membuat kartu pola | T-KARTU | T-KARTU (dari catatan T-BELAJAR-RUGI s.d. T-BIAYA) | T-EVALUASI | — |
 | Menyusun rapor dan menilai lampu | T-EVALUASI | T-EVALUASI | Fahmi | — |
+| Membuat dan mengikuti trade bayangan | T-BAYANGAN | T-BAYANGAN | T-BELAJAR-RUGI, T-PELUANG, T-KARTU | — |
+| Menampilkan daftar trade uji (demo) | T-AKUN-DEMO | T-AKUN-DEMO | Fahmi | — |
+| Membuka trade uji di MT5 demo (komentar `MDBKA-UJI`) | FAHMI | FAHMI | T-TAB-TRADE | — |
+| Menghitung peluang tertahan biaya | T-PELUANG | T-PELUANG | T-EVALUASI | — |
+| Membuat dan mengirim rekomendasi dari rugi | T-BELAJAR-RUGI | T-BELAJAR-RUGI | Tim penerima | — |
+| Menerima rekomendasi menjadi versi aturan | T-BUKU | T-EVALUASI (uji) → T-BUKU | Semua tim | **FAHMI** |
 | Menaikkan status versi | T-BUKU | T-BUKU | Semua tim | **FAHMI** |
 | Menurunkan status versi | T-EVALUASI | T-BUKU | Fahmi, semua tim | — (otomatis) |
 | Menghentikan kenaikan (perubahan kondisi) | T-PERUBAHAN | T-PERUBAHAN | T-EVALUASI, Fahmi | — |
@@ -152,7 +167,7 @@
 | Disahkan oleh | Fahmi Alhabsi — tanggal: ______ |
 | Dasar | Aturan mutlak `HANDOVER-CLAUDE.md` bagian 5; prinsip rancangan alur (bagian 2); rancangan fondasi; rancangan tim; keputusan K-1 s.d. K-9 di `docs/AUDIT-RANCANGAN-2026-10-13.md` |
 | Peralatan/perlengkapan | 4 terminal MT5 (Finex, OTB, MIFX, Exness) dengan EA `MDBKAMultiLive`, `ExportPositions` dan service `AutoExportMDBKAService`, `MDBKACalendarService`, `MDBKAHistoryService`; server Express MDBKA; aplikasi MDBKA; folder `Common\Files` dan `data/` |
-| Pencatatan dan pendataan | Tabel JSONL append-only: `keputusan`, `rangkaian`, `kartu_pola`, `laporan_tim` (fondasi G dan rancangan tim bagian 7); Buku Aturan dan riwayat status di `config/` (ikut git) |
+| Pencatatan dan pendataan | Tabel JSONL append-only: `keputusan`, `rangkaian`, `kartu_pola`, `laporan_tim`, `bayangan`, `rekomendasi` (fondasi G dan rancangan tim bagian 7); Buku Aturan dan riwayat status di `config/` (ikut git) |
 | Peringatan umum | MDBKA tidak pernah mengirim order. Rumus `decisionEngine.ts` dan parser tidak diubah. Data tidak ada → `null`, bukan angka karangan |
 
 ### SOP-MDBKA-01 — Pengambilan dan Validasi Data
@@ -229,7 +244,7 @@
 | --- | --- |
 | Kualifikasi pelaksana | T-AKUN-DEMO, T-AKUN-LIVE, T-RISIKO, FAHMI |
 | Keterkaitan | SOP-04 (masukan); SOP-06 (sesudah order) |
-| Peringatan | Live hanya versi PERCOBAAN_LIVE/LIVE; Finex demo baru dilonggarkan setelah F3 (K-2); gerbang biaya tetap aktif di demo (K-9) |
+| Peringatan | Live hanya versi PERCOBAAN_LIVE/LIVE; Finex demo baru dilonggarkan setelah F3 (K-2); gerbang biaya tetap menahan sinyal biasa di demo; di mode laboratorium sinyal yang ditahan biaya boleh menjadi trade uji (K-9 direvisi, SOP-15) |
 | Berlaku saat | Penyaringan per akun: setelah saklar mode (fase 2) dan J1 |
 
 | No | Uraian Prosedur | Pelaksana | Persyaratan/Kelengkapan | Waktu | Output | Keterangan |
@@ -264,7 +279,7 @@
 
 | Unsur | Isi |
 | --- | --- |
-| Kualifikasi pelaksana | T-TITIK-LEMAH, T-POLA, T-KONTEKS, T-BERITA, T-BIAYA, T-IND, T-KARTU |
+| Kualifikasi pelaksana | T-BELAJAR-RUGI, T-POLA, T-KONTEKS, T-BERITA, T-BIAYA, T-IND, T-KARTU |
 | Keterkaitan | SOP-06 (masukan); SOP-10 (penerima) |
 | Peringatan | Kartu hanya dari rangkaian selesai; tidak pernah digabung/ditimpa; data tidak lengkap ditandai, bukan dikarang |
 | Berlaku saat | Setelah K1–K4 dan G-5 |
@@ -273,7 +288,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Menghitung hasil rangkaian dalam R, USD, Rupiah | T-BIAYA | History + biaya; R = total bersih ÷ risiko uang open 1 (K-5) | Saat rangkaian selesai | Hasil rangkaian | — |
 | 2 | Mengisi catatan: indikator, konteks, berita, biaya, pola | T-IND, T-KONTEKS, T-BERITA, T-BIAYA, T-POLA | Catatan selama rangkaian | Saat rangkaian selesai | Catatan per tim | — |
-| 3 | Mencari sebab bila TP tidak tercapai / SL kena | T-TITIK-LEMAH | Data MFE/MAE | Saat rangkaian selesai | Label sebab | — |
+| 3 | Mencari sebab bila TP tidak tercapai / SL kena, lalu menjalankan SOP-17 | T-BELAJAR-RUGI | Data MFE/MAE | Saat rangkaian selesai | Label sebab + rekomendasi | — |
 | 4 | Menggabungkan semua catatan dan memberi label: Kasbi Bakar / Popeda Sagu / Sagu Tumang / Pupare Rebus | T-KARTU | Hasil langkah 1–3 | Saat rangkaian selesai | `kartu_pola` bernomor | Label dari aturan, bukan penilaian |
 | 5 | Menyusun sidik jari bertingkat (K-6) | T-KARTU | Kartu langkah 4 | Saat rangkaian selesai | Sidik jari tingkat 1–3 | — |
 | 6 | Menyerahkan kartu ke T-EVALUASI | T-KARTU | — | Segera | Kartu diterima | — |
@@ -324,6 +339,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Menyusun rapor per golongan, per versi aturan, per jenis akun | T-EVALUASI | Kartu, `keputusan`, History, rapor backtest | Mingguan | Rapor | Isi rapor: alur bagian 4 |
 | 2 | Menilai lampu 1 (backtest, dengan equity akun Live, tidak MODAL KURANG), lampu 2 (≥ 20 rangkaian demo setara Live, biaya Live), lampu 3 (20 rangkaian Live lot minimum) | T-EVALUASI | Rapor langkah 1 | Mingguan | Status lampu | Fondasi C5, K-8 |
+| 2a | Memperbarui panel laju bukti: jumlah trade bayangan, trade uji, dan trade setara Live per golongan, serta perkiraan waktu mencapai 20 | T-EVALUASI | `bayangan`, `keputusan`, `kartu_pola` | Mingguan | Panel laju bukti | Rancangan tim 11.3 |
 | 3 | Mengusulkan naik status bila lampu terpenuhi dan tidak ada tanda "perlu ditinjau" | T-EVALUASI | Langkah 2 + SOP-09 | Saat terpenuhi | Usulan naik | — |
 | 4 | Menyetujui atau menolak usulan naik | FAHMI | Usulan + rapor | Sesuai keputusan Fahmi | Persetujuan tertulis | — |
 | 5 | Mencatat perubahan status dan commit | T-BUKU (dibuatkan PENGEMBANG, di-commit Fahmi) | Persetujuan langkah 4 | Setelah disetujui | `riwayat_status` + commit | — |
@@ -380,6 +396,80 @@
 | 1 | Menjalankan "Backup sekarang" | FAHMI | Server berjalan | Usulan: setiap hari | Salinan cadangan | — |
 | 2 | Memastikan folder `keputusan`, `rangkaian`, `kartu`, `laporan` ikut dicadangkan | T-DATA | G-6 selesai | Setiap backup | Daftar folder tercadang | — |
 | 3 | Menerapkan retensi: arsip tick dan `keputusan` non-LOLOS 120 hari; `keputusan` LOLOS/entry, `rangkaian`, `kartu_pola` selamanya | T-DATA | Fondasi G4 | Harian | Berkas lama dihapus sesuai aturan | Tidak menghapus yang selamanya |
+
+### SOP-MDBKA-14 — Trade Bayangan
+
+| Unsur | Isi |
+| --- | --- |
+| Kualifikasi pelaksana | T-BAYANGAN |
+| Keterkaitan | SOP-04 (masukan: sinyal tertahan); SOP-07, SOP-16, SOP-17 (penerima) |
+| Peringatan | Bayangan tidak pernah dipakai untuk lampu 2/3; tidak ada hasil karangan; arsip tick mengikuti frekuensi ekspor EA |
+| Berlaku saat | Setelah TB-1 dan TB-2 (Finex, OTB dulu; MIFX, Exness setelah F1) |
+
+| No | Uraian Prosedur | Pelaksana | Persyaratan/Kelengkapan | Waktu | Output | Keterangan |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Menerima sinyal yang punya arah tetapi ditahan, dan setup "hampir" (skor ±2) | T-BAYANGAN | Catatan `keputusan` dari SOP-04 | Setiap candle tertutup | Calon bayangan | — |
+| 2 | Memastikan belum ada bayangan yang sama (simbol + arah) masih berjalan | T-BAYANGAN | Daftar bayangan aktif | Segera | Lolos / dilewati | — |
+| 3 | Mencatat bayangan: arah, entry (ask/bid saat sinyal), SL/TP sebelum gerbang, lot teoretis, porsi biaya, kode penjaga | T-BAYANGAN | Kuotasi + usulan strategi | Segera | Baris `bayangan` (dibuat) | Rumus tidak disentuh |
+| 4 | Mengikuti harga dari arsip tick sampai SL, TP, time-stop (Forex/JPY 3 jam), atau batas pengamatan | T-BAYANGAN | Arsip tick | Terus-menerus | — | Fungsi SL/TP sama dengan T-MONITOR |
+| 5 | Mencatat hasil dalam R, USD, Rupiah, termasuk biaya | T-BAYANGAN | Hasil langkah 4 | Saat selesai | Baris `bayangan` (selesai) | "Tanpa hasil" bila batas pengamatan habis |
+| 6 | Menyerahkan ke T-KARTU (kartu asal "bayangan"), T-BELAJAR-RUGI (bila rugi), T-PELUANG (bila ditahan biaya) | T-BAYANGAN | — | Segera | Diterima | — |
+
+### SOP-MDBKA-15 — Demo Laboratorium (Trade Uji, Opsi A)
+
+| Unsur | Isi |
+| --- | --- |
+| Kualifikasi pelaksana | T-AKUN-DEMO, FAHMI, T-TAB-TRADE |
+| Keterkaitan | SOP-04, SOP-05 (masukan); SOP-06, SOP-07 (sesudah dibuka) |
+| Peringatan | Hanya akun demo; Finex demo setelah F3; penjaga keras tetap menahan; lot minimum; MDBKA tidak mengirim order; trade uji tidak setara Live |
+| Berlaku saat | Setelah LAB-1 sampai LAB-3 dan saklar mode (fase 2) |
+
+| No | Uraian Prosedur | Pelaksana | Persyaratan/Kelengkapan | Waktu | Output | Keterangan |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Memastikan akun aktif terbukti demo | T-AKUN-DEMO | Status akun dari T-GERBANG | Segera | Lanjut / berhenti | Akun tanpa label = Live (tidak boleh) |
+| 2 | Memilah penjaga yang menahan: keras atau lunak | T-AKUN-DEMO | Daftar penjaga dari `keputusan` | Segera | Keras → tetap TUNGGU; lunak → calon trade uji | Rancangan tim 11.2 |
+| 3 | Menampilkan daftar trade uji: simbol, arah, entry, SL, TP, lot minimum, penjaga lunak yang dilewati | T-AKUN-DEMO | Calon langkah 2 | Segera | Daftar trade uji di layar | Diberi label jelas "TRADE UJI — DEMO" |
+| 4 | Membuka trade uji di MT5 demo dengan komentar `MDBKA-UJI` (bila Fahmi memilih) | FAHMI | Daftar langkah 3 | Sesuai keputusan Fahmi | Posisi demo | Opsi A |
+| 5 | Mengenali posisi sebagai trade uji (pencocokan simbol, arah, waktu; komentar di History setelah ditutup) | T-TAB-TRADE | Posisi + daftar trade uji | Segera / saat ditutup | Tanda trade uji di `keputusan` dan `rangkaian` | Tidak setara Live |
+| 6 | Pemantauan seperti rangkaian biasa | T-MONITOR | — | Siklus 30 menit | Saran | SOP-06 |
+
+### SOP-MDBKA-16 — Peluang Tertahan Biaya (T-PELUANG)
+
+| Unsur | Isi |
+| --- | --- |
+| Kualifikasi pelaksana | T-PELUANG, T-EVALUASI, FAHMI |
+| Keterkaitan | SOP-14 (bayangan), SOP-15 (trade uji), SOP-10 (lampu) |
+| Peringatan | Tidak membuka atau menahan sinyal; gerbang biaya di Live tidak berubah tanpa pengecualian tertulis aturan mutlak 2 |
+| Berlaku saat | Tahap 1: setelah PL-1. Tahap 3: setelah lampu terpenuhi dan PL-3 ditandatangani |
+
+| No | Uraian Prosedur | Pelaksana | Persyaratan/Kelengkapan | Waktu | Output | Keterangan |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Mengumpulkan sinyal yang ditahan biaya beserta porsi biayanya | T-PELUANG | `keputusan`, rapor backtest | Mingguan | Daftar sinyal tertahan biaya | — |
+| 2 | Menghitung hasil "seandainya diambil" dari backtest, bayangan, dan trade uji | T-PELUANG | SOP-14, SOP-15 | Mingguan | Hasil per golongan per tingkat biaya | Biaya nyata ikut dihitung |
+| 3 | Menyusun usulan ambang biaya per golongan bila ada yang tetap untung | T-PELUANG | Hasil langkah 2; n ≥ 20 | Saat bukti cukup | Usulan | — |
+| 4 | Menguji usulan lewat 3 lampu | T-EVALUASI | SOP-10 | Sesuai jadwal | Status lampu | — |
+| 5 | Menyiapkan draf pengecualian tertulis aturan mutlak 2 | PENGEMBANG | Lampu terpenuhi | Saat terpenuhi | Draf (seperti fondasi A9) | — |
+| 6 | Menandatangani atau menolak | FAHMI | Draf + bukti | Sesuai keputusan Fahmi | Pengecualian berlaku / tidak | — |
+
+### SOP-MDBKA-17 — Pembelajaran Rugi dan Pelacakan Rekomendasi
+
+| Unsur | Isi |
+| --- | --- |
+| Kualifikasi pelaksana | T-BELAJAR-RUGI, tim penerima, T-EVALUASI, FAHMI, T-BUKU |
+| Keterkaitan | SOP-07, SOP-14, SOP-15 (masukan); SOP-10 (aturan baru) |
+| Peringatan | Aturan tidak diubah setelah satu kali rugi; catatan waspada hanya peringatan; tidak ada jaminan simbol tidak rugi lagi |
+| Berlaku saat | Setelah PR-1 (rekomendasi), PR-2 (catatan waspada), PR-3 (pelacakan) |
+
+| No | Uraian Prosedur | Pelaksana | Persyaratan/Kelengkapan | Waktu | Output | Keterangan |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Menerima setiap rugi dari rangkaian, trade bayangan, dan trade uji | T-BELAJAR-RUGI | Hasil + MFE/MAE + konteks | Saat selesai | Daftar rugi | — |
+| 2 | Menetapkan sebab rugi menurut tabel sebab (rancangan tim 12) | T-BELAJAR-RUGI | Data langkah 1 | Segera | Label sebab | — |
+| 3 | Memberi catatan waspada pada simbol + sidik jari | T-BELAJAR-RUGI | Label sebab | Segera | Catatan waspada di layar | Tidak menahan |
+| 4 | Membuat rekomendasi tertulis dan mengirimnya ke tim penerima | T-BELAJAR-RUGI | Tabel sebab → penerima | Segera | Baris `rekomendasi` (DIUSULKAN) | — |
+| 5 | Bila sebab yang sama berulang n ≥ 20 per golongan: menguji rekomendasi dengan backtest dan bayangan | T-EVALUASI | Rekomendasi + data | Saat n tercapai | Status DIUJI + hasil | Data latih untuk menyetel, data ujian untuk memeriksa |
+| 6 | Menyetujui atau menolak | FAHMI | Hasil uji | Sesuai keputusan Fahmi | DITERIMA / DITOLAK | — |
+| 7 | Mencatat sebagai versi aturan baru (UJI_DEMO) | T-BUKU | Persetujuan | Setelah disetujui | MENJADI_VERSI + `riwayat_status` | Lalu jalur 3 lampu |
+| 8 | Laporan kepatuhan ke Fahmi bila sebabnya saran tidak dijalankan | T-BELAJAR-RUGI | Saran vs tindakan di MT5 | Mingguan | Laporan kepatuhan | — |
 
 ## D. Alur, proses, dan workflow
 
@@ -461,6 +551,34 @@ Tanda "perlu ditinjau" dari T-PERUBAHAN menghentikan semua panah naik sampai ver
 | T-PERUBAHAN | T-EVALUASI, T-BUKU | Tanda "perlu ditinjau" | Segera | 09 |
 | T-EVALUASI | FAHMI | Usulan naik status | Saat lampu terpenuhi | 10 |
 | T-BUKU | T-ANALISA, tim akun | Versi aturan baru/turun | Setelah dicatat | 10 |
+| T-ANALISA | T-BAYANGAN | Sinyal tertahan + setup "hampir" | Setiap candle tertutup | 14 |
+| T-AKUN-DEMO | FAHMI | Daftar trade uji | Segera | 15 |
+| T-BAYANGAN | T-KARTU, T-BELAJAR-RUGI, T-PELUANG | Hasil bayangan | Saat selesai | 14 |
+| T-PELUANG | T-EVALUASI | Usulan ambang biaya | Saat bukti cukup | 16 |
+| T-BELAJAR-RUGI | Tim penerima | Rekomendasi + catatan waspada | Segera | 17 |
+| T-EVALUASI | FAHMI | Hasil uji rekomendasi | Saat n tercapai | 17 |
+
+### D5. Mesin bukti
+
+```mermaid
+flowchart LR
+  S[Sinyal dari T-ANALISA] --> P{T-PENJAGA}
+  P -- lolos --> L[Trade setara Live<br/>lampu 2 dan 3]
+  P -- ditahan penjaga lunak --> U[Trade uji demo<br/>dibuka Fahmi, SOP-15]
+  P -- ditahan, punya arah --> B[Trade bayangan<br/>SOP-14]
+  P -- ditahan penjaga keras --> T[TUNGGU]
+  B --> R[Hasil: R, USD, Rupiah]
+  U --> R
+  L --> R
+  R --> K[T-KARTU]
+  R -- rugi --> BR[T-BELAJAR-RUGI<br/>rekomendasi, SOP-17]
+  R --> LB[Panel laju bukti]
+  BR --> EV[T-EVALUASI]
+  K --> EV
+  EV --> BK[T-BUKU<br/>versi aturan baru]
+```
+
+Trade bayangan juga dibuat untuk sinyal yang ditahan penjaga lunak, jadi satu sinyal bisa menghasilkan bayangan dan trade uji sekaligus; hasil keduanya dicatat terpisah.
 
 ## E. Mengelola dan mengevaluasi SOP
 
@@ -477,6 +595,10 @@ Tanda "perlu ditinjau" dari T-PERUBAHAN menghentikan semua panah naik sampai ver
 | T-RISIKO | Rugi gabungan selalu dalam batas Buku Aturan | Panel risiko |
 | T-KARTU | Satu kartu per rangkaian selesai; label sesuai aturan | `kartu_pola` |
 | T-EVALUASI | Rapor mingguan terbit; penurunan status otomatis berjalan | Rapor, `riwayat_status` |
+| T-BAYANGAN | Setiap sinyal tertahan yang punya arah menjadi bayangan; tidak ada bayangan dobel | `bayangan` |
+| T-AKUN-DEMO (laboratorium) | Tidak ada trade uji di akun Live; tidak ada trade uji dari penjaga keras | `keputusan` |
+| T-PELUANG | Hasil per golongan dan tingkat biaya terbit mingguan | Laporan T-PELUANG |
+| T-BELAJAR-RUGI | Setiap rugi punya sebab dan rekomendasi; tidak ada rekomendasi tanpa penerima atau status | `rekomendasi` |
 
 ### E2. Jadwal evaluasi
 

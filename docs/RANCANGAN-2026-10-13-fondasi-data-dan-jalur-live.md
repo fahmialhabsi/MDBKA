@@ -241,6 +241,10 @@ Bila 20 rangkaian Live terakhir rata-ratanya ≤ 0, atau rugi beruntun melewati 
 
 Kartu pola demo tetap menjadi bahan bakar analisa di Live, diberi tanda asal "demo". Kartu Live ditambahkan terpisah. Tampilan memisahkan keduanya, dan keputusan yang menahan atau membuka sinyal Live hanya memakai kartu setara Live.
 
+### C9. Bobot sumber bukti (13 Okt 2026)
+
+Backtest < trade bayangan < trade uji demo laboratorium < trade setara Live. **Lampu 2 dan 3 hanya memakai trade setara Live.** Trade bayangan dan trade uji dipakai untuk memilih aturan yang layak diuji, mengisi kartu tingkat awal, dan menilai penjaga yang terlalu ketat (rancangan tim, bagian 11).
+
 ### Langkah Jalur Demo → Live
 
 | Langkah | Isi | Menyentuh Live? |
@@ -298,7 +302,9 @@ Batas 1% berlaku per setup, sedangkan penjaga korelasi dan margin bekerja per po
 | `keputusan` | `data/keputusan/keputusan-<broker>-<YYYY-MM>.jsonl` | Tidak (backup) | Append-only |
 | `penjaga_hasil` | Di dalam setiap baris `keputusan` | Tidak | Bagian dari keputusan |
 | `rangkaian` | `data/rangkaian/rangkaian-<broker>.jsonl` | Tidak (backup) | Append-only; perubahan = baris baru |
-| `kartu_pola` | `data/kartu/kartu-pola-<broker>.jsonl` | Tidak (backup) | Append-only, tidak pernah digabung |
+| `kartu_pola` | `data/kartu/kartu-pola-<broker>.jsonl` | Tidak (backup) | Append-only, tidak pernah digabung; `asal`: live / demo / uji / bayangan |
+| `bayangan` | `data/bayangan/bayangan-<broker>-<YYYY-MM>.jsonl` | Tidak (backup) | Append-only; satu baris saat dibuat, satu baris saat selesai |
+| `rekomendasi` | `data/rekomendasi/rekomendasi.jsonl` | Tidak (backup) | Append-only; perubahan status = baris baru |
 | Sudah ada: `entries`, `excursion`, History MT5, arsip tick | Tetap di tempatnya | Tidak | Dihubungkan lewat tiket/PositionId |
 
 ### G2. Kolom utama

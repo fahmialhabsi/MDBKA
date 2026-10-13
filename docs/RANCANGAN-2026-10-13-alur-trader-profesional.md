@@ -157,7 +157,7 @@ Fahmi meminta Claude memutuskan ketujuh pertanyaan berdasarkan data MDBKA. Ini *
 | 6 | Jam sesi London/New York | **Ditunda.** Tidak dipakai di versi pertama. | Setup H4 + emas tidak memerlukannya. Bila nanti dibutuhkan, jam sesi dihitung dari jam UTC tetap ditambah selisih jam server tiap broker yang sudah tercatat (misalnya OTB UTC+2, Exness UTC+0). Perubahan jam musim akhir Okt/awal Nov harus dicek, seperti catatan handoff. |
 | 7 | Urutan dengan pekerjaan mode demo/live | **Mode demo/live dulu (2–3 langkah kecil), lalu P1–P5 rancangan ini.** | Permintaan awal hari ini adalah demo tidak terkunci. Langkah awalnya kecil dan dibatasi untuk broker tanpa akun live terdaftar (OTB, MIFX, Exness), sesuai audit. P1–P5 rancangan ini hanya menyentuh backtest, tidak menyentuh Live, jadi aman dikerjakan sesudahnya. |
 
-**Keputusan dari audit (disetujui Fahmi 13 Okt 2026):** definisi "3 lampu hijau" (fondasi C5); **mode A dengan penguncian login** (tombol Demo/Live, default Live; tombol Demo hanya aktif untuk login yang terbukti demo; sebelum F3: OTB, MIFX, Exness); **gerbang biaya tetap aktif di demo** (K-9).
+**Keputusan dari audit (disetujui Fahmi 13 Okt 2026):** definisi "3 lampu hijau" (fondasi C5); **mode A dengan penguncian login** (tombol Demo/Live, default Live; tombol Demo hanya aktif untuk login yang terbukti demo; sebelum F3: OTB, MIFX, Exness); **gerbang biaya tetap aktif di demo** (K-9). **K-9 direvisi 13 Okt 2026:** di demo laboratorium, sinyal yang ditahan biaya boleh dibuka sebagai trade uji (rancangan tim, bagian 10–11).
 
 ## 7. Tim 2 — monitor posisi berjalan (draf, 13 Okt 2026)
 
@@ -268,6 +268,7 @@ Rugi terbesar satu rangkaian = 1R.
 
 - Setiap rangkaian rugi diberi label sebab dari data MFE/MAE: langsung melawan sejak awal (pemicu lemah); sempat +0,5R lalu berbalik (titik impas terlambat); SL < 0,5 × ATR (SL terlalu dekat); dekat berita, sesi tutup, atau melawan arah D1 (penjaga/penyaring kurang ketat).
 - Aturan TIDAK diubah setelah satu kali rugi. Perbaikan hanya bila satu sebab berulang (n ≥ 20 per golongan), disetel di data latih, lalu dicek di data ujian.
+- Rekomendasi tertulis, catatan waspada, dan pelacakannya: rancangan tim bagian 12 (Tim Pembelajaran Rugi). Sumber rugi juga mencakup trade bayangan dan trade uji (bagian 11).
 
 ### 7.8 Tim-tim pencatat dan label pola (permintaan Fahmi, 13 Okt 2026)
 
@@ -278,7 +279,7 @@ Sejak open 1, beberapa "tim" bekerja bersamaan. Setiap tim adalah modul aturan m
 | Tim 1 — Analisa | Membuat sinyal open 1 (pemindai yang sudah ada) | Status, skor, arah, entry/SL/TP, alasan |
 | Tim 2 — Monitor posisi | Saran tiap siklus 30 menit (7.6, 7.7) | Keputusan tiap siklus dan alasannya |
 | Tim 3 — Pemantau indikator (koordinator tim indikator, lihat `docs/RANCANGAN-2026-10-13-tim-akun-tab-indikator.md` bagian 5) | Memotret semua indikator saat entry dan tiap siklus | MA50, RSI, CCI, MACD, ATR, posisi harga terhadap MA50 (H1; M15 bila sudah ada) |
-| Tim 4 — Penguji titik lemah | Setelah rangkaian selesai, mencari kenapa TP tidak tercapai atau SL kena | Jarak SL dibanding ATR, MFE dibanding jarak TP (misalnya sempat 70% ke TP lalu berbalik), MAE sejak menit awal |
+| Tim 4 — Pembelajaran Rugi (dulu penguji titik lemah; rancangan tim bagian 12) | Setelah rangkaian selesai, mencari kenapa TP tidak tercapai atau SL kena | Jarak SL dibanding ATR, MFE dibanding jarak TP (misalnya sempat 70% ke TP lalu berbalik), MAE sejak menit awal |
 | Tim 5 — Pembaca pola | Mencatat pola yang muncul selama posisi berjalan dan arah gerak sesudahnya | Pola (penolakan, engulfing, breakout-retest), arah sesudahnya; catatan untuk open berikutnya |
 | Tim 6 — Pencatat konteks (tambahan Claude) | Keadaan pasar saat entry | Golongan, arah D1, sesi dan jam, hari, jarak ke berita, kondisi ATR |
 | Tim 6b — Pencatat respons berita (13 Okt 2026) | Untuk berita yang terjadi selama rangkaian: selisih Actual dibanding Forecast (sudah ada di `MDBKA_Calendar_<login>.csv`) dan gerak harga/spread sesudahnya | Nama berita, Actual, Forecast, Previous, gerak harga 5/15/30 menit sesudahnya, spread |
