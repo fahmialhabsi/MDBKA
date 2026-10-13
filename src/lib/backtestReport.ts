@@ -15,11 +15,13 @@
  */
 import { candleTimeMs, type ScanRiskHold, type ScanStatus } from "./symbolScanner";
 import { MIN_PROVEN_TRADES } from "./evaluationView";
+import { RISK_GROUPS, riskGroupOf } from "./riskGroup";
 import {
   BACKTEST_SKIPPED_GUARDS,
   type BacktestOutcome,
   type BacktestRun,
   type BacktestTrade,
+  type CostHeldTrade,
 } from "./backtest";
 
 /** Porsi waktu untuk data latih (sisanya data ujian). */
@@ -327,4 +329,86 @@ export function buildBacktestReport(
     skippedGuards: BACKTEST_SKIPPED_GUARDS,
     notes,
   };
+}
+
+/** PL-1: tingkat porsi biaya (batas Mode Aman 10%). */
+export const COST_TIERS: readonly { readonly key: string; readonly from: number; readonly to: number }[] = [
+  { key: "10–15%", from: 0.1, to: 0.15 },
+  { key: "15–20%", from: 0.15, to: 0.2 },
+  { key: "20–30%", from: 0.2, to: 0.3 },
+  { key: "≥30%", from: 0.3, to: Number.POSITIVE_INFINITY },
+];
+
+export interface CostHeldRow {
+  /** "FOREX · 10–15%" dst. */
+  readonly key: string;
+  readonly group: string;
+  readonly tier: string;
+  readonly n: number;
+  readonly tp: number;
+  readonly sl: number;
+  readonly time: number;
+  readonly avgR: number | null;
+  readonly netUsd: number;
+}
+
+/**
+ * PL-1 (13 Okt 2026, T-PELUANG tahap 1) — hasil "seandainya diambil" sinyal
+ * DITAHAN_BIAYA per golongan × tingkat porsi biaya. Posisi TERBUKA (data habis)
+ * dan porsi biaya tidak diketahui tidak dihitung. Hanya bahan bukti: gerbang
+ * biaya 10% TIDAK berubah (aturan mutlak 2).
+ */
+export function summarizeCostHeld(runs: readonly BacktestRun[]): CostHeldRow[] {
+  const acc = new Map<string, { group: string; tier: string; trades: CostHeldTrade[] }>();
+  for (const run of runs) {
+    const group = riskGroupOf(run.symbol).id;
+    for (const t of run.costHeldTrades ?? []) {
+      if (t.outcome === "TERBUKA" || t.costShareOfRisk === null) continue;
+      const share = t.costShareOfRisk;
+      const tier = COST_TIERS.find((c) => share >= c.from && share < c.to);
+      if (tier === undefined) continue;
+      const key = `${group} · ${tier.key}`;
+      const cur = acc.get(key) ?? { group, tier: tier.key, trades: [] };
+      cur.trades.push(t);
+      acc.set(key, cur);
+    }
+  }
+  const groupOrder = Object.keys(RISK_GROUPS);
+  const tierOrder = COST_TIERS.map((c) => c.key);
+  return [...acc.entries()]
+    .map(([key, v]) => {
+      const n = v.trades.length;
+      return {
+        key,
+        group: v.group,
+        tier: v.tier,
+        n,
+        tp: v.trades.filter((t) => t.outcome === "TP").length,
+        sl: v.trades.filter((t) => t.outcome === "SL").length,
+        time: v.trades.filter((t) => t.outcome === "WAKTU").length,
+        avgR: n > 0 ? Math.round((v.trades.reduce((s, t) => s + t.rMultiple, 0) / n) * 100) / 100 : null,
+        netUsd: Math.round(v.trades.reduce((s, t) => s + t.netUsd, 0) * 100) / 100,
+      };
+    })
+    .sort((a, b) => groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group) || tierOrder.indexOf(a.tier) - tierOrder.indexOf(b.tier));
+}
+
+/** Bagian rapor teks untuk `npm run backtest`. */
+export function formatCostHeldSection(rows: readonly CostHeldRow[], usdIdr: number | null): string {
+  const lines = [
+    "Seandainya diambil — sinyal DITAHAN_BIAYA (PL-1, hanya bukti; gerbang biaya 10% tidak berubah)",
+    "SL/TP dari usulan strategi sebelum gerbang; lot minimum broker; spread, komisi, dan swap ikut dihitung.",
+  ];
+  if (rows.length === 0) {
+    lines.push("  Tidak ada sinyal ditahan biaya yang selesai disimulasikan.");
+    return lines.join("\n");
+  }
+  for (const r of rows) {
+    const rp = usdIdr === null ? "" : ` (≈Rp${Math.round(r.netUsd * usdIdr).toLocaleString("id-ID")})`;
+    const proof = r.n >= MIN_PROVEN_TRADES ? "" : ` — belum cukup (${r.n}/${MIN_PROVEN_TRADES})`;
+    lines.push(
+      `  ${r.key.padEnd(24)} n=${String(r.n).padStart(3)}  TP ${r.tp} · SL ${r.sl} · waktu ${r.time}  rata-rata ${r.avgR === null ? "-" : `${r.avgR}R`}  bersih $${r.netUsd}${rp}${proof}`,
+    );
+  }
+  return lines.join("\n");
 }

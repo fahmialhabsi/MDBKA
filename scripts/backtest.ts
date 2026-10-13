@@ -12,7 +12,7 @@ import { resolveCommonFilesDir } from "../server/routes/marginRoutes";
 import { readUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
 import { FALLBACK_RATES, fetchECBRates } from "../src/services/fxRateService";
 import { runBacktest, type BacktestRun } from "../src/lib/backtest";
-import { buildBacktestReport, capitalTopUp } from "../src/lib/backtestReport";
+import { buildBacktestReport, capitalTopUp, formatCostHeldSection, summarizeCostHeld } from "../src/lib/backtestReport";
 import { getStrategy } from "../src/lib/strategyRegistry";
 import { aggregateCandleCsv } from "../src/lib/candleAggregate";
 import {
@@ -119,6 +119,9 @@ async function main(): Promise<number> {
     retestEquityUsd,
     judged,
   }));
+  // PL-1: hasil "seandainya diambil" sinyal yang ditahan biaya (bukti T-PELUANG).
+  console.log("");
+  console.log(formatCostHeldSection(summarizeCostHeld(runs), usdIdr));
   return 0;
 }
 

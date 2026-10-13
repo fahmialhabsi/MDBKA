@@ -32,7 +32,7 @@ import { timeStopApplies, TIME_STOP_HOURS } from "./exitMonitor";
 import { applyBrokerPreset } from "./marketReset";
 import { estimateSwap } from "./swapEstimate";
 import { withUsdPointValue } from "./usdPointValue";
-import { candleTimeMs, scanSymbol, type ScanRiskHold, type ScanStatus } from "./symbolScanner";
+import { candleTimeMs, scanSymbolDetailed, type ScanRiskHold, type ScanStatus } from "./symbolScanner";
 import type { StrategyId } from "./strategyRegistry";
 
 /** Jumlah candle yang dilihat mesin tiap jam (= CSV live AutoExport). */
@@ -86,6 +86,17 @@ export interface BacktestTrade extends BacktestPlan {
   readonly swapUsd?: number | null;
 }
 
+/**
+ * PL-1 (13 Okt 2026) — sinyal DITAHAN_BIAYA yang disimulasikan "seandainya
+ * diambil" (T-PELUANG tahap 1). SL/TP dari usulan strategi SEBELUM gerbang
+ * Mode Aman; lot = lot minimum broker (gerbang biaya dinilai per lot).
+ * Jalur terpisah: tidak memengaruhi `trades` maupun sinyal LOLOS.
+ */
+export interface CostHeldTrade extends BacktestTrade {
+  /** Porsi biaya terhadap risiko saat sinyal (0..1). */
+  readonly costShareOfRisk: number | null;
+}
+
 export interface BacktestInput {
   readonly symbol: string;
   readonly brokerId: BrokerId;
@@ -116,6 +127,8 @@ export interface BacktestRun {
   /** Hitungan status pemindai per jam yang dinilai (tanpa jam saat posisi terbuka). */
   readonly statusCount: Readonly<Partial<Record<ScanStatus, number>>>;
   readonly trades: readonly BacktestTrade[];
+  /** PL-1: simulasi "seandainya diambil" untuk sinyal DITAHAN_BIAYA (jalur terpisah). */
+  readonly costHeldTrades?: readonly CostHeldTrade[];
   /** B5d: angka risiko tiap jam yang sinyalnya DITAHAN_RISIKO (bahan modal yang dibutuhkan). */
   readonly riskHolds?: readonly ScanRiskHold[];
   /** B3: jam candle pertama & terakhir yang dinilai mesin ("" bila gagal). */
@@ -236,37 +249,21 @@ export function runBacktest(input: BacktestInput): BacktestRun {
   const statusCount: Partial<Record<ScanStatus, number>> = {};
   const trades: BacktestTrade[] = [];
   const riskHolds: ScanRiskHold[] = [];
-  let evaluated = 0;
-  let i = window - 1;
-  while (i < candles.length - 1) {
-    const csv = [header, ...rows.slice(i - window + 1, i + 1)].join("\n");
-    const row = scanSymbol({
-      symbol, brokerId: input.brokerId, csv, quote,
-      equity: input.equity, fxRates: input.fxRates,
-      ...(input.strategy !== undefined ? { strategy: input.strategy } : {}),
-    });
-    evaluated += 1;
-    statusCount[row.status] = (statusCount[row.status] ?? 0) + 1;
-    if (row.riskHold !== undefined) riskHolds.push(row.riskHold);
-    const plan = row.status === "LOLOS" ? (row.plan ?? null) : null;
-    if (plan === null) {
-      i += 1;
-      continue;
-    }
-    const signalMs = candleTimeMs(String(candles[i].time ?? ""));
-    const exit = simulateTrade(plan, candles.slice(i + 1), input.spread, signalMs, timeStop);
-    if (exit === null) break;
-    const exitAt = i + 1 + exit.exitIndex;
+  const costHeldTrades: CostHeldTrade[] = [];
+  // PL-1: satu simulasi "seandainya diambil" per simbol pada satu waktu.
+  let costFreeAt = 0;
+
+  const makeTrade = (plan: BacktestPlan, lot: number, at: number, exit: SimulatedExit): BacktestTrade => {
+    const exitAt = at + 1 + exit.exitIndex;
     const risk = Math.abs(plan.entry - plan.stopLoss);
     const priceResult = round12(
       plan.direction === "BELI" ? exit.exitPrice - plan.entry : plan.entry - exit.exitPrice,
     );
-    const lot = plan.suggestedLot !== null && plan.suggestedLot > 0 ? plan.suggestedLot : broker.minLot;
     // B5c: masuk di tutup candle sinyal, keluar dianggap di tutup candle keluar (hati-hati).
     const swap = estimateSwap(
       {
         symbol, broker: input.brokerId, direction: plan.direction, lot, price: plan.entry,
-        entryServer: addHours(String(candles[i].time ?? ""), input.barHours ?? 1),
+        entryServer: addHours(String(candles[at].time ?? ""), input.barHours ?? 1),
         nowServer: addHours(String(candles[exitAt].time ?? ""), input.barHours ?? 1),
       },
       (amount, currency) => {
@@ -279,12 +276,12 @@ export function runBacktest(input: BacktestInput): BacktestRun {
     );
     const swapUsd = swap === null ? null : swap.value;
     const netUsd = Math.round(((priceResult * broker.pointValue - broker.commission) * lot + (swapUsd ?? 0)) * 100) / 100;
-    trades.push({
+    return {
       direction: plan.direction,
       entry: plan.entry,
       stopLoss: plan.stopLoss,
       takeProfit: plan.takeProfit,
-      signalTime: String(candles[i].time ?? ""),
+      signalTime: String(candles[at].time ?? ""),
       exitTime: String(candles[exitAt].time ?? ""),
       exitPrice: round12(exit.exitPrice),
       outcome: exit.outcome,
@@ -294,13 +291,56 @@ export function runBacktest(input: BacktestInput): BacktestRun {
       lot,
       netUsd,
       swapUsd,
+    };
+  };
+
+  let evaluated = 0;
+  let i = window - 1;
+  while (i < candles.length - 1) {
+    const csv = [header, ...rows.slice(i - window + 1, i + 1)].join("\n");
+    const detail = scanSymbolDetailed({
+      symbol, brokerId: input.brokerId, csv, quote,
+      equity: input.equity, fxRates: input.fxRates,
+      ...(input.strategy !== undefined ? { strategy: input.strategy } : {}),
     });
+    const row = detail.row;
+    evaluated += 1;
+    statusCount[row.status] = (statusCount[row.status] ?? 0) + 1;
+    if (row.riskHold !== undefined) riskHolds.push(row.riskHold);
+    const setup = detail.setup;
+    if (
+      row.status === "DITAHAN_BIAYA" &&
+      i >= costFreeAt &&
+      setup !== null &&
+      (setup.decision === "BELI" || setup.decision === "JUAL") &&
+      setup.stopLoss !== null &&
+      setup.takeProfit !== null &&
+      broker.minLot > 0
+    ) {
+      const held: BacktestPlan = { direction: setup.decision, entry: setup.entry, stopLoss: setup.stopLoss, takeProfit: setup.takeProfit };
+      const heldExit = simulateTrade(held, candles.slice(i + 1), input.spread, candleTimeMs(String(candles[i].time ?? "")), timeStop);
+      if (heldExit !== null) {
+        costHeldTrades.push({ ...makeTrade(held, broker.minLot, i, heldExit), costShareOfRisk: row.costShareOfRisk });
+        costFreeAt = heldExit.outcome === "TERBUKA" ? Number.POSITIVE_INFINITY : i + 1 + heldExit.exitIndex;
+      }
+    }
+    const plan = row.status === "LOLOS" ? (row.plan ?? null) : null;
+    if (plan === null) {
+      i += 1;
+      continue;
+    }
+    const signalMs = candleTimeMs(String(candles[i].time ?? ""));
+    const exit = simulateTrade(plan, candles.slice(i + 1), input.spread, signalMs, timeStop);
+    if (exit === null) break;
+    const exitAt = i + 1 + exit.exitIndex;
+    const lot = plan.suggestedLot !== null && plan.suggestedLot > 0 ? plan.suggestedLot : broker.minLot;
+    trades.push(makeTrade(plan, lot, i, exit));
     if (exit.outcome === "TERBUKA") break;
     // Sinyal berikutnya paling cepat di close candle tempat posisi tutup.
     i = exitAt;
   }
   return {
-    symbol, candles: candles.length, evaluated, statusCount, trades, riskHolds,
+    symbol, candles: candles.length, evaluated, statusCount, trades, riskHolds, costHeldTrades,
     startTime: String(candles[window - 1].time ?? ""),
     endTime: String(candles[candles.length - 1].time ?? ""),
     error: null,

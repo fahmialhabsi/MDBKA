@@ -8,6 +8,7 @@
  */
 import type { AnalysisResult } from "../types/analysis";
 import { priceDigits } from "./tickSize";
+import { RISK_GROUPS, riskGroupOf, type RiskGroupId } from "./riskGroup";
 
 export interface EvalTradeStats {
   readonly n: number;
@@ -298,4 +299,54 @@ export function excursionCell(
       (partial ? ` · rekaman sebagian (${e.ticks} harga)` : ` · rekaman lengkap (${e.ticks} harga)`),
     tone: value > 0 ? "untung" : value < 0 ? "rugi" : "netral",
   };
+}
+
+export interface RiskGroupProof {
+  readonly group: RiskGroupId;
+  readonly label: string;
+  readonly stats: EvalTradeStats;
+}
+
+const round2 = (v: number): number => Math.round(v * 100) / 100;
+
+/**
+ * P5a (13 Okt 2026, tampilan saja) — bukti trade berstatus LOLOS saat entry,
+ * dipecah per golongan risiko (Forex, Forex JPY, Logam, …). Rumus sama dengan
+ * computeStats server (untung = bersih > 0). Penahan F5 TIDAK diubah: masih
+ * dinilai per broker sampai ada keputusan terpisah.
+ */
+export function lolosByRiskGroup(trades: readonly EvalTrade[]): RiskGroupProof[] {
+  const byGroup = new Map<RiskGroupId, EvalTrade[]>();
+  for (const t of trades) {
+    if (t.group !== "LOLOS") continue;
+    const id = riskGroupOf(t.symbol).id;
+    byGroup.set(id, [...(byGroup.get(id) ?? []), t]);
+  }
+  const order = Object.keys(RISK_GROUPS) as RiskGroupId[];
+  return order
+    .filter((id) => byGroup.has(id))
+    .map((id) => {
+      const list = byGroup.get(id) ?? [];
+      const wins = list.filter((t) => t.net > 0);
+      const losses = list.filter((t) => t.net <= 0);
+      const sum = (xs: readonly EvalTrade[]): number => xs.reduce((s, t) => s + t.net, 0);
+      const withR = list.filter((t) => t.rMultiple !== null);
+      const n = list.length;
+      return {
+        group: id,
+        label: RISK_GROUPS[id].label,
+        stats: {
+          n,
+          wins: wins.length,
+          losses: losses.length,
+          winRate: n > 0 ? wins.length / n : null,
+          net: round2(sum(list)),
+          avgWin: wins.length > 0 ? round2(sum(wins) / wins.length) : null,
+          avgLoss: losses.length > 0 ? round2(sum(losses) / losses.length) : null,
+          expectancy: n > 0 ? round2(sum(list) / n) : null,
+          avgR: withR.length > 0 ? round2(withR.reduce((s, t) => s + (t.rMultiple ?? 0), 0) / withR.length) : null,
+          rCount: withR.length,
+        },
+      };
+    });
 }

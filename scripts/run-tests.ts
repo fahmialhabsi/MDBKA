@@ -258,7 +258,7 @@ import {
 import { withUsdPointValue } from "../src/lib/usdPointValue";
 import { resolveCsvBidAsk } from "../src/lib/csvQuote";
 import { BACKTEST_SKIPPED_GUARDS, BACKTEST_WINDOW, runBacktest, simulateTrade, type BacktestRun, type BacktestTrade } from "../src/lib/backtest";
-import { buildBacktestReport, capitalForSignals, capitalTopUp, MAX_DRAWDOWN_SHARE_OF_CAPITAL, MIN_EDGE_OVER_BREAKEVEN, SIGNAL_CAPITAL_COVERAGE, summarizeTrades } from "../src/lib/backtestReport";
+import { buildBacktestReport, capitalForSignals, capitalTopUp, formatCostHeldSection, MAX_DRAWDOWN_SHARE_OF_CAPITAL, MIN_EDGE_OVER_BREAKEVEN, SIGNAL_CAPITAL_COVERAGE, summarizeCostHeld, summarizeTrades } from "../src/lib/backtestReport";
 import { DEFAULT_STRATEGY_ID, getStrategy, parseStrategyId, STRATEGIES, STRATEGY_IDS } from "../src/lib/strategyRegistry";
 import { bearishRejection, bullishRejection, CANDLE_PARAMS, candleSetup, trendFromSwings } from "../src/lib/candleStrategy";
 import { isBearishEngulfing, isBullishEngulfing, scalpSetup, SCALP_PARAMS, smaSeries, stochasticK } from "../src/lib/scalpStrategy";
@@ -344,6 +344,7 @@ import {
   formatWinRate,
   isLegacyGroup,
   applyProofHold,
+  lolosByRiskGroup,
   lolosLabel,
   mergeGroupStats,
   proofHoldReason,
@@ -8076,7 +8077,8 @@ test("636. B2 runBacktest: data kurang/rusak jujur, tanpa mengintip masa depan, 
     assert(t.outcome !== "WAKTU" || t.bars <= 3, `Forex WAKTU maks 3 candle: ${JSON.stringify(t)}`);
   }
   assert(BACKTEST_SKIPPED_GUARDS.length === 6, "daftar satpam yang dilewati wajib tampil di rapor");
-  assert(readSrc("src/lib/backtest.ts").includes("scanSymbol({") && !readSrc("src/lib/backtest.ts").includes("analyzeMarket"), "wajib lewat pemindai yang sama, tanpa jalur keputusan lain");
+  // PL-1 (13 Okt 2026): diubah sengaja — backtest kini memakai scanSymbolDetailed (inti scanCore yang SAMA dengan scanSymbol + setup sebelum gerbang); inti uji tetap.
+  assert(/scanSymbol(Detailed)?\(\{/.test(readSrc("src/lib/backtest.ts")) && !readSrc("src/lib/backtest.ts").includes("analyzeMarket"), "wajib lewat pemindai yang sama, tanpa jalur keputusan lain");
 });
 
 function btTrade(day: number, hour: number, netUsd: number, outcome: BacktestTrade["outcome"] = netUsd > 0 ? "TP" : "SL"): BacktestTrade {
@@ -9281,7 +9283,7 @@ test("705. A7-6 test kembar: snapshot setara → scanSymbol identik; pemindai, d
     "server/services/tradeEntryLog.ts",
     "src/lib/backtest.ts",
   ]) {
-    assert(readSrc(rel).includes("scanSymbol("), `${rel} harus memakai scanSymbol`);
+    assert(/scanSymbol(Detailed)?\(/.test(readSrc(rel)), `${rel} harus memakai scanSymbol`);
   }
   // Hasil analisa (App.tsx) masih jalur sendiri sampai klausul A9 (A7-5); dicatat lewat shadow S1–S3.
   assert(!readSrc("src/App.tsx").includes("scanSymbol("), "App belum boleh memakai scanSymbol (menunggu A9)");
@@ -9416,6 +9418,53 @@ test("709. TB-2 pelari: sinyal tertahan → satu baris DIBUAT per simbol+arah; t
   } finally {
     nfs.rmSync(dir, { recursive: true, force: true });
   }
+});
+test("711. PL-1 backtest: sinyal DITAHAN_BIAYA disimulasikan 'seandainya diambil' di jalur terpisah; rapor per golongan × porsi biaya", () => {
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const gelombang = (i: number) => 1.3 + 0.004 * Math.sin(i / 40) + 0.0006 * Math.sin(i / 3);
+  const base = { symbol: "GBPUSD", brokerId: "finex" as const, csv: btCsv(500, gelombang), equity: 10000, fxRates: rates };
+  const murah = runBacktest({ ...base, spread: 0.00005 });
+  assert((murah.costHeldTrades ?? []).length === 0 && murah.trades.length > 0, "spread murah: tidak ada sinyal ditahan biaya");
+  const mahal = runBacktest({ ...base, spread: 0.0003 });
+  const held = mahal.costHeldTrades ?? [];
+  assert((mahal.statusCount.DITAHAN_BIAYA ?? 0) > 0 && held.length > 0 && mahal.trades.length === 0, `ditahan=${mahal.statusCount.DITAHAN_BIAYA} sim=${held.length}`);
+  for (let k = 0; k < held.length; k++) {
+    const t = held[k];
+    assert(t.costShareOfRisk !== null && t.costShareOfRisk >= 0.1 && t.lot === 0.01, `porsi/lot: ${JSON.stringify(t)}`);
+    assert(t.direction === "BELI" ? t.stopLoss < t.entry && t.entry < t.takeProfit : t.takeProfit < t.entry && t.entry < t.stopLoss, "SL/TP asli strategi");
+    if (k > 0) assert(t.signalTime >= held[k - 1].exitTime, "satu simulasi per simbol pada satu waktu");
+  }
+  const rows = summarizeCostHeld([mahal]);
+  const counted = held.filter((t) => t.outcome !== "TERBUKA").length;
+  assert(rows.reduce((s, r) => s + r.n, 0) === counted && rows.every((r) => r.group === "FOREX"), `baris: ${JSON.stringify(rows)}`);
+  assert(rows.map((r) => r.tier).join(",") === "10–15%,15–20%,20–30%", `urut tingkat: ${rows.map((r) => r.tier).join(",")}`);
+  const text = formatCostHeldSection(rows, 17000);
+  assert(text.includes("gerbang biaya 10% tidak berubah") && text.includes("FOREX · 20–30%") && text.includes("Rp"), text);
+  assert(formatCostHeldSection([], null).includes("Tidak ada sinyal ditahan biaya"), "kosong dijelaskan jujur");
+  assert(readSrc("scripts/backtest.ts").includes("formatCostHeldSection(summarizeCostHeld(runs), usdIdr)"), "rapor npm run backtest memuat bagian PL-1");
+  assert(readSrc("src/calculations/decisionEngine.ts").includes("MAX_COST_SHARE_OF_RISK"), "gerbang biaya tetap di decisionEngine");
+});
+test("712. P5a bukti LOLOS per golongan (tampilan): hanya entry LOLOS, dipecah Forex/Logam, rumus sama dengan server", () => {
+  const tr = (symbol: string, net: number, group: string, r: number | null) => ({
+    positionId: `${symbol}-${net}-${group}`, symbol, side: "BUY" as const, volume: 0.01, openTime: "2026.10.12 02:00:00",
+    closeTime: "2026.10.12 05:00:00", net, durationMin: 180, exit: "SL" as const, rMultiple: r, group,
+  });
+  const out = lolosByRiskGroup([
+    tr("XAUUSD", -3.2, "LOLOS", -1),
+    tr("AUDJPY", -0.94, "LOLOS", -1),
+    tr("EURUSD", 2, "LOLOS", 2),
+    tr("GBPUSD", -1, "LOLOS", null),
+    tr("EURUSD", 5, "DITAHAN_BIAYA", 1),
+  ]);
+  assert(out.map((g) => g.group).join(",") === "FOREX,FOREX_JPY,LOGAM", `urutan: ${out.map((g) => g.group).join(",")}`);
+  const fx = out[0].stats;
+  assert(fx.n === 2 && fx.wins === 1 && fx.net === 1 && fx.expectancy === 0.5 && fx.avgR === 2 && fx.rCount === 1, `FOREX: ${JSON.stringify(fx)}`);
+  assert(out[2].label === "Logam" && out[2].stats.n === 1 && out[2].stats.net === -3.2, "LOGAM");
+  assert(proofLabel(fx) === "Belum cukup data (2/20)", proofLabel(fx));
+  assert(lolosByRiskGroup([]).length === 0, "tanpa trade = kosong");
+  const panel = readSrc("src/components/analysis/TradeEvaluationPanel.tsx");
+  assert(panel.includes("lolosByRiskGroup(trades)") && panel.includes("Bukti entry LOLOS per golongan"), "panel menampilkan tabel per golongan");
+  assert(readSrc("src/lib/evaluationView.ts").includes("export function proofHoldReason(stats: EvalTradeStats | null | undefined)"), "penahan F5 tidak diubah");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

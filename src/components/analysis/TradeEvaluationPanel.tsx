@@ -10,6 +10,7 @@ import {
   formatWinRate,
   groupLabel,
   isLegacyGroup,
+  lolosByRiskGroup,
   proofLabel,
   proofStatus,
   sortGroups,
@@ -94,6 +95,8 @@ function AccountCard({ account, kurs }: { account: EvalAccount; kurs: number | n
   const groups = sortGroups(Object.keys(byGroup));
   const hasModeAman = groups.some((g) => !isLegacyGroup(g));
   const recent = trades.slice(0, RECENT_TRADES);
+  // P5a: bukti LOLOS per golongan (tampilan saja).
+  const lolosGroups = lolosByRiskGroup(trades);
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -164,6 +167,30 @@ function AccountCard({ account, kurs }: { account: EvalAccount; kurs: number | n
               </tbody>
             </table>
           </div>
+          {lolosGroups.length > 0 && (
+            <div className="mt-4 overflow-x-auto">
+              <p className="mb-1 text-xs text-slate-500">
+                Bukti entry LOLOS per golongan (tiap golongan butuh n ≥ 20 sendiri; penahan bukti masih dinilai per broker).
+              </p>
+              <table className="w-full text-left text-sm">
+                <thead className="text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="py-2 pr-3">Golongan</th>
+                    <th className="py-2 pr-3 text-right">n</th>
+                    <th className="py-2 pr-3 text-right">Win rate</th>
+                    <th className="py-2 pr-3 text-right">Bersih</th>
+                    <th className="py-2 pr-3 text-right">Per trade</th>
+                    <th className="py-2">Bukti</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {lolosGroups.map((g) => (
+                    <StatsRow key={g.group} name={g.label} stats={g.stats} kurs={kurs} muted={false} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {!hasModeAman && (
             <p className="mt-2 text-xs text-slate-500">
               Belum ada trade Mode Aman yang tercatat. Trade baru yang dibuka saat
