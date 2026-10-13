@@ -26,7 +26,7 @@ Baca berkas ini **setiap kali** sebelum mengerjakan satu tahap. Kerjakan **hanya
    - `src/App.tsx`
 2. **Hasil analisa Finex yang tampil tidak boleh berubah** (aturan mutlak 1). Penjaga sesi untuk Hasil analisa hanya boleh **shadow**.
 3. **Test lama tidak boleh dihapus.** Hanya boleh ditambah. Bila sebuah test lama terpaksa diubah, beri komentar alasan di baris itu dan sebutkan di laporan.
-4. **Tanpa `any`** (ESLint `@typescript-eslint/no-explicit-any` = error). **Tanpa impor ganda** (`no-duplicate-imports` = error).
+4. **Tanpa `any`** (ESLint `@typescript-eslint/no-explicit-any` = error), termasuk `catch (e: any)`: pakai `catch (error)` + `error instanceof Error`. **Tanpa impor ganda** (`no-duplicate-imports` = error).
 5. **Tanpa angka fiktif.** Nilai yang tidak diketahui = `null`, bukan 0 dan bukan karangan.
 6. **Jangan hapus atau ganti nama fungsi yang sudah ada.** Tanpa refactor besar.
 7. **Jangan menjalankan git yang menulis**: `commit`, `add`, `push`, `checkout`, `stash`, `reset`, `rebase`, `merge`. Boleh `git status` dan `git diff` untuk membaca. Commit dilakukan Fahmi setelah audit.
@@ -48,8 +48,10 @@ Baca berkas ini **setiap kali** sebelum mengerjakan satu tahap. Kerjakan **hanya
   });
   ```
 - Helper yang tersedia di berkas itu: `test`, `assert`, `readSrc(rel)` (membaca isi berkas sumber), `analyzeMarket`, `modeAmanMarket`, `modeAmanBroker`, dan banyak impor lain di bagian atas berkas.
-- **Nomor test berikutnya: 688** (test terakhir 687, di sekitar baris 8875). Tambahkan test baru **tepat setelah blok test 687** (dan setelah test terakhir yang ditambahkan tahap sebelumnya), berurutan.
-- Impor modul baru ditambahkan di bagian impor atas berkas. Satu modul = satu baris impor (jangan dobel).
+- **Nomor test dan titik sisip ditulis di berkas tahap** (berupa teks penanda yang persis, bukan nomor baris). Nomor test di berkas ini **tidak** urut dari atas ke bawah (blok test 288 dst. ada setelah test terbaru), jadi jangan menyisip berdasarkan nomor.
+- **Dilarang menulis ulang `scripts/run-tests.ts` utuh.** Hanya penyisipan teks. Setelah selesai, `git diff --stat scripts/run-tests.ts` harus menunjukkan 0 penghapusan (kecuali tahap menyebut baris yang dihapus).
+- Impor modul baru ditambahkan di bagian impor atas berkas. Satu modul = satu baris impor (jangan dobel). Bila modul sudah diimpor, tambahkan nama ke baris yang ada.
+- **Commit terakhir selalu lolos semua test.** Error yang muncul setelah Anda bekerja berasal dari perubahan Anda. Jangan menulis "error sudah ada sebelumnya".
 - `tsconfig.test.json` cukup memuat `scripts/run-tests.ts`; modul lain ikut terkompilasi lewat impor. **Tidak perlu** menambah berkas baru ke `include`.
 - Perintah: `npm test` (tsc test → `dist-tests` → runner), `npm run build` (`tsc -b && vite build`), `npm run lint`.
 
