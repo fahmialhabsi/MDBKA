@@ -4,17 +4,19 @@
  *
  * Bahan: Common\Files\MDBKA_<simbol>_H1_LONG.csv (ExportLongH1MDBKA),
  * spread dari Common\Files\MDBKA_Margin_<Finex|OTB>.csv, kurs USD→Rp dari
- * data/fx/ecb-usdidr.json. HANYA MEMBACA — tidak menulis file apa pun.
+ * data/fx/ecb-usdidr.json. Hanya membaca, KECUALI --simpan-audit (T-AUDIT):
+ * berkas perkara CSV ke data/audit/.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveCommonFilesDir } from "../server/routes/marginRoutes";
 import { readUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
 import { FALLBACK_RATES, fetchECBRates } from "../src/services/fxRateService";
-import { runBacktest, type BacktestRun } from "../src/lib/backtest";
+import { BACKTEST_WINDOW, runBacktest, type BacktestRun } from "../src/lib/backtest";
 import { buildBacktestReport, capitalTopUp, formatCostHeldSection, formatGroupSection, groupReports, summarizeCostHeld } from "../src/lib/backtestReport";
 import { getStrategy, STRATEGY_WINDOWS } from "../src/lib/strategyRegistry";
 import { aggregateCandleCsv } from "../src/lib/candleAggregate";
+import { auditCsv, buildDossiers, formatAuditSection, type TradeDossier } from "../src/lib/tradeAudit";
 import {
   formatBacktestReport,
   parseBacktestArgs,
@@ -68,18 +70,22 @@ async function main(): Promise<number> {
   ];
   const rates = kurs === null ? ecb : { ...ecb, IDR: kurs.rate * ecb.USD };
 
+  // T-AUDIT: CSV yang diuji per simbol (berkas perkara memakai candle yang SAMA).
+  const csvUsed = new Map<string, string>();
   const runAll = (equity: number, log: boolean): BacktestRun[] =>
     picked.symbols.map((symbol) => {
+      const csv = opt.timeframe === "M15"
+        ? readFileSync(m15File(symbol), "utf8")
+        : h4Native(symbol)
+        ? readFileSync(h4File(symbol), "utf8")
+        : opt.timeframe === "H4"
+          ? aggregateCandleCsv(readFileSync(longFile(symbol), "utf8"), 4)
+          : readFileSync(longFile(symbol), "utf8");
+      if (log) csvUsed.set(symbol, csv);
       const run = runBacktest({
         symbol,
         brokerId: opt.brokerId,
-        csv: opt.timeframe === "M15"
-          ? readFileSync(m15File(symbol), "utf8")
-          : h4Native(symbol)
-          ? readFileSync(h4File(symbol), "utf8")
-          : opt.timeframe === "H4"
-            ? aggregateCandleCsv(readFileSync(longFile(symbol), "utf8"), 4)
-            : readFileSync(longFile(symbol), "utf8"),
+        csv,
         ...(opt.timeframe === "H4" ? { barHours: 4 } : opt.timeframe === "M15" ? { barHours: 0.25 } : {}),
         equity,
         fxRates: rates,
@@ -129,6 +135,22 @@ async function main(): Promise<number> {
   // PL-1: hasil "seandainya diambil" sinyal yang ditahan biaya (bukti T-PELUANG).
   console.log("");
   console.log(formatCostHeldSection(summarizeCostHeld(runs), usdIdr));
+  // T-AUDIT: berkas perkara setiap trade + sebab rugi + peringatan (fakta, bukan tafsiran).
+  const dossiers: TradeDossier[] = runs.flatMap((run) =>
+    run.error !== null
+      ? []
+      : buildDossiers({ symbol: run.symbol, csv: csvUsed.get(run.symbol) ?? "", trades: run.trades, window: window ?? BACKTEST_WINDOW, spread: spreads.get(run.symbol) ?? 0 }),
+  ).map((d, i) => ({ ...d, no: i + 1 }));
+  console.log("");
+  console.log(formatAuditSection(dossiers));
+  if (process.argv.includes("--simpan-audit")) {
+    const dirAudit = join(process.cwd(), "data", "audit");
+    mkdirSync(dirAudit, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15);
+    const file = join(dirAudit, `audit-${opt.strategy}-${opt.brokerId}-${stamp}.csv`);
+    writeFileSync(file, auditCsv(dossiers), "utf8");
+    console.log(`  Berkas perkara disimpan: ${file}`);
+  }
   // P5: vonis latih/ujian per golongan (bukti tidak dicampur antar golongan).
   console.log("");
   console.log(formatGroupSection(groupReports(runs, usdIdr)));

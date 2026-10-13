@@ -329,6 +329,7 @@ import { aggregateDaily, d1Direction, D1_PARAMS, dailyLevels } from "../src/lib/
 import { breakoutRetestAt } from "../src/lib/breakoutRetest";
 import { aggregateH4, TOPDOWN_WINDOW, topdownSetup } from "../src/lib/topdownStrategy";
 import { resolveAccountIdentity } from "../src/lib/accountIdentity";
+import { auditCsv, buildDossiers, causeCounts, factorFindings, formatAuditSection, lossCauseOf } from "../src/lib/tradeAudit";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
 import { convertIdrSnapshot, IdrEquitySource, parseAccountCurrency } from "../server/services/convertedEquity";
 import { getMifxSpec, MIFX_SPEC_SYMBOLS, mifxVolume } from "../src/lib/mifxSpecs";
@@ -8186,7 +8187,12 @@ test("642. B4 teks rapor: latih, ujian, vonis, satpam yang dilewati, catatan", (
     assert(text.includes(kata), `teks rapor tanpa "${kata}"`);
   }
   assert(readSrc("package.json").includes('"backtest": "tsx scripts/backtest.ts"'), "perintah npm run backtest");
-  assert(!readSrc("scripts/backtest.ts").includes("writeFileSync"), "perintah backtest hanya membaca");
+  // T-AUDIT (13 Okt 2026): diubah sengaja — backtest kini boleh menulis SATU berkas perkara CSV, hanya bila diminta --simpan-audit; selain itu tetap hanya membaca.
+  {
+    const bt = readSrc("scripts/backtest.ts");
+    const tulis = bt.split("writeFileSync(").length - 1;
+    assert(tulis === 0 || (tulis === 1 && bt.indexOf('process.argv.includes("--simpan-audit")') >= 0 && bt.indexOf('process.argv.includes("--simpan-audit")') < bt.indexOf("writeFileSync(")), "perintah backtest hanya membaca (kecuali --simpan-audit)");
+  }
 });
 
 test("643. S1 colokan strategi: analyzeMarket = applyRiskGates(scoreSetup) dan setup strategi lain memakai rumus risiko yang sama", () => {
@@ -9822,6 +9828,85 @@ test("726. F3 identitas dipakai catatan (keputusan, bayangan, laporan tim) + kor
   }
   const idx = readSrc("server/index.ts");
   assert(idx.includes("getLogin: () => identityOf().login,") && idx.includes("resolveAccountIdentity(equityReader?.getLatest() ?? null"), "server memasang identitas ke catatan");
+});
+test("727. T-AUDIT berkas perkara: harga, SL/TP, indikator, arah D1, pola H4, level harian, perjalanan harga dari candle apa adanya", () => {
+  const h1 = topdownH1();
+  // Sesudah sinyal (harga uji): naik ke +1,2R lalu turun ke SL.
+  const entry = 100.72;
+  const sl = 100.4;
+  const risk = entry - sl;
+  const last = h1[h1.length - 1];
+  const base = Date.parse(last.time.replace(/\./g, "-").replace(" ", "T") + ":00Z");
+  const t = (k: number) => {
+    const d = new Date(base + k * 3_600_000);
+    return `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${String(d.getUTCDate()).padStart(2, "0")} ${String(d.getUTCHours()).padStart(2, "0")}:00`;
+  };
+  const after = [
+    { time: t(1), open: 100.7, high: 100.9, low: 100.6, close: 100.85 },
+    { time: t(2), open: 100.85, high: entry + 1.2 * risk, low: 100.8, close: 101 },
+    { time: t(3), open: 101, high: 101.02, low: 100.5, close: 100.55 },
+    { time: t(4), open: 100.55, high: 100.6, low: 100.3, close: 100.35 },
+  ];
+  const all = [...h1, ...after];
+  const csv = ["time,open,high,low,close,tick_volume", ...all.map((c) => `${c.time},${c.open},${c.high},${c.low},${c.close},100`)].join("\n");
+  const trade = {
+    direction: "BELI" as const, entry, stopLoss: sl, takeProfit: entry + 2 * risk, signalTime: last.time, exitTime: t(4),
+    exitPrice: sl, outcome: "SL" as const, bars: 4, priceResult: -risk, rMultiple: -1, lot: 0.01, netUsd: -3.3, costShareOfRisk: 0.04,
+  };
+  const [d] = buildDossiers({ symbol: "XAUUSD", csv, trades: [trade], window: 1500, spread: 0 });
+  assert(d.symbol === "XAUUSD" && d.entry === 100.72 && d.stopLoss === 100.4 && d.rrPlan === 2 && d.costShareOfRisk === 0.04, "harga & rencana");
+  assert(d.d1Direction === "NAIK" && d.d1DistAtr !== null && d.d1DistAtr > 0, `D1: ${d.d1Direction} ${d.d1DistAtr}`);
+  assert(d.patternLevel === 100.5 && d.breakoutTime !== null && d.breakoutToRetestBars === 3, `pola: ${d.patternLevel} ${d.breakoutTime} ${d.breakoutToRetestBars}`);
+  assert(d.rsi !== null && d.ma50 !== null && d.atrH1 !== null && d.atrH4 !== null && d.priceVsMa50 === "SEARAH", "indikator terisi");
+  assert(d.mfeR === 1.2 && d.reachedOneR === true && d.maeR !== null && d.maeR >= 1 && d.hoursToMfe === 2, `perjalanan: MFE ${d.mfeR} MAE ${d.maeR} jam ${d.hoursToMfe}`);
+  assert(!d.win && d.lossCause === "BERBALIK_SETELAH_0_5R", `sebab: ${d.lossCause}`);
+  assert(d.prevHigh !== null && d.prevLow !== null, "level harian kemarin");
+  const row = auditCsv([d]).split("\n");
+  assert(row[0].startsWith("no,symbol,direction,signalTime") && row[0].endsWith("win,lossCause") && row[1].includes("BERBALIK_SETELAH_0_5R"), row[0]);
+});
+test("728. T-AUDIT sebab rugi (aturan pasti, berurutan) + peringatan faktor (ambang dikunci) + rekomendasi ke tim penerima", () => {
+  const mk = (over: Partial<Parameters<typeof lossCauseOf>[0]>) => ({
+    no: 1, symbol: "XAUUSD", direction: "BELI" as const, signalTime: "2026.10.12 03:00", hour: 3, weekday: "Sen",
+    entry: 100, stopLoss: 99, takeProfit: 102, rrPlan: 2, costShareOfRisk: 0.03, ma50: 99, rsi: 55, cci: 50, macd: 1, macdSignal: 0,
+    atrH1: 1, atrH4: 1, priceVsMa50: "SEARAH" as const, macdSearah: true, d1Direction: "NAIK" as const, d1DistAtr: 1, riskAtrH1: 1, riskAtrH4: 1,
+    patternLevel: 99.5, breakoutTime: null, retestTime: null, breakoutToRetestBars: 2, prevHigh: null, prevLow: null, roomToDailyR: null,
+    outcome: "SL", exitTime: "x", bars: 2, rMultiple: -1, netUsd: -1, mfeR: 0.1, maeR: 1, hoursToMfe: 1, reachedHalfR: false, reachedOneR: false,
+    win: false, ...over,
+  });
+  assert(lossCauseOf(mk({ d1Direction: "NETRAL" })) === "MELAWAN_ARAH_D1", "D1 tidak searah didahulukan");
+  assert(lossCauseOf(mk({ riskAtrH1: 0.3 })) === "SL_TERLALU_DEKAT", "SL < 0,5 ATR H1");
+  assert(lossCauseOf(mk({ costShareOfRisk: 0.12 })) === "BIAYA_BESAR", "biaya ≥ 10%");
+  assert(lossCauseOf(mk({ mfeR: 0.7 })) === "BERBALIK_SETELAH_0_5R", "sempat +0,7R");
+  assert(lossCauseOf(mk({ mfeR: 0.1 })) === "MELAWAN_SEJAK_MASUK", "langsung melawan");
+  assert(lossCauseOf(mk({ mfeR: 0.4 })) === "TANPA_SEBAB_PASTI", "di antara = jujur tanpa sebab pasti");
+  const rugiRsiTinggi = Array.from({ length: 6 }, (_, i) => ({ ...mk({ rsi: 75, no: i }), lossCause: "MELAWAN_SEJAK_MASUK" as const }));
+  const menang = Array.from({ length: 6 }, (_, i) => ({ ...mk({ rsi: 55, no: 10 + i, win: true, rMultiple: 2, netUsd: 2, mfeR: 2 }), lossCause: null }));
+  const all = [...rugiRsiTinggi, ...menang];
+  const f = factorFindings(all);
+  const hot = f.find((x) => x.id === "W-rsi:≥70");
+  assert(hot !== undefined && hot.warning && hot.n === 6 && hot.winRate === 0, `peringatan RSI: ${JSON.stringify(hot)}`);
+  assert(f.find((x) => x.id === "W-rsi:50-70")?.warning === false, "kelompok menang bukan peringatan");
+  const kecil = factorFindings([...rugiRsiTinggi.slice(0, 4), ...menang]);
+  assert(kecil.find((x) => x.id === "W-rsi:≥70")?.warning === false, "n < 5 = belum peringatan");
+  const causes = causeCounts(all);
+  assert(causes.length === 1 && causes[0].cause === "MELAWAN_SEJAK_MASUK" && causes[0].n === 6 && causes[0].rekomendasi === "Perketat pemicu masuk" && causes[0].penerima.join() === "T-ANALISA", JSON.stringify(causes));
+  const text = formatAuditSection(all);
+  assert(text.includes("TIM AUDIT TRADE") && text.includes("W-rsi:≥70") && text.includes("auditRujukan"), text);
+  assert(formatAuditSection([]).includes("Tidak ada trade"), "kosong");
+});
+test("729. T-AUDIT wajib: versi strategi turunan di Buku Aturan harus merujuk hasil audit; backtest mencetak audit", () => {
+  const book = parseRuleBook(JSON.parse(readSrc("config/buku-aturan.json")) as unknown);
+  const td = latestVersion(book.entries, "topdown");
+  assert(td !== null && book.errors.length === 0, "buku aturan sah");
+  if (td === null) return;
+  const v2 = { ...td, versi: "2", versiSebelumnya: "1", alasanPerubahan: "uji" };
+  const tolak = parseRuleBook([td, v2]);
+  assert(tolak.entries.length === 1 && tolak.errors[0].includes("auditRujukan"), `tanpa rujukan ditolak: ${tolak.errors.join("; ")}`);
+  const terima = parseRuleBook([td, { ...v2, auditRujukan: ["W-rsi:≥70", "MELAWAN_SEJAK_MASUK"] }]);
+  assert(terima.entries.length === 2 && terima.errors.length === 0, "dengan rujukan diterima");
+  assert(parseRuleBook([td, { ...v2, auditRujukan: [] }]).errors.length === 1, "rujukan kosong ditolak");
+  const cli = readSrc("scripts/backtest.ts");
+  assert(cli.includes("console.log(formatAuditSection(dossiers));") && cli.includes("buildDossiers({ symbol: run.symbol"), "rapor backtest selalu memuat audit");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

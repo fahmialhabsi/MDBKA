@@ -84,6 +84,8 @@ export interface BacktestTrade extends BacktestPlan {
    * null = tidak bisa dihitung (spesifikasi/kurs tidak ada) → tidak masuk netUsd.
    */
   readonly swapUsd?: number | null;
+  /** T-AUDIT: porsi biaya terhadap risiko saat sinyal (0..1); absen/null = tidak diketahui. */
+  readonly costShareOfRisk?: number | null;
 }
 
 /**
@@ -334,7 +336,7 @@ export function runBacktest(input: BacktestInput): BacktestRun {
     if (exit === null) break;
     const exitAt = i + 1 + exit.exitIndex;
     const lot = plan.suggestedLot !== null && plan.suggestedLot > 0 ? plan.suggestedLot : broker.minLot;
-    trades.push(makeTrade(plan, lot, i, exit));
+    trades.push({ ...makeTrade(plan, lot, i, exit), costShareOfRisk: row.costShareOfRisk });
     if (exit.outcome === "TERBUKA") break;
     // Sinyal berikutnya paling cepat di close candle tempat posisi tutup.
     i = exitAt;

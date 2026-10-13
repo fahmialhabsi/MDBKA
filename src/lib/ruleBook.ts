@@ -20,6 +20,12 @@ export interface RuleEntry {
   readonly ujiSebelum: Readonly<Record<string, number | null>> | null;
   readonly ujiSesudah: Readonly<Record<string, number | null>> | null;
   readonly versiSebelumnya: string | null;
+  /**
+   * T-AUDIT (13 Okt 2026): versi turunan WAJIB merujuk ID peringatan/sebab
+   * rugi dari Tim Audit Trade (mis. "W-rsi:≥70", "MELAWAN_SEJAK_MASUK").
+   * Versi pertama (versiSebelumnya null) boleh tanpa rujukan.
+   */
+  readonly auditRujukan?: readonly string[];
 }
 
 export interface RuleBookParse {
@@ -81,6 +87,10 @@ function invalidReason(it: Record<string, unknown>): string | null {
   if (!isTestSummary(it.ujiSebelum)) return "ujiSebelum wajib objek angka atau null";
   if (!isTestSummary(it.ujiSesudah)) return "ujiSesudah wajib objek angka atau null";
   if (!(it.versiSebelumnya === null || typeof it.versiSebelumnya === "string")) return "versiSebelumnya wajib teks atau null";
+  if (it.auditRujukan !== undefined && !isStringArray(it.auditRujukan)) return "auditRujukan wajib daftar teks";
+  if (typeof it.versiSebelumnya === "string" && !(isStringArray(it.auditRujukan) && it.auditRujukan.length > 0)) {
+    return "versi turunan wajib merujuk hasil Tim Audit Trade (auditRujukan)";
+  }
   return null;
 }
 
