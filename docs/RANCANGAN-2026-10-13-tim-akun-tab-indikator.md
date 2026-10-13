@@ -2,7 +2,7 @@
 
 13 Okt 2026 · Fahmi Alhabsi
 
-> **Status:** DRAF DISKUSI. Belum ada kode yang diubah.
+> **Status:** DRAF DISKUSI. Belum ada kode yang diubah. **Enam koreksi bedah ulang (bagian 0) dan tangga tujuan jangka panjang (bagian 8) disetujui Fahmi 13 Okt 2026.** Tugas, tanggung jawab, kewenangan, dan SOP: `docs/SOP-2026-10-13-tim-mdbka.md`.
 > **Terkait:** `docs/RANCANGAN-2026-10-13-alur-trader-profesional.md`, `docs/RANCANGAN-2026-10-13-fondasi-data-dan-jalur-live.md`, `docs/AUDIT-RANCANGAN-2026-10-13.md`.
 > **Sifat:** "tim" di dokumen ini adalah modul aturan murni (tanpa AI, tanpa orang). TUNGGU tetap default. MDBKA tidak pernah mengirim order.
 
@@ -198,7 +198,7 @@ Tujuan Fahmi adalah MDBKA yang siap Live dan suatu saat mampu mengelola dana san
 
 | Langkah | Isi | Fase (peta urutan induk) | Mengubah perilaku? |
 | --- | --- | --- | --- |
-| TA-1 | Label untuk 72159716 di `.env` (diisi Fahmi) + aturan akun tanpa label sesuai K-3 | 0 | Hanya status akun |
+| TA-1 | Label `72159716:OTB demo 2` di `.env` (diisi Fahmi) + aturan akun tanpa label = Live (K-3, disetujui) | 0 | Hanya status akun |
 | TA-2 | Konfigurasi tim per login (satu kode) + papan per akun | 0–1 | Tampilan |
 | TA-3 | Tim akun demo/Live membaca status Buku Aturan | 6 (setelah J1) | Ya, langkah dan test tersendiri |
 | TT-1 | Laporan per jam: tim Trade dan Exposure (dari data yang sudah ada) | 0 | Tidak |

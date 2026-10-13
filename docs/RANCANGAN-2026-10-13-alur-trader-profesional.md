@@ -157,7 +157,7 @@ Fahmi meminta Claude memutuskan ketujuh pertanyaan berdasarkan data MDBKA. Ini *
 | 6 | Jam sesi London/New York | **Ditunda.** Tidak dipakai di versi pertama. | Setup H4 + emas tidak memerlukannya. Bila nanti dibutuhkan, jam sesi dihitung dari jam UTC tetap ditambah selisih jam server tiap broker yang sudah tercatat (misalnya OTB UTC+2, Exness UTC+0). Perubahan jam musim akhir Okt/awal Nov harus dicek, seperti catatan handoff. |
 | 7 | Urutan dengan pekerjaan mode demo/live | **Mode demo/live dulu (2–3 langkah kecil), lalu P1–P5 rancangan ini.** | Permintaan awal hari ini adalah demo tidak terkunci. Langkah awalnya kecil dan dibatasi untuk broker tanpa akun live terdaftar (OTB, MIFX, Exness), sesuai audit. P1–P5 rancangan ini hanya menyentuh backtest, tidak menyentuh Live, jadi aman dikerjakan sesudahnya. |
 
-**Yang tetap butuh keputusan Fahmi** (dari audit, bukan soal trading): pilihan mode A/B dan nasib gerbang biaya di demo. Definisi "3 lampu hijau" sudah disetujui 13 Okt 2026 (rancangan fondasi, C5).
+**Keputusan dari audit (disetujui Fahmi 13 Okt 2026):** definisi "3 lampu hijau" (fondasi C5); **mode A dengan penguncian login** (tombol Demo/Live, default Live; tombol Demo hanya aktif untuk login yang terbukti demo; sebelum F3: OTB, MIFX, Exness); **gerbang biaya tetap aktif di demo** (K-9).
 
 ## 7. Tim 2 — monitor posisi berjalan (draf, 13 Okt 2026)
 
@@ -203,7 +203,7 @@ Catatan: RR AUDJPY di bawah batas MDBKA (minimal 2), dan time-stop 3 jam Forex s
 - **Syarat yang diusulkan agar risiko total tetap dalam batas** (pola "menambah posisi" yang lazim dipakai):
     1. Posisi pertama sudah aman: SL-nya minimal di titik impas. Dengan begitu risiko total tetap ≤ 1% equity dan batas golongan.
     2. Posisi tambahan punya SL dan lot sendiri dari aturan biasa, dan tetap lolos penjaga lain (biaya, risiko, jeda, berita, sesi).
-    3. Maksimal posisi per simbol dibatasi (usulan: 2).
+    3. Maksimal 2 posisi per simbol (K-7, disetujui Fahmi 13 Okt 2026); naik ke 3 hanya bila bukti kelompok "TAMBAH" baik dan risiko gabungan (E1) tetap dalam batas.
     4. Hanya untuk simbol yang SAMA. Simbol lain yang berkaitan (misalnya AUDJPY dan AUDUSD) tetap dinilai penjaga korelasi seperti sekarang.
     5. Dicatat sebagai kelompok bukti tersendiri ("TAMBAH") per golongan. Berlaku di demo dulu; Live tetap seperti sekarang sampai ada bukti n ≥ 20, sesuai arah audit.
 - **Dipastikan Fahmi (13 Okt 2026):** syarat 1 (posisi pertama sudah aman) DITERIMA. Berlaku di SEMUA akun demo dulu; Live tetap seperti sekarang.
@@ -231,7 +231,7 @@ Permintaan: analisa open pertama memperhitungkan jangka maksimal 30 menit. Tim 2
 | … | Siklus berulang setiap 30 menit |
 | 03:00 | Jendela selesai. Forex/Forex JPY: aba-aba tutup (time-stop). Emas, minyak, indeks: masa pantau intensif selesai, posisi tetap berjalan dengan SL/TP (K-1) |
 
-Akibat syarat "semua posisi sebelumnya sudah aman": hanya posisi TERBARU yang masih berisiko, sehingga risiko total rangkaian tetap ≤ 1% equity dan batas golongan. Jumlah posisi tetap dibatasi oleh margin (maks 50% free margin, `marginGuard.ts`) dan batas jumlah per simbol (7.4 mengusulkan 2; angka final menunggu keputusan, lihat audit rancangan).
+Akibat syarat "semua posisi sebelumnya sudah aman": hanya posisi TERBARU yang masih berisiko, sehingga risiko total rangkaian tetap ≤ 1% equity dan batas golongan. Jumlah posisi tetap dibatasi oleh margin (maks 50% free margin, `marginGuard.ts`) dan batas jumlah per simbol (K-7: maksimal 2).
 
 **Dua cara membaca "maksimal 30 menit" — diputuskan: cara 1, siklus tinjau (7.7):**
 
@@ -255,7 +255,9 @@ Akibat syarat "semua posisi sebelumnya sudah aman": hanya posisi TERBARU yang ma
 3. **Arah berlawanan** hanya setelah posisi lama ditutup (tidak membuka Beli dan Jual bersamaan di simbol yang sama).
 4. **Jam ke-3:** Forex/Forex JPY → aba-aba tutup semua posisi rangkaian (time-stop). Emas, minyak, indeks → pantau intensif selesai; posisi tetap berjalan dengan SL/TP (K-1).
 
-Rugi terbesar satu rangkaian = 1R (R rangkaian: lihat keputusan K-5 di `docs/AUDIT-RANCANGAN-2026-10-13.md`). Rugi mendekati nol tidak bisa dijamin; yang dirancang adalah sebanyak mungkin rangkaian berakhir di titik impas.
+Rugi terbesar satu rangkaian = 1R.
+
+**Definisi R rangkaian (K-5, disetujui Fahmi 13 Okt 2026):** total untung/rugi bersih semua posisi rangkaian (termasuk komisi dan swap) ÷ risiko uang open 1. Contoh: open 1 berisiko Rp20 rb dan ditutup impas, open 2 untung Rp30 rb → rangkaian +1,5R (Popeda Sagu). Rugi mendekati nol tidak bisa dijamin; yang dirancang adalah sebanyak mungkin rangkaian berakhir di titik impas.
 
 **B. Papan nilai (per golongan, setelah ≥ 20 rangkaian)**
 
@@ -303,6 +305,7 @@ Sejak open 1, beberapa "tim" bekerja bersamaan. Setiap tim adalah modul aturan m
 **Kartu pola sebagai bahan bakar analisa baru:**
 
 - Setiap kartu punya "sidik jari": golongan, arah, arah D1, posisi terhadap MA50, rentang skor indikator, pola, sesi. Analisa baru mencari kartu dengan sidik jari yang sama.
+- **Sidik jari bertingkat (K-6, disetujui Fahmi 13 Okt 2026).** Tingkat 1: golongan + arah + arah D1. Tingkat 2: ditambah rezim volatilitas + sesi. Tingkat 3: ditambah pola + rentang skor. Yang dipakai adalah tingkat terdalam yang sudah punya ≥ 20 kartu.
 - Sebelum ada ≥ 20 kartu dengan sidik jari yang sama di golongan yang sama, hasilnya hanya ditampilkan sebagai catatan ("pola ini pernah 3× Kasbi Bakar, 5× Pupare Rebus"), belum mengubah keputusan.
 - Setelah ≥ 20: sidik jari yang kebanyakan Pupare Rebus dipakai lebih dulu sebagai **penahan** (TUNGGU). Sidik jari yang kebanyakan Kasbi Bakar/Popeda Sagu baru boleh menjadi alasan membuka posisi setelah lolos uji data latih dan ujian.
 - Alasannya: sedikit kartu mudah menipu (kebetulan). Mode Aman tetap: TUNGGU default.

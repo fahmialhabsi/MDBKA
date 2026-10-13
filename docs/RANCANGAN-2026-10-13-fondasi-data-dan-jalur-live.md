@@ -22,7 +22,7 @@
 
 - **Fakta:** `positions.csv`, `equity.csv`, dan `quotes.csv` tidak memuat login atau jenis akun (audit, temuan 1).
 - **Usulan:** EA menulis `ACCOUNT_LOGIN` dan `ACCOUNT_TRADE_MODE` (demo/kontes/riil) di setiap baris atau di header file. Server mencocokkannya dengan `ACCOUNT_LABELS`. Bila login di file berbeda dengan label, tampil peringatan dan semua sinyal broker itu TUNGGU.
-- **Akun yang tidak terbukti demo:** rekomendasi eksternal dan saran Claude sama-sama memperlakukannya sebagai Live. Pilihan Fahmi di audit ("akun tanpa label = demo") masih berlaku sampai Fahmi memutuskan ulang.
+- **Akun yang tidak terbukti demo:** rekomendasi eksternal dan saran Claude sama-sama memperlakukannya sebagai Live. **Diputuskan ulang (K-3, disetujui Fahmi 13 Okt 2026): akun tanpa label = Live**, sebagai jaring pengaman. Login 72159716 diberi label `OTB demo 2` di `.env` (langkah TA-1).
 - **Hasil audit akun (K-3, 13 Okt 2026),** dari file di `Common\Files` dicocokkan dengan `ACCOUNT_LABELS`: ada 6 login. Lima berlabel (91811209 Finex live, 61823011 Finex demo, 70930952 OTB demo, 1003997005 MIFX demo, 413925678 Exness demo). **Satu tidak berlabel: 72159716 (PT. Orbi Trade Berjangka)**, berisi satu deal saja, yaitu setoran 5.000 USD berkomentar "Demo Deposit Awal" pada 2026.10.09 16:59. Bukti menunjukkan demo, tetapi kepastian penuh baru dari `ACCOUNT_TRADE_MODE` (F3). Rinciannya di `docs/RANCANGAN-2026-10-13-tim-akun-tab-indikator.md` bagian 2.
 - **Keputusan K-2 (disetujui Fahmi 13 Okt 2026):** pelonggaran demo untuk Finex demo menunggu F3; OTB, MIFX, dan Exness boleh lebih dulu.
 - **Catatan:** perubahan MQL, dipasang manual di keempat terminal.
@@ -221,7 +221,7 @@ Hasil demo hanya boleh dipakai di Live bila memenuhi tiga syarat:
 
 | Lampu | Syarat (per golongan, per versi aturan) |
 | --- | --- |
-| 1 — Backtest | Rapor data latih DAN ujian "layak" (untung ≥ 3% di atas titik impas, `MIN_EDGE_OVER_BREAKEVEN`) dan tetap untung di sebagian besar periode uji bergulir. Usulan tambahan (audit rancangan, menunggu persetujuan): rapor dijalankan dengan equity akun Live, dan tidak boleh berstatus MODAL KURANG (pemeriksaan modal yang sudah ada di `backtestReport.ts`) |
+| 1 — Backtest | Rapor data latih DAN ujian "layak" (untung ≥ 3% di atas titik impas, `MIN_EDGE_OVER_BREAKEVEN`) dan tetap untung di sebagian besar periode uji bergulir. Tambahan (K-8, disetujui Fahmi 13 Okt 2026): rapor dijalankan dengan equity akun Live, dan tidak boleh berstatus MODAL KURANG (pemeriksaan modal yang sudah ada di `backtestReport.ts`) |
 | 2 — Demo | ≥ 20 rangkaian setara Live; rata-rata hasil > 0 sesudah dihitung ulang dengan biaya Live; rugi terbesar per rangkaian ≤ 1R; tidak ada pelanggaran gerbang kualitas data |
 | 3 — Percobaan Live | 20 rangkaian di akun Live dengan lot minimum; rata-rata hasil tetap > 0 dan tidak lebih buruk dari demo melebihi 0,2R |
 
