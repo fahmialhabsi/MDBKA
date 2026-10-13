@@ -325,6 +325,8 @@ import { readSpecsForBroker } from "../server/services/specReader";
 import { specContentHash, trackSpecVersion } from "../server/services/specVersion";
 import { calendarTabFindings, exposureTabFindings, lastHourWindow, tradeTabFindings } from "../src/lib/tabReports";
 import { runTabReportsOnce } from "../server/services/tabReportJob";
+import { aggregateDaily, d1Direction, D1_PARAMS, dailyLevels } from "../src/lib/dailyLevels";
+import { breakoutRetestAt } from "../src/lib/breakoutRetest";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
 import { convertIdrSnapshot, IdrEquitySource, parseAccountCurrency } from "../server/services/convertedEquity";
 import { getMifxSpec, MIFX_SPEC_SYMBOLS, mifxVolume } from "../src/lib/mifxSpecs";
@@ -9622,6 +9624,72 @@ test("718. G-7 laporan tim tab per jam: 3 laporan per broker per jendela jam, ti
   } finally {
     nfs.rmSync(dataDir, { recursive: true, force: true });
   }
+});
+test("719. P1 level harian: open hari (jam server 00:00), high/low/close kemarin; satu hari saja = kemarin null", () => {
+  const c = (time: string, o: number, h: number, l: number, cl: number) => ({ time, open: o, high: h, low: l, close: cl });
+  const h1 = [
+    c("2026.10.12 22:00", 1.1, 1.104, 1.099, 1.103),
+    c("2026.10.12 23:00", 1.103, 1.106, 1.098, 1.105),
+    c("2026.10.13 00:00", 1.105, 1.107, 1.104, 1.106),
+    c("2026.10.13 01:00", 1.106, 1.108, 1.1, 1.101),
+  ];
+  const lv = dailyLevels(h1);
+  assert(lv !== null && lv.day === "2026.10.13" && lv.dayOpen === 1.105, `hari ini: ${JSON.stringify(lv)}`);
+  assert(lv !== null && lv.prevDay === "2026.10.12" && lv.prevHigh === 1.106 && lv.prevLow === 1.098 && lv.prevClose === 1.105, "kemarin");
+  const satu = dailyLevels(h1.slice(2));
+  assert(satu !== null && satu.prevHigh === null && satu.prevClose === null, "tanpa kemarin = null");
+  assert(dailyLevels([]) === null, "kosong");
+});
+test("720. P2 rakit D1 dari H1 (hari berjalan dibuang) + arah D1 ketat: NAIK/TURUN/NETRAL, data kurang = null", () => {
+  const c = (time: string, o: number, h: number, l: number, cl: number) => ({ time, open: o, high: h, low: l, close: cl });
+  const d1 = aggregateDaily([
+    c("2026.10.12 00:00", 1, 2, 0.5, 1.5),
+    c("2026.10.12 01:00", 1.5, 3, 1, 2.5),
+    c("2026.10.13 00:00", 2.5, 2.6, 2.4, 2.45),
+  ]);
+  assert(d1.length === 1 && d1[0].time === "2026.10.12 00:00" && d1[0].open === 1 && d1[0].high === 3 && d1[0].low === 0.5 && d1[0].close === 2.5, `D1: ${JSON.stringify(d1)}`);
+  const daily = (n: number, f: (i: number) => number) =>
+    Array.from({ length: n }, (_, i) => {
+      const cl = f(i);
+      const d = new Date(Date.UTC(2026, 0, 1) + i * 86_400_000);
+      const time = `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${String(d.getUTCDate()).padStart(2, "0")} 00:00`;
+      return c(time, cl - 0.5, cl + 1, cl - 1, cl);
+    });
+  const naik = d1Direction(daily(60, (i) => 100 + i));
+  assert(naik !== null && naik.direction === "NAIK" && naik.ma > naik.maBefore, `naik: ${JSON.stringify(naik)}`);
+  const turun = d1Direction(daily(60, (i) => 200 - i));
+  assert(turun !== null && turun.direction === "TURUN", `turun: ${turun?.direction}`);
+  const datar = d1Direction(daily(60, () => 100));
+  assert(datar !== null && datar.direction === "NETRAL" && datar.reason.includes("dekat MA50"), `datar: ${JSON.stringify(datar)}`);
+  // Naik lama lalu jatuh di bawah MA: close dan kemiringan tidak searah → NETRAL (= TUNGGU).
+  const balik = d1Direction(daily(60, (i) => (i < 59 ? 100 + i : 100)));
+  assert(balik !== null && balik.direction === "NETRAL", `balik: ${balik?.direction}`);
+  assert(d1Direction(daily(54, (i) => 100 + i)) === null, "kurang dari 55 hari = null");
+  assert(D1_PARAMS.maPeriod === 50 && D1_PARAMS.neutralAtr === 0.25, "parameter dikunci");
+});
+test("721. P3 breakout-retest: tembus puncak swing lalu diuji ulang dengan penolakan = BELI; cermin = JUAL; gagal/tanpa penolakan = null", () => {
+  const c = (t: number, o: number, h: number, l: number, cl: number) => ({ time: `2026.10.12 ${String(t).padStart(2, "0")}:00`, open: o, high: h, low: l, close: cl });
+  // Harga uji (bukan data nyata). Puncak swing 100.5 di jam 04, tembus jam 09, uji ulang jam 12 (bullish engulfing).
+  const cs = [
+    c(0, 99, 99.5, 98.8, 99.2), c(1, 99.2, 99.6, 99, 99.4), c(2, 99.4, 99.8, 99.2, 99.6), c(3, 99.6, 100, 99.4, 99.8),
+    c(4, 99.8, 100.5, 99.6, 100), c(5, 100, 100.2, 99.5, 99.7), c(6, 99.7, 99.9, 99.3, 99.5), c(7, 99.5, 99.8, 99.2, 99.6),
+    c(8, 99.6, 100.4, 99.5, 100.3), c(9, 100.3, 101, 100.2, 100.9), c(10, 100.9, 101.1, 100.6, 100.7), c(11, 100.7, 100.9, 100.4, 100.6),
+    c(12, 100.55, 100.8, 100.45, 100.7),
+  ];
+  const buy = breakoutRetestAt(cs, 0.6);
+  assert(buy !== null && buy.direction === "BELI" && buy.level === 100.5 && buy.breakoutTime === "2026.10.12 09:00" && buy.retestTime === "2026.10.12 12:00", JSON.stringify(buy));
+  const mirror = cs.map((x) => ({ time: x.time, open: 200 - x.open, high: 200 - x.low, low: 200 - x.high, close: 200 - x.close }));
+  const sell = breakoutRetestAt(mirror, 0.6);
+  assert(sell !== null && sell.direction === "JUAL" && sell.level === 99.5, JSON.stringify(sell));
+  const gagal = cs.map((x, i) => (i === 10 ? c(10, 100.9, 101, 99.9, 100) : i === 11 ? c(11, 100, 100.3, 99.9, 100.2) : x));
+  assert(breakoutRetestAt(gagal, 0.6) === null, "tutup di bawah level − zona = breakout gagal");
+  // Tembus ulang (candle 11 tutup di atas lagi) = breakout baru yang sah.
+  assert(breakoutRetestAt(cs.map((x, i) => (i === 10 ? c(10, 100.9, 101, 99.9, 100) : x)), 0.6)?.breakoutTime === "2026.10.12 11:00", "tembus ulang dihitung dari candle terbaru");
+  const tanpaTolak = [...cs.slice(0, 12), c(12, 100.7, 100.8, 100.45, 100.6)];
+  assert(breakoutRetestAt(tanpaTolak, 0.6) === null, "tanpa candle penolakan = null");
+  const jauh = [...cs.slice(0, 12), c(12, 100.55, 101.2, 100.9, 101.1)];
+  assert(breakoutRetestAt(jauh, 0.6) === null, "tidak menyentuh zona level = null");
+  assert(breakoutRetestAt(cs, null) === null && breakoutRetestAt(cs.slice(0, 5), 0.6) === null, "ATR/data kurang = null");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
