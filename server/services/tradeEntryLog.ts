@@ -3,11 +3,17 @@ import { dirname } from "node:path";
 import {
   lastCandleTimeMs,
   scanSymbol,
+  type ScanInput,
+  type ScanRow,
   type ScanStatus,
 } from "../../src/lib/symbolScanner";
 import type { ExchangeRates } from "../../src/services/fxRateService";
 import type { BrokerId } from "../../src/types/broker";
 import { collectCandleItems, type CandleSource } from "../routes/candlesRoutes";
+import { randomUUID } from "node:crypto";
+import { jsonlRelativePath } from "../../src/lib/jsonlRecord";
+import { keputusanFromScan, snapshotMaterial } from "../../src/lib/decisionSnapshot";
+import { appendJsonlRecord, snapshotFingerprint } from "./jsonlStore";
 import type { BrokerPosition } from "../types/positions";
 import type { NewsEventLike } from "../../src/lib/newsGuard";
 import type { TradeSession } from "../../src/lib/sessionGuard";
@@ -70,6 +76,12 @@ export interface TradeEntryLogOptions {
   readonly getSessions?: () => readonly TradeSession[] | null;
   /** V2c-2: simbol → alasan spesifikasi MT5 beda spec32; null / gagal = tanpa satpam. */
   readonly getSpecHolds?: () => ReadonlyMap<string, string> | null;
+  /**
+   * A7-4/G-4 (13 Okt 2026): folder data/ untuk baris `keputusan` jalur entry
+   * (data/keputusan/keputusan-<broker>-<YYYY-MM>.jsonl). Absen = tidak dicatat.
+   * Gagal tulis tidak pernah menghentikan catatan entry.
+   */
+  readonly decisionDataDir?: string;
   readonly now?: () => Date;
 }
 
@@ -139,11 +151,31 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
     }
   };
 
+  // A7-4/G-4: satu baris `keputusan` per entry baru; gagal = diam (catatan entry tetap).
+  const recordDecision = (input: ScanInput, row: ScanRow, timeOpen: string, ticket: string): void => {
+    if (opts.decisionDataDir === undefined) return;
+    try {
+      const waktuUtc = now().toISOString().slice(0, 19) + "Z";
+      const rec = keputusanFromScan(input, row, {
+        keputusanId: randomUUID(),
+        jalur: "entry",
+        waktuUtc,
+        waktuServer: timeOpen,
+        sidikJariSnapshot: snapshotFingerprint(snapshotMaterial(input)),
+        tiket: ticket,
+      });
+      appendJsonlRecord(opts.decisionDataDir, jsonlRelativePath("keputusan", opts.broker, waktuUtc), rec);
+    } catch {
+      // Jangan blok catatan entry.
+    }
+  };
+
   const scanFor = (
     symbol: string,
     equity: number | null,
     others: readonly { symbol: string; side: string }[],
     timeOpen: string,
+    ticket: string,
   ): EntryScan => {
     const items = collectCandleItems(opts.quotes, opts.commonDir);
     const item = items.find((i) => i.symbol === symbol);
@@ -163,7 +195,7 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       const t = lastCandleTimeMs(i.csv);
       return t !== null && (max === null || t > max) ? t : max;
     }, null);
-    const row = scanSymbol({
+    const input: ScanInput = {
       symbol,
       brokerId: opts.broker,
       csv: item.csv,
@@ -181,7 +213,9 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       specHolds: specHolds(),
       // O2b: pembukaan bursa pada jam nyata posisi pertama terlihat (≈ jam entry).
       openingNowMs: now().getTime(),
-    });
+    };
+    const row = scanSymbol(input);
+    recordDecision(input, row, timeOpen, ticket);
     return {
       status: row.status,
       direction: row.direction,
@@ -208,6 +242,7 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
               equity,
               positions.filter((o) => o.ticket !== p.ticket),
               p.timeOpen,
+              p.ticket,
             );
           } catch (e) {
             scan = {

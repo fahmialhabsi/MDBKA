@@ -53,6 +53,7 @@ import { appendJsonlRecord, readJsonlRecords, snapshotFingerprint } from "../ser
 import { allowedOnLive, latestVersion, parseRuleBook, type RuleEntry } from "../src/lib/ruleBook";
 import { buildShadowRecord, computeResultShadow, shadowDedupKey, summarizeShown, type ShownSummary } from "../src/lib/resultShadow";
 import { handleShadowRequest } from "../server/routes/keputusanRoutes";
+import { keputusanFromScan, snapshotMaterial } from "../src/lib/decisionSnapshot";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
 import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
@@ -9241,6 +9242,98 @@ test("703. S3 pengaman: App hanya memanggil useResultShadow sesudah shownResult;
   const hook = readSrc("src/hooks/useResultShadow.ts");
   assert(hook.includes("): void {") && !hook.includes("useState") && hook.includes("/api/keputusan/shadow"), "hook tanpa state dan tanpa nilai balik");
   assert(readSrc("server/app.ts").includes('app.use("/api/keputusan", createKeputusanRoutes());'), "rute terdaftar");
+});
+test("704. A7-4 snapshot keputusan: materi setara = sidik jari sama; isi berbeda = sidik jari berbeda", () => {
+  const csv = scanCsv(80);
+  const a = {
+    symbol: "GBPUSD", brokerId: "finex" as const, csv, quote: null, equity: 10000, fxRates: null,
+    specHolds: new Map([["AUDJPY", "beda"], ["XAUUSD", "beda"]]),
+    sessions: [{ symbol: "GBPUSD", day: 1, fromMin: 0, toMin: 1440 }],
+  };
+  const b = {
+    sessions: [{ symbol: "GBPUSD", day: 1, fromMin: 0, toMin: 1440 }],
+    specHolds: new Map([["XAUUSD", "beda"], ["AUDJPY", "beda"]]),
+    fxRates: null, equity: 10000, quote: null, csv, brokerId: "finex" as const, symbol: "GBPUSD",
+  };
+  const ma = snapshotMaterial(a);
+  assert(canonicalJson(ma) === canonicalJson(snapshotMaterial(b)), "urutan kunci/Map tidak boleh berpengaruh");
+  assert(snapshotFingerprint(ma) === snapshotFingerprint(snapshotMaterial(b)), "sidik jari harus sama");
+  assert(ma.strategy === "skor" && ma.newsEvents === null && ma.proof === null, "nilai absen = default jujur (skor / null)");
+  const lines = csv.split("\n");
+  lines[lines.length - 1] = lines[lines.length - 1].replace(/,100$/, ",101");
+  assert(snapshotFingerprint(snapshotMaterial({ ...a, csv: lines.join("\n") })) !== snapshotFingerprint(ma), "candle berubah = sidik jari berubah");
+  assert(snapshotFingerprint(snapshotMaterial({ ...a, equity: 10001 })) !== snapshotFingerprint(ma), "equity berubah = sidik jari berubah");
+});
+test("705. A7-6 test kembar: snapshot setara → scanSymbol identik; pemindai, detail sinyal, entry, dan backtest memakai scanSymbol", () => {
+  const csv = scanCsv(80);
+  const a = { symbol: "GBPUSD", brokerId: "finex" as const, csv, quote: null, equity: 10000, fxRates: null, specHolds: new Map([["AUDJPY", "x"], ["EURUSD", "y"]]) };
+  const b = { specHolds: new Map([["EURUSD", "y"], ["AUDJPY", "x"]]), fxRates: null, equity: 10000, quote: null, csv, brokerId: "finex" as const, symbol: "GBPUSD" };
+  const ra = scanSymbol(a);
+  const rb = scanSymbol(b);
+  assert(canonicalJson(ra) === canonicalJson(rb), "hasil scanSymbol harus identik untuk snapshot setara");
+  const rec = keputusanFromScan(a, ra, { keputusanId: "k-1", jalur: "pemindai", waktuUtc: "2026-10-08T06:15:00Z", waktuServer: null, sidikJariSnapshot: null, tiket: null });
+  assert(rec.hasil.status === ra.status && rec.hasil.keputusan === (ra.decision ?? "TUNGGU") && rec.tiket === null && rec.sumber === "live", "baris keputusan mengikuti hasil scanSymbol");
+  for (const rel of [
+    "src/components/analysis/SymbolScannerPanel.tsx",
+    "src/components/analysis/SignalDetailPage.tsx",
+    "server/services/tradeEntryLog.ts",
+    "src/lib/backtest.ts",
+  ]) {
+    assert(readSrc(rel).includes("scanSymbol("), `${rel} harus memakai scanSymbol`);
+  }
+  // Hasil analisa (App.tsx) masih jalur sendiri sampai klausul A9 (A7-5); dicatat lewat shadow S1–S3.
+  assert(!readSrc("src/App.tsx").includes("scanSymbol("), "App belum boleh memakai scanSymbol (menunggu A9)");
+});
+test("706. G-4 catatan entry menulis baris keputusan jalur entry + tiket + sidik jari; gagal tulis tidak memblok", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "entries-keputusan-"));
+  try {
+    nfs.writeFileSync(npath.join(dir, "MDBKA_GBPUSD_H1.csv"), scanCsv(80));
+    const quotes = { getSymbols: () => ["GBPUSD"], getLatestBySymbol: () => [] };
+    const dataDir = npath.join(dir, "data");
+    const pos = (ticket: string) => ({
+      ticket, symbol: "GBPUSD", side: "BUY" as const, volume: 0.01,
+      priceOpen: 1.3, sl: 1.29, tp: 1.31, timeOpen: "2026.10.08 09:15:00",
+    });
+    const log = createTradeEntryLog({
+      file: npath.join(dataDir, "trades", "entries-finex.jsonl"), broker: "finex", commonDir: dir, quotes,
+      getEquity: () => 10000, getFxRates: () => null, decisionDataDir: dataDir,
+      now: () => new Date("2026-10-08T06:15:00Z"),
+    });
+    log.ingest([pos("1")]);
+    const baru = log.ingest([pos("1"), pos("2")]);
+    assert(baru.length === 1 && baru[0].scan !== null, "entry baru harus dipindai");
+    const book = readJsonlRecords(dataDir, "keputusan/keputusan-finex-2026-10.jsonl", "keputusan/1");
+    assert(book.records.length === 1 && book.brokenLines === 0, `harus 1 baris keputusan, dapat ${book.records.length}`);
+    const rec = book.records[0];
+    assert(rec.jalur === "entry" && rec.tiket === "2" && rec.waktuServer === "2026.10.08 09:15:00", "jalur/tiket/jam server");
+    assert(typeof rec.sidikJariSnapshot === "string" && /^[0-9a-f]{64}$/.test(rec.sidikJariSnapshot), "sidik jari SHA-256");
+    const hasil = rec.hasil as { status: string };
+    assert(baru[0].scan !== null && hasil.status === baru[0].scan.status, "status keputusan = status catatan entry");
+    const masukan = rec.masukan as { jumlahCandle: number; candleTerakhir: string | null; bid: number | null };
+    assert(masukan.jumlahCandle === 80 && masukan.candleTerakhir === "2026.10.04 07:00" && masukan.bid === null, `masukan: ${JSON.stringify(masukan)}`);
+    // Folder keputusan tidak bisa ditulis (berupa berkas) → entry tetap tercatat.
+    const blocked = npath.join(dir, "blocked");
+    nfs.writeFileSync(blocked, "bukan folder");
+    const log2 = createTradeEntryLog({
+      file: npath.join(dir, "b.jsonl"), broker: "finex", commonDir: dir, quotes,
+      getEquity: () => 10000, getFxRates: () => null, decisionDataDir: blocked,
+    });
+    log2.ingest([]);
+    assert(log2.ingest([pos("3")]).length === 1, "gagal tulis keputusan tidak boleh memblok catatan entry");
+    const tanpa = createTradeEntryLog({
+      file: npath.join(dir, "c.jsonl"), broker: "finex", commonDir: dir, quotes,
+      getEquity: () => 10000, getFxRates: () => null,
+    });
+    tanpa.ingest([]);
+    tanpa.ingest([pos("4")]);
+    assert(readJsonlRecords(dataDir, "keputusan/keputusan-finex-2026-10.jsonl", "keputusan/1").records.length === 1, "tanpa decisionDataDir = tidak mencatat");
+    assert(readSrc("server/index.ts").includes('decisionDataDir: path.join(process.cwd(), "data"),'), "server harus memasang decisionDataDir");
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

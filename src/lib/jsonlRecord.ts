@@ -71,6 +71,8 @@ export interface KeputusanRecord {
   readonly sumber: "live" | "csv" | "ocr" | "manual" | null;
   readonly diubahManual: readonly string[];
   readonly mengoreksi: string | null;
+  /** A7-4: tiket posisi MT5 untuk jalur entry (G3); absen/null di jalur lain. */
+  readonly tiket?: string | null;
 }
 
 export interface BayanganRecord {

@@ -307,6 +307,8 @@ async function startServer() {
         const snap = readSpecsForBroker(resolveCommonFilesDir(), src.broker);
         return snap === null ? null : specHoldMap(snap.diffs);
       },
+      // A7-4/G-4 (13 Okt 2026): baris `keputusan` jalur entry + sidik jari snapshot.
+      decisionDataDir: path.join(process.cwd(), "data"),
     });
     const record = (positions: readonly import("./types/positions").BrokerPosition[]): void => {
       try {
