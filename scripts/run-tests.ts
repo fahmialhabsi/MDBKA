@@ -34,7 +34,7 @@ import {
   type StrategySetup,
 } from "../src/calculations/decisionEngine";
 import { formatSharePercent, signalReason } from "../src/lib/signalReason";
-import { collectCandleItems } from "../server/routes/candlesRoutes";
+import { collectCandleItems, readCandleCsv } from "../server/routes/candlesRoutes";
 import { createTradeEntryLog } from "../server/services/tradeEntryLog";
 import { getBackupStatus, runBackup } from "../server/services/dataBackup";
 import { evaluateTrades, GROUP_BEFORE_LOG, GROUP_NO_LOG } from "../server/services/tradeEvaluation";
@@ -44,7 +44,10 @@ import {
   excursionsForLogin,
   parseAccountLabels,
 } from "../server/routes/evaluationRoutes";
-import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow } from "../src/lib/symbolScanner";
+import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow, type ScanStatus } from "../src/lib/symbolScanner";
+import { classifyScanStatus, LAB_HARD_STATUSES, LAB_SOFT_STATUSES, type GuardClass } from "../src/lib/guardClass";
+import { evaluateShadowTrade, validateShadowInput, type ShadowTick, type ShadowTradeInput } from "../src/lib/shadowTrade";
+import { canTransition, CAUSE_ROUTES, routeFor, type LossCause, type RecommendationStatus } from "../src/lib/lossLesson";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
 import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
@@ -54,7 +57,6 @@ import { parseSignalPage, signalPageUrl } from "../src/lib/signalPageView";
 import { calculateTargets, floatingProfit, secureReadiness } from "../src/lib/targetCalculator";
 import { accountMetrics, floatingProfitText, GROUP_TABS, groupPageUrl, groupSymbolTabs, parseGroupPage, realSymbolName, sumFloatingProfit } from "../src/lib/groupPageView";
 import { candleChartModel, hourKey, LINE_COLOR, positionLines, spreadLabels, withLiveCandles } from "../src/lib/candleChart";
-import { readCandleCsv } from "../server/routes/candlesRoutes";
 import { findSessionHold, serverNowText, serverToWitLabel, sessionNotice, sessionState, weeklyIntervals } from "../src/lib/sessionGuard";
 import { parseSessionsCsv } from "../server/services/sessionReader";
 import { buildStockPortfolio, buildTradeSummary, isStockSymbol } from "../src/lib/stockPortfolio";
@@ -8903,6 +8905,125 @@ test("687. A7-1 bukti celah (tanpa ubah tampilan): Hasil analisa tidak punya pen
   assert(readSrc("src/lib/symbolScanner.ts").includes("findSessionHold(symbol"), "pemindai harus tetap memakai penjaga sesi");
 });
 
+test("688. LAB-1 klasifikasi penjaga: 13 status sesuai tabel, sesi bergantung menit sampai tutup", () => {
+  const expected: ReadonlyArray<readonly [ScanStatus, GuardClass]> = [
+    ["LOLOS", "LOLOS"],
+    ["TUNGGU", "BUKAN_SETUP"],
+    ["DATA", "KERAS"],
+    ["PASAR_TUTUP", "KERAS"],
+    ["DITAHAN_SPEK", "KERAS"],
+    ["DITAHAN_BUKTI", "KERAS"],
+    ["DITAHAN_BIAYA", "LUNAK"],
+    ["DITAHAN_RISIKO", "LUNAK"],
+    ["DITAHAN_JEDA", "LUNAK"],
+    ["DITAHAN_BERITA", "LUNAK"],
+    ["DITAHAN_BUKA", "LUNAK"],
+    ["DITAHAN_KORELASI", "LUNAK"],
+    ["DITAHAN_SESI", "KERAS"],
+  ];
+  assert(expected.length === 13, "tabel harus 13 status");
+  for (const [status, guardClass] of expected) {
+    assert(classifyScanStatus(status) === guardClass, `${status} → ${classifyScanStatus(status)}, harap ${guardClass}`);
+  }
+  assert(classifyScanStatus("DITAHAN_SESI", { sessionClosesInMin: 30 }) === "LUNAK", "sesi jelang tutup 30 mnt = LUNAK");
+  assert(classifyScanStatus("DITAHAN_SESI", { sessionClosesInMin: 0 }) === "KERAS", "pasar tutup = KERAS");
+  assert(classifyScanStatus("DITAHAN_SESI", { sessionClosesInMin: null }) === "KERAS", "tidak diketahui = KERAS");
+  assert(LAB_SOFT_STATUSES.every((s) => classifyScanStatus(s) === "LUNAK") && LAB_SOFT_STATUSES.length === 6, "daftar lunak salah");
+  assert(LAB_HARD_STATUSES.every((s) => classifyScanStatus(s) === "KERAS") && LAB_HARD_STATUSES.length === 4, "daftar keras salah");
+  assert(!LAB_SOFT_STATUSES.includes("DITAHAN_SESI") && !LAB_HARD_STATUSES.includes("DITAHAN_SESI"), "DITAHAN_SESI tidak masuk daftar mana pun");
+});
+test("689. TB-1 trade bayangan time-stop JPY: AUDJPY Finex demo 61823011 (12 Okt 2026) → WAKTU r -0.19, MFE 0.48", () => {
+  // Entry/SL/TP/jam dari trade nyata; harga tick adalah harga uji, bukan data nyata.
+  const input: ShadowTradeInput = {
+    symbol: "AUDJPY",
+    direction: "BELI",
+    signalServerTime: "2026.10.12 02:27:27",
+    entry: 110.528,
+    stopLoss: 110.379,
+    takeProfit: 110.759,
+    heldBy: "DITAHAN_BIAYA",
+  };
+  const ticks: ShadowTick[] = [
+    { tsServer: "2026.10.12 05:27:27", bid: 110.5, ask: 110.52 },
+    { tsServer: "2026.10.12 03:00:00", bid: 110.6, ask: 110.62 },
+  ];
+  const copy = ticks.map((t) => t.tsServer).join("|");
+  const result = evaluateShadowTrade(input, ticks);
+  assert(ticks.map((t) => t.tsServer).join("|") === copy, "array masukan tidak boleh diubah");
+  assert(result.outcome === "WAKTU", `outcome=${result.outcome}`);
+  assert(result.exitPrice === 110.5 && result.exitServerTime === "2026.10.12 05:27:27", `exit=${result.exitPrice} ${result.exitServerTime}`);
+  assert(result.r === -0.19, `r=${result.r}`);
+  assert(result.maxFavorableR === 0.48, `MFE=${result.maxFavorableR}`);
+  assert(result.maxAdverseR === 0.19, `MAE=${result.maxAdverseR}`);
+});
+test("690. TB-1 trade bayangan TP dan SL EURUSD (tick < 1 jam), tick sebelum sinyal diabaikan", () => {
+  // Harga uji, bukan data nyata.
+  const buy: ShadowTradeInput = {
+    symbol: "EURUSD", direction: "BELI", signalServerTime: "2026.10.12 10:00:00",
+    entry: 1.1, stopLoss: 1.095, takeProfit: 1.11, heldBy: "DITAHAN_BIAYA",
+  };
+  const tp = evaluateShadowTrade(buy, [
+    { tsServer: "2026.10.12 09:59:00", bid: 1.09, ask: 1.0902 },
+    { tsServer: "2026.10.12 10:20:00", bid: 1.105, ask: 1.1052 },
+    { tsServer: "2026.10.12 10:40:00", bid: 1.1101, ask: 1.1103 },
+  ]);
+  assert(tp.outcome === "TP" && tp.exitPrice === 1.11 && tp.r === 2, `TP: ${tp.outcome} ${tp.exitPrice} r=${tp.r}`);
+  const sell: ShadowTradeInput = {
+    symbol: "EURUSD", direction: "JUAL", signalServerTime: "2026.10.12 10:00:00",
+    entry: 1.1, stopLoss: 1.105, takeProfit: 1.09, heldBy: "DITAHAN_KORELASI",
+  };
+  const sl = evaluateShadowTrade(sell, [
+    { tsServer: "2026.10.12 10:10:00", bid: 1.1018, ask: 1.102 },
+    { tsServer: "2026.10.12 10:30:00", bid: 1.1048, ask: 1.105 },
+  ]);
+  assert(sl.outcome === "SL" && sl.exitPrice === 1.105 && sl.r === -1, `SL: ${sl.outcome} ${sl.exitPrice} r=${sl.r}`);
+  const before = evaluateShadowTrade(sell, [{ tsServer: "2026.10.12 09:00:00", bid: 1.2, ask: 1.2 }]);
+  assert(before.outcome === "BERJALAN" && before.maxFavorableR === null, "tick sebelum sinyal harus diabaikan");
+});
+test("691. TB-1 trade bayangan emas tanpa time-stop: BERJALAN, BATAS_AMATAN, input tidak sah", () => {
+  // Entry/SL/TP dari XAUUSD Finex demo 61823011 (12 Okt 2026); harga tick adalah harga uji.
+  const gold: ShadowTradeInput = {
+    symbol: "XAUUSD", direction: "BELI", signalServerTime: "2026.10.12 07:51:21",
+    entry: 4196.84, stopLoss: 4184.03, takeProfit: 4242.03, heldBy: "DITAHAN_BIAYA",
+  };
+  const running = evaluateShadowTrade(gold, [{ tsServer: "2026.10.12 11:51:21", bid: 4200, ask: 4200.3 }]);
+  assert(running.outcome === "BERJALAN" && running.r === null && running.exitPrice === null && running.exitServerTime === null, `emas 4 jam: ${running.outcome}`);
+  const limited = evaluateShadowTrade({ ...gold, maxObserveHours: 2 }, [{ tsServer: "2026.10.12 10:51:21", bid: 4200, ask: 4200.3 }]);
+  assert(limited.outcome === "BATAS_AMATAN" && limited.r === null && limited.exitPrice === null && limited.exitServerTime === "2026.10.12 10:51:21", `batas amatan: ${limited.outcome}`);
+  const bad: ShadowTradeInput = { ...gold, stopLoss: 4200 };
+  const reason = validateShadowInput(bad);
+  assert(reason !== null && reason.length > 0, "SL di atas entry BELI harus ditolak");
+  let thrown = "";
+  try {
+    evaluateShadowTrade(bad, []);
+  } catch (error) {
+    thrown = error instanceof Error ? error.message : String(error);
+  }
+  assert(thrown === reason, `harus melempar alasan validasi, dapat "${thrown}"`);
+});
+test("692. PR-1 rute pembelajaran rugi: delapan sebab punya rekomendasi dan penerima", () => {
+  const causes: LossCause[] = [
+    "MELAWAN_SEJAK_MASUK", "BERBALIK_SETELAH_0_5R", "SL_TERLALU_DEKAT", "DEKAT_BERITA_ATAU_TUTUP",
+    "MELAWAN_ARAH_D1", "BIAYA_BESAR", "DATA_BERMASALAH", "SARAN_TIDAK_DIJALANKAN",
+  ];
+  assert(Object.keys(CAUSE_ROUTES).length === 8, "harus 8 sebab");
+  for (const cause of causes) {
+    const route = routeFor(cause);
+    assert(route.rekomendasi.length > 0 && route.penerima.length > 0, `${cause} tanpa rute`);
+  }
+  assert(routeFor("BIAYA_BESAR").penerima.join(",") === "T-PELUANG,T-BIAYA", "BIAYA_BESAR ke T-PELUANG dan T-BIAYA");
+  assert(routeFor("SARAN_TIDAK_DIJALANKAN").penerima.join(",") === "FAHMI", "kepatuhan ke FAHMI");
+});
+test("693. PR-1 status rekomendasi: hanya 4 transisi yang sah", () => {
+  const ok: ReadonlyArray<readonly [RecommendationStatus, RecommendationStatus]> = [
+    ["DIUSULKAN", "DIUJI"], ["DIUJI", "DITERIMA"], ["DIUJI", "DITOLAK"], ["DITERIMA", "MENJADI_VERSI"],
+  ];
+  const notOk: ReadonlyArray<readonly [RecommendationStatus, RecommendationStatus]> = [
+    ["DIUSULKAN", "DITERIMA"], ["DITOLAK", "DIUJI"], ["MENJADI_VERSI", "DIUSULKAN"], ["DIUSULKAN", "DIUSULKAN"],
+  ];
+  for (const [from, to] of ok) assert(canTransition(from, to), `${from} → ${to} harus sah`);
+  for (const [from, to] of notOk) assert(!canTransition(from, to), `${from} → ${to} harus ditolak`);
+});
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
