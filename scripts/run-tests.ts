@@ -259,8 +259,8 @@ import {
 import { withUsdPointValue } from "../src/lib/usdPointValue";
 import { resolveCsvBidAsk } from "../src/lib/csvQuote";
 import { BACKTEST_SKIPPED_GUARDS, BACKTEST_WINDOW, runBacktest, simulateTrade, type BacktestRun, type BacktestTrade } from "../src/lib/backtest";
-import { buildBacktestReport, capitalForSignals, capitalTopUp, formatCostHeldSection, MAX_DRAWDOWN_SHARE_OF_CAPITAL, MIN_EDGE_OVER_BREAKEVEN, SIGNAL_CAPITAL_COVERAGE, summarizeCostHeld, summarizeTrades } from "../src/lib/backtestReport";
-import { DEFAULT_STRATEGY_ID, getStrategy, parseStrategyId, STRATEGIES, STRATEGY_IDS } from "../src/lib/strategyRegistry";
+import { buildBacktestReport, capitalForSignals, capitalTopUp, formatCostHeldSection, MAX_DRAWDOWN_SHARE_OF_CAPITAL, MIN_EDGE_OVER_BREAKEVEN, SIGNAL_CAPITAL_COVERAGE, summarizeCostHeld, summarizeTrades, formatGroupSection, groupReports } from "../src/lib/backtestReport";
+import { DEFAULT_STRATEGY_ID, getStrategy, parseStrategyId, STRATEGIES, STRATEGY_IDS, STRATEGY_WINDOWS } from "../src/lib/strategyRegistry";
 import { bearishRejection, bullishRejection, CANDLE_PARAMS, candleSetup, trendFromSwings } from "../src/lib/candleStrategy";
 import { isBearishEngulfing, isBullishEngulfing, scalpSetup, SCALP_PARAMS, smaSeries, stochasticK } from "../src/lib/scalpStrategy";
 import { ABC_PARAMS, abcSetup, findBullishAbc } from "../src/lib/abcStrategy";
@@ -327,6 +327,7 @@ import { calendarTabFindings, exposureTabFindings, lastHourWindow, tradeTabFindi
 import { runTabReportsOnce } from "../server/services/tabReportJob";
 import { aggregateDaily, d1Direction, D1_PARAMS, dailyLevels } from "../src/lib/dailyLevels";
 import { breakoutRetestAt } from "../src/lib/breakoutRetest";
+import { aggregateH4, TOPDOWN_WINDOW, topdownSetup } from "../src/lib/topdownStrategy";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
 import { convertIdrSnapshot, IdrEquitySource, parseAccountCurrency } from "../server/services/convertedEquity";
 import { getMifxSpec, MIFX_SPEC_SYMBOLS, mifxVolume } from "../src/lib/mifxSpecs";
@@ -9690,6 +9691,75 @@ test("721. P3 breakout-retest: tembus puncak swing lalu diuji ulang dengan penol
   const jauh = [...cs.slice(0, 12), c(12, 100.55, 101.2, 100.9, 101.1)];
   assert(breakoutRetestAt(jauh, 0.6) === null, "tidak menyentuh zona level = null");
   assert(breakoutRetestAt(cs, null) === null && breakoutRetestAt(cs.slice(0, 5), 0.6) === null, "ATR/data kurang = null");
+});
+function topdownH1(): { time: string; open: number; high: number; low: number; close: number }[] {
+  // Harga uji (bukan data nyata): 57 hari tren naik 40→98, lalu pola breakout-retest H4 (test 721) di 99–101.
+  const out: { time: string; open: number; high: number; low: number; close: number }[] = [];
+  const t = (day: number, hour: number) => {
+    const d = new Date(Date.UTC(2026, 0, 1) + day * 86_400_000);
+    return `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${String(d.getUTCDate()).padStart(2, "0")} ${String(hour).padStart(2, "0")}:00`;
+  };
+  for (let day = 0; day < 57; day++) {
+    for (let h = 0; h < 24; h++) {
+      const p = 40 + (58 * (day * 24 + h)) / (57 * 24);
+      out.push({ time: t(day, h), open: p, high: p + 0.05, low: p - 0.05, close: p + 0.02 });
+    }
+  }
+  const h4 = [
+    [99, 99.5, 98.8, 99.2], [99.2, 99.6, 99, 99.4], [99.4, 99.8, 99.2, 99.6], [99.6, 100, 99.4, 99.8],
+    [99.8, 100.5, 99.6, 100], [100, 100.2, 99.5, 99.7], [99.7, 99.9, 99.3, 99.5], [99.5, 99.8, 99.2, 99.6],
+    [99.6, 100.4, 99.5, 100.3], [100.3, 101, 100.2, 100.9], [100.9, 101.1, 100.6, 100.7], [100.7, 100.9, 100.4, 100.6],
+    [100.55, 100.8, 100.45, 100.7],
+  ];
+  h4.forEach(([o, hi, lo, cl], k) => {
+    const day = 57 + Math.floor((k * 4) / 24);
+    const hour = (k * 4) % 24;
+    // 4 candle H1 per H4: o → lo → hi → cl (bentuk blok H4 sama persis).
+    const path = cl >= o ? [o, lo, hi, cl] : [o, hi, lo, cl];
+    for (let j = 0; j < 4; j++) {
+      const a = j === 0 ? o : path[j];
+      const b = path[j + 1] ?? cl;
+      const end = j === 3 ? cl : b;
+      out.push({ time: t(day, hour + j), open: a, high: Math.max(a, end, j === 1 || j === 2 ? path[j] : a), low: Math.min(a, end, j === 1 || j === 2 ? path[j] : a), close: end });
+    }
+  });
+  return out;
+}
+test("722. P4 strategi topdown: arah D1 ketat + breakout-retest H4 → BELI dengan SL 0,5–3×ATR H4 dan TP 2×; selain itu TUNGGU", () => {
+  const h1 = topdownH1();
+  const h4 = aggregateH4(h1);
+  assert(h4.lastClosed && h4.candles[h4.candles.length - 1].close === 100.7 && h4.candles[h4.candles.length - 1].low === 100.45, `H4 terakhir: ${JSON.stringify(h4.candles[h4.candles.length - 1])}`);
+  const market = { ...modeAmanMarket, symbol: "XAUUSD", bid: 100.7, ask: 100.72, close: 100.7 };
+  const broker = { ...modeAmanBroker, buffer: 0.05 };
+  const s = topdownSetup(market, broker, h1);
+  assert(s.decision === "BELI" && s.entry === 100.72, `harus BELI: ${s.decision} ${s.factors.join(" | ")}`);
+  assert(s.stopLoss !== null && s.takeProfit !== null && s.riskDistance !== null, "SL/TP ada");
+  if (s.stopLoss === null || s.takeProfit === null || s.riskDistance === null) return;
+  assert(Math.abs(s.takeProfit - s.entry - 2 * s.riskDistance) < 1e-9 && s.stopLoss <= 100.4, `SL ${s.stopLoss} TP ${s.takeProfit}`);
+  assert(s.factors[0].startsWith("Arah D1 NAIK") && s.factors[1].includes("Breakout-retest H4"), s.factors.join(" | "));
+  const belumTutup = topdownSetup(market, broker, h1.slice(0, -1));
+  assert(belumTutup.decision === "TUNGGU" && belumTutup.factors[0] === "menunggu candle H4 tutup", belumTutup.factors[0]);
+  const pendek = topdownSetup(market, broker, h1.slice(-200));
+  assert(pendek.decision === "TUNGGU" && pendek.factors[0].includes("D1 belum cukup"), "200 candle live = D1 kurang = TUNGGU");
+  const r = analyzeMarket(market, broker);
+  assert(typeof r.decision === "string", "mesin skor tidak terpengaruh");
+});
+test("723. P4/P5 rak strategi + backtest: topdown terdaftar (window 1.500 H1), Buku Aturan UJI_DEMO; rapor vonis per golongan", () => {
+  assert(STRATEGY_IDS.includes("topdown") && getStrategy("topdown").label.startsWith("Top-down") && STRATEGY_WINDOWS.topdown === TOPDOWN_WINDOW && TOPDOWN_WINDOW === 1500, "registry");
+  assert(STRATEGY_WINDOWS.skor === undefined, "strategi lain tetap 200 candle");
+  const book = parseRuleBook(JSON.parse(readSrc("config/buku-aturan.json")) as unknown);
+  const td = latestVersion(book.entries, "topdown");
+  assert(td !== null && td.status === "UJI_DEMO" && !allowedOnLive(td) && td.parameter.rewardRisk === 2 && td.golongan?.join() === "LOGAM", "Buku Aturan topdown");
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const gelombang = (i: number) => 1.3 + 0.004 * Math.sin(i / 40) + 0.0006 * Math.sin(i / 3);
+  const fx = runBacktest({ symbol: "GBPUSD", brokerId: "finex", csv: btCsv(500, gelombang), equity: 10000, fxRates: rates, spread: 0.00005 });
+  const rows = groupReports([fx, { ...fx, symbol: "XAUUSD", trades: [] }, { ...fx, symbol: "EURUSD", error: "Candle kurang" }], 17000);
+  assert(rows.map((r) => r.group).join(",") === "FOREX,LOGAM", `golongan: ${rows.map((r) => r.group).join(",")}`);
+  assert(rows[0].symbols.join(",") === "GBPUSD" && rows[1].latih.n === 0 && rows[1].verdict === "BELUM_CUKUP", "simbol gagal dilewati; emas tanpa trade belum cukup");
+  const text = formatGroupSection(rows);
+  assert(text.includes("Vonis per golongan") && text.includes("Logam") && text.includes("BELUM_CUKUP"), text);
+  const cli = readSrc("scripts/backtest.ts");
+  assert(cli.includes("formatGroupSection(groupReports(runs, usdIdr))") && cli.includes("...(window !== undefined ? { window } : {})"), "CLI memakai window strategi + rapor per golongan");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

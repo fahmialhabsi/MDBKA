@@ -70,5 +70,42 @@
     "ujiSebelum": null,
     "ujiSesudah": null,
     "versiSebelumnya": null
+  },
+  {
+    "id": "topdown",
+    "versi": "1",
+    "nama": "Top-down: arah D1 ketat + breakout-retest H4",
+    "jenis": "strategi",
+    "peran": "setup",
+    "golongan": [
+      "LOGAM"
+    ],
+    "timeframe": {
+      "arah": "D1",
+      "setup": "H4",
+      "pemicu": "H4"
+    },
+    "sumberData": [
+      "MDBKA_<simbol>_H1_LONG.csv"
+    ],
+    "parameter": {
+      "d1MaPeriod": 50,
+      "d1SlopeLookback": 5,
+      "d1NeutralAtr": 0.25,
+      "swingStrength": 3,
+      "maxRetestBars": 6,
+      "zoneAtr": 0.25,
+      "slMinAtr": 0.5,
+      "slMaxAtr": 3,
+      "rewardRisk": 2,
+      "windowH1": 1500
+    },
+    "status": "UJI_DEMO",
+    "aktifSejak": "2026-10-13",
+    "dibuatOleh": "P4",
+    "alasanPerubahan": "Versi awal dari keputusan bagian 6 rancangan alur trader (emas H4 dulu); backtest saja, belum ada bukti lampu hijau.",
+    "ujiSebelum": null,
+    "ujiSesudah": null,
+    "versiSebelumnya": null
   }
 ]

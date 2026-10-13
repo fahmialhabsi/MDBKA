@@ -12,8 +12,8 @@ import { resolveCommonFilesDir } from "../server/routes/marginRoutes";
 import { readUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
 import { FALLBACK_RATES, fetchECBRates } from "../src/services/fxRateService";
 import { runBacktest, type BacktestRun } from "../src/lib/backtest";
-import { buildBacktestReport, capitalTopUp, formatCostHeldSection, summarizeCostHeld } from "../src/lib/backtestReport";
-import { getStrategy } from "../src/lib/strategyRegistry";
+import { buildBacktestReport, capitalTopUp, formatCostHeldSection, formatGroupSection, groupReports, summarizeCostHeld } from "../src/lib/backtestReport";
+import { getStrategy, STRATEGY_WINDOWS } from "../src/lib/strategyRegistry";
 import { aggregateCandleCsv } from "../src/lib/candleAggregate";
 import {
   formatBacktestReport,
@@ -29,6 +29,12 @@ async function main(): Promise<number> {
     return 1;
   }
   const opt = parsed.options;
+  // P4: topdown merakit D1/H4 sendiri dari H1 — timeframe lain akan salah.
+  const window = STRATEGY_WINDOWS[opt.strategy];
+  if (window !== undefined && opt.timeframe !== "H1") {
+    console.error(`Strategi ${opt.strategy} hanya untuk data H1 (merakit D1/H4 sendiri). Hapus --timeframe ${opt.timeframe}.`);
+    return 1;
+  }
   const dir = resolveCommonFilesDir();
   const marginFile = join(dir, `MDBKA_Margin_${opt.marginTag}.csv`);
   if (!existsSync(marginFile)) {
@@ -79,6 +85,7 @@ async function main(): Promise<number> {
         fxRates: rates,
         spread: spreads.get(symbol) ?? 0,
         strategy: opt.strategy,
+        ...(window !== undefined ? { window } : {}),
         ...(opt.timeStopHours !== undefined ? { timeStopHours: opt.timeStopHours } : {}),
       });
       if (log) console.log(`  ${symbol.padEnd(12)} ${run.error ?? `${run.trades.length} trade`}`);
@@ -122,6 +129,9 @@ async function main(): Promise<number> {
   // PL-1: hasil "seandainya diambil" sinyal yang ditahan biaya (bukti T-PELUANG).
   console.log("");
   console.log(formatCostHeldSection(summarizeCostHeld(runs), usdIdr));
+  // P5: vonis latih/ujian per golongan (bukti tidak dicampur antar golongan).
+  console.log("");
+  console.log(formatGroupSection(groupReports(runs, usdIdr)));
   return 0;
 }
 

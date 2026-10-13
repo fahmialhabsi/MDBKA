@@ -412,3 +412,55 @@ export function formatCostHeldSection(rows: readonly CostHeldRow[], usdIdr: numb
   }
   return lines.join("\n");
 }
+
+export interface GroupBacktestRow {
+  readonly group: string;
+  readonly label: string;
+  readonly symbols: readonly string[];
+  readonly latih: BacktestSegment;
+  readonly ujian: BacktestSegment;
+  readonly verdict: BacktestVerdict;
+}
+
+/**
+ * P5 (13 Okt 2026) — rapor latih/ujian PER GOLONGAN: tiap golongan dinilai
+ * sendiri dengan aturan vonis yang sama (n ≥ 20 di latih DAN ujian, untung ≥
+ * 3 poin di atas titik impas). Bukti emas tidak menolong Forex, dan sebaliknya.
+ * Batas waktu latih|ujian dihitung per golongan dari data simbolnya.
+ */
+export function groupReports(runs: readonly BacktestRun[], usdIdr: number | null): GroupBacktestRow[] {
+  const byGroup = new Map<string, BacktestRun[]>();
+  for (const r of runs) {
+    if (r.error !== null) continue;
+    const g = riskGroupOf(r.symbol).id;
+    byGroup.set(g, [...(byGroup.get(g) ?? []), r]);
+  }
+  const order = Object.keys(RISK_GROUPS);
+  return [...byGroup.entries()]
+    .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+    .map(([group, list]) => {
+      const rep = buildBacktestReport(list, usdIdr);
+      return {
+        group,
+        label: RISK_GROUPS[group as keyof typeof RISK_GROUPS]?.label ?? group,
+        symbols: list.map((r) => r.symbol),
+        latih: rep.latih,
+        ujian: rep.ujian,
+        verdict: rep.verdict,
+      };
+    });
+}
+
+export function formatGroupSection(rows: readonly GroupBacktestRow[]): string {
+  const lines = ["Vonis per golongan (P5) — tiap golongan butuh bukti sendiri"];
+  if (rows.length === 0) {
+    lines.push("  Tidak ada simbol yang berhasil diuji.");
+    return lines.join("\n");
+  }
+  const seg = (s: BacktestSegment): string =>
+    `n=${s.n}, menang ${s.winRate === null ? "-" : `${Math.round(s.winRate * 100)}%`}, bersih $${s.totalUsd}`;
+  for (const r of rows) {
+    lines.push(`  ${r.label.padEnd(24)} ${r.verdict.padEnd(12)} latih ${seg(r.latih)} | ujian ${seg(r.ujian)}  (${r.symbols.length} simbol)`);
+  }
+  return lines.join("\n");
+}

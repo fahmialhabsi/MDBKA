@@ -15,8 +15,9 @@ import type { BrokerSettings, MarketData } from "../types/analysis";
 import { candleSetup } from "./candleStrategy";
 import { scalpSetup } from "./scalpStrategy";
 import { abcSetup } from "./abcStrategy";
+import { TOPDOWN_WINDOW, topdownSetup } from "./topdownStrategy";
 
-export type StrategyId = "skor" | "candle" | "scalping" | "abc";
+export type StrategyId = "skor" | "candle" | "scalping" | "abc" | "topdown";
 
 export interface StrategyContext {
   readonly market: MarketData;
@@ -59,7 +60,16 @@ export const STRATEGIES: Readonly<Record<StrategyId, Strategy>> = {
     description: "P2: dorongan L0→P0 >= 3×ATR, koreksi A-B-C (C lewat A, L0 utuh), candle penolakan di ujung C; SL ujung C, TP = 2× SL (PDF ABC gold).",
     propose: ({ market, broker, candles }) => abcSetup(market, broker, candles),
   },
+  topdown: {
+    id: "topdown",
+    label: "Top-down: arah D1 ketat + breakout-retest H4",
+    description: "P4: D1 (MA50 + kemiringan, netral = TUNGGU) harus searah; breakout-retest pada candle H4 tertutup dengan candle penolakan; SL ujung retest (0,5–3×ATR H4), TP = 2× SL. Backtest saja.",
+    propose: ({ market, broker, candles }) => topdownSetup(market, broker, candles),
+  },
 };
+
+/** P4: jumlah candle H1 per penilaian di backtest bila strategi butuh lebih dari 200 (absen = BACKTEST_WINDOW). */
+export const STRATEGY_WINDOWS: Readonly<Partial<Record<StrategyId, number>>> = { topdown: TOPDOWN_WINDOW };
 
 export const STRATEGY_IDS: readonly StrategyId[] = Object.keys(STRATEGIES) as StrategyId[];
 
