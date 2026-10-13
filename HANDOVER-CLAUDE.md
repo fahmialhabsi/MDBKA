@@ -2,6 +2,8 @@
 
 > Dokumen ini dibaca pertama kali oleh Claude AI agar langsung memahami
 > konteks tanpa kehilangan riwayat pekerjaan dari Manus/Muse Spark.
+>
+> **Sesi baru: mulai dari Bagian 12 (13 Okt 2026)** — rancangan, keputusan, SOP, dan urutan kerja terbaru.
 
 ---
 
@@ -312,3 +314,117 @@ ACCOUNT_LABELS=…,413925678:Exness demo
   `git add -A; git commit -m "…"; git push` (jangan sisipkan kata "lalu").
 * Test lama hanya ditambah; bila TERPAKSA diubah, beri komentar alasan.
   File `scripts/run-tests.ts` ber-CRLF; beberapa .tsx ber-BOM + CRLF.
+
+---
+
+## 12. PEMBARUAN 13 OKT 2026 — RANCANGAN BESAR + SOP (baca ini dulu)
+
+HEAD sebelum bagian ini ditulis: `16ee7b3`. Test terakhir **686**, test berikutnya **687**.
+Sejak `551b696` yang berubah **hanya dokumen** di `docs/`; belum ada kode
+yang diubah. Semua rancangan berstatus DRAF sampai langkahnya dikerjakan.
+
+### 12.1 Dokumen yang wajib dibaca (urut)
+
+| # | Berkas | Isi |
+|---|---|---|
+| 1 | `docs/AUDIT-2026-10-13-analisa-dan-pembatasan-risiko.md` | Audit awal: data, alur, penjaga, 8 risiko pelonggaran demo |
+| 2 | `docs/AUDIT-RANCANGAN-2026-10-13.md` | Temuan audit rancangan, **keputusan K-1 s.d. K-9**, **peta urutan induk** (fase 0–6) |
+| 3 | `docs/RANCANGAN-2026-10-13-alur-trader-profesional.md` | Top-down, pola, pemicu, SL/TP, keputusan awal 7 pertanyaan, Tim 2 (siklus 30 menit), kartu pola + label |
+| 4 | `docs/RANCANGAN-2026-10-13-fondasi-data-dan-jalur-live.md` | Fondasi data (A1–A9), konteks (B), jalur demo → Live + 3 lampu (C), risiko gabungan (E), pemantauan (F), penyimpanan JSONL (G), **pekerjaan tertunda D1–D8** |
+| 5 | `docs/RANCANGAN-2026-10-13-tim-akun-tab-indikator.md` | Daftar akun, tim per akun, tim tab MT5, 38 indikator, T-PELUANG, mesin bukti, demo laboratorium, Tim Pembelajaran Rugi |
+| 6 | `docs/SOP-2026-10-13-tim-mdbka.md` | Tugas, tanggung jawab, kewenangan semua tim; 8 aturan wewenang; **17 SOP**; diagram alur |
+
+### 12.2 Keputusan Fahmi yang berlaku (ringkas)
+
+* **Aturan mutlak 1 tetap** ("hasil analisis Finex tidak boleh berubah").
+  A7-2/A7-3 (penjaga sesi + urutan penahan di Hasil analisa) **hanya
+  shadow** untuk semua broker. Draf pengecualian ada di fondasi A9, **belum
+  ditandatangani** → belum berlaku.
+* **3 lampu hijau** (fondasi C5): backtest layak + uji bergulir + equity akun
+  Live tidak MODAL KURANG → ≥ 20 rangkaian demo setara Live (biaya Live) →
+  20 rangkaian Live lot minimum. Hasil memburuk = turun otomatis ke demo.
+* **Akun:** tanpa label = **Live** (K-3). Satu akun tak berlabel: **72159716
+  (OTB)**, isinya hanya "Demo Deposit Awal" → Fahmi menambah
+  `72159716:OTB demo 2` ke `ACCOUNT_LABELS` (langkah TA-1).
+  Trade AUDJPY/XAUUSD 12 Okt berasal dari **Finex demo 61823011**.
+* **Demo:** OTB, MIFX, Exness boleh dilonggarkan lebih dulu; **Finex demo
+  menunggu F3** (EA menulis login + `ACCOUNT_TRADE_MODE`) (K-2).
+* **Bukti F5 dan jeda Live** hanya menghitung entri setara Live (K-4).
+* **Mode A dengan penguncian login**, default Live (K-9).
+* **Demo laboratorium:** penjaga keras (data/akun, spesifikasi, pasar sedang
+  tutup, margin, terbukti rugi) tetap menahan; penjaga lunak (biaya, risiko >
+  batas, jeda, berita, pembukaan bursa, korelasi, pasar jelang tutup) boleh
+  jadi **trade uji** lot minimum. **Opsi A:** Fahmi membuka sendiri di MT5
+  dengan komentar `MDBKA-UJI`. MDBKA tetap tidak mengirim order.
+  K-9 direvisi: gerbang biaya di demo boleh dilewati sebagai trade uji.
+* **Masuk lagi simbol sama** (demo): posisi sebelumnya wajib sudah aman
+  (SL ≥ titik impas), maksimal 2 posisi per simbol (K-7).
+* **Siklus 30 menit = siklus tinjau** Tim 2. Jam ke-3: Forex/JPY time-stop;
+  emas, minyak, indeks hanya akhir masa pantau intensif (K-1).
+* **R rangkaian** = total bersih ÷ risiko uang open 1 (K-5).
+  **Label:** Kasbi Bakar ≥ +1R, Popeda Sagu untung kecil, Sagu Tumang
+  ±0,1R, Pupare Rebus rugi. **Sidik jari bertingkat** 3 tingkat (K-6).
+* **Bukti punya bobot:** backtest < bayangan < trade uji < setara Live.
+  Hanya setara Live yang menyalakan lampu 2 dan 3.
+* **T-PELUANG** 3 tahap (hitung "seandainya", trade uji demo, Live hanya
+  lewat 3 lampu + pengecualian tertulis aturan mutlak 2).
+* **Tujuan jangka panjang** (sampai Rp18 triliun) = tangga yang dinaiki hanya
+  dengan bukti; batas golongan Rupiah ditinjau di setiap tangga.
+* **MDBKA belum selesai** selama pekerjaan tertunda D1–D8 (fondasi D) belum
+  diimplementasikan.
+
+### 12.3 Fakta kode yang ditemukan 13 Okt (jangan diulang mencarinya)
+
+* Pemindai, detail sinyal, pencatat entry, backtest = `scanSymbol`.
+  **Hasil analisa (`App.tsx`) = `analyzeMarket` + 6 penahan**: penjaga sesi
+  tidak ada, urutan penahan berbeda (fondasi A7).
+* Lot sudah dihitung dari jarak SL (`applyRiskGates`): SL dulu, lot kemudian.
+* `csvCandleParser.ts` membuang kolom `tick_volume` (jangan ubah parser;
+  pakai pembaca baru).
+* `mt5LogReader.ts` hanya mengurai angka equity, bukan isi Journal.
+* Arsip tick (`tickHistory.ts`) baru untuk Finex dan OTB; offset zona hanya
+  `MT5_TZ_OFFSET_FINEX/OTB`, bawaan +3 (Exness UTC+0 akan salah).
+* Kalender sudah menyimpan Actual/Forecast/Previous.
+* Pencatat entry sudah menilai sesi saat entry → entri `DITAHAN_SESI` sudah
+  ada sebagai bukti.
+* Backtest menghitung jumlah sinyal tertahan, belum hasilnya.
+* `positions.csv`, `equity.csv`, `quotes.csv` tidak memuat login.
+
+### 12.4 Langkah berikutnya (fase 0, tanpa mengubah perilaku)
+
+1. **A7-1** — test 687: membuktikan penjaga sesi tidak ada di Hasil analisa
+   (tanpa mengubah tampilan/keputusan).
+2. **TB-1** — modul murni trade bayangan + test.
+3. **LAB-1** — modul murni pembagian penjaga keras/lunak + test.
+4. **PR-1** — tabel `rekomendasi`; **PL-1** — hasil "seandainya" sinyal
+   tertahan biaya di backtest; **G-1/G-2** — tipe + Buku Aturan awal;
+   **S1–S4** shadow; **TT-1/TT-2**, **TI-1**, **F1**, **F4**, **P5a**.
+
+Urutan lengkap dan syarat tiap fase: `docs/AUDIT-RANCANGAN-2026-10-13.md`
+bagian 4, 7, 9.
+
+### 12.5 Pelajaran teknis sesi 13 Okt
+
+* **Jangan menjalankan perintah git dari sesi Claude** di folder repo
+  (shell jembatan tidak bisa menghapus `.git/index.lock`; sempat membuat git
+  Fahmi terkunci). Cek repo cukup dengan membaca berkas.
+* Saat menyalin berkas ke komputer Fahmi, pakai nama berkas sementara yang
+  baru setiap kali; sekali sempat versi lama yang tertulis. Selalu verifikasi
+  dengan membaca berkas hasil.
+
+### 12.6 Prompt siap-tempel untuk sesi berikutnya
+
+```text
+Halo Claude. Saya Fahmi, melanjutkan MDBKA di E:\MDBKA (main). Baca
+HANDOVER-CLAUDE.md bagian 12 lalu enam dokumen di 12.1, terutama
+AUDIT-RANCANGAN (keputusan K-1..K-9, peta urutan induk) dan SOP.
+Cek git log -5 dan git status (saya yang menjalankan git).
+Aturan: analisa akar masalah dulu; satu langkah kecil per giliran; cek
+npm test, tsc -b, lint; tanpa auto-commit; jelaskan dengan bahasa awam
+(analogi, contoh data asli, kegunaan, batasan, perubahan layar, teknis
+singkat); perintah: "npm test; npm run build" lalu baris terpisah
+"git add -A; git commit -m ...; git push". Test lama hanya ditambah;
+nomor test berikutnya 687. Rumus decisionEngine jangan diubah; tanpa
+angka fiktif; hindari any; jaga CRLF/BOM. Mode Aman: TUNGGU default.
+Tugas: lanjutkan fase 0 mulai A7-1.
+```
