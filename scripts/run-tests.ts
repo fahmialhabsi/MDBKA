@@ -51,6 +51,8 @@ import { canTransition, CAUSE_ROUTES, routeFor, type LossCause, type Recommendat
 import { canonicalJson, isUtcSecondIso, jsonlRelativePath, parseJsonlText, toJsonlLine, type RekomendasiRecord } from "../src/lib/jsonlRecord";
 import { appendJsonlRecord, readJsonlRecords, snapshotFingerprint } from "../server/services/jsonlStore";
 import { allowedOnLive, latestVersion, parseRuleBook, type RuleEntry } from "../src/lib/ruleBook";
+import { buildShadowRecord, computeResultShadow, shadowDedupKey, summarizeShown, type ShownSummary } from "../src/lib/resultShadow";
+import { handleShadowRequest } from "../server/routes/keputusanRoutes";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
 import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
@@ -9156,6 +9158,89 @@ test("699. G-2 Buku Aturan awal: 4 strategi versi 1 berstatus UJI_DEMO; pembaca 
   assert(latestVersion(two, "skor")?.versi === "2", "versi terbaru = baris terakhir");
   assert(latestVersion(two, "tidak-ada") === null, "id tak dikenal = null");
   assert(allowedOnLive({ ...valid, status: "LIVE" }) && allowedOnLive({ ...valid, status: "PERCOBAAN_LIVE" }), "LIVE/PERCOBAAN_LIVE boleh di Live");
+});
+test("700. S1 shadow Hasil analisa: penjaga sesi dinilai di atas hasil terlihat tanpa mengubahnya", () => {
+  // S1 (13 Okt 2026, fondasi A8): data sesi META.US sama dengan test 687.
+  const ses = [1, 2, 3, 4, 5].map((day) => ({ symbol: "META.US", day, fromMin: 930, toMin: 1315 }));
+  const base = analyzeMarket(modeAmanMarket, modeAmanBroker);
+  const beli: ReturnType<typeof analyzeMarket> = Object.freeze({ ...base, decision: "BELI", stopLoss: 1, takeProfit: 2, suggestedLot: 0.01, warnings: ["w"] });
+  const before = JSON.stringify(beli);
+  const shown = summarizeShown(beli);
+  const near = computeResultShadow(shown, "META.US", "2026.10.09 21:00:00", ses);
+  assert(near !== null && near.differs && near.shownDecision === "BELI" && near.shadowDecision === "TUNGGU", `55 mnt jelang tutup: ${JSON.stringify(near)}`);
+  assert(near !== null && near.shadowCode === "DITAHAN_SESI" && near.closesInMin === 55, "kode dan menit sampai tutup");
+  const far = computeResultShadow(shown, "META.US", "2026.10.08 18:00:00", ses);
+  assert(far !== null && !far.differs && far.shadowDecision === "BELI", "jauh dari tutup = sama");
+  const wait = computeResultShadow({ ...shown, decision: "TUNGGU" }, "META.US", "2026.10.09 21:00:00", ses);
+  assert(wait !== null && !wait.differs && wait.shadowCode === null, "TUNGGU tidak pernah dicatat");
+  assert(computeResultShadow(shown, "META.US", "2026.10.09 21:00:00", []) === null, "data sesi kosong = tidak dinilai");
+  assert(computeResultShadow(shown, "META.US", null, ses) === null, "jam server tidak ada = tidak dinilai");
+  assert(computeResultShadow(shown, "META.US", "2026-10-09T21:00:00Z", ses) === null, "format jam salah = tidak dinilai");
+  assert(JSON.stringify(beli) === before && beli.decision === "BELI" && beli.suggestedLot === 0.01, "hasil terlihat tidak boleh berubah");
+  assert(shadowDedupKey("finex", "META.US", "2026.10.09 21:00:00") === shadowDedupKey("finex", "META.US", "2026.10.09 21:59:59"), "satu candle H1 = satu kunci");
+  assert(shadowDedupKey("finex", "META.US", "2026.10.09 21:00:00") !== shadowDedupKey("finex", "META.US", "2026.10.09 22:00:00"), "candle berbeda = kunci berbeda");
+});
+test("701. S1 baris keputusan hasil-shadow: format keputusan/1, nilai tidak diketahui null", () => {
+  const ses = [1, 2, 3, 4, 5].map((day) => ({ symbol: "META.US", day, fromMin: 930, toMin: 1315 }));
+  const shown: ShownSummary = { decision: "BELI", entry: 700.5, stopLoss: 690, takeProfit: 721.5, suggestedLot: 0.01, costShareOfRisk: 0.04 };
+  const shadow = computeResultShadow(shown, "META.US", "2026.10.09 21:00:00", ses);
+  assert(shadow !== null, "shadow harus ada");
+  if (shadow === null) return;
+  const rec = buildShadowRecord(
+    { keputusanId: "id-1", waktuUtc: "2026-10-09T18:00:00Z", broker: "finex", symbol: "META.US", serverNow: "2026.10.09 21:00:00" },
+    shown,
+    shadow,
+  );
+  assert(rec.skema === "keputusan/1" && rec.jalur === "hasil-shadow" && rec.waktuServer === "2026.10.09 21:00:00", "identitas");
+  assert(rec.golongan === "SAHAM_AS" && rec.aturanId === "skor" && rec.versi === "1", `golongan=${rec.golongan}`);
+  assert(rec.hasil.keputusan === "TUNGGU" && rec.hasil.arahAsli === "BELI" && rec.hasil.status === "DITAHAN_SESI", "hasil shadow");
+  assert(rec.hasil.entry === 700.5 && rec.hasil.sl === 690 && rec.hasil.tp === 721.5 && rec.hasil.lot === 0.01, "angka hasil terlihat disalin apa adanya");
+  assert(rec.login === null && rec.sumber === null && rec.masukan.bid === null && rec.hasil.risikoRp === null, "tidak diketahui = null");
+  assert(rec.penjaga.length === 1 && rec.penjaga[0].hasil === "GAGAL" && rec.penjaga[0].kodeAlasan === "DITAHAN_SESI", "penjaga sesi");
+  assert(!toJsonlLine(rec).includes("\n"), "satu baris JSONL");
+});
+test("702. S2 POST /api/keputusan/shadow: catat hanya bila berbeda, sekali per simbol per candle H1, tolak masukan tidak sah", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const dataDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "shadow-")), "data");
+  const ses = [1, 2, 3, 4, 5].map((day) => ({ symbol: "META.US", day, fromMin: 930, toMin: 1315 }));
+  let n = 0;
+  const deps = {
+    dataDir,
+    getSessions: (broker: string) => (broker === "finex" ? ses : null),
+    now: () => new Date("2026-10-09T18:00:00Z"),
+    newId: () => `id-${++n}`,
+    seen: new Set<string>(),
+  };
+  const shown = { decision: "BELI", entry: 700.5, stopLoss: 690, takeProfit: 721.5, suggestedLot: 0.01, costShareOfRisk: null };
+  const req = { broker: "finex", symbol: "META.US", serverNow: "2026.10.09 21:00:00", shown };
+  const first = handleShadowRequest(req, deps);
+  assert(first.status === 200 && first.body.recorded, `pertama: ${JSON.stringify(first)}`);
+  assert(!handleShadowRequest(req, deps).body.recorded, "permintaan sama tidak dicatat ulang");
+  assert(!handleShadowRequest({ ...req, serverNow: "2026.10.09 21:30:00" }, deps).body.recorded, "candle H1 sama tidak dicatat ulang");
+  assert(!handleShadowRequest({ ...req, serverNow: "2026.10.08 18:00:00" }, deps).body.recorded, "jauh dari tutup = tidak berbeda");
+  assert(!handleShadowRequest({ ...req, shown: { ...shown, decision: "TUNGGU" } }, deps).body.recorded, "TUNGGU tidak dicatat");
+  const noSessions = handleShadowRequest({ ...req, broker: "orbitraderberjangka" }, deps);
+  assert(noSessions.status === 200 && !noSessions.body.recorded, "data sesi tidak ada = tidak dicatat");
+  assert(handleShadowRequest({ ...req, broker: undefined }, deps).status === 400, "broker wajib");
+  assert(handleShadowRequest({ ...req, serverNow: "kemarin" }, deps).status === 400, "jam server tidak sah");
+  assert(handleShadowRequest({ ...req, shown: { ...shown, entry: "700" } }, deps).status === 400, "angka harus angka");
+  assert(handleShadowRequest([], deps).status === 400, "body bukan objek");
+  const book = readJsonlRecords(dataDir, "keputusan/keputusan-finex-2026-10.jsonl", "keputusan/1");
+  assert(book.records.length === 1 && book.brokenLines === 0, `tercatat ${book.records.length}`);
+  assert(book.records[0].keputusanId === "id-1" && book.records[0].jalur === "hasil-shadow", "isi catatan");
+});
+test("703. S3 pengaman: App hanya memanggil useResultShadow sesudah shownResult; rantai penahan dan tampilan tidak berubah", () => {
+  const app = readSrc("src/App.tsx");
+  const call = "useResultShadow(activeBrokerId, market.symbol, liveQuote?.timestamp ?? null, shownResult);";
+  assert(app.split(call).length === 2, "panggilan useResultShadow harus tepat satu");
+  assert(app.indexOf("const shownResult = useMemo(") < app.indexOf(call), "dipanggil sesudah shownResult");
+  assert(app.includes("applyProofHold(applyDoubleBetHold(") && app.includes("applyLossPauseHold(applySpecHold(result, market.symbol, specHolds), lossPause)"), "rantai penahan App tidak boleh berubah");
+  assert(!app.includes("findSessionHold") && !app.includes("computeResultShadow"), "App tidak boleh menilai sesi sendiri");
+  const hook = readSrc("src/hooks/useResultShadow.ts");
+  assert(hook.includes("): void {") && !hook.includes("useState") && hook.includes("/api/keputusan/shadow"), "hook tanpa state dan tanpa nilai balik");
+  assert(readSrc("server/app.ts").includes('app.use("/api/keputusan", createKeputusanRoutes());'), "rute terdaftar");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

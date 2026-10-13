@@ -50,7 +50,7 @@ export interface DecisionOutcome {
 export interface KeputusanRecord {
   readonly skema: "keputusan/1";
   readonly keputusanId: string;
-  readonly jalur: "pemindai" | "hasil" | "entry" | "backtest";
+  readonly jalur: "pemindai" | "hasil" | "hasil-shadow" | "entry" | "backtest";
   readonly waktuUtc: string | null;
   readonly waktuServer: string | null;
   readonly waktuDiterima: string | null;
@@ -68,7 +68,7 @@ export interface KeputusanRecord {
   readonly kualitasData: readonly GuardEntry[];
   readonly penjaga: readonly GuardEntry[];
   readonly hasil: DecisionOutcome;
-  readonly sumber: "live" | "csv" | "ocr" | "manual";
+  readonly sumber: "live" | "csv" | "ocr" | "manual" | null;
   readonly diubahManual: readonly string[];
   readonly mengoreksi: string | null;
 }

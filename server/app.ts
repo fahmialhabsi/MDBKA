@@ -22,6 +22,7 @@ import { createBackupRoutes } from "./routes/backupRoutes";
 import { createEvaluationRoutes } from "./routes/evaluationRoutes";
 import { createCalendarRoutes } from "./routes/calendarRoutes";
 import { createSessionRoutes } from "./routes/sessionRoutes";
+import { createKeputusanRoutes } from "./routes/keputusanRoutes";
 import { createSpecRoutes } from "./routes/specRoutes";
 import { createHistoryRoutes } from "./routes/historyRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
@@ -97,6 +98,8 @@ export function createApp(
   // Satpam Kalender K2b: kalender ekonomi MT5 per broker (jam server).
   app.use("/api/calendar", createCalendarRoutes());
   app.use("/api/sessions", createSessionRoutes());
+  // S2 (13 Okt 2026): catatan shadow Hasil analisa (fondasi A8); tidak mengubah tampilan.
+  app.use("/api/keputusan", createKeputusanRoutes());
   app.use("/api/specs", createSpecRoutes());
   // Halaman History H2b: History MT5 per akun + Rupiah kurs tanggal transaksi.
   app.use("/api/history", createHistoryRoutes());

@@ -30,6 +30,7 @@ import { applyDoubleBetHold } from "./lib/correlationGuard";
 import { applyLossPauseHold } from "./lib/lossStreakGuard";
 import { useLossPause } from "./hooks/useLossPause";
 import { useLolosProof } from "./hooks/useLolosProof";
+import { useResultShadow } from "./hooks/useResultShadow";
 import { applyProofHold, proofHoldReason } from "./lib/evaluationView";
 import { useNewsCalendar } from "./hooks/useNewsCalendar";
 import { useSpecHolds } from "./hooks/useSpecHolds";
@@ -551,6 +552,9 @@ export default function App() {
           ), proofHoldReason(lolosProof)),
     [result, market.symbol, openPositionsAll, lossPause, newsEvents, newsMinute, specHolds, nowMs, lolosProof],
   );
+
+  // S3 (13 Okt 2026): shadow penjaga sesi — hanya mengirim ke server, tidak merender (fondasi A8).
+  useResultShadow(activeBrokerId, market.symbol, liveQuote?.timestamp ?? null, shownResult);
 
   // Langkah E: klik status LOLOS di pemindai → pilih simbol (data dimuat
   // otomatis oleh Langkah A) lalu gulir ke Hasil analisa.
