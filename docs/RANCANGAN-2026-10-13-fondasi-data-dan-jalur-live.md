@@ -11,7 +11,10 @@
 - **A. Fondasi Data** dikerjakan lebih dulu, sebelum Tim 2 dan kartu pola. Keduanya bergantung pada data yang benar: akun mana, jam berapa, dan apakah datanya lengkap.
 - **B. Konteks per golongan** menyusul sesudah A: yield AS–Jepang, stok minyak EIA, laporan COT. Hanya sebagai konteks, bukan pemicu.
 - **C. Jalur Demo → Live**: aturan yang terbukti di demo naik ke Live lewat 3 lampu hijau. Hasil demo hanya sah untuk Live bila dicatat "setara Live" dan dihitung ulang dengan biaya akun Live.
+- **A7–A9:** satu kontrak keputusan untuk semua jalur; A7-2/A7-3 hanya shadow; draf pengecualian aturan mutlak 1 (belum berlaku).
+- **E. Risiko gabungan**, **F. Pemantauan perubahan kondisi**, **G. Struktur penyimpanan dan format JSONL**.
 - **D. Pekerjaan tertunda**: daftar yang belum diimplementasikan. **Selama bagian D belum selesai, MDBKA dianggap belum selesai** (penetapan Fahmi, 13 Okt 2026).
+- **Audit rancangan 13 Okt 2026** dan peta urutan induk: `docs/AUDIT-RANCANGAN-2026-10-13.md`.
 
 ## A. Fondasi Data (prioritas P0)
 
@@ -130,7 +133,9 @@ Akibatnya, untuk simbol dan jam yang sama, Hasil analisa bisa menampilkan BELI/J
 | S3 | App memanggil shadow setelah `shownResult`, tanpa render | Tidak |
 | S4 | Laporan shadow (halaman/panel terpisah dari Hasil analisa) | Tidak mengubah Hasil analisa |
 
-**Pertanyaan terbuka:** aturan mutlak 1 hanya menyebut Finex. Apakah broker lain (OTB, MIFX, Exness) juga cukup shadow, atau boleh langsung menerapkan A7-2 di tampilannya? Usulan Claude: shadow untuk semua broker dulu, supaya bukti dan perilakunya seragam.
+**Diputuskan Fahmi (13 Okt 2026):** broker lain (OTB, MIFX, Exness) juga cukup shadow dulu, supaya bukti dan perilakunya seragam.
+
+**Bukti yang sudah ada (temuan audit rancangan):** pencatat entry server sudah menilai sesi saat entry (`tradeEntryLog` mengirim `sessions` ke `scanSymbol`), sehingga entry berstatus `DITAHAN_SESI` sudah tercatat di `entries-<broker>.jsonl`. Data ini dipakai sebagai bukti utama; catatan shadow A8 sebagai pelengkap, karena shadow hanya muncul saat Hasil analisa dibuka.
 
 ### A9. Draf perubahan klausul aturan mutlak 1 — BELUM BERLAKU
 
@@ -207,13 +212,14 @@ Hasil demo hanya boleh dipakai di Live bila memenuhi tiga syarat:
 
 - Bukti dari demo broker A hanya berlaku untuk Live broker A, karena spread, komisi, dan spesifikasi berbeda antar broker.
 - Setiap hasil demo dihitung ulang memakai spread akun Live (dari arsip tick Live, A2) dan komisi akun Live. Yang dinilai adalah hasil sesudah hitung ulang.
+- **Bergantung pada A1:** terminal Finex dipakai bergantian untuk akun demo dan Live, sedangkan arsip tick belum mencatat login. Spread "Live" baru bisa dipisahkan setelah A1 (F3) selesai.
 - **Fakta saat ini:** hanya Finex yang punya akun Live (91811209). Bukti dari OTB, MIFX, atau Exness demo baru bisa naik ke Live bila akun Live broker itu dibuka.
 
 ### C5. Tiga lampu hijau (disetujui Fahmi, 13 Okt 2026)
 
 | Lampu | Syarat (per golongan, per versi aturan) |
 | --- | --- |
-| 1 — Backtest | Rapor data latih DAN ujian "layak" (untung ≥ 3% di atas titik impas, `MIN_EDGE_OVER_BREAKEVEN`) dan tetap untung di sebagian besar periode uji bergulir |
+| 1 — Backtest | Rapor data latih DAN ujian "layak" (untung ≥ 3% di atas titik impas, `MIN_EDGE_OVER_BREAKEVEN`) dan tetap untung di sebagian besar periode uji bergulir. Usulan tambahan (audit rancangan, menunggu persetujuan): rapor dijalankan dengan equity akun Live, dan tidak boleh berstatus MODAL KURANG (pemeriksaan modal yang sudah ada di `backtestReport.ts`) |
 | 2 — Demo | ≥ 20 rangkaian setara Live; rata-rata hasil > 0 sesudah dihitung ulang dengan biaya Live; rugi terbesar per rangkaian ≤ 1R; tidak ada pelanggaran gerbang kualitas data |
 | 3 — Percobaan Live | 20 rangkaian di akun Live dengan lot minimum; rata-rata hasil tetap > 0 dan tidak lebih buruk dari demo melebihi 0,2R |
 
@@ -411,4 +417,4 @@ Penetapan Fahmi, 13 Okt 2026: item di bawah wajib tercatat sebagai pekerjaan yan
 | D3 | Basis spot–futures emas, kurva futures minyak, selisih Brent–WTI | Butuh data futures CME/ICE | Sumber data futures resmi + pemetaan simbol broker ke kontrak futures | TERTUNDA (tahap paling akhir) |
 | D4 | Fase lelang IDX | MDBKA belum trading indeks/saham IDX | MDBKA mulai mendukung instrumen IDX | TERTUNDA |
 
-Item lain yang belum dikerjakan dilacak di tabel langkah masing-masing rancangan (P0–P7, T1–T4, K1–K6, F1–F6, J1–J6).
+Item lain yang belum dikerjakan dilacak di tabel langkah masing-masing rancangan (P0–P7, P5a, T1–T4, K1–K6, F1–F7, A7-1–A7-6, S1–S4, J1–J6, E1–E3, P-F1–P-F2, G-1–G-6), dengan urutan induk di `docs/AUDIT-RANCANGAN-2026-10-13.md`.

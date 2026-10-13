@@ -11,7 +11,8 @@
 - **Urutan "SL dulu, lot kemudian" sudah dipakai mesin sekarang.** Di `applyRiskGates`, lot = batas risiko ÷ ((jarak SL + spread + slippage) × nilai poin + komisi). Strategi `candle` dan `abc` juga sudah menaruh SL di ujung wick/gelombang C. Jadi yang perlu ditambah bukan urutan, melainkan **cara memilih SL dari struktur**, **arah dari timeframe besar**, dan **pemicu masuk**.
 - **Celah terbesar adalah data.** Pemindai live hanya membaca 200 candle H1 tertutup (±8 hari). Dari data itu H4 hanya bisa dirakit ±50 candle dan D1 ±8 candle, sehingga MA50 D1 dan W1 tidak bisa dihitung.
 - **Semua tambahan masuk sebagai strategi atau penyaring baru**, dengan pola yang sama seperti `candle` dan `abc` di `strategyRegistry.ts`. Rumus `decisionEngine.ts` tidak diubah.
-- **Tidak ada yang memengaruhi sinyal Live** sebelum lulus backtest (data latih dan ujian), lalu bukti n ≥ 20 di demo.
+- **Tidak ada yang memengaruhi sinyal Live** sebelum lulus 3 lampu hijau (backtest, demo, percobaan Live) di `docs/RANCANGAN-2026-10-13-fondasi-data-dan-jalur-live.md` bagian C5.
+- **Audit rancangan 13 Okt 2026:** `docs/AUDIT-RANCANGAN-2026-10-13.md` (temuan, keputusan yang dibutuhkan, peta urutan induk).
 
 ## 1. Alur profesional dibanding MDBKA sekarang
 
@@ -77,18 +78,18 @@
 - **Masalah:** mesin sekarang menilai candle terakhir saja; tidak ada keadaan "setup sudah terbentuk, tunggu harga datang".
 - **Usulan dua tahap:**
   1. **SETUP** (H4/H1): arah D1 cocok, struktur searah, dan ada level atau MA yang menjadi zona tunggu. Status pemindai: **SIAGA**, dengan zona harga yang ditampilkan.
-  2. **PEMICU** (M15 tertutup): harga masuk zona (misalnya MA50 H1 atau level ± 0,25 × ATR), lalu muncul candle penolakan atau engulfing, dikonfirmasi RSI/MACD searah. Baru setelah itu status bisa LOLOS dan melewati semua penjaga yang ada.
+  2. **PEMICU** (H1 tertutup, sesuai keputusan 1 di bagian 6; M15 baru dipertimbangkan setelah candle M15 live tersedia dan terbukti): harga masuk zona (MA50 H1 atau level ± 0,25 × ATR H1), lalu muncul candle penolakan atau engulfing, dikonfirmasi RSI/MACD searah. Baru setelah itu status bisa LOLOS dan melewati semua penjaga yang ada.
 - **Kedaluwarsa:** SIAGA batal setelah N candle H1 atau bila struktur rusak (lembah/puncak swing tertembus).
 - Semua hanya tampilan; tidak ada order otomatis.
 
 ### 3.7 SL, lot, dan TP
 
 - **SL:** di balik struktur (ujung wick, swing, atau ujung pola) dikurangi buffer broker.
-  - Jarak SL < 0,5 × ATR → diperlebar ke 0,5 × ATR, supaya tidak kena gerak kecil biasa.
-  - Jarak SL > 3 × ATR → TUNGGU.
-  - Kedua angka ini masih usulan.
+  - Jarak SL < 0,5 × ATR H4 → diperlebar ke 0,5 × ATR H4, supaya tidak kena gerak kecil biasa.
+  - Jarak SL > 3 × ATR H4 → TUNGGU.
+  - Angka ini keputusan awal (bagian 6, keputusan 4), dikunci sebelum uji.
 - **Lot:** tetap `applyRiskGates` tanpa perubahan (lot = batas risiko ÷ risiko per lot, termasuk spread, slippage, dan komisi), dengan batas 1% equity dan batas golongan Rupiah.
-- **TP:** level lawan berikutnya, bila RR ke level itu ≥ minimum (usulan 1,5). Bila level terlalu dekat → TUNGGU. Bila tidak ada level → RR broker seperti sekarang.
+- **TP:** level lawan berikutnya, bila RR ke level itu ≥ 2 (keputusan 4 di bagian 6; sama dengan `MIN_REWARD_RISK` di `exitMonitor.ts`). Bila level terlalu dekat → TUNGGU. Bila tidak ada level → RR broker seperti sekarang.
   - SL dan TP ditentukan oleh strategi lewat `propose()`, sama seperti strategi `candle`, jadi `decisionEngine.ts` tidak disentuh.
 - **Penjaga yang sudah ada tetap berlaku:** biaya, risiko, spesifikasi, bukti, jeda, berita, sesi, pembukaan bursa, korelasi, margin.
 
@@ -156,7 +157,7 @@ Fahmi meminta Claude memutuskan ketujuh pertanyaan berdasarkan data MDBKA. Ini *
 | 6 | Jam sesi London/New York | **Ditunda.** Tidak dipakai di versi pertama. | Setup H4 + emas tidak memerlukannya. Bila nanti dibutuhkan, jam sesi dihitung dari jam UTC tetap ditambah selisih jam server tiap broker yang sudah tercatat (misalnya OTB UTC+2, Exness UTC+0). Perubahan jam musim akhir Okt/awal Nov harus dicek, seperti catatan handoff. |
 | 7 | Urutan dengan pekerjaan mode demo/live | **Mode demo/live dulu (2–3 langkah kecil), lalu P1–P5 rancangan ini.** | Permintaan awal hari ini adalah demo tidak terkunci. Langkah awalnya kecil dan dibatasi untuk broker tanpa akun live terdaftar (OTB, MIFX, Exness), sesuai audit. P1–P5 rancangan ini hanya menyentuh backtest, tidak menyentuh Live, jadi aman dikerjakan sesudahnya. |
 
-**Yang tetap butuh keputusan Fahmi** (dari audit, bukan soal trading): pilihan mode A/B, definisi "3 lampu hijau", dan nasib gerbang biaya di demo.
+**Yang tetap butuh keputusan Fahmi** (dari audit, bukan soal trading): pilihan mode A/B dan nasib gerbang biaya di demo. Definisi "3 lampu hijau" sudah disetujui 13 Okt 2026 (rancangan fondasi, C5).
 
 ## 7. Tim 2 — monitor posisi berjalan (draf, 13 Okt 2026)
 
@@ -229,9 +230,9 @@ Permintaan: analisa open pertama memperhitungkan jangka maksimal 30 menit. Tim 2
 | … | Siklus berulang setiap 30 menit |
 | 03:00 | Jendela selesai: aba-aba tutup semua posisi dalam rangkaian ini, untuk semua golongan |
 
-Akibat syarat "semua posisi sebelumnya sudah aman": hanya posisi TERBARU yang masih berisiko, sehingga risiko total rangkaian tetap ≤ 1% equity dan batas golongan. Jumlah posisi tetap dibatasi oleh margin (maks 50% free margin, `marginGuard.ts`) dan batas jumlah per simbol (usulan 3, perlu dibuktikan).
+Akibat syarat "semua posisi sebelumnya sudah aman": hanya posisi TERBARU yang masih berisiko, sehingga risiko total rangkaian tetap ≤ 1% equity dan batas golongan. Jumlah posisi tetap dibatasi oleh margin (maks 50% free margin, `marginGuard.ts`) dan batas jumlah per simbol (7.4 mengusulkan 2; angka final menunggu keputusan, lihat audit rancangan).
 
-**Dua cara membaca "maksimal 30 menit" — perlu dipastikan Fahmi:**
+**Dua cara membaca "maksimal 30 menit" — diputuskan: cara 1, siklus tinjau (7.7):**
 
 1. **30 menit = siklus tinjau (usulan Claude).** Posisi boleh berjalan lebih lama; setiap 30 menit Tim 2 menilai ulang. TP tetap dari struktur (level berikutnya, RR ≥ 2). Ini cocok dengan keputusan 1 dan 5 di bagian 6 (setup H4/H1, emas).
 2. **30 menit = jangka trade.** TP harus tercapai dalam 30 menit, jadi TP kecil dan pemicu dari M5/M15. Data MDBKA menunjukkan risikonya: scalping M15 TIDAK LAYAK (90 trade, rugi di latih dan ujian), TP kecil butuh win rate ±67% untuk impas, dan gerbang biaya 10% akan sering menahan. Bila dipilih, ini strategi tersendiri yang diuji terpisah.
