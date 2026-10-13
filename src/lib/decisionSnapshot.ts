@@ -17,6 +17,8 @@ export interface DecisionMeta {
   readonly waktuServer: string | null;
   readonly sidikJariSnapshot: string | null;
   readonly tiket: string | null;
+  /** F4: versi spesifikasi broker saat keputusan ("YYYY-MM-DD#hash"); absen = null. */
+  readonly versiSpesifikasi?: string | null;
 }
 
 /**
@@ -76,7 +78,7 @@ export function keputusanFromScan(input: ScanInput, row: ScanRow, meta: Decision
     setaraLive: null,
     simbol: input.symbol,
     golongan: riskGroupOf(input.symbol).id,
-    versiSpesifikasi: null,
+    versiSpesifikasi: meta.versiSpesifikasi ?? null,
     aturanId: input.strategy ?? "skor",
     versi: "1",
     sidikJariSnapshot: meta.sidikJariSnapshot,

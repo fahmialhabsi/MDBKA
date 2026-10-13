@@ -164,6 +164,7 @@ import {
   normalizeTsToUtc,
   readTailText,
   resolveTzOffset,
+  resolveTzOffsetOrNull,
   tickKey,
 } from "../server/services/tickHistory";
 import { FX_CACHE_TTL_MS, isFxCacheFresh } from "../server/routes/fxRoutes";
@@ -321,6 +322,7 @@ import {
 
 import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
 import { readSpecsForBroker } from "../server/services/specReader";
+import { specContentHash, trackSpecVersion } from "../server/services/specVersion";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
 import { convertIdrSnapshot, IdrEquitySource, parseAccountCurrency } from "../server/services/convertedEquity";
 import { getMifxSpec, MIFX_SPEC_SYMBOLS, mifxVolume } from "../src/lib/mifxSpecs";
@@ -9465,6 +9467,91 @@ test("712. P5a bukti LOLOS per golongan (tampilan): hanya entry LOLOS, dipecah F
   const panel = readSrc("src/components/analysis/TradeEvaluationPanel.tsx");
   assert(panel.includes("lolosByRiskGroup(trades)") && panel.includes("Bukti entry LOLOS per golongan"), "panel menampilkan tabel per golongan");
   assert(readSrc("src/lib/evaluationView.ts").includes("export function proofHoldReason(stats: EvalTradeStats | null | undefined)"), "penahan F5 tidak diubah");
+});
+test("713. F1 arsip tick MIFX/Exness: offset wajib diisi (tanpa tebakan +3); Exness UTC+0 menulis ts_utc = jam server", () => {
+  assert(resolveTzOffsetOrNull("3") === 3 && resolveTzOffsetOrNull("0") === 0 && resolveTzOffsetOrNull("-2") === -2, "angka sah");
+  assert(resolveTzOffsetOrNull("") === null && resolveTzOffsetOrNull(undefined) === null && resolveTzOffsetOrNull("abc") === null && resolveTzOffsetOrNull("15") === null, "kosong/tidak sah = null");
+  assert(resolveTzOffset(undefined) === 3, "perilaku lama OTB/Finex tetap (default +3)");
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "hist-exness-"));
+  try {
+    const logger = new TickHistoryLogger(dir, "exness", 0);
+    const r = logger.ingest([{ timestamp: "2026.10.13 08:28:01", symbol: "XAUUSDm", bid: 4100.1, ask: 4100.3 }], true);
+    assert(r.appended === 1, `ditulis ${r.appended}`);
+    const line = nfs.readFileSync(npath.join(dir, "exness", "ticks-2026-10-13.jsonl"), "utf8").trim();
+    const rec = JSON.parse(line) as { ts_utc: string; ts_raw: string; broker: string };
+    assert(rec.ts_utc.startsWith("2026-10-13T08:28:01") && rec.ts_raw === "2026.10.13 08:28:01" && rec.broker === "exness", line);
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+  const idx = readSrc("server/index.ts");
+  assert(idx.includes("resolveTzOffsetOrNull(process.env.MT5_TZ_OFFSET_MIFX)") && idx.includes("resolveTzOffsetOrNull(process.env.MT5_TZ_OFFSET_EXNESS)"), "MIFX/Exness memakai offset wajib");
+  assert(idx.includes("mifx: historyMifx,") && idx.includes("exness: historyExness,"), "cakupan arsip MIFX/Exness dilayani");
+  assert(idx.includes("tickArchiveDir[src.broker] !== undefined"), "trade bayangan ikut broker yang arsipnya aktif");
+});
+test("714. F4 versi spesifikasi bertanggal: sidik jari isi (tanpa tarif swap harian); baris baru hanya saat isi berubah", () => {
+  const spec = (symbol: string, contractSize: number, swapLong = -1) => ({
+    symbol, contractSize, tickSize: 0.01, digits: 2, volumeMin: 0.01, volumeStep: 0.01, swapMode: 1, swapLong, swapShort: 1, profitCurrency: "USD",
+  });
+  const a = [spec("XAUUSD", 100), spec("EURUSD", 100000)];
+  assert(specContentHash(a) === specContentHash([...a].reverse()), "urutan simbol tidak berpengaruh");
+  assert(specContentHash(a) === specContentHash([spec("XAUUSD", 100, -9), spec("EURUSD", 100000, -3)]), "tarif swap harian tidak mengubah versi");
+  assert(specContentHash(a) !== specContentHash([spec("XAUUSD", 10), spec("EURUSD", 100000)]), "contract size berubah = versi baru");
+  assert(/^[0-9a-f]{12}$/.test(specContentHash(a)), "12 hex");
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dataDir = nfs.mkdtempSync(npath.join(os.tmpdir(), "spec-ver-"));
+  try {
+    const snap = { broker: "finex" as const, file: "MDBKA_Specs_61823011.csv", generated: "2026.10.13 11:00:00", symbols: 2, diffs: [], specs: a };
+    const v1 = trackSpecVersion(dataDir, snap, new Date("2026-10-13T02:00:00Z"));
+    assert(v1 === `2026-10-13#${specContentHash(a)}`, `v1=${v1}`);
+    assert(trackSpecVersion(dataDir, { ...snap, generated: "2026.10.13 11:05:00" }, new Date("2026-10-14T02:00:00Z")) === v1, "isi sama = versi sama (tanggal pertama terlihat)");
+    const v2 = trackSpecVersion(dataDir, { ...snap, specs: [spec("XAUUSD", 10), spec("EURUSD", 100000)] }, new Date("2026-10-15T02:00:00Z"));
+    assert(v2 !== null && v2.startsWith("2026-10-15#") && v2 !== v1, `v2=${v2}`);
+    const book = readJsonlRecords(dataDir, "spesifikasi/spesifikasi-finex.jsonl", "spesifikasi/1");
+    assert(book.records.length === 2 && book.brokenLines === 0, `baris=${book.records.length}`);
+    assert(trackSpecVersion(dataDir, null, new Date()) === null, "tanpa spesifikasi = null");
+  } finally {
+    nfs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+test("715. F4 catatan entry menyimpan versi spesifikasi di baris keputusan; gagal baca = null", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "entries-spec-"));
+  try {
+    nfs.writeFileSync(npath.join(dir, "MDBKA_GBPUSD_H1.csv"), scanCsv(80));
+    const quotes = { getSymbols: () => ["GBPUSD"], getLatestBySymbol: () => [] };
+    const pos = (ticket: string) => ({
+      ticket, symbol: "GBPUSD", side: "BUY" as const, volume: 0.01,
+      priceOpen: 1.3, sl: 1.29, tp: 1.31, timeOpen: "2026.10.08 09:15:00",
+    });
+    const mk = (dataDir: string, getSpecVersion: () => string | null) =>
+      createTradeEntryLog({
+        file: npath.join(dataDir, "trades", "entries-finex.jsonl"), broker: "finex", commonDir: dir, quotes,
+        getEquity: () => 10000, getFxRates: () => null, decisionDataDir: dataDir, getSpecVersion,
+        now: () => new Date("2026-10-08T06:15:00Z"),
+      });
+    const a = npath.join(dir, "a");
+    const logA = mk(a, () => "2026-10-13#abcdef012345");
+    logA.ingest([]);
+    logA.ingest([pos("1")]);
+    const recA = readJsonlRecords(a, "keputusan/keputusan-finex-2026-10.jsonl", "keputusan/1").records;
+    assert(recA.length === 1 && recA[0].versiSpesifikasi === "2026-10-13#abcdef012345", `versi: ${String(recA[0]?.versiSpesifikasi)}`);
+    const b = npath.join(dir, "b");
+    const logB = mk(b, () => { throw new Error("berkas terkunci"); });
+    logB.ingest([]);
+    assert(logB.ingest([pos("2")]).length === 1, "entry tetap tercatat");
+    const recB = readJsonlRecords(b, "keputusan/keputusan-finex-2026-10.jsonl", "keputusan/1").records;
+    assert(recB.length === 1 && recB[0].versiSpesifikasi === null, "gagal baca = null");
+    assert(readSrc("server/index.ts").includes("getSpecVersion: () =>"), "server memasang versi spesifikasi");
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

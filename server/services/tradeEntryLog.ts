@@ -82,6 +82,8 @@ export interface TradeEntryLogOptions {
    * Gagal tulis tidak pernah menghentikan catatan entry.
    */
   readonly decisionDataDir?: string;
+  /** F4 (13 Okt 2026): versi spesifikasi broker saat entry; null / gagal = null. */
+  readonly getSpecVersion?: () => string | null;
   readonly now?: () => Date;
 }
 
@@ -163,6 +165,13 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
         waktuServer: timeOpen,
         sidikJariSnapshot: snapshotFingerprint(snapshotMaterial(input)),
         tiket: ticket,
+        versiSpesifikasi: (() => {
+          try {
+            return opts.getSpecVersion?.() ?? null;
+          } catch {
+            return null;
+          }
+        })(),
       });
       appendJsonlRecord(opts.decisionDataDir, jsonlRelativePath("keputusan", opts.broker, waktuUtc), rec);
     } catch {

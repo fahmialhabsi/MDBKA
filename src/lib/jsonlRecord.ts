@@ -4,8 +4,8 @@ import type { GuardClass } from "./guardClass";
 import type { LossCause, RecommendationStatus, RecommendationTarget } from "./lossLesson";
 import type { ShadowOutcome } from "./shadowTrade";
 import type { ScanStatus } from "./symbolScanner";
-export type JsonlSchema = "keputusan/1" | "bayangan/1" | "rekomendasi/1" | "laporan_tim/1";
-export type JsonlTable = "keputusan" | "bayangan" | "rekomendasi" | "laporan";
+export type JsonlSchema = "keputusan/1" | "bayangan/1" | "rekomendasi/1" | "laporan_tim/1" | "spesifikasi/1";
+export type JsonlTable = "keputusan" | "bayangan" | "rekomendasi" | "laporan" | "spesifikasi";
 
 export type GuardResult = "LULUS" | "GAGAL" | "TIDAK_DINILAI";
 
@@ -139,7 +139,19 @@ export interface LaporanTimRecord {
   readonly mengoreksi: string | null;
 }
 
-export type JsonlRecord = KeputusanRecord | BayanganRecord | RekomendasiRecord | LaporanTimRecord;
+/** F4 (13 Okt 2026): satu baris setiap kali isi spesifikasi broker berubah. */
+export interface SpesifikasiRecord {
+  readonly skema: "spesifikasi/1";
+  /** "YYYY-MM-DD#<12 hex>": tanggal pertama terlihat + sidik jari isi. */
+  readonly versi: string;
+  readonly broker: BrokerId;
+  readonly hash: string;
+  readonly pertamaTerlihatUtc: string;
+  readonly berkas: string;
+  readonly jumlahSimbol: number;
+}
+
+export type JsonlRecord = KeputusanRecord | BayanganRecord | RekomendasiRecord | LaporanTimRecord | SpesifikasiRecord;
 
 export interface JsonlParseResult {
   readonly records: readonly Record<string, unknown>[];
@@ -193,6 +205,7 @@ export function jsonlRelativePath(table: JsonlTable, key: string | null, utcIso:
   if (!isUtcSecondIso(utcIso)) throw new Error(`waktu UTC harus "YYYY-MM-DDTHH:MM:SSZ": ${utcIso}`);
   if (table === "rekomendasi") return "rekomendasi/rekomendasi.jsonl";
   if (key === null || !SAFE_KEY.test(key)) throw new Error(`kunci berkas ${table} tidak sah: ${String(key)}`);
+  if (table === "spesifikasi") return `spesifikasi/spesifikasi-${key}.jsonl`;
   return `${table}/${table}-${key}-${utcIso.slice(0, 7)}.jsonl`;
 }
 

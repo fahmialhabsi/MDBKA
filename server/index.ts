@@ -21,7 +21,8 @@ import { readCalendarForBroker } from "./services/calendarReader";
 import { readSessionsForBroker } from "./services/sessionReader";
 import { readSpecsForBroker } from "./services/specReader";
 import { specHoldMap } from "../src/lib/specCompare";
-import { ARCHIVE_DIR_BY_BROKER, runExcursionPass, startExcursionSchedule } from "./services/excursionJob";
+import { runExcursionPass, startExcursionSchedule } from "./services/excursionJob";
+import { trackSpecVersion } from "./services/specVersion";
 import { createShadowsOnce, settleShadowsOnce, startShadowSchedule, type ShadowSource, type ShadowTickCache } from "./services/shadowRunner";
 import { MT5LogReader } from "./services/mt5LogReader";
 import { IdrEquitySource, parseAccountCurrency, type EquitySource } from "./services/convertedEquity";
@@ -32,6 +33,7 @@ import {
   DEFAULT_RETENTION_DAYS,
   TickHistoryLogger,
   resolveTzOffset,
+  resolveTzOffsetOrNull,
 } from "./services/tickHistory";
 
 dotenv.config();
@@ -155,6 +157,47 @@ if (historyFinex !== null) {
   historyFinex.prune(Number.isFinite(historyRetentionDays) ? historyRetentionDays : DEFAULT_RETENTION_DAYS);
 }
 
+// F1 (13 Okt 2026): arsip tick MIFX & Exness. Offset zona WAJIB di .env
+// (MT5_TZ_OFFSET_MIFX / MT5_TZ_OFFSET_EXNESS); kosong → arsip tidak jalan
+// (tidak menebak +3: nama berkas harian & ts_utc akan salah).
+const offsetMifx = resolveTzOffsetOrNull(process.env.MT5_TZ_OFFSET_MIFX);
+const offsetExness = resolveTzOffsetOrNull(process.env.MT5_TZ_OFFSET_EXNESS);
+const historyMifx =
+  quotesReaderMifx !== null && offsetMifx !== null ? new TickHistoryLogger(historyDir, "mifx", offsetMifx) : null;
+const historyExness =
+  quotesReaderExness !== null && offsetExness !== null ? new TickHistoryLogger(historyDir, "exness", offsetExness) : null;
+for (const [name, reader, logger, offset] of [
+  ["MIFX", quotesReaderMifx, historyMifx, offsetMifx],
+  ["Exness", quotesReaderExness, historyExness, offsetExness],
+] as const) {
+  if (reader === null) continue;
+  if (logger === null) {
+    console.log(`⚠ History ${name}: arsip tick TIDAK jalan — isi MT5_TZ_OFFSET_${name.toUpperCase()} di .env (sekarang ${String(offset)})`);
+    continue;
+  }
+  logger.prune(Number.isFinite(historyRetentionDays) ? historyRetentionDays : DEFAULT_RETENTION_DAYS);
+  let backfilled = false;
+  reader.onUpdate((quotes) => {
+    const first = !backfilled;
+    backfilled = true;
+    const { appended, skipped } = logger.ingest(quotes, first);
+    if (appended > 0 || first) {
+      console.log(
+        `✓ History ${name}: +${appended} tick${first ? " (backfill awal)" : ""}` +
+          (skipped > 0 ? `, ${skipped} dilewati (duplikat/invalid)` : ""),
+      );
+    }
+  });
+}
+
+/** Folder arsip tick per broker yang AKTIF (bahan trade bayangan TB-2). */
+const tickArchiveDir: Partial<Record<string, string>> = {
+  orbitraderberjangka: "otb",
+  ...(historyFinex !== null ? { finex: "finex" } : {}),
+  ...(historyMifx !== null ? { mifx: "mifx" } : {}),
+  ...(historyExness !== null ? { exness: "exness" } : {}),
+};
+
 let historyBackfilled = false;
 quotesReader.onUpdate((quotes) => {
   const first = !historyBackfilled;
@@ -186,6 +229,8 @@ if (quotesReaderFinex !== null && historyFinex !== null) {
 const app = createApp(reader, quotesReader, readerFinex, quotesReaderFinex, {
   otb: historyOtb,
   finex: historyFinex,
+  mifx: historyMifx,
+  exness: historyExness,
 }, positionsReader, positionsReaderFinex, {
   equity: readerMifx,
   quotes: quotesReaderMifx,
@@ -310,6 +355,9 @@ async function startServer() {
         const snap = readSpecsForBroker(resolveCommonFilesDir(), src.broker);
         return snap === null ? null : specHoldMap(snap.diffs);
       },
+      // F4 (13 Okt 2026): versi spesifikasi bertanggal (data/spesifikasi/).
+      getSpecVersion: () =>
+        trackSpecVersion(path.join(process.cwd(), "data"), readSpecsForBroker(resolveCommonFilesDir(), src.broker), new Date()),
       // A7-4/G-4 (13 Okt 2026): baris `keputusan` jalur entry + sidik jari snapshot.
       decisionDataDir: path.join(process.cwd(), "data"),
     });
@@ -327,7 +375,7 @@ async function startServer() {
     };
     record(src.positions.getAll());
     src.positions.onUpdate(record);
-    if (ARCHIVE_DIR_BY_BROKER[src.broker] !== undefined) {
+    if (tickArchiveDir[src.broker] !== undefined) {
       const positions = src.positions;
       shadowSources.push({
         broker: src.broker,
@@ -366,7 +414,7 @@ async function startServer() {
     const parts: string[] = [];
     for (const s of shadowSources) {
       const made = createShadowsOnce(s, shadowDataDir, now);
-      const done = await settleShadowsOnce(s.broker, shadowDataDir, path.join(historyDir, ARCHIVE_DIR_BY_BROKER[s.broker]), now, 120, shadowTickCache);
+      const done = await settleShadowsOnce(s.broker, shadowDataDir, path.join(historyDir, tickArchiveDir[s.broker] ?? s.broker), now, 120, shadowTickCache);
       if (made + done > 0) parts.push(`${s.broker}: ${made} dibuat, ${done} selesai`);
     }
     return parts.length === 0 ? "" : `✓ Trade bayangan — ${parts.join("; ")}`;

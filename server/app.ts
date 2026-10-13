@@ -50,6 +50,9 @@ export function createApp(
   history: {
     readonly otb: TickHistoryLogger | null;
     readonly finex: TickHistoryLogger | null;
+    /** F1 (13 Okt 2026): arsip MIFX/Exness (null = offset zona belum diisi di .env). */
+    readonly mifx?: TickHistoryLogger | null;
+    readonly exness?: TickHistoryLogger | null;
   } | null = null,
   positionsReader: PositionsLogReader | null = null,
   positionsReaderFinex: PositionsLogReader | null = null,
@@ -117,6 +120,8 @@ export function createApp(
     res.json({
       otb: cover(history?.otb),
       finex: cover(history?.finex),
+      mifx: cover(history?.mifx),
+      exness: cover(history?.exness),
       timestamp: new Date().toISOString(),
     });
   });

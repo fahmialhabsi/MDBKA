@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { compareSpecs, parseSpecsCsv, type SpecDiff } from "../../src/lib/specCompare";
+import { compareSpecs, parseSpecsCsv, type LiveSpec, type SpecDiff } from "../../src/lib/specCompare";
 import type { BrokerId } from "../../src/types/broker";
 import { brokerFromCompany } from "../routes/evaluationRoutes";
 
@@ -17,6 +17,8 @@ export interface SpecSnapshot {
   readonly generated: string;
   readonly symbols: number;
   readonly diffs: readonly SpecDiff[];
+  /** F4 (13 Okt 2026): isi spesifikasi apa adanya (bahan versi spesifikasi bertanggal). */
+  readonly specs: readonly LiveSpec[];
 }
 
 export function readSpecsForBroker(commonDir: string, broker: BrokerId): SpecSnapshot | null {
@@ -36,7 +38,7 @@ export function readSpecsForBroker(commonDir: string, broker: BrokerId): SpecSna
       if (brokerFromCompany(parsed.company) !== broker || parsed.specs.length === 0) continue;
       best = {
         mtime,
-        snap: { broker, file: name, generated: parsed.generated, symbols: parsed.specs.length, diffs: compareSpecs(parsed) },
+        snap: { broker, file: name, generated: parsed.generated, symbols: parsed.specs.length, diffs: compareSpecs(parsed), specs: parsed.specs },
       };
     } catch {
       continue;

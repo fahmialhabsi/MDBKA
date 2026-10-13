@@ -59,6 +59,16 @@ export interface BrokerCoverage {
 const MT5_TS_RE = /^(\d{4})\.(\d{2})\.(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
 
 /** Validasi offset zona jam; invalid → default (dilog pemanggil). */
+/**
+ * F1 (13 Okt 2026): offset WAJIB diisi (MIFX/Exness). Kosong/tidak sah → null
+ * (arsip tidak dijalankan, daripada menebak +3 dan salah menamai berkas harian).
+ */
+export function resolveTzOffsetOrNull(raw: unknown): number | null {
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= -12 && n <= 14 ? n : null;
+}
+
 export function resolveTzOffset(raw: unknown): number {
   const n = typeof raw === "string" ? Number(raw) : raw;
   if (typeof n === "number" && Number.isFinite(n) && n >= -12 && n <= 14) {
