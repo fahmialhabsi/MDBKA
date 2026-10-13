@@ -21,7 +21,8 @@ import { readCalendarForBroker } from "./services/calendarReader";
 import { readSessionsForBroker } from "./services/sessionReader";
 import { readSpecsForBroker } from "./services/specReader";
 import { specHoldMap } from "../src/lib/specCompare";
-import { runExcursionPass, startExcursionSchedule } from "./services/excursionJob";
+import { ARCHIVE_DIR_BY_BROKER, runExcursionPass, startExcursionSchedule } from "./services/excursionJob";
+import { createShadowsOnce, settleShadowsOnce, startShadowSchedule, type ShadowSource, type ShadowTickCache } from "./services/shadowRunner";
 import { MT5LogReader } from "./services/mt5LogReader";
 import { IdrEquitySource, parseAccountCurrency, type EquitySource } from "./services/convertedEquity";
 import { readUsdIdrBook, usdIdrOn } from "./services/ecbHistory";
@@ -281,6 +282,8 @@ async function startServer() {
     // X3c: catatan entry Exness — equity SUDAH USD (IdrEquitySource), jadi risiko % benar.
     { broker: "exness" as const, positions: positionsReaderExness, quotes: quotesReaderExness, equity: readerExness },
   ];
+  // TB-2 (13 Okt 2026): sumber pelari trade bayangan (arsip tick hanya Finex & OTB).
+  const shadowSources: ShadowSource[] = [];
   for (const src of entrySources) {
     if (src.positions === null || src.quotes === null) continue;
     const equityReader = src.equity;
@@ -324,6 +327,28 @@ async function startServer() {
     };
     record(src.positions.getAll());
     src.positions.onUpdate(record);
+    if (ARCHIVE_DIR_BY_BROKER[src.broker] !== undefined) {
+      const positions = src.positions;
+      shadowSources.push({
+        broker: src.broker,
+        quotes: src.quotes,
+        commonDir: resolveCommonFilesDir(),
+        getEquity: () => equityReader?.getLatest()?.equity ?? null,
+        getFxRates: getCachedEcbRates,
+        getPauseReason: (serverTime) =>
+          checkLossStreak(
+            tradesForBroker(collectAccountEvaluations(resolveCommonFilesDir(), tradesDir, {}), src.broker),
+            serverTime,
+          ).reason,
+        getNewsEvents: () => readCalendarForBroker(resolveCommonFilesDir(), src.broker)?.events ?? null,
+        getSessions: () => readSessionsForBroker(resolveCommonFilesDir(), src.broker)?.sessions ?? null,
+        getSpecHolds: () => {
+          const snap = readSpecsForBroker(resolveCommonFilesDir(), src.broker);
+          return snap === null ? null : specHoldMap(snap.diffs);
+        },
+        getOpenPositions: () => positions.getAll().map((p) => ({ symbol: p.symbol, side: p.side })),
+      });
+    }
   }
 
   // Langkah 5b4 Mode Aman: isi buku MFE/MAE (data/trades/excursion-<broker>.jsonl)
@@ -331,6 +356,21 @@ async function startServer() {
   excursionSchedule = startExcursionSchedule(() =>
     runExcursionPass({ commonDir: resolveCommonFilesDir(), tradesDir, historyDir }),
   );
+
+  // TB-2 (13 Okt 2026): trade bayangan — buat dari sinyal tertahan, selesaikan
+  // dengan arsip tick (data/bayangan/bayangan-<broker>-<YYYY-MM>.jsonl).
+  const shadowDataDir = path.join(process.cwd(), "data");
+  const shadowTickCache: ShadowTickCache = new Map();
+  shadowSchedule = startShadowSchedule(async () => {
+    const now = new Date();
+    const parts: string[] = [];
+    for (const s of shadowSources) {
+      const made = createShadowsOnce(s, shadowDataDir, now);
+      const done = await settleShadowsOnce(s.broker, shadowDataDir, path.join(historyDir, ARCHIVE_DIR_BY_BROKER[s.broker]), now, 120, shadowTickCache);
+      if (made + done > 0) parts.push(`${s.broker}: ${made} dibuat, ${done} selesai`);
+    }
+    return parts.length === 0 ? "" : `✓ Trade bayangan — ${parts.join("; ")}`;
+  });
 
   const server = app.listen(PORT, () => {
     const latest = reader.getLatest();
@@ -360,6 +400,7 @@ async function startServer() {
 }
 
 let excursionSchedule: { stop: () => void } | null = null;
+let shadowSchedule: { stop: () => void } | null = null;
 const serverPromise = startServer();
 
 function shutdown(): void {
@@ -377,6 +418,7 @@ function shutdown(): void {
   if (rawReaderExness !== null) rawReaderExness.stopWatching();
   if (positionsReaderExness !== null) positionsReaderExness.destroy();
   excursionSchedule?.stop();
+  shadowSchedule?.stop();
   serverPromise
     .then((server) => {
       server.close(() => {

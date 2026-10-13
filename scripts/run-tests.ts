@@ -44,7 +44,7 @@ import {
   excursionsForLogin,
   parseAccountLabels,
 } from "../server/routes/evaluationRoutes";
-import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow, type ScanStatus } from "../src/lib/symbolScanner";
+import { lastCandleTimeMs, scanSymbol, scanSymbolDetailed, sortScanRows, type ScanRow, type ScanStatus } from "../src/lib/symbolScanner";
 import { classifyScanStatus, LAB_HARD_STATUSES, LAB_SOFT_STATUSES, type GuardClass } from "../src/lib/guardClass";
 import { evaluateShadowTrade, validateShadowInput, type ShadowTick, type ShadowTradeInput } from "../src/lib/shadowTrade";
 import { canTransition, CAUSE_ROUTES, routeFor, type LossCause, type RecommendationStatus } from "../src/lib/lossLesson";
@@ -54,6 +54,8 @@ import { allowedOnLive, latestVersion, parseRuleBook, type RuleEntry } from "../
 import { buildShadowRecord, computeResultShadow, shadowDedupKey, summarizeShown, type ShownSummary } from "../src/lib/resultShadow";
 import { handleShadowRequest } from "../server/routes/keputusanRoutes";
 import { keputusanFromScan, snapshotMaterial } from "../src/lib/decisionSnapshot";
+import { asBayangan, condenseTicks, finishShadow, openShadows, shadowCandidate, shadowOpenKey } from "../src/lib/shadowBook";
+import { createShadowsOnce, readShadowBook, settleShadowsOnce, shadowFiles, type ShadowTickCache } from "../server/services/shadowRunner";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
 import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
@@ -9335,6 +9337,86 @@ test("706. G-4 catatan entry menulis baris keputusan jalur entry + tiket + sidik
     nfs.rmSync(dir, { recursive: true, force: true });
   }
 });
+test("707. TB-2 scanSymbolDetailed: baris identik scanSymbol + setup strategi sebelum gerbang (SL/TP asli)", () => {
+  const input = { symbol: "GBPUSD", brokerId: "finex" as const, csv: scanCsv(81), quote: null, equity: 10000, fxRates: null };
+  const d = scanSymbolDetailed(input);
+  assert(canonicalJson(d.row) === canonicalJson(scanSymbol(input)), "row harus identik dengan scanSymbol");
+  assert(d.row.status === "DITAHAN_RISIKO" && d.row.direction === "JUAL" && d.row.held, `status=${d.row.status}`);
+  assert(d.row.plan === null, "sinyal tertahan tetap tanpa angka order di pemindai");
+  assert(d.setup !== null && d.setup.decision === "JUAL" && d.setup.stopLoss !== null && d.setup.takeProfit !== null, "setup asli harus punya SL/TP");
+  assert(d.setup !== null && d.setup.stopLoss !== null && d.setup.takeProfit !== null && d.setup.takeProfit < d.setup.entry && d.setup.entry < d.setup.stopLoss, "urutan JUAL: TP < entry < SL");
+  assert(scanSymbolDetailed({ ...input, csv: scanCsv(10) }).setup === null, "data kurang = belum sampai strategi");
+});
+test("708. TB-2 buku bayangan: kandidat hanya sinyal tertahan berarah; satu terbuka per simbol+arah; SELESAI dari hasil evaluasi", () => {
+  const setup = { decision: "JUAL" as const, entry: 1.30212, stopLoss: 1.30428, takeProfit: 1.29888 };
+  const row = {
+    symbol: "GBPUSD", status: "DITAHAN_BIAYA" as const, decision: "TUNGGU" as const, direction: "JUAL" as const,
+    held: true, score: -3, reason: "biaya", costShareOfRisk: 0.14, candles: 81, plan: null,
+  };
+  const meta = { bayanganId: "b-1", waktuUtc: "2026-10-12T00:00:00Z", broker: "finex" as const, signalServerTime: "2026.10.12 03:00:00" };
+  const full = scanSymbolDetailed({ symbol: "GBPUSD", brokerId: "finex", csv: scanCsv(81), quote: null, equity: 10000, fxRates: null }).setup;
+  assert(full !== null, "setup contoh");
+  if (full === null) return;
+  const s = { ...full, ...setup };
+  const rec = shadowCandidate(row, s, meta);
+  assert(rec !== null && rec.fase === "DIBUAT" && rec.kelasPenjaga === "LUNAK" && rec.ditahanOleh === "DITAHAN_BIAYA", "kandidat biaya = LUNAK");
+  assert(rec !== null && rec.entry === 1.30212 && rec.sl === 1.30428 && rec.tp === 1.29888 && rec.golongan === "FOREX" && rec.r === null, "angka dari setup asli");
+  assert(shadowCandidate({ ...row, status: "DITAHAN_SPEK" }, s, meta)?.kelasPenjaga === "KERAS", "spesifikasi = KERAS (tetap dicatat)");
+  assert(shadowCandidate({ ...row, held: false, status: "TUNGGU", direction: "TUNGGU" }, s, meta) === null, "TUNGGU murni bukan kandidat");
+  assert(shadowCandidate(row, { ...s, stopLoss: 1.30 }, meta) === null, "urutan harga salah ditolak");
+  assert(shadowCandidate(row, s, { ...meta, signalServerTime: null }) === null, "tanpa jam server ditolak");
+  assert(shadowCandidate(row, null, meta) === null, "tanpa setup ditolak");
+  if (rec === null) return;
+  const other = { ...rec, bayanganId: "b-2", simbol: "EURUSD" };
+  const done = finishShadow(rec, { outcome: "SL", exitServerTime: "2026.10.12 03:20:00", exitPrice: 1.30428, r: -1, maxFavorableR: 0.1, maxAdverseR: 1 }, "2026-10-12T01:00:00Z");
+  assert(done !== null && done.fase === "SELESAI" && done.hasil === "SL" && done.r === -1 && done.bayanganId === "b-1", "baris SELESAI");
+  assert(finishShadow(rec, { outcome: "BERJALAN", exitServerTime: null, exitPrice: null, r: null, maxFavorableR: null, maxAdverseR: null }, "x") === null, "BERJALAN tidak ditulis");
+  if (done === null) return;
+  const open = openShadows([rec, other, done]);
+  assert(open.length === 1 && open[0].bayanganId === "b-2", "hanya yang belum SELESAI");
+  assert(shadowOpenKey(rec) === "GBPUSD|JUAL", "kunci simbol+arah");
+  assert(asBayangan(JSON.parse(toJsonlLine(rec)) as Record<string, unknown>)?.bayanganId === "b-1" && asBayangan({ skema: "bayangan/1" }) === null, "pembaca baris");
+  const ticks = [
+    { tsServer: "2026.10.12 04:00:00", bid: 1.3, ask: 1.301 },
+    { tsServer: "2026.10.12 05:00:00", bid: 1.297, ask: 1.298 },
+    { tsServer: "2026.10.12 06:00:00", bid: 1.302, ask: 1.303 },
+  ];
+  const kept = condenseTicks(rec, ticks);
+  assert(kept.length === 2 && kept[0].tsServer === "2026.10.12 05:00:00" && kept[1].tsServer === "2026.10.12 06:00:00", "JUAL: R tertinggi (ask terendah) dan terendah (ask tertinggi), urut waktu");
+});
+test("709. TB-2 pelari: sinyal tertahan → satu baris DIBUAT per simbol+arah; tanpa equity/kuotasi tidak membuat apa pun", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "bayangan-"));
+  try {
+    nfs.writeFileSync(npath.join(dir, "MDBKA_GBPUSD_H1.csv"), scanCsv(81));
+    const quote = { timestamp: "2026.10.04 09:00:00", symbol: "GBPUSD", bid: 1.30212, ask: 1.30228 };
+    const src = {
+      broker: "finex" as const,
+      quotes: { getSymbols: () => ["GBPUSD"], getLatestBySymbol: () => [quote] },
+      commonDir: dir,
+      getEquity: () => 10000,
+      getFxRates: () => null,
+    };
+    const dataDir = npath.join(dir, "data");
+    const now = new Date("2026-10-04T06:00:00Z");
+    let n = 0;
+    const id = () => `b-${++n}`;
+    assert(createShadowsOnce(src, dataDir, now, id) === 1, "satu bayangan dibuat");
+    assert(createShadowsOnce(src, dataDir, now, id) === 0, "yang sama masih berjalan → tidak dibuat ulang");
+    const book = readShadowBook(dataDir, "finex", now);
+    assert(book.length === 1 && book[0].fase === "DIBUAT" && book[0].simbol === "GBPUSD" && book[0].waktuSinyalServer === "2026.10.04 09:00:00", "isi baris DIBUAT");
+    assert(book[0].kelasPenjaga === "LUNAK" && book[0].ditahanOleh === "DITAHAN_RISIKO", `penjaga=${book[0].ditahanOleh}`);
+    assert(createShadowsOnce({ ...src, getEquity: () => null }, npath.join(dir, "d2"), now, id) === 0, "tanpa equity = tidak membuat");
+    assert(createShadowsOnce({ ...src, quotes: { ...src.quotes, getLatestBySymbol: () => [] } }, npath.join(dir, "d3"), now, id) === 0, "tanpa kuotasi = tidak membuat");
+    assert(shadowFiles("finex", new Date("2026-11-01T00:00:00Z")).join(",") === "bayangan/bayangan-finex-2026-10.jsonl,bayangan/bayangan-finex-2026-11.jsonl", "bulan lalu + bulan ini");
+    const idx = readSrc("server/index.ts");
+    assert(idx.includes("startShadowSchedule(async () =>") && idx.includes("shadowSchedule?.stop();"), "jadwal bayangan terpasang & dihentikan");
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +
@@ -12865,6 +12947,61 @@ test("472. kanonis + profil preservasi nama bertitik/bertanda", () => {
   } catch (e) {
     failed += 1;
     console.log(`FAIL - 581. buku kurs ECB: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  try {
+    // 710. TB-2 penyelesaian dengan arsip tick (harga tick = harga uji).
+    const os = require("node:os") as unknown as { tmpdir(): string };
+    const nfs = require("node:fs") as unknown as typeof import("node:fs");
+    const npath = require("node:path") as unknown as typeof import("node:path");
+    const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "bayangan-tick-"));
+    try {
+      const dataDir = npath.join(dir, "data");
+      const archive = npath.join(dir, "history", "finex");
+      nfs.mkdirSync(archive, { recursive: true });
+      const base = {
+        skema: "bayangan/1" as const, fase: "DIBUAT" as const, waktuUtc: "2026-10-12T00:00:00Z", broker: "finex" as const, login: null,
+        golongan: "FOREX", lotTeoretis: null, porsiBiaya: 0.14, ditahanOleh: "DITAHAN_BIAYA" as const, kelasPenjaga: "LUNAK" as const,
+        aturanId: "skor", versi: "1", hasil: null, waktuKeluarServer: null, hargaKeluar: null, r: null, mfeR: null, maeR: null, mengoreksi: null,
+      };
+      const rel = "bayangan/bayangan-finex-2026-10.jsonl";
+      appendJsonlRecord(dataDir, rel, { ...base, bayanganId: "b-sl", simbol: "GBPUSD", arah: "JUAL", waktuSinyalServer: "2026.10.12 03:00:00", entry: 1.3, sl: 1.305, tp: 1.29 });
+      appendJsonlRecord(dataDir, rel, { ...base, bayanganId: "b-jalan", simbol: "XAUUSD", arah: "BELI", waktuSinyalServer: "2026.10.12 03:00:00", entry: 4196.84, sl: 4184.03, tp: 4242.03, golongan: "LOGAM" });
+      const t = (ts: string, symbol: string, bid: number, ask: number) =>
+        JSON.stringify({ ts_utc: "2026-10-12T00:00:00Z", ts_raw: ts, broker: "finex", symbol, bid, ask, received_at: "x" });
+      nfs.writeFileSync(npath.join(archive, "ticks-2026-10-12.jsonl"), [
+        t("2026.10.12 02:59:00", "GBPUSD", 1.4, 1.4),
+        t("2026.10.12 03:10:00", "GBPUSD", 1.301, 1.3012),
+        "{rusak",
+        t("2026.10.12 03:20:00", "GBPUSD", 1.3048, 1.305),
+        t("2026.10.12 04:00:00", "XAUUSD", 4200, 4200.3),
+      ].join("\n") + "\n");
+      const now = new Date("2026-10-12T06:00:00Z");
+      const settled = await settleShadowsOnce("finex", dataDir, archive, now);
+      assert(settled === 1, `harus 1 selesai, dapat ${settled}`);
+      const book = readShadowBook(dataDir, "finex", now);
+      const done = book.find((r) => r.fase === "SELESAI");
+      assert(done !== undefined && done.bayanganId === "b-sl" && done.hasil === "SL" && done.r === -1 && done.hargaKeluar === 1.305 && done.waktuKeluarServer === "2026.10.12 03:20:00", `SELESAI: ${JSON.stringify(done)}`);
+      assert(openShadows(book).map((r) => r.bayanganId).join(",") === "b-jalan", "emas masih berjalan");
+      assert((await settleShadowsOnce("finex", dataDir, archive, now)) === 0, "tidak diselesaikan dua kali");
+      // Ringkasan hari lampau: hari 12 dibaca sekali lalu diringkas; berkas dihapus pun hasil tetap benar.
+      const cache: ShadowTickCache = new Map();
+      const later = new Date("2026-10-14T06:00:00Z");
+      assert((await settleShadowsOnce("finex", dataDir, archive, later, 120, cache)) === 0, "emas belum kena SL/TP");
+      assert(cache.get("b-jalan")?.doneFiles.has("ticks-2026-10-12.jsonl") === true && cache.get("b-jalan")?.kept.length === 1, "hari 12 diringkas jadi tick ekstrem");
+      nfs.rmSync(npath.join(archive, "ticks-2026-10-12.jsonl"));
+      nfs.writeFileSync(npath.join(archive, "ticks-2026-10-14.jsonl"), t("2026.10.14 01:00:00", "XAUUSD", 4184, 4184.3) + "\n");
+      assert((await settleShadowsOnce("finex", dataDir, archive, later, 120, cache)) === 1, "emas kena SL di hari 14");
+      const gold = readShadowBook(dataDir, "finex", later).find((r) => r.fase === "SELESAI" && r.bayanganId === "b-jalan");
+      assert(gold !== undefined && gold.hasil === "SL" && gold.r === -1 && gold.mfeR === 0.25 && !cache.has("b-jalan"), `emas SELESAI: ${JSON.stringify(gold)}`);
+    } finally {
+      nfs.rmSync(dir, { recursive: true, force: true });
+    }
+    passed += 1;
+    console.log("ok - 710. TB-2 penyelesaian bayangan dari arsip tick: SL tercatat sekali, yang belum kena tetap berjalan");
+  } catch (e) {
+    failed += 1;
+    console.log(`FAIL - 710. TB-2 penyelesaian bayangan: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   console.log(

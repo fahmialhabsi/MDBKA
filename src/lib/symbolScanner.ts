@@ -1,5 +1,5 @@
 import { findOpeningHold } from "./openingGuard";
-import { applyRiskGates } from "../calculations/decisionEngine";
+import { applyRiskGates, type StrategySetup } from "../calculations/decisionEngine";
 import { computeIndicators } from "../calculations/indicators";
 import { validateAnalysisInputs } from "../calculations/inputValidator";
 import { detectScaleMismatch } from "../calculations/scaleValidator";
@@ -174,7 +174,27 @@ export function lastCandleTimeMs(csv: string): number | null {
   return candleTimeMs(lines[lines.length - 1].split(",")[0] ?? "");
 }
 
+/**
+ * TB-2 (13 Okt 2026): hasil pemindai + setup strategi SEBELUM gerbang Mode
+ * Aman (SL/TP asli untuk trade bayangan). setup null = belum sampai strategi
+ * (data/pasar tutup). Hasil `row` identik dengan scanSymbol.
+ */
+export interface ScanDetail {
+  readonly row: ScanRow;
+  readonly setup: StrategySetup | null;
+}
+
+export function scanSymbolDetailed(input: ScanInput): ScanDetail {
+  const sink: { setup: StrategySetup | null } = { setup: null };
+  const row = scanCore(input, sink);
+  return { row, setup: sink.setup };
+}
+
 export function scanSymbol(input: ScanInput): ScanRow {
+  return scanCore(input, { setup: null });
+}
+
+function scanCore(input: ScanInput, sink: { setup: StrategySetup | null }): ScanRow {
   const symbol = canonicalSymbolForBroker(input.symbol, input.brokerId);
   if (symbol === "") return dataRow(input.symbol, "Simbol tidak dikenal", 0);
 
@@ -245,11 +265,9 @@ export function scanSymbol(input: ScanInput): ScanRow {
   });
   if (reasons !== null) return dataRow(symbol, reasons[0] ?? "Data belum lengkap", count);
 
-  const result = applyRiskGates(
-    market,
-    broker,
-    getStrategy(input.strategy).propose({ market, broker, candles: parsed.candles }),
-  );
+  const setup = getStrategy(input.strategy).propose({ market, broker, candles: parsed.candles });
+  sink.setup = setup;
+  const result = applyRiskGates(market, broker, setup);
   const status: ScanStatus =
     result.heldBy === "biaya"
       ? "DITAHAN_BIAYA"
