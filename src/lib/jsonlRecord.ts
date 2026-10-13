@@ -125,7 +125,8 @@ export interface RekomendasiRecord {
 export interface LaporanTimRecord {
   readonly skema: "laporan_tim/1";
   readonly laporanId: string;
-  readonly login: string;
+  /** null = login belum terverifikasi (sebelum F3); berkas memakai nama broker. */
+  readonly login: string | null;
   readonly broker: BrokerId;
   readonly jenisAkun: "demo" | "live" | "tidak-terbukti";
   readonly tim: string;

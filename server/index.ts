@@ -23,6 +23,7 @@ import { readSpecsForBroker } from "./services/specReader";
 import { specHoldMap } from "../src/lib/specCompare";
 import { runExcursionPass, startExcursionSchedule } from "./services/excursionJob";
 import { trackSpecVersion } from "./services/specVersion";
+import { runTabReportsOnce, startTabReportSchedule, type TabReportSource } from "./services/tabReportJob";
 import { createShadowsOnce, settleShadowsOnce, startShadowSchedule, type ShadowSource, type ShadowTickCache } from "./services/shadowRunner";
 import { MT5LogReader } from "./services/mt5LogReader";
 import { IdrEquitySource, parseAccountCurrency, type EquitySource } from "./services/convertedEquity";
@@ -329,6 +330,8 @@ async function startServer() {
   ];
   // TB-2 (13 Okt 2026): sumber pelari trade bayangan (arsip tick hanya Finex & OTB).
   const shadowSources: ShadowSource[] = [];
+  // TT-1/TT-2 (13 Okt 2026): sumber laporan per jam tim Trade/Exposure/Calendar (semua broker).
+  const tabSources: TabReportSource[] = [];
   for (const src of entrySources) {
     if (src.positions === null || src.quotes === null) continue;
     const equityReader = src.equity;
@@ -375,6 +378,27 @@ async function startServer() {
     };
     record(src.positions.getAll());
     src.positions.onUpdate(record);
+    {
+      const positions = src.positions;
+      const quotes = src.quotes;
+      tabSources.push({
+        broker: src.broker,
+        getPositions: () => positions.getAll(),
+        getEquity: () => {
+          const e = equityReader?.getLatest() ?? null;
+          return e === null ? null : { balance: e.balance, equity: e.equity };
+        },
+        getServerNow: () =>
+          quotes.getSymbols().reduce<string | null>((max, sym) => {
+            const t = quotes.getLatestBySymbol(sym, 1).at(-1)?.timestamp ?? null;
+            return t !== null && (max === null || t > max) ? t : max;
+          }, null),
+        getCalendar: () => {
+          const cal = readCalendarForBroker(resolveCommonFilesDir(), src.broker);
+          return cal === null ? null : { events: cal.events, file: cal.file };
+        },
+      });
+    }
     if (tickArchiveDir[src.broker] !== undefined) {
       const positions = src.positions;
       shadowSources.push({
@@ -420,6 +444,12 @@ async function startServer() {
     return parts.length === 0 ? "" : `✓ Trade bayangan — ${parts.join("; ")}`;
   });
 
+  // TT-1/TT-2/G-7: laporan per jam (data/laporan/), sekali per tim per jendela jam.
+  const tabReportsDone = new Set<string>();
+  tabReportSchedule = startTabReportSchedule(() =>
+    runTabReportsOnce(tabSources, shadowDataDir, new Date(), tabReportsDone),
+  );
+
   const server = app.listen(PORT, () => {
     const latest = reader.getLatest();
     console.log(`✓ Backend running on http://localhost:${PORT}`);
@@ -449,6 +479,7 @@ async function startServer() {
 
 let excursionSchedule: { stop: () => void } | null = null;
 let shadowSchedule: { stop: () => void } | null = null;
+let tabReportSchedule: { stop: () => void } | null = null;
 const serverPromise = startServer();
 
 function shutdown(): void {
@@ -467,6 +498,7 @@ function shutdown(): void {
   if (positionsReaderExness !== null) positionsReaderExness.destroy();
   excursionSchedule?.stop();
   shadowSchedule?.stop();
+  tabReportSchedule?.stop();
   serverPromise
     .then((server) => {
       server.close(() => {

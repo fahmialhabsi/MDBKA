@@ -323,6 +323,8 @@ import {
 import { applySpecHold, compareSpecs, heldSymbols, parseSpecsCsv, specHoldMap } from "../src/lib/specCompare";
 import { readSpecsForBroker } from "../server/services/specReader";
 import { specContentHash, trackSpecVersion } from "../server/services/specVersion";
+import { calendarTabFindings, exposureTabFindings, lastHourWindow, tradeTabFindings } from "../src/lib/tabReports";
+import { runTabReportsOnce } from "../server/services/tabReportJob";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
 import { convertIdrSnapshot, IdrEquitySource, parseAccountCurrency } from "../server/services/convertedEquity";
 import { getMifxSpec, MIFX_SPEC_SYMBOLS, mifxVolume } from "../src/lib/mifxSpecs";
@@ -9551,6 +9553,74 @@ test("715. F4 catatan entry menyimpan versi spesifikasi di baris keputusan; gaga
     assert(readSrc("server/index.ts").includes("getSpecVersion: () =>"), "server memasang versi spesifikasi");
   } finally {
     nfs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test("716. TT-1 tim Trade: posisi tanpa SL, lewat time-stop (Forex saja), rugi mengambang ≥ 5% = kejadian penting", () => {
+  const pos = (ticket: string, symbol: string, sl: number, timeOpen: string) => ({ ticket, symbol, side: "BUY" as const, volume: 0.01, sl, tp: 0, timeOpen });
+  // AUDJPY Finex demo 61823011, 12 Okt 2026: dibuka 02:27:27 (data nyata); jam laporan 05:30 adalah contoh.
+  const f = tradeTabFindings(
+    [pos("1", "AUDJPY", 110.379, "2026.10.12 02:27:27"), pos("2", "XAUUSD", 4184.03, "2026.10.12 00:00:00"), pos("3", "EURUSD", 0, "2026.10.12 05:00:00")],
+    { balance: 100, equity: 94 },
+    "2026.10.12 05:30:00",
+  );
+  assert(f.kejadianPenting, "harus penting");
+  assert(f.temuan.some((t) => t.includes("#1 AUDJPY terbuka 3 jam") && t.includes("time-stop")), `time-stop: ${f.temuan.join(" | ")}`);
+  assert(!f.temuan.some((t) => t.includes("#2 XAUUSD") && t.includes("time-stop")), "emas tanpa time-stop");
+  assert(f.temuan.some((t) => t === "#3 EURUSD BUY tanpa SL"), "posisi tanpa SL");
+  assert(f.temuan.some((t) => t.includes("mengambang $-6")) && f.temuan.includes("3 posisi terbuka"), f.temuan.join(" | "));
+  const tenang = tradeTabFindings([pos("4", "EURUSD", 1.09, "2026.10.12 05:00:00")], { balance: 100, equity: 99 }, "2026.10.12 05:30:00");
+  assert(!tenang.kejadianPenting && tenang.temuan.some((t) => t.includes("Margin/free margin belum tersedia")), "tenang + jujur soal margin");
+  assert(tradeTabFindings([], null, "2026.10.12 05:30:00").temuan.includes("Equity tidak tersedia"), "equity absen dijelaskan");
+});
+test("717. TT-1 tim Exposure (lot per mata uang/golongan) + TT-2 tim Calendar (berita Tinggi ±60 mnt, Actual vs Forecast)", () => {
+  const pos = (symbol: string, side: "BUY" | "SELL", volume: number) => ({ ticket: symbol, symbol, side, volume, sl: 1, tp: 0, timeOpen: "2026.10.12 05:00:00" });
+  const ex = exposureTabFindings([pos("EURUSD", "BUY", 0.01), pos("GBPUSD", "BUY", 0.02), pos("XAUUSD", "SELL", 0.01), pos("US500", "BUY", 0.1)]);
+  assert(!ex.kejadianPenting, `USD campuran arah (emas SELL menyeimbangkan) bukan tumpukan: ${ex.temuan.join(" | ")}`);
+  assert(ex.temuan.includes("USD: bersih -0,02 lot (3 kaki)"), `USD bersih: ${ex.temuan.join(" | ")}`);
+  assert(ex.temuan.some((t) => t === "EUR: bersih 0,01 lot (1 kaki)") && ex.temuan.some((t) => t === "FOREX: kotor 0,03 lot, bersih 0,03 lot"), ex.temuan.join(" | "));
+  assert(ex.temuan.some((t) => t.startsWith("INDEKS: kotor 0,1")), "indeks dihitung per golongan");
+  const searah = exposureTabFindings([pos("EURUSD", "BUY", 0.01), pos("GBPUSD", "BUY", 0.01)]);
+  assert(searah.kejadianPenting && searah.temuan.some((t) => t.startsWith("USD:") && t.endsWith("menumpuk searah")), searah.temuan.join(" | "));
+  assert(exposureTabFindings([]).temuan.includes("Tanpa eksposur") && !exposureTabFindings([]).kejadianPenting, "kosong");
+  const ev = (serverTime: string, importance: string, actual: number | null, forecast: number | null) => ({ serverTime, currency: "USD", importance, event: "CPI m/m", actual, forecast });
+  const cal = calendarTabFindings([ev("2026.10.12 05:50:00", "HIGH", null, 0.3), ev("2026.10.12 05:00:00", "HIGH", 0.4, 0.3), ev("2026.10.12 05:40:00", "LOW", null, null)], "2026.10.12 05:30:00");
+  assert(cal.kejadianPenting && cal.temuan.some((t) => t.includes("20 mnt lagi")), cal.temuan.join(" | "));
+  assert(cal.temuan.some((t) => t.includes("30 mnt lalu") && t.includes("Actual 0,4 vs Forecast 0,3 (selisih 0,1)")), cal.temuan.join(" | "));
+  assert(cal.temuan.length === 2, "berita LOW tidak dilaporkan");
+  assert(calendarTabFindings(null, "2026.10.12 05:30:00").temuan[0] === "Kalender tidak tersedia", "kalender absen");
+  assert(calendarTabFindings([], "2026.10.12 05:30:00").temuan[0] === "Tidak ada berita Tinggi ±60 mnt", "sepi");
+});
+test("718. G-7 laporan tim tab per jam: 3 laporan per broker per jendela jam, tidak ganda, tanpa jam server dilewati", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dataDir = nfs.mkdtempSync(npath.join(os.tmpdir(), "laporan-"));
+  try {
+    const src = {
+      broker: "finex" as const,
+      getPositions: () => [{ ticket: "1", symbol: "EURUSD", side: "BUY" as const, volume: 0.01, sl: 0, tp: 0, timeOpen: "2026.10.12 05:00:00" }],
+      getEquity: () => ({ balance: 100, equity: 99 }),
+      getServerNow: () => "2026.10.12 05:30:00",
+      getCalendar: () => ({ events: [], file: "MDBKA_Calendar_61823011.csv" }),
+    };
+    const done = new Set<string>();
+    let n = 0;
+    const id = () => `L-${++n}`;
+    const now = new Date("2026-10-12T02:31:00Z");
+    assert(runTabReportsOnce([src], dataDir, now, done, id) === 3, "3 laporan");
+    assert(runTabReportsOnce([src], dataDir, new Date("2026-10-12T02:50:00Z"), done, id) === 0, "jendela jam sama tidak ganda");
+    assert(runTabReportsOnce([{ ...src, getServerNow: () => null }], dataDir, new Date("2026-10-12T03:05:00Z"), done, id) === 0, "tanpa jam server dilewati");
+    const book = readJsonlRecords(dataDir, "laporan/laporan-finex-2026-10.jsonl", "laporan_tim/1");
+    assert(book.records.length === 3 && book.brokenLines === 0, `baris ${book.records.length}`);
+    const trade = book.records.find((r) => r.tim === "TAB_TRADE");
+    assert(trade !== undefined && trade.login === null && trade.jendelaMulaiUtc === "2026-10-12T01:00:00Z" && trade.jendelaSelesaiUtc === "2026-10-12T02:00:00Z" && trade.kejadianPenting === true, JSON.stringify(trade));
+    assert(lastHourWindow(Date.parse("2026-10-12T02:00:00Z")).start === "2026-10-12T01:00:00Z", "batas jam tepat");
+    const tolak = runTabReportsOnce([{ ...src, broker: "mifx" as const, getPositions: () => { throw new Error("terkunci"); } }], dataDir, now, done, id);
+    assert(tolak === 1, "posisi gagal dibaca → hanya laporan Calendar");
+    const idx = readSrc("server/index.ts");
+    assert(idx.includes("startTabReportSchedule(() =>") && idx.includes("tabReportSchedule?.stop();"), "jadwal laporan terpasang");
+  } finally {
+    nfs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
