@@ -48,6 +48,9 @@ import { lastCandleTimeMs, scanSymbol, sortScanRows, type ScanRow, type ScanStat
 import { classifyScanStatus, LAB_HARD_STATUSES, LAB_SOFT_STATUSES, type GuardClass } from "../src/lib/guardClass";
 import { evaluateShadowTrade, validateShadowInput, type ShadowTick, type ShadowTradeInput } from "../src/lib/shadowTrade";
 import { canTransition, CAUSE_ROUTES, routeFor, type LossCause, type RecommendationStatus } from "../src/lib/lossLesson";
+import { canonicalJson, isUtcSecondIso, jsonlRelativePath, parseJsonlText, toJsonlLine, type RekomendasiRecord } from "../src/lib/jsonlRecord";
+import { appendJsonlRecord, readJsonlRecords, snapshotFingerprint } from "../server/services/jsonlStore";
+import { allowedOnLive, latestVersion, parseRuleBook, type RuleEntry } from "../src/lib/ruleBook";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
 import { calendarResponse } from "../server/routes/calendarRoutes";
 import { mergeUsdIdrBook, parseEcbHistXml, readUsdIdrBook, refreshUsdIdrBook, usdIdrOn } from "../server/services/ecbHistory";
@@ -9023,6 +9026,136 @@ test("693. PR-1 status rekomendasi: hanya 4 transisi yang sah", () => {
   ];
   for (const [from, to] of ok) assert(canTransition(from, to), `${from} → ${to} harus sah`);
   for (const [from, to] of notOk) assert(!canTransition(from, to), `${from} → ${to} harus ditolak`);
+});
+test("694. G-1 JSON kanonik: kunci urut abjad, undefined dilewati, angka tidak hingga ditolak", () => {
+  assert(canonicalJson({ b: 1, a: [2, { d: null, c: "x" }] }) === '{"a":[2,{"c":"x","d":null}],"b":1}', "teks kanonik salah");
+  assert(canonicalJson({ a: 1, b: undefined }) === '{"a":1}', "undefined harus dilewati");
+  assert(canonicalJson({ x: 1, y: { q: 2, p: 3 } }) === canonicalJson({ y: { p: 3, q: 2 }, x: 1 }), "urutan kunci tidak boleh berpengaruh");
+  let message = "";
+  try {
+    canonicalJson({ a: Number.NaN });
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  assert(message.includes("angka tidak hingga"), `NaN harus ditolak, pesan="${message}"`);
+  const rec: RekomendasiRecord = {
+    skema: "rekomendasi/1", rekomendasiId: "r-1", waktuUtc: "2026-10-13T05:00:00Z", sebab: "BIAYA_BESAR",
+    rekomendasi: "Data untuk ambang biaya per golongan", penerima: ["T-PELUANG", "T-BIAYA"], status: "DIUSULKAN",
+    sumberJenis: "bayangan", sumberId: "b-1", broker: null, simbol: null, golongan: null, catatan: null, mengoreksi: null,
+  };
+  const line = toJsonlLine(rec);
+  const back = JSON.parse(line) as { skema: string; penerima: string[] };
+  assert(!line.includes("\n") && back.skema === "rekomendasi/1" && back.penerima.join(",") === "T-PELUANG,T-BIAYA", "baris JSONL salah");
+});
+test("695. G-1 lokasi berkas JSONL per tabel, broker/login, dan bulan UTC", () => {
+  assert(jsonlRelativePath("keputusan", "finex", "2026-10-12T00:27:27Z") === "keputusan/keputusan-finex-2026-10.jsonl", "keputusan");
+  assert(jsonlRelativePath("bayangan", "orbitraderberjangka", "2026-11-01T00:00:00Z") === "bayangan/bayangan-orbitraderberjangka-2026-11.jsonl", "bayangan");
+  assert(jsonlRelativePath("laporan", "61823011", "2026-10-13T05:00:00Z") === "laporan/laporan-61823011-2026-10.jsonl", "laporan");
+  assert(jsonlRelativePath("rekomendasi", null, "2026-10-13T05:00:00Z") === "rekomendasi/rekomendasi.jsonl", "rekomendasi");
+  assert(isUtcSecondIso("2026-10-12T00:27:27Z") && !isUtcSecondIso("2026-10-12 00:27:27"), "pola waktu UTC");
+  const bad: ReadonlyArray<() => string> = [
+    () => jsonlRelativePath("keputusan", "../x", "2026-10-12T00:27:27Z"),
+    () => jsonlRelativePath("keputusan", null, "2026-10-12T00:27:27Z"),
+    () => jsonlRelativePath("keputusan", "finex", "2026.10.12 02:27:27"),
+    () => jsonlRelativePath("keputusan", "finex", "2026-10-12T00:27:27.000Z"),
+  ];
+  bad.forEach((fn, i) => {
+    let threw = false;
+    try {
+      fn();
+    } catch {
+      threw = true;
+    }
+    assert(threw, `kasus tidak sah #${i + 1} harus ditolak`);
+  });
+});
+test("696. G-1 baca JSONL: baris rusak dan skema lain dihitung, tidak menghentikan", () => {
+  const text = [
+    '{"skema":"keputusan/1","n":1}',
+    "",
+    '{"skema":"bayangan/1"}',
+    '{"skema":"keputusan/1","x":',
+    "[1,2]",
+    '{"skema":"keputusan/1","n":2}',
+  ].join("\r\n");
+  const result = parseJsonlText(text, "keputusan/1");
+  assert(result.records.length === 2 && result.records[0].n === 1 && result.records[1].n === 2, `records=${result.records.length}`);
+  assert(result.brokenLines === 2, `brokenLines=${result.brokenLines}`);
+  assert(result.otherSchemaLines === 1, `otherSchemaLines=${result.otherSchemaLines}`);
+});
+test("697. G-1 jsonlStore: tulis-baca append-only, tanpa BOM, LF, tolak path keluar data/, sidik jari SHA-256", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jsonl-"));
+  const dir = path.join(root, "data");
+  const rel = jsonlRelativePath("rekomendasi", null, "2026-10-13T05:00:00Z");
+  const rec: RekomendasiRecord = {
+    skema: "rekomendasi/1", rekomendasiId: "r-1", waktuUtc: "2026-10-13T05:00:00Z", sebab: "BIAYA_BESAR",
+    rekomendasi: "Data untuk ambang biaya per golongan", penerima: ["T-PELUANG", "T-BIAYA"], status: "DIUSULKAN",
+    sumberJenis: "bayangan", sumberId: "b-1", broker: null, simbol: null, golongan: null, catatan: null, mengoreksi: null,
+  };
+  const file = appendJsonlRecord(dir, rel, rec);
+  appendJsonlRecord(dir, rel, { ...rec, rekomendasiId: "r-2", status: "DIUJI", mengoreksi: null });
+  fs.appendFileSync(file, '{"skema":\n');
+  const result = readJsonlRecords(dir, rel, "rekomendasi/1");
+  assert(result.records.length === 2 && result.brokenLines === 1 && result.otherSchemaLines === 0, `baca: ${result.records.length}/${result.brokenLines}`);
+  const raw = fs.readFileSync(file, "utf8");
+  assert(raw.charCodeAt(0) !== 0xfeff && !raw.includes("\r\n") && raw.endsWith("\n"), "berkas harus UTF-8 tanpa BOM, LF");
+  let threw = false;
+  try {
+    appendJsonlRecord(dir, "../luar.jsonl", rec);
+  } catch {
+    threw = true;
+  }
+  assert(threw && !fs.existsSync(path.join(root, "luar.jsonl")), "path keluar data/ harus ditolak");
+  const missing = readJsonlRecords(dir, "bayangan/tidak-ada.jsonl", "bayangan/1");
+  assert(missing.records.length === 0 && missing.brokenLines === 0 && missing.otherSchemaLines === 0, "berkas tidak ada = kosong");
+  assert(snapshotFingerprint({ b: 1, a: [2, { d: null, c: "x" }] }) === "41f05899d3459a3ecc94ff088afcd290b9ae4f51dc9ddaa35a82a642ddb55070", "SHA-256 salah");
+  assert(snapshotFingerprint({ a: 1, b: 2 }) === snapshotFingerprint({ b: 2, a: 1 }), "sidik jari harus sama untuk isi sama");
+});
+test("698. G-6 folder catatan baru (keputusan/bayangan/rekomendasi/laporan) otomatis ikut Backup, arsip tick tetap di-mirror", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "backup-g6-"));
+  const dataDir = path.join(root, "data");
+  const backupDir = path.join(root, "backup");
+  const files = [
+    "keputusan/keputusan-finex-2026-10.jsonl",
+    "bayangan/bayangan-finex-2026-10.jsonl",
+    "rekomendasi/rekomendasi.jsonl",
+    "laporan/laporan-61823011-2026-10.jsonl",
+    "history/finex/ticks-2026-10-12.jsonl",
+  ];
+  for (const rel of files) {
+    const full = path.join(dataDir, ...rel.split("/"));
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, '{"skema":"uji/1"}\n');
+  }
+  const status = getBackupStatus(dataDir, backupDir);
+  assert(status.changedFiles === 4, `changedFiles=${status.changedFiles}`);
+  assert(status.historyPending === 1, `historyPending=${status.historyPending}`);
+  assert(status.due, "backup harus jatuh tempo");
+});
+test("699. G-2 Buku Aturan awal: 4 strategi versi 1 berstatus UJI_DEMO; pembaca menolak entri tidak sah", () => {
+  const book = parseRuleBook(JSON.parse(readSrc("config/buku-aturan.json")) as unknown);
+  assert(book.errors.length === 0, `galat: ${book.errors.join("; ")}`);
+  assert(book.entries.map((e) => e.id).join(",") === STRATEGY_IDS.join(","), "id harus sama dengan STRATEGY_IDS");
+  for (const id of STRATEGY_IDS) {
+    const entry = latestVersion(book.entries, id);
+    assert(entry !== null && entry.nama === STRATEGIES[id].label, `nama ${id} harus sama dengan label strategi`);
+    assert(entry !== null && entry.status === "UJI_DEMO" && entry.versi === "1" && !allowedOnLive(entry), `${id} harus UJI_DEMO versi 1`);
+  }
+  const notArray = parseRuleBook({});
+  assert(notArray.entries.length === 0 && notArray.errors.length === 1, "bukan array harus ditolak");
+  const valid: RuleEntry = book.entries[0];
+  const mixed = parseRuleBook([valid, { ...valid, versi: "2", status: "AKTIF" }, { ...valid }]);
+  assert(mixed.entries.length === 1 && mixed.errors.length === 2, `campuran: ${mixed.entries.length} entri, ${mixed.errors.length} galat`);
+  const two: RuleEntry[] = [{ ...valid, versi: "1" }, { ...valid, versi: "2", versiSebelumnya: "1" }];
+  assert(latestVersion(two, "skor")?.versi === "2", "versi terbaru = baris terakhir");
+  assert(latestVersion(two, "tidak-ada") === null, "id tak dikenal = null");
+  assert(allowedOnLive({ ...valid, status: "LIVE" }) && allowedOnLive({ ...valid, status: "PERCOBAAN_LIVE" }), "LIVE/PERCOBAAN_LIVE boleh di Live");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
