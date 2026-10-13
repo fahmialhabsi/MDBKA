@@ -22,6 +22,11 @@ export interface TabPosition {
 export interface TabEquity {
   readonly balance: number;
   readonly equity: number;
+  /** Dari equity.csv MDBKAMultiLive (8+ kolom); absen = EA lama. */
+  readonly margin?: number;
+  readonly freeMargin?: number;
+  /** Persen; absen bila tanpa posisi (MT5 menulis 0). */
+  readonly marginLevel?: number;
 }
 
 export interface TabCalendarEvent {
@@ -44,6 +49,8 @@ export const FLOATING_LOSS_ALERT = 0.05;
 /** Tim Calendar: berita Tinggi dalam 60 mnt ke depan dilaporkan, ≤ 30 mnt = penting. */
 export const NEWS_AHEAD_MIN = 60;
 export const NEWS_URGENT_MIN = 30;
+/** Usulan: margin level < 200% = kejadian penting (margin call broker umumnya ±100%). */
+export const MARGIN_LEVEL_ALERT = 200;
 
 const fmt2 = (v: number): string => (Math.round(v * 100) / 100).toString().replace(".", ",");
 
@@ -73,7 +80,17 @@ export function tradeTabFindings(positions: readonly TabPosition[], equity: TabE
     temuan.push(`Equity $${fmt2(equity.equity)}, mengambang $${fmt2(floating)} (${fmt2(share * 100)}% saldo)`);
     if (share <= -FLOATING_LOSS_ALERT) penting = true;
   }
-  temuan.push("Margin/free margin belum tersedia di equity.csv");
+  if (equity !== null && equity.freeMargin !== undefined && equity.margin !== undefined) {
+    // Koreksi 13 Okt: equity.csv MDBKAMultiLive SUDAH memuat margin (dulu keliru ditulis "belum tersedia").
+    const level = equity.marginLevel;
+    temuan.push(
+      `Margin $${fmt2(equity.margin)}, free margin $${fmt2(equity.freeMargin)}` +
+        (level === undefined ? " (tanpa posisi: margin level tidak terdefinisi)" : `, margin level ${fmt2(level)}%`),
+    );
+    if (level !== undefined && level < MARGIN_LEVEL_ALERT) penting = true;
+  } else {
+    temuan.push("Margin/free margin tidak ada di equity.csv (EA lama)");
+  }
   return { temuan, kejadianPenting: penting };
 }
 
@@ -164,6 +181,8 @@ export interface TabReportMeta {
   readonly laporanId: string;
   readonly broker: BrokerId;
   readonly login: string | null;
+  /** F3: dari identitas akun terbukti; absen = tidak-terbukti. */
+  readonly jenisAkun?: "demo" | "live" | "tidak-terbukti";
   readonly tim: "TAB_TRADE" | "TAB_EXPOSURE" | "TAB_CALENDAR";
   readonly jendelaMulaiUtc: string;
   readonly jendelaSelesaiUtc: string;
@@ -183,7 +202,7 @@ export function buildTabReport(meta: TabReportMeta, findings: TabFindings): Lapo
     laporanId: meta.laporanId,
     login: meta.login,
     broker: meta.broker,
-    jenisAkun: "tidak-terbukti",
+    jenisAkun: meta.jenisAkun ?? "tidak-terbukti",
     tim: meta.tim,
     jendelaMulaiUtc: meta.jendelaMulaiUtc,
     jendelaSelesaiUtc: meta.jendelaSelesaiUtc,

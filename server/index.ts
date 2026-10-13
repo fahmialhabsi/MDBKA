@@ -13,7 +13,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createApp } from "./app";
 import { checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
-import { collectAccountEvaluations } from "./routes/evaluationRoutes";
+import { collectAccountEvaluations, parseAccountLabels } from "./routes/evaluationRoutes";
+import { resolveAccountIdentity } from "../src/lib/accountIdentity";
 import { getCachedEcbRates } from "./routes/fxRoutes";
 import { resolveCommonFilesDir } from "./routes/marginRoutes";
 import { createTradeEntryLog } from "./services/tradeEntryLog";
@@ -335,6 +336,9 @@ async function startServer() {
   for (const src of entrySources) {
     if (src.positions === null || src.quotes === null) continue;
     const equityReader = src.equity;
+    // F3/TA-1 (13 Okt 2026): identitas akun terbukti dari kolom Login/TradeMode EA.
+    const identityOf = () =>
+      resolveAccountIdentity(equityReader?.getLatest() ?? null, parseAccountLabels(process.env.ACCOUNT_LABELS));
     const log = createTradeEntryLog({
       file: path.join(tradesDir, `entries-${src.broker}.jsonl`),
       broker: src.broker,
@@ -361,6 +365,10 @@ async function startServer() {
       // F4 (13 Okt 2026): versi spesifikasi bertanggal (data/spesifikasi/).
       getSpecVersion: () =>
         trackSpecVersion(path.join(process.cwd(), "data"), readSpecsForBroker(resolveCommonFilesDir(), src.broker), new Date()),
+      getIdentity: () => {
+        const id = identityOf();
+        return { login: id.login, jenisAkun: id.jenisAkun };
+      },
       // A7-4/G-4 (13 Okt 2026): baris `keputusan` jalur entry + sidik jari snapshot.
       decisionDataDir: path.join(process.cwd(), "data"),
     });
@@ -386,7 +394,15 @@ async function startServer() {
         getPositions: () => positions.getAll(),
         getEquity: () => {
           const e = equityReader?.getLatest() ?? null;
-          return e === null ? null : { balance: e.balance, equity: e.equity };
+          return e === null
+            ? null
+            : {
+                balance: e.balance,
+                equity: e.equity,
+                ...(e.margin !== undefined ? { margin: e.margin } : {}),
+                ...(e.freeMargin !== undefined ? { freeMargin: e.freeMargin } : {}),
+                ...(e.marginLevel !== undefined ? { marginLevel: e.marginLevel } : {}),
+              };
         },
         getServerNow: () =>
           quotes.getSymbols().reduce<string | null>((max, sym) => {
@@ -396,6 +412,10 @@ async function startServer() {
         getCalendar: () => {
           const cal = readCalendarForBroker(resolveCommonFilesDir(), src.broker);
           return cal === null ? null : { events: cal.events, file: cal.file };
+        },
+        getIdentity: () => {
+          const id = identityOf();
+          return { login: id.login, jenisAkun: id.jenisAkun };
         },
       });
     }
@@ -419,6 +439,7 @@ async function startServer() {
           return snap === null ? null : specHoldMap(snap.diffs);
         },
         getOpenPositions: () => positions.getAll().map((p) => ({ symbol: p.symbol, side: p.side })),
+        getLogin: () => identityOf().login,
       });
     }
   }

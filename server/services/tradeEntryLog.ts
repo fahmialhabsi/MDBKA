@@ -84,6 +84,8 @@ export interface TradeEntryLogOptions {
   readonly decisionDataDir?: string;
   /** F4 (13 Okt 2026): versi spesifikasi broker saat entry; null / gagal = null. */
   readonly getSpecVersion?: () => string | null;
+  /** F3 (13 Okt 2026): identitas akun terbukti (EA); gagal = login null, tidak-terbukti. */
+  readonly getIdentity?: () => { readonly login: string | null; readonly jenisAkun: "demo" | "live" | "tidak-terbukti" };
   readonly now?: () => Date;
 }
 
@@ -165,6 +167,14 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
         waktuServer: timeOpen,
         sidikJariSnapshot: snapshotFingerprint(snapshotMaterial(input)),
         tiket: ticket,
+        ...(() => {
+          try {
+            const id = opts.getIdentity?.();
+            return id === undefined ? {} : { login: id.login, jenisAkun: id.jenisAkun };
+          } catch {
+            return {};
+          }
+        })(),
         versiSpesifikasi: (() => {
           try {
             return opts.getSpecVersion?.() ?? null;

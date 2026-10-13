@@ -29,6 +29,8 @@ export interface EquitySnapshot {
   readonly freeMargin?: number;
   /** Margin level persen = equity/margin*100 (opsional). */
   readonly marginLevel?: number;
+  /** F3: jenis akun dari server broker (ACCOUNT_TRADE_MODE); absen = EA lama. */
+  readonly tradeMode?: "DEMO" | "CONTEST" | "REAL";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

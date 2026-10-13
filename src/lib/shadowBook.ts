@@ -21,6 +21,8 @@ export interface ShadowCandidateMeta {
   readonly broker: BrokerId;
   /** Jam server kuotasi saat sinyal ("YYYY.MM.DD HH:MM:SS"). */
   readonly signalServerTime: string | null;
+  /** F3: login terbukti (EA); absen = null. */
+  readonly login?: string | null;
 }
 
 /** Baris DIBUAT, atau null bila bukan sinyal tertahan yang bisa diikuti. */
@@ -41,7 +43,7 @@ export function shadowCandidate(row: ScanRow, setup: StrategySetup | null, meta:
     fase: "DIBUAT",
     waktuUtc: meta.waktuUtc,
     broker: meta.broker,
-    login: null,
+    login: meta.login ?? null,
     simbol: row.symbol,
     golongan: riskGroupOf(row.symbol).id,
     arah: row.direction,

@@ -19,6 +19,9 @@ export interface DecisionMeta {
   readonly tiket: string | null;
   /** F4: versi spesifikasi broker saat keputusan ("YYYY-MM-DD#hash"); absen = null. */
   readonly versiSpesifikasi?: string | null;
+  /** F3: identitas akun terbukti (EA); absen = login null, tidak-terbukti. */
+  readonly login?: string | null;
+  readonly jenisAkun?: "demo" | "live" | "tidak-terbukti";
 }
 
 /**
@@ -73,8 +76,8 @@ export function keputusanFromScan(input: ScanInput, row: ScanRow, meta: Decision
     waktuServer: meta.waktuServer,
     waktuDiterima: meta.waktuUtc,
     broker,
-    login: null,
-    jenisAkun: "tidak-terbukti",
+    login: meta.login ?? null,
+    jenisAkun: meta.jenisAkun ?? "tidak-terbukti",
     setaraLive: null,
     simbol: input.symbol,
     golongan: riskGroupOf(input.symbol).id,

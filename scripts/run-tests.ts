@@ -328,6 +328,7 @@ import { runTabReportsOnce } from "../server/services/tabReportJob";
 import { aggregateDaily, d1Direction, D1_PARAMS, dailyLevels } from "../src/lib/dailyLevels";
 import { breakoutRetestAt } from "../src/lib/breakoutRetest";
 import { aggregateH4, TOPDOWN_WINDOW, topdownSetup } from "../src/lib/topdownStrategy";
+import { resolveAccountIdentity } from "../src/lib/accountIdentity";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
 import { convertIdrSnapshot, IdrEquitySource, parseAccountCurrency } from "../server/services/convertedEquity";
 import { getMifxSpec, MIFX_SPEC_SYMBOLS, mifxVolume } from "../src/lib/mifxSpecs";
@@ -9572,7 +9573,8 @@ test("716. TT-1 tim Trade: posisi tanpa SL, lewat time-stop (Forex saja), rugi m
   assert(f.temuan.some((t) => t === "#3 EURUSD BUY tanpa SL"), "posisi tanpa SL");
   assert(f.temuan.some((t) => t.includes("mengambang $-6")) && f.temuan.includes("3 posisi terbuka"), f.temuan.join(" | "));
   const tenang = tradeTabFindings([pos("4", "EURUSD", 1.09, "2026.10.12 05:00:00")], { balance: 100, equity: 99 }, "2026.10.12 05:30:00");
-  assert(!tenang.kejadianPenting && tenang.temuan.some((t) => t.includes("Margin/free margin belum tersedia")), "tenang + jujur soal margin");
+  // F3 (13 Okt 2026): diubah sengaja — teks lama "belum tersedia" keliru (equity.csv 8 kolom SUDAH memuat margin); tanpa kolom margin = EA lama.
+  assert(!tenang.kejadianPenting && tenang.temuan.some((t) => t.includes("Margin/free margin tidak ada di equity.csv (EA lama)")), "tenang + jujur soal margin");
   assert(tradeTabFindings([], null, "2026.10.12 05:30:00").temuan.includes("Equity tidak tersedia"), "equity absen dijelaskan");
 });
 test("717. TT-1 tim Exposure (lot per mata uang/golongan) + TT-2 tim Calendar (berita Tinggi ±60 mnt, Actual vs Forecast)", () => {
@@ -9760,6 +9762,66 @@ test("723. P4/P5 rak strategi + backtest: topdown terdaftar (window 1.500 H1), B
   assert(text.includes("Vonis per golongan") && text.includes("Logam") && text.includes("BELUM_CUKUP"), text);
   const cli = readSrc("scripts/backtest.ts");
   assert(cli.includes("formatGroupSection(groupReports(runs, usdIdr))") && cli.includes("...(window !== undefined ? { window } : {})"), "CLI memakai window strategi + rapor per golongan");
+});
+test("724. F3 equity.csv 10 kolom: Login + TradeMode dari EA dibaca; format 8 kolom lama tetap sama", () => {
+  const baru = parseEquityCsvLine("2026.10.13 11:27:23,9971.26,9972.26,1.00,100,20.00,9952.26,49861.30,61823011,DEMO");
+  assert(baru !== null && baru.account === "61823011" && baru.tradeMode === "DEMO" && baru.margin === 20 && baru.freeMargin === 9952.26 && baru.marginLevel === 49861.3, JSON.stringify(baru));
+  const live = parseEquityCsvLine("2026.10.13 11:27:23,8.50,8.50,0.00,500,0.00,8.50,0.00,91811209,real");
+  assert(live !== null && live.account === "91811209" && live.tradeMode === "REAL" && live.marginLevel === undefined, JSON.stringify(live));
+  const lama = parseEquityCsvLine("2026.10.06 10:39:46,4811.82,4879.82,68.00,100,250.00,4629.82,1951.93");
+  assert(lama !== null && lama.account === undefined && lama.tradeMode === undefined && lama.margin === 250, "8 kolom tanpa identitas");
+  const aneh = parseEquityCsvLine("2026.10.13 11:27:23,1,1,0,100,0,1,0,abc,DEMO");
+  assert(aneh !== null && aneh.account === undefined && aneh.tradeMode === undefined, "login tidak sah diabaikan");
+  const ea = readSrc("ea/MDBKAMultiLive.mq5");
+  assert(ea.includes("AccountInfoInteger(ACCOUNT_LOGIN)") && ea.includes("ACCOUNT_TRADE_MODE_REAL") && ea.includes("TradeModeText()"), "EA menulis Login + TradeMode");
+});
+test("725. F3/TA-1 identitas akun: server broker yang dipercaya; label hanya pelengkap; tanpa kolom EA = tidak-terbukti", () => {
+  const labels = { "61823011": "Finex demo", "91811209": "Finex live", "72159716": "OTB demo 2", "413925678": "Exness" };
+  const demo = resolveAccountIdentity({ account: "61823011", tradeMode: "DEMO" }, labels);
+  assert(demo.login === "61823011" && demo.jenisAkun === "demo" && demo.cocokLabel === true && demo.catatan.startsWith("Terverifikasi"), JSON.stringify(demo));
+  const live = resolveAccountIdentity({ account: "91811209", tradeMode: "REAL" }, labels);
+  assert(live.jenisAkun === "live" && live.cocokLabel === true, "live");
+  const bentrok = resolveAccountIdentity({ account: "91811209", tradeMode: "DEMO" }, labels);
+  assert(bentrok.jenisAkun === "demo" && bentrok.cocokLabel === false && bentrok.catatan.includes("bertentangan"), bentrok.catatan);
+  const tanpaKata = resolveAccountIdentity({ account: "413925678", tradeMode: "REAL" }, labels);
+  assert(tanpaKata.jenisAkun === "live" && tanpaKata.cocokLabel === null, "label tanpa kata demo/live = tidak dibandingkan");
+  const tanpaLabel = resolveAccountIdentity({ account: "1003997005", tradeMode: "CONTEST" }, labels);
+  assert(tanpaLabel.jenisAkun === "demo" && tanpaLabel.label === null && tanpaLabel.catatan.includes("belum diberi label"), "CONTEST = demo");
+  const lama = resolveAccountIdentity({}, labels);
+  assert(lama.login === null && lama.jenisAkun === "tidak-terbukti" && lama.catatan.includes("EA belum menulis"), "EA lama");
+  assert(resolveAccountIdentity(null, labels).jenisAkun === "tidak-terbukti", "tanpa equity");
+  assert(readSrc("server/app.ts").includes('app.get("/api/account-identity"'), "endpoint identitas");
+});
+test("726. F3 identitas dipakai catatan (keputusan, bayangan, laporan tim) + koreksi margin di laporan tim Trade", () => {
+  const lv = tradeTabFindings([], { balance: 100, equity: 99, margin: 50, freeMargin: 49, marginLevel: 150 }, "2026.10.12 05:30:00");
+  assert(lv.kejadianPenting && lv.temuan.some((t) => t.includes("margin level 150%")), lv.temuan.join(" | "));
+  const kosong = tradeTabFindings([], { balance: 9971.26, equity: 9972.26, margin: 0, freeMargin: 9972.26 }, "2026.10.12 05:30:00");
+  assert(!kosong.kejadianPenting && kosong.temuan.some((t) => t.includes("margin level tidak terdefinisi")), kosong.temuan.join(" | "));
+  const row = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: scanCsv(80), quote: null, equity: 10000, fxRates: null });
+  const rec = keputusanFromScan({ symbol: "GBPUSD", brokerId: "finex", csv: scanCsv(80), quote: null, equity: 10000, fxRates: null }, row, {
+    keputusanId: "k", jalur: "entry", waktuUtc: "2026-10-13T02:00:00Z", waktuServer: null, sidikJariSnapshot: null, tiket: "9", login: "61823011", jenisAkun: "demo",
+  });
+  assert(rec.login === "61823011" && rec.jenisAkun === "demo", "keputusan memuat identitas");
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dataDir = nfs.mkdtempSync(npath.join(os.tmpdir(), "laporan-login-"));
+  try {
+    const n = runTabReportsOnce([{
+      broker: "finex",
+      getPositions: () => [],
+      getEquity: () => ({ balance: 1, equity: 1 }),
+      getServerNow: () => "2026.10.12 05:30:00",
+      getCalendar: () => null,
+      getIdentity: () => ({ login: "61823011", jenisAkun: "demo" }),
+    }], dataDir, new Date("2026-10-12T02:31:00Z"), new Set<string>(), () => "L");
+    const book = readJsonlRecords(dataDir, "laporan/laporan-61823011-2026-10.jsonl", "laporan_tim/1");
+    assert(n === 3 && book.records.length === 3 && book.records.every((r) => r.login === "61823011" && r.jenisAkun === "demo"), `laporan per login: ${book.records.length}`);
+  } finally {
+    nfs.rmSync(dataDir, { recursive: true, force: true });
+  }
+  const idx = readSrc("server/index.ts");
+  assert(idx.includes("getLogin: () => identityOf().login,") && idx.includes("resolveAccountIdentity(equityReader?.getLatest() ?? null"), "server memasang identitas ke catatan");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

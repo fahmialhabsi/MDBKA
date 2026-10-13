@@ -27,6 +27,8 @@ export interface TabReportSource {
   readonly getServerNow: () => string | null;
   /** Kalender broker; null = tidak tersedia. login dari nama berkas MDBKA_Calendar_<login>.csv. */
   readonly getCalendar: () => { readonly events: readonly TabCalendarEvent[]; readonly file: string } | null;
+  /** F3: identitas akun terbukti (EA); absen/gagal = login null, tidak-terbukti. */
+  readonly getIdentity?: () => { readonly login: string | null; readonly jenisAkun: "demo" | "live" | "tidak-terbukti" };
 }
 
 function safe<T>(fn: () => T, fallback: T): T {
@@ -52,6 +54,8 @@ export function runTabReportsOnce(
     const positions = safe(src.getPositions, null);
     const equity = safe(src.getEquity, null);
     const calendar = safe(src.getCalendar, null);
+    const identity = src.getIdentity === undefined ? null : safe(src.getIdentity, null);
+    const login = identity?.login ?? null;
     const reports = [
       positions === null
         ? null
@@ -67,7 +71,8 @@ export function runTabReportsOnce(
         {
           laporanId: newId(),
           broker: src.broker,
-          login: null,
+          login,
+          jenisAkun: identity?.jenisAkun ?? "tidak-terbukti",
           tim: r.tim,
           jendelaMulaiUtc: window.start,
           jendelaSelesaiUtc: window.end,
@@ -75,7 +80,7 @@ export function runTabReportsOnce(
         },
         r.findings,
       );
-      appendJsonlRecord(dataDir, jsonlRelativePath("laporan", src.broker, window.end), rec);
+      appendJsonlRecord(dataDir, jsonlRelativePath("laporan", login ?? src.broker, window.end), rec);
       done.add(key);
       written++;
     }

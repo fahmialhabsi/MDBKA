@@ -19,7 +19,8 @@ import { createJurnalPajakRoutes } from "./routes/jurnalPajakRoutes";
 import { createPajakRoutes } from "./routes/pajakRoutes";
 import { createCandlesRoutes } from "./routes/candlesRoutes";
 import { createBackupRoutes } from "./routes/backupRoutes";
-import { createEvaluationRoutes } from "./routes/evaluationRoutes";
+import { createEvaluationRoutes, parseAccountLabels } from "./routes/evaluationRoutes";
+import { resolveAccountIdentity } from "../src/lib/accountIdentity";
 import { createCalendarRoutes } from "./routes/calendarRoutes";
 import { createSessionRoutes } from "./routes/sessionRoutes";
 import { createKeputusanRoutes } from "./routes/keputusanRoutes";
@@ -101,6 +102,18 @@ export function createApp(
   // Satpam Kalender K2b: kalender ekonomi MT5 per broker (jam server).
   app.use("/api/calendar", createCalendarRoutes());
   app.use("/api/sessions", createSessionRoutes());
+  // F3/TA-1 (13 Okt 2026): identitas akun terbukti per broker (Login + TradeMode dari EA).
+  app.get("/api/account-identity", (_req, res) => {
+    const labels = parseAccountLabels(process.env?.["ACCOUNT_LABELS"]);
+    const of = (src: Pick<EquitySource, "getLatest"> | null | undefined) =>
+      src === null || src === undefined ? null : resolveAccountIdentity(src.getLatest(), labels);
+    res.json({
+      orbitraderberjangka: of(reader),
+      finex: of(readerFinex),
+      mifx: of(mifx?.equity),
+      exness: of(exness?.equity),
+    });
+  });
   // S2 (13 Okt 2026): catatan shadow Hasil analisa (fondasi A8); tidak mengubah tampilan.
   app.use("/api/keputusan", createKeputusanRoutes());
   app.use("/api/specs", createSpecRoutes());

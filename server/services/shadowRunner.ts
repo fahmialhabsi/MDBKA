@@ -33,6 +33,8 @@ export interface ShadowSource {
   readonly getSessions?: () => readonly TradeSession[] | null;
   readonly getSpecHolds?: () => ReadonlyMap<string, string> | null;
   readonly getOpenPositions?: () => readonly OpenPositionLike[];
+  /** F3: login terbukti (EA); absen/gagal = null. */
+  readonly getLogin?: () => string | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -90,6 +92,7 @@ export function createShadowsOnce(
   const sessions = safe(src.getSessions, null);
   const specHolds = safe(src.getSpecHolds, null);
   const openPositions = safe(src.getOpenPositions, []);
+  const login = src.getLogin === undefined ? null : safe(src.getLogin, null);
   // Jeda 3-rugi dinilai SEKALI per putaran (membaca History MT5 itu mahal) pada jam server terbaru.
   const latestServer = items.reduce<string | null>((max, i) => {
     const t = i.quote?.timestamp ?? null;
@@ -127,6 +130,7 @@ export function createShadowsOnce(
       waktuUtc: utcSecond(now),
       broker: src.broker,
       signalServerTime: serverNow,
+      login,
     });
     if (rec === null || running.has(shadowOpenKey(rec))) continue;
     appendJsonlRecord(dataDir, jsonlRelativePath("bayangan", src.broker, rec.waktuUtc), rec);

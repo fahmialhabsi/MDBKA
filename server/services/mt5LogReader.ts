@@ -28,6 +28,9 @@ export interface ParsedEquity {
   readonly margin?: number;
   readonly freeMargin?: number;
   readonly marginLevel?: number;
+  /** F3 (10 kolom): login MT5 dan jenis akun dari server broker. */
+  readonly account?: string;
+  readonly tradeMode?: "DEMO" | "CONTEST" | "REAL";
 }
 
 const BALANCE_RE = /balance\s*:\s*(-?[\d.,]+)/gi;
@@ -103,6 +106,11 @@ export function parseEquityCsvLine(line: string): ParsedEquity | null {
   // MT5 menulis 0 bila tanpa posisi → tak terdefinisi, bukan 0%.
   const marginLevel =
     levelRaw !== undefined && levelRaw > 0 ? levelRaw : undefined;
+  // F3 (13 Okt 2026): kolom 9–10 = Login, TradeMode (EA baru). Tidak sah = diabaikan.
+  const loginRaw = (cells[8] ?? "").trim();
+  const account = cells.length >= 10 && /^\d{1,20}$/.test(loginRaw) ? loginRaw : undefined;
+  const modeRaw = (cells[9] ?? "").trim().toUpperCase();
+  const tradeMode = account !== undefined && (modeRaw === "DEMO" || modeRaw === "CONTEST" || modeRaw === "REAL") ? modeRaw : undefined;
   let tradeCount: number | undefined;
   if (!isMarginFormat && cells.length >= 5) {
     const tradesRaw = (cells[4] ?? "").trim();
@@ -120,6 +128,8 @@ export function parseEquityCsvLine(line: string): ParsedEquity | null {
     ...(margin !== undefined ? { margin } : {}),
     ...(freeMargin !== undefined ? { freeMargin } : {}),
     ...(marginLevel !== undefined ? { marginLevel } : {}),
+    ...(account !== undefined ? { account } : {}),
+    ...(tradeMode !== undefined ? { tradeMode } : {}),
   };
 }
 
@@ -223,6 +233,8 @@ function readSnapshot(logFile: string, parsed: ParsedEquity): EquitySnapshot {
     ...(parsed.marginLevel !== undefined
       ? { marginLevel: parsed.marginLevel }
       : {}),
+    ...(parsed.account !== undefined ? { account: parsed.account } : {}),
+    ...(parsed.tradeMode !== undefined ? { tradeMode: parsed.tradeMode } : {}),
     lastModified,
   };
 }
