@@ -11,6 +11,7 @@ import {
   groupLabel,
   isLegacyGroup,
   lolosByRiskGroup,
+  byRiskGroupOf,
   proofLabel,
   proofStatus,
   sortGroups,
@@ -98,6 +99,8 @@ function AccountCard({ account, kurs }: { account: EvalAccount; kurs: number | n
   const recent = trades.slice(0, RECENT_TRADES);
   // P5a: bukti LOLOS per golongan (tampilan saja).
   const lolosGroups = lolosByRiskGroup(trades);
+  // T4: bukti "masuk lagi simbol sama" (TAMBAH) per golongan, terpisah dari LOLOS.
+  const addOnGroups = byRiskGroupOf(trades, "TAMBAH");
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -186,6 +189,30 @@ function AccountCard({ account, kurs }: { account: EvalAccount; kurs: number | n
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {lolosGroups.map((g) => (
+                    <StatsRow key={g.group} name={g.label} stats={g.stats} kurs={kurs} muted={false} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {addOnGroups.length > 0 && (
+            <div data-testid="eval-addon-groups" className="mt-4 overflow-x-auto">
+              <p className="mb-1 text-xs text-slate-500">
+                Bukti masuk lagi (TAMBAH, demo) per golongan — batas 2 posisi per simbol baru boleh dinaikkan bila n ≥ 20 dan hasilnya baik.
+              </p>
+              <table className="w-full text-left text-sm">
+                <thead className="text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="py-2 pr-3">Golongan</th>
+                    <th className="py-2 pr-3 text-right">n</th>
+                    <th className="py-2 pr-3 text-right">Win rate</th>
+                    <th className="py-2 pr-3 text-right">Bersih</th>
+                    <th className="py-2 pr-3 text-right">Per trade</th>
+                    <th className="py-2">Bukti</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {addOnGroups.map((g) => (
                     <StatsRow key={g.group} name={g.label} stats={g.stats} kurs={kurs} muted={false} />
                   ))}
                 </tbody>

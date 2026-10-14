@@ -318,9 +318,17 @@ const round2 = (v: number): number => Math.round(v * 100) / 100;
  * dinilai per broker sampai ada keputusan terpisah.
  */
 export function lolosByRiskGroup(trades: readonly EvalTrade[]): RiskGroupProof[] {
+  return byRiskGroupOf(trades, "LOLOS");
+}
+
+/**
+ * T4 (Tahap 16, 15 Okt 2026) — bukti satu kelompok entry (mis. "TAMBAH" =
+ * masuk lagi simbol sama) per golongan risiko; rumus sama dengan LOLOS.
+ */
+export function byRiskGroupOf(trades: readonly EvalTrade[], entryGroup: string): RiskGroupProof[] {
   const byGroup = new Map<RiskGroupId, EvalTrade[]>();
   for (const t of trades) {
-    if (t.group !== "LOLOS") continue;
+    if (t.group !== entryGroup) continue;
     const id = riskGroupOf(t.symbol).id;
     byGroup.set(id, [...(byGroup.get(id) ?? []), t]);
   }

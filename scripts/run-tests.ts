@@ -367,6 +367,7 @@ import {
   isLegacyGroup,
   applyProofHold,
   lolosByRiskGroup,
+  byRiskGroupOf,
   lolosLabel,
   mergeGroupStats,
   proofHoldReason,
@@ -10366,6 +10367,16 @@ test("751. Siklus Tim 2: 30 menit, menilai menit 20–30, jendela 3 jam; Forex =
   assert(monitorCycle({ ...base, openTime: "2026-10-15T01:00:00Z" }) === null && monitorCycle({ ...base, serverNow: "2026.10.15 00:59:00" }) === null, "format/jam tidak sah = null");
   const card = readSrc("src/components/holdings/HoldingsDashboard.tsx");
   assert(card.includes('data-testid="holding-cycle"') && card.includes("openTime: holding.entryTime,") && card.includes("serverNow: live.timestamp,"), "siklus tampil di kartu posisi");
+});
+test("752. T4 bukti TAMBAH per golongan: terpisah dari LOLOS, rumus sama; lolosByRiskGroup tetap sama; tabel di panel Evaluasi", () => {
+  const tr = (symbol: string, group: string, net: number) => ({ positionId: `${symbol}${net}${group}`, symbol, side: "BUY", volume: 0.01, openTime: "", closeTime: "", openPrice: 1, closePrice: 1, net, group, rMultiple: null });
+  const trades = [tr("GBPUSD", "LOLOS", 2), tr("GBPUSD", "TAMBAH", 3), tr("EURUSD", "TAMBAH", -1), tr("XAUUSD", "TAMBAH", 5)] as unknown as Parameters<typeof byRiskGroupOf>[0];
+  const add = byRiskGroupOf(trades, "TAMBAH");
+  const fx = add.find((g) => g.group === "FOREX");
+  assert(add.length === 2 && fx !== undefined && fx.stats.n === 2 && fx.stats.net === 2 && fx.stats.wins === 1, JSON.stringify(add));
+  assert(JSON.stringify(lolosByRiskGroup(trades)) === JSON.stringify(byRiskGroupOf(trades, "LOLOS")) && lolosByRiskGroup(trades)[0]?.stats.n === 1, "LOLOS tidak tercampur TAMBAH");
+  const panel = readSrc("src/components/analysis/TradeEvaluationPanel.tsx");
+  assert(panel.includes('const addOnGroups = byRiskGroupOf(trades, "TAMBAH");') && panel.includes('data-testid="eval-addon-groups"'), "tabel TAMBAH di panel");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
