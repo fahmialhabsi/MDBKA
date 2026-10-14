@@ -62,8 +62,30 @@ export function readCandleCsv(
   commonDir: string,
   symbol: string,
 ): { csv: string; modified: string } | null {
+  return readCandleCsvTf(commonDir, symbol, "H1");
+}
+
+/** F5 (Tahap 16): timeframe yang diekspor service AutoExportMDBKA. */
+export const CANDLE_TIMEFRAMES = ["M15", "H1", "D1", "W1"] as const;
+export type CandleTimeframe = (typeof CANDLE_TIMEFRAMES)[number];
+
+export function parseCandleTimeframe(raw: unknown): CandleTimeframe | null {
+  if (raw === undefined) return "H1";
+  const v = typeof raw === "string" ? raw.trim().toUpperCase() : "";
+  return (CANDLE_TIMEFRAMES as readonly string[]).includes(v) ? (v as CandleTimeframe) : null;
+}
+
+/**
+ * F5 (Tahap 16): CSV candle tertutup satu simbol per timeframe
+ * (MDBKA_<simbol>_<TF>.csv). Belum diekspor / nama tidak aman = null.
+ */
+export function readCandleCsvTf(
+  commonDir: string,
+  symbol: string,
+  tf: CandleTimeframe,
+): { csv: string; modified: string } | null {
   if (!SAFE_SYMBOL.test(symbol) || symbol.includes("..")) return null;
-  const file = join(commonDir, `MDBKA_${symbol}_H1.csv`);
+  const file = join(commonDir, `MDBKA_${symbol}_${tf}.csv`);
   if (!existsSync(file)) return null;
   try {
     return { csv: readFileSync(file, "utf8"), modified: statSync(file).mtime.toISOString() };
@@ -100,15 +122,21 @@ export function createCandlesRoutes(
   });
 
   // G2: GET /api/candles/:symbol → { symbol, csv, modified } | 404.
+  // F5: ?tf=M15|H1|D1|W1 (tanpa tf = H1, perilaku lama).
   router.get("/:symbol", (req: Request, res: Response) => {
     const raw = req.params.symbol;
     const symbol = (Array.isArray(raw) ? (raw[0] ?? "") : raw).trim();
-    const found = readCandleCsv(commonDir, symbol);
-    if (found === null) {
-      res.status(404).json({ error: `CSV H1 ${symbol} belum ada` });
+    const tf = parseCandleTimeframe(req.query.tf);
+    if (tf === null) {
+      res.status(400).json({ error: "tf tidak dikenal (M15|H1|D1|W1)" });
       return;
     }
-    res.json({ symbol, ...found });
+    const found = readCandleCsvTf(commonDir, symbol, tf);
+    if (found === null) {
+      res.status(404).json({ error: `CSV ${tf} ${symbol} belum ada` });
+      return;
+    }
+    res.json(tf === "H1" ? { symbol, ...found } : { symbol, tf, ...found });
   });
 
   return router;

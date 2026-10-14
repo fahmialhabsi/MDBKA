@@ -34,7 +34,7 @@ import {
   type StrategySetup,
 } from "../src/calculations/decisionEngine";
 import { formatSharePercent, signalReason } from "../src/lib/signalReason";
-import { collectCandleItems, readCandleCsv } from "../server/routes/candlesRoutes";
+import { collectCandleItems, parseCandleTimeframe, readCandleCsv, readCandleCsvTf } from "../server/routes/candlesRoutes";
 import { createTradeEntryLog } from "../server/services/tradeEntryLog";
 import { getBackupStatus, runBackup } from "../server/services/dataBackup";
 import { evaluateTrades, GROUP_BEFORE_LOG, GROUP_NO_LOG } from "../server/services/tradeEvaluation";
@@ -10281,6 +10281,34 @@ test("745. E1/E2 risiko gabungan: rugi bila semua SL kena (USD + Rupiah + % equi
   assert(scanPointValueUsd("GBPUSD", "finex", null) === null && scanPointValueUsd("ZZZQQQ", "finex", FALLBACK_RATES) === null && scanPointValueUsd("ZZZ", "mifx", FALLBACK_RATES) === null, "kurs/spesifikasi tidak ada = null");
   const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
   assert(panel.includes('data-testid="scan-combined-risk"') && panel.includes("scanPointValueUsd(sym, brokerId, fxRates)"), "panel risiko gabungan di pemindai");
+});
+test("746. F5 EA AutoExportMDBKA: ekspor M15/D1/W1 tertutup per candle baru; file H1 lama tetap; tanpa order", () => {
+  const ea = readSrc("ea/AutoExportMDBKAService.mq5");
+  assert(ea.includes("return ExportSymbolCandlesTf(symbol, PERIOD_H1, \"H1\", candleCount);") && ea.includes("ExportSymbolCandles(sym, CANDLE_COUNT)"), "jalur H1 lama tetap");
+  assert(ea.includes('ExportIfNewBar(sym, PERIOD_M15, "M15", COUNT_M15)') && ea.includes('ExportIfNewBar(sym, PERIOD_D1, "D1", COUNT_D1)') && ea.includes('ExportIfNewBar(sym, PERIOD_W1, "W1", COUNT_W1)'), "tiga timeframe baru");
+  assert(ea.includes('"MDBKA_" + symbol + "_" + tfName + ".csv"') && ea.includes("CopyRates(symbol, tf, 1, candleCount, rates)"), "nama file per TF, hanya candle tertutup (mulai indeks 1)");
+  assert(ea.includes('FindIndex(sym + "|" + tfName)'), "penanda candle terakhir terpisah per TF");
+  assert(!/OrderSend|CTrade|PositionClose/.test(ea), "EA tidak mengirim order");
+  assert(ea.includes("\r\n"), "CRLF dipertahankan");
+});
+test("747. F5 server: baca CSV per timeframe (MDBKA_<simbol>_<TF>.csv); tanpa tf = H1; tf asing ditolak; belum ada = null", () => {
+  assert(parseCandleTimeframe(undefined) === "H1" && parseCandleTimeframe("d1") === "D1" && parseCandleTimeframe(" W1 ") === "W1" && parseCandleTimeframe("M15") === "M15", "tf dikenal");
+  assert(parseCandleTimeframe("H4") === null && parseCandleTimeframe(["D1"]) === null, "tf asing = null");
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "cdltf-"));
+  try {
+    nfs.writeFileSync(npath.join(dir, "MDBKA_XAUUSD_D1.csv"), "time,open,high,low,close,tick_volume\n2026.10.14 00:00,1,2,0.5,1.5,10\n");
+    nfs.writeFileSync(npath.join(dir, "MDBKA_XAUUSD_H1.csv"), "time,open,high,low,close,tick_volume\n");
+    assert(readCandleCsvTf(dir, "XAUUSD", "D1")?.csv.includes("2026.10.14 00:00") === true, "D1 terbaca");
+    assert(readCandleCsvTf(dir, "XAUUSD", "W1") === null && readCandleCsvTf(dir, "../XAUUSD", "D1") === null, "belum ada / tidak aman = null");
+    assert(readCandleCsv(dir, "XAUUSD")?.csv === readCandleCsvTf(dir, "XAUUSD", "H1")?.csv, "readCandleCsv lama = H1");
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+  const route = readSrc("server/routes/candlesRoutes.ts");
+  assert(route.includes("const tf = parseCandleTimeframe(req.query.tf);") && route.includes('res.json(tf === "H1" ? { symbol, ...found } : { symbol, tf, ...found });'), "route ?tf=");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
