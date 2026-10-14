@@ -73,6 +73,24 @@ export interface KeputusanRecord {
   readonly mengoreksi: string | null;
   /** A7-4: tiket posisi MT5 untuk jalur entry (G3); absen/null di jalur lain. */
   readonly tiket?: string | null;
+  /** K3 (Tahap 17): potret indikator gelombang 1, konteks & biaya saat keputusan (tidak memengaruhi hasil). */
+  readonly konteks?: DecisionContext;
+}
+
+/** K3 (Tahap 17): Tim 3 (indikator), Tim 6 (konteks), Tim 7 (biaya). Tidak diketahui = null. */
+export interface DecisionContext {
+  readonly adx: number | null;
+  readonly plusDi: number | null;
+  readonly minusDi: number | null;
+  readonly bbLebar: number | null;
+  readonly fractalAtas: number | null;
+  readonly fractalBawah: number | null;
+  readonly rasioVolume: number | null;
+  readonly posisiMa50: "DI_ATAS" | "DI_BAWAH" | null;
+  readonly spread: number | null;
+  /** Jam (0–23) dan hari (0=Minggu) dari jam server MT5. */
+  readonly jamServer: number | null;
+  readonly hariServer: number | null;
 }
 
 export interface BayanganRecord {

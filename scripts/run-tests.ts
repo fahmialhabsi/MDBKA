@@ -53,7 +53,7 @@ import { appendJsonlRecord, readJsonlRecords, snapshotFingerprint } from "../ser
 import { allowedOnLive, latestVersion, parseRuleBook, type RuleEntry } from "../src/lib/ruleBook";
 import { buildShadowRecord, computeResultShadow, shadowDedupKey, summarizeShown, type ShownSummary } from "../src/lib/resultShadow";
 import { handleShadowRequest } from "../server/routes/keputusanRoutes";
-import { keputusanFromScan, snapshotMaterial } from "../src/lib/decisionSnapshot";
+import { decisionContext, keputusanFromScan, snapshotMaterial } from "../src/lib/decisionSnapshot";
 import { asBayangan, condenseTicks, finishShadow, openShadows, shadowCandidate, shadowOpenKey } from "../src/lib/shadowBook";
 import { createShadowsOnce, readShadowBook, settleShadowsOnce, shadowFiles, type ShadowTickCache } from "../server/services/shadowRunner";
 import { parseCalendarCsv, readCalendarForBroker } from "../server/services/calendarReader";
@@ -10465,6 +10465,19 @@ test("755. K1/K2 rangkaian & label kartu: simbol+arah sama dalam 3 jam sejak ope
   const s5 = byPos("5");
   assert(s5 !== undefined && s5.r === null && s5.cardName === null && !s5.complete, "tanpa risiko = data tidak lengkap");
   assert(readSrc("server/services/tradeEvaluation.ts").includes('riskMoney: riskDist > 0 && move !== 0 ? round2(Math.abs(total("profit") / move) * riskDist) : null,'), "risiko uang dari History");
+});
+test("756. K3 catatan keputusan: indikator H1 terisi (dulu null) + konteks gelombang 1, posisi MA50, spread, jam & hari server; hasil keputusan tidak berubah", () => {
+  const input = { symbol: "GBPUSD", brokerId: "finex" as const, csv: scanCsv(120), quote: { timestamp: "2026.10.15 03:00:00", symbol: "GBPUSD", bid: 1.3, ask: 1.3002 }, equity: 10000, fxRates: null };
+  const row = scanSymbol(input);
+  const rec = keputusanFromScan(input, row, { keputusanId: "k-k3", jalur: "entry", waktuUtc: "2026-10-15T00:00:00Z", waktuServer: "2026.10.15 03:00:00", sidikJariSnapshot: null, tiket: "9" });
+  assert(rec.masukan.ma50 !== null && rec.masukan.rsi !== null && rec.masukan.atr !== null && rec.masukan.macd !== null, JSON.stringify(rec.masukan));
+  const k = rec.konteks;
+  assert(k !== undefined && k.adx !== null && k.bbLebar !== null && (k.posisiMa50 === "DI_ATAS" || k.posisiMa50 === "DI_BAWAH"), JSON.stringify(k));
+  assert(k !== undefined && Math.abs((k.spread ?? 0) - 0.0002) < 1e-9 && k.jamServer === 3 && k.hariServer === 4, "spread, jam 03, Kamis");
+  assert(rec.hasil.status === row.status && rec.hasil.keputusan === (row.decision ?? "TUNGGU"), "hasil = baris pemindai");
+  const kosong = decisionContext("time,open,high,low,close\n", null, null, null);
+  assert(kosong.adx === null && kosong.spread === null && kosong.jamServer === null && kosong.posisiMa50 === null && kosong.rasioVolume === null, "data kurang = null");
+  assert(JSON.stringify(snapshotMaterial(input)).includes('"csv"') && !JSON.stringify(snapshotMaterial(input)).includes("konteks"), "sidik jari snapshot tidak ikut berubah");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

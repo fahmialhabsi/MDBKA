@@ -257,7 +257,7 @@ Akibat syarat "semua posisi sebelumnya sudah aman": hanya posisi TERBARU yang ma
 
 Rugi terbesar satu rangkaian = 1R.
 
-**Definisi R rangkaian (K-5, disetujui Fahmi 13 Okt 2026):** total untung/rugi bersih semua posisi rangkaian (termasuk komisi dan swap) ÷ risiko uang open 1. Contoh: open 1 berisiko Rp20 rb dan ditutup impas, open 2 untung Rp30 rb → rangkaian +1,5R (Popeda Sagu). Rugi mendekati nol tidak bisa dijamin; yang dirancang adalah sebanyak mungkin rangkaian berakhir di titik impas.
+**Definisi R rangkaian (K-5, disetujui Fahmi 13 Okt 2026):** total untung/rugi bersih semua posisi rangkaian (termasuk komisi dan swap) ÷ risiko uang open 1. Contoh: open 1 berisiko Rp20 rb dan ditutup impas, open 2 untung Rp30 rb → rangkaian +1,5R (Kasbi Bakar; contoh dikoreksi Fahmi 15 Okt 2026, sesuai tabel label ≥ +1R). Rugi mendekati nol tidak bisa dijamin; yang dirancang adalah sebanyak mungkin rangkaian berakhir di titik impas.
 
 **B. Papan nilai (per golongan, setelah ≥ 20 rangkaian)**
 

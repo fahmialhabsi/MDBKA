@@ -6,7 +6,11 @@
  */
 import { usdIdrRate } from "../services/fxRateService";
 import type { BrokerId } from "../types/broker";
-import type { KeputusanRecord } from "./jsonlRecord";
+import { computeIndicators } from "../calculations/indicators";
+import { parseCsvCandles } from "./csvCandleParser";
+import type { DecisionContext, KeputusanRecord } from "./jsonlRecord";
+import { serverTimeMs } from "./lossStreakGuard";
+import { wave1Context } from "./indicatorsWave1";
 import { riskGroupOf } from "./riskGroup";
 import type { ScanInput, ScanRow } from "./symbolScanner";
 
@@ -65,9 +69,40 @@ function csvSummary(csv: string): { readonly count: number; readonly last: strin
   return { count: lines.length - 1, last: last === "" ? null : last };
 }
 
+const r6 = (v: number): number => Math.round(v * 1e6) / 1e6;
+
+/** K3: potret konteks dari CSV H1 + kuotasi + jam server; hanya catatan. */
+export function decisionContext(
+  csv: string,
+  quote: { readonly bid: number; readonly ask: number } | null,
+  waktuServer: string | null,
+  ma50: number | null,
+): DecisionContext {
+  const candles = parseCsvCandles(csv).candles;
+  const w = wave1Context(candles, csv);
+  const last = candles[candles.length - 1];
+  const ms = waktuServer === null ? null : serverTimeMs(waktuServer);
+  const d = ms === null ? null : new Date(ms);
+  return {
+    adx: w.adx === null ? null : r6(w.adx.adx),
+    plusDi: w.adx === null ? null : r6(w.adx.plusDi),
+    minusDi: w.adx === null ? null : r6(w.adx.minusDi),
+    bbLebar: w.bollinger === null ? null : r6(w.bollinger.widthPct),
+    fractalAtas: w.fractals.up?.price ?? null,
+    fractalBawah: w.fractals.down?.price ?? null,
+    rasioVolume: w.volumeRatio === null ? null : r6(w.volumeRatio),
+    posisiMa50: ma50 === null || last === undefined ? null : last.close >= ma50 ? "DI_ATAS" : "DI_BAWAH",
+    spread: quote === null ? null : r6(quote.ask - quote.bid),
+    jamServer: d === null ? null : d.getUTCHours(),
+    hariServer: d === null ? null : d.getUTCDay(),
+  };
+}
+
 /** Baris `keputusan` (G5) dari masukan + hasil scanSymbol. Nilai yang tidak diketahui = null. */
 export function keputusanFromScan(input: ScanInput, row: ScanRow, meta: DecisionMeta): KeputusanRecord {
   const csv = csvSummary(input.csv);
+  // K3 (Tahap 17): indikator H1 saat keputusan (dulu null) — dari CSV yang sama.
+  const ind = computeIndicators(parseCsvCandles(input.csv).candles);
   const held = row.status !== "LOLOS" && row.status !== "TUNGGU";
   const broker: BrokerId = input.brokerId;
   return {
@@ -93,11 +128,11 @@ export function keputusanFromScan(input: ScanInput, row: ScanRow, meta: Decision
       umurKuotasiDetik: null,
       candleTerakhir: csv.last,
       jumlahCandle: csv.count,
-      ma50: null,
-      rsi: null,
-      cci: null,
-      macd: null,
-      atr: null,
+      ma50: ind?.ma50 ?? null,
+      rsi: ind?.rsi ?? null,
+      cci: ind?.cci ?? null,
+      macd: ind?.macd ?? null,
+      atr: ind?.atr ?? null,
       kursUsdIdr: usdIdrRate(input.fxRates),
       tanggalKurs: null,
       equity: Number.isFinite(input.equity) ? input.equity : null,
@@ -123,5 +158,6 @@ export function keputusanFromScan(input: ScanInput, row: ScanRow, meta: Decision
     diubahManual: [],
     mengoreksi: null,
     tiket: meta.tiket,
+    konteks: decisionContext(input.csv, input.quote, meta.waktuServer, ind?.ma50 ?? null),
   };
 }
