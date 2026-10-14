@@ -343,6 +343,7 @@ import { monitorCycle } from "../src/lib/monitorCycle";
 import { alertsTabFindings } from "../src/lib/alertsTab";
 import { buildSeriesCards, labelForR } from "../src/lib/seriesCard";
 import { patternsDuring, seriesInsight, seriesLossCause } from "../src/lib/seriesInsight";
+import { buildPatternCards, d1DirectionAt, fingerprintNotes } from "../src/lib/patternCards";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
 import { evidencePace } from "../src/lib/evidencePace";
 import { collectEvidenceEvents } from "../server/services/evidenceEvents";
@@ -10494,6 +10495,30 @@ test("757. K4 Tim 4 sebab rugi rangkaian dari MFE open 1 (ambang T-AUDIT) + Tim 
   const ins = seriesInsight(card, [trade], { "7": ex(-0.06) }, () => h1);
   assert(ins.lossCause === "MELAWAN_SEJAK_MASUK" && ins.mfeR === -0.06 && ins.patterns?.length === 2, JSON.stringify(ins));
   assert(seriesInsight({ ...card, label: "Kasbi Bakar" }, [trade], undefined, () => null).lossCause === null, "sebab rugi hanya untuk Pupare Rebus");
+});
+test("758. K5 kartu pola: arah D1 dari candle D1 yang sudah tutup, sidik jari tingkat 1, catatan < 20 kartu = catatan saja; route /api/evaluation/cards + panel", () => {
+  const d1 = Array.from({ length: 70 }, (_, i) => {
+    const day = new Date(Date.UTC(2026, 6, 1) + i * 86_400_000).toISOString().slice(0, 10).replace(/-/g, ".");
+    const c = 100 + i;
+    return { time: `${day} 00:00`, open: c - 0.5, high: c + 1, low: c - 1, close: c };
+  });
+  assert(d1DirectionAt(d1, "2026.09.08 10:00:00") === "NAIK" && d1DirectionAt(d1, "2026.07.10 10:00:00") === null && d1DirectionAt(null, "x") === null, "D1 tutup sebelum hari open 1");
+  const tr = (positionId: string, symbol: string, side: "BUY" | "SELL", openTime: string, net: number) =>
+    ({ positionId, symbol, side, volume: 0.01, openTime, closeTime: openTime, net, durationMin: 10, exit: "MANUAL" as const, rMultiple: null, riskMoney: 10, group: "LOLOS" });
+  const views = buildPatternCards(
+    [tr("1", "EURUSD", "BUY", "2026.09.08 10:00:00", 12), tr("2", "EURUSD", "BUY", "2026.09.08 20:00:00", -10), tr("3", "XAUUSD", "SELL", "2026.09.08 10:00:00", 0)],
+    undefined,
+    () => null,
+    (s) => (s === "EURUSD" ? d1 : null),
+  );
+  assert(views.length === 3 && views[0]?.card.positions[0] === "2" && views[1]?.fingerprint === "LOGAM|SELL|?", JSON.stringify(views.map((v) => v.fingerprint)));
+  const notes = fingerprintNotes(views);
+  const fx = notes.find((n) => n.fingerprint === "FOREX|BUY|NAIK");
+  assert(fx !== undefined && fx.n === 2 && !fx.enough && fx.text === "Pola ini pernah 1× Kasbi Bakar, 1× Pupare Rebus (n=2 < 20: catatan saja, belum mengubah keputusan)", JSON.stringify(fx));
+  const route = readSrc("server/routes/evaluationRoutes.ts");
+  assert(route.includes('router.get("/cards"') && route.includes('buildPatternCards(a.evaluation.trades, a.excursions, candlesOf("H1"), candlesOf("D1"))') && route.includes("cards: views.slice(0, CARDS_PER_ACCOUNT)"), "route kartu");
+  const panel = readSrc("src/components/analysis/PatternCardsPanel.tsx");
+  assert(panel.includes("/api/evaluation/cards") && panel.includes('data-testid="pattern-cards"') && readSrc("src/components/analysis/TradeEvaluationPanel.tsx").includes("<PatternCardsPanel />"), "panel kartu di Evaluasi");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

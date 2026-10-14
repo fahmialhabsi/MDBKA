@@ -20,6 +20,7 @@ import {
 } from "../../lib/evaluationView";
 import { usdIdrRate, type ExchangeRates } from "../../services/fxRateService";
 import { EvidencePacePanel } from "./EvidencePacePanel";
+import { PatternCardsPanel } from "./PatternCardsPanel";
 
 /**
  * Langkah 4c-2 (Mode Aman, 8 Okt 2026) — panel "Evaluasi trade".
@@ -375,6 +376,8 @@ export function TradeEvaluationPanel({ fxRates }: Props) {
 
       {/* LB-1: laju bukti per golongan. */}
       <EvidencePacePanel />
+      {/* K5: kartu pola rangkaian + catatan sidik jari. */}
+      <PatternCardsPanel />
 
       <div className="space-y-4">
         {(accounts ?? []).map((a) => (

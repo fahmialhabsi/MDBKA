@@ -9,6 +9,10 @@ import { excursionCacheFile, readExcursionCache } from "../services/excursionCac
 import type { TradeExcursion } from "../services/tradeExcursion";
 import { parseHistoryCsv } from "../types/historyCsv";
 import { resolveCommonFilesDir } from "./marginRoutes";
+import { readCandleCsvTf, type CandleTimeframe } from "./candlesRoutes";
+import { parseCsvCandles } from "../../src/lib/csvCandleParser";
+import type { Candle } from "../../src/calculations/swingDetector";
+import { buildPatternCards, fingerprintNotes, type FingerprintNote, type PatternCardView } from "../../src/lib/patternCards";
 
 /**
  * Langkah 4c — GET /api/evaluation
@@ -121,6 +125,38 @@ export function collectAccountEvaluations(
   return out;
 }
 
+/** K5: kartu terbaru yang dikirim per akun (catatan sidik jari dihitung dari SEMUA kartu). */
+export const CARDS_PER_ACCOUNT = 30;
+
+export interface AccountCards {
+  readonly login: string;
+  readonly label: string;
+  readonly total: number;
+  readonly cards: readonly PatternCardView[];
+  readonly notes: readonly FingerprintNote[];
+}
+
+/** K5 (Tahap 17): kartu pola per akun dari History + candle H1/D1 Common\Files. */
+export function collectAccountCards(
+  commonDir: string,
+  tradesDir: string,
+  labels: Record<string, string>,
+): AccountCards[] {
+  const cache = new Map<string, readonly Candle[] | null>();
+  const candlesOf = (tf: CandleTimeframe) => (symbol: string): readonly Candle[] | null => {
+    const key = `${tf}|${symbol}`;
+    if (!cache.has(key)) {
+      const found = readCandleCsvTf(commonDir, symbol, tf);
+      cache.set(key, found === null ? null : parseCsvCandles(found.csv).candles);
+    }
+    return cache.get(key) ?? null;
+  };
+  return collectAccountEvaluations(commonDir, tradesDir, labels).map((a) => {
+    const views = buildPatternCards(a.evaluation.trades, a.excursions, candlesOf("H1"), candlesOf("D1"));
+    return { login: a.login, label: a.label, total: views.length, cards: views.slice(0, CARDS_PER_ACCOUNT), notes: fingerprintNotes(views) };
+  });
+}
+
 export function createEvaluationRoutes(
   commonDir: string = resolveCommonFilesDir(),
   tradesDir: string = join(process.cwd(), "data", "trades"),
@@ -130,6 +166,15 @@ export function createEvaluationRoutes(
     try {
       const labels = parseAccountLabels(process.env?.["ACCOUNT_LABELS"]);
       res.json({ accounts: collectAccountEvaluations(commonDir, tradesDir, labels) });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+  // K5: GET /api/evaluation/cards → { accounts: AccountCards[] }
+  router.get("/cards", (_req: Request, res: Response) => {
+    try {
+      const labels = parseAccountLabels(process.env?.["ACCOUNT_LABELS"]);
+      res.json({ accounts: collectAccountCards(commonDir, tradesDir, labels) });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
