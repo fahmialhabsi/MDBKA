@@ -335,6 +335,9 @@ import { evaluateDataQuality } from "../src/lib/dataQualityGate";
 import { readTerminalLogs, terminalDirFromFilesPath } from "../server/services/mt5JournalReader";
 import { accountsForActiveLogin, effectiveMode, isLiveEquivalent, parseTradingMode, pauseLocks } from "../src/lib/tradingMode";
 import { modeFor, requestedMode, setRequestedMode } from "../server/services/tradingModeStore";
+import { isLabComment, labAllowed, labTicket, minLotFor } from "../src/lib/labTrades";
+import { evidencePace } from "../src/lib/evidencePace";
+import { collectEvidenceEvents } from "../server/services/evidenceEvents";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
 import { convertIdrSnapshot, IdrEquitySource, parseAccountCurrency } from "../server/services/convertedEquity";
 import { getMifxSpec, MIFX_SPEC_SYMBOLS, mifxVolume } from "../src/lib/mifxSpecs";
@@ -356,6 +359,7 @@ import {
   formatRupiah,
   formatUsd,
   formatWinRate,
+  groupLabel,
   isLegacyGroup,
   applyProofHold,
   lolosByRiskGroup,
@@ -10098,6 +10102,90 @@ test("737. Tahap 13 J2: catatan entry menandai setara Live; server & pemindai me
   const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
   assert(panel.includes("const pauseLocked = lossPause.paused && pauseLocks(tradingMode.state.mode);") && panel.includes('data-testid="scan-mode"'), "pemindai: saklar + jeda tidak mengunci di Demo");
   assert(!readSrc("src/App.tsx").includes("useTradingMode"), "Hasil analisa tidak diubah (aturan mutlak 1)");
+});
+test("738. LAB-2 trade uji: hanya akun terbukti demo + mode Demo; hanya penjaga LUNAK; SL/TP asli strategi; lot minimum; komentar MDBKA-UJI", () => {
+  assert(labAllowed("demo", "DEMO") && !labAllowed("demo", "LIVE") && !labAllowed("live", "DEMO") && !labAllowed("tidak-terbukti", "DEMO"), "syarat laboratorium");
+  const d = scanSymbolDetailed({ symbol: "GBPUSD", brokerId: "finex", csv: scanCsv(81), quote: null, equity: 10000, fxRates: null });
+  assert(d.row.status === "DITAHAN_RISIKO" && d.setup !== null, "contoh tertahan risiko");
+  const t = labTicket(d.row, d.setup, minLotFor("GBPUSD", "finex"));
+  assert(t !== null && t.direction === "JUAL" && t.heldBy === "DITAHAN_RISIKO" && t.penjagaDilewati === "risiko > batas" && t.komentar === "MDBKA-UJI", JSON.stringify(t));
+  assert(t !== null && t.takeProfit < t.entry && t.entry < t.stopLoss && t.lot === 0.01 && t.rr > 0, "angka tiket");
+  assert(labTicket({ ...d.row, status: "DITAHAN_SPEK" }, d.setup, 0.01) === null, "penjaga KERAS tetap menahan");
+  assert(labTicket({ ...d.row, status: "DITAHAN_SESI" }, d.setup, 0.01) === null, "sesi tanpa detail = KERAS (aman)");
+  assert(labTicket({ ...d.row, held: false }, d.setup, 0.01) === null && labTicket(d.row, null, 0.01) === null, "tanpa tahanan/setup = bukan trade uji");
+  assert(isLabComment("mdbka-uji") && isLabComment("[MDBKA-UJI] 1") && !isLabComment("[sl 1.30]"), "pengenal komentar");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes("const labOn = labAllowed(tradingMode.state.jenisAkun, tradingMode.state.mode);") && panel.includes('data-testid="lab-trades"'), "daftar trade uji di pemindai");
+});
+test("739. LAB-3 trade ber-komentar MDBKA-UJI di History = kelompok UJI (dipisah dari bukti LOLOS)", () => {
+  const deal = (positionId: string, time: string, type: string, entry: string, price: number, profit: number, commission: number, comment = "") => ({
+    dealTicket: `${positionId}-${entry}`, positionId, orderTicket: positionId, serverTime: time,
+    symbol: "GBPUSD", type, entry, volume: 0.01, price, commission, swap: 0, profit, fee: 0,
+    comment, login: "1003997005", accountCurrency: "USD", idrAmount: null, sl: null, tp: null,
+  });
+  const entry = (ticket: string, status: string) => ({
+    ticket, broker: "mifx" as const, symbol: "GBPUSD", side: "BUY" as const, volume: 0.01, priceOpen: 1.3, sl: 1.299, tp: 0,
+    timeOpen: "", firstSeenUtc: "", preExisting: false, equity: 1000,
+    scan: { status: status as "LOLOS", direction: "BELI" as const, score: 5, costShareOfRisk: 0.12, reason: "" },
+  });
+  const ev = evaluateTrades(
+    [
+      deal("1", "2026.10.14 10:00:00", "BUY", "IN", 1.3, 0, -0.1, "MDBKA-UJI"),
+      deal("1", "2026.10.14 11:00:00", "SELL", "OUT", 1.299, -1, 0, "[sl 1.29900]"),
+      deal("2", "2026.10.14 12:00:00", "BUY", "IN", 1.3, 0, -0.1),
+      deal("2", "2026.10.14 13:00:00", "SELL", "OUT", 1.302, 2, 0, "[tp 1.30200]"),
+    ],
+    [entry("1", "DITAHAN_BIAYA"), entry("2", "LOLOS")],
+  );
+  const g = Object.fromEntries(ev.trades.map((t) => [t.positionId, t.group]));
+  assert(g["1"] === "UJI" && g["2"] === "LOLOS", JSON.stringify(g));
+  assert(ev.byGroup.UJI?.n === 1 && ev.byGroup.LOLOS?.n === 1, "statistik terpisah");
+  assert(groupLabel("UJI").includes("tidak setara Live"), groupLabel("UJI"));
+});
+test("740. LB-1 laju bukti: total, laju 4 minggu terakhir per minggu, perkiraan minggu menuju 20", () => {
+  const now = Date.parse("2026-10-15T00:00:00Z");
+  const day = 86_400_000;
+  const ev = [
+    ...Array.from({ length: 8 }, (_, i) => ({ group: "LOGAM", kind: "BAYANGAN" as const, atMs: now - i * day })),
+    ...Array.from({ length: 2 }, (_, i) => ({ group: "LOGAM", kind: "SETARA_LIVE" as const, atMs: now - 60 * day - i * day })),
+    { group: "FOREX", kind: "UJI" as const, atMs: now - 3 * day },
+    { group: "FOREX", kind: "UJI" as const, atMs: now + day },
+  ];
+  const rows = evidencePace(ev, now);
+  const logam = rows.find((r) => r.group === "LOGAM");
+  assert(logam !== undefined && logam.cells.BAYANGAN.total === 8 && logam.cells.BAYANGAN.perWeek === 2 && logam.cells.BAYANGAN.weeksTo20 === 6, JSON.stringify(logam?.cells.BAYANGAN));
+  assert(logam !== undefined && logam.cells.SETARA_LIVE.total === 2 && logam.cells.SETARA_LIVE.perWeek === 0 && logam.cells.SETARA_LIVE.weeksTo20 === null, "laju 0 = tidak bisa diperkirakan");
+  const fx = rows.find((r) => r.group === "FOREX");
+  assert(fx !== undefined && fx.cells.UJI.total === 1, "kejadian masa depan tidak dihitung");
+  const full = evidencePace(Array.from({ length: 21 }, () => ({ group: "INDEKS", kind: "UJI" as const, atMs: now })), now);
+  assert(full[0].cells.UJI.weeksTo20 === 0, "sudah ≥ 20");
+  assert(evidencePace([], now).length === 0, "kosong");
+});
+test("741. LB-1 sumber laju bukti: bayangan SELESAI + entry setara Live + trade uji; panel di Evaluasi trade", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dataDir = nfs.mkdtempSync(npath.join(os.tmpdir(), "pace-"));
+  try {
+    nfs.mkdirSync(npath.join(dataDir, "bayangan"));
+    nfs.mkdirSync(npath.join(dataDir, "keputusan"));
+    nfs.writeFileSync(npath.join(dataDir, "bayangan", "bayangan-finex-2026-10.jsonl"), [
+      '{"skema":"bayangan/1","fase":"DIBUAT","simbol":"XAUUSD","golongan":"LOGAM","waktuUtc":"2026-10-12T00:00:00Z"}',
+      '{"skema":"bayangan/1","fase":"SELESAI","simbol":"XAUUSD","golongan":"LOGAM","waktuUtc":"2026-10-13T00:00:00Z"}',
+    ].join("\n") + "\n");
+    nfs.writeFileSync(npath.join(dataDir, "keputusan", "keputusan-finex-2026-10.jsonl"), [
+      '{"skema":"keputusan/1","jalur":"entry","setaraLive":true,"simbol":"EURUSD","golongan":"FOREX","waktuUtc":"2026-10-13T01:00:00Z"}',
+      '{"skema":"keputusan/1","jalur":"entry","setaraLive":false,"simbol":"EURUSD","golongan":"FOREX","waktuUtc":"2026-10-13T02:00:00Z"}',
+      '{"skema":"keputusan/1","jalur":"hasil-shadow","setaraLive":null,"simbol":"EURUSD","golongan":"FOREX","waktuUtc":"2026-10-13T03:00:00Z"}',
+    ].join("\n") + "\n");
+    const ev = collectEvidenceEvents(dataDir, [{ symbol: "AUDJPY", closeTime: "2026.10.14 10:00:00" }]);
+    const kinds = ev.map((e) => `${e.group}:${e.kind}`).sort().join(",");
+    assert(kinds === "FOREX:SETARA_LIVE,FOREX_JPY:UJI,LOGAM:BAYANGAN", kinds);
+  } finally {
+    nfs.rmSync(dataDir, { recursive: true, force: true });
+  }
+  assert(readSrc("src/components/analysis/TradeEvaluationPanel.tsx").includes("<EvidencePacePanel />"), "panel laju bukti tampil");
+  assert(readSrc("server/index.ts").includes('app.get("/api/evidence-pace"'), "endpoint laju bukti");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

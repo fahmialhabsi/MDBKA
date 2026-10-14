@@ -3,6 +3,7 @@ import { useTradeSessions } from "../../hooks/useTradeSessions";
 import { useDataQuality } from "../../hooks/useDataQuality";
 import { useTradingMode } from "../../hooks/useTradingMode";
 import { accountsForActiveLogin, pauseLocks } from "../../lib/tradingMode";
+import { labAllowed, labTicket, minLotFor, type LabTicket } from "../../lib/labTrades";
 import { RefreshCw, ScanSearch } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
@@ -18,7 +19,9 @@ import { signalPageUrl } from "../../lib/signalPageView";
 import {
   lastCandleTimeMs,
   scanSymbol,
+  scanSymbolDetailed,
   sortScanRows,
+  type ScanInput,
   type ScanStatus,
 } from "../../lib/symbolScanner";
 import { useBrokerPositions } from "../../hooks/useBrokerPositions";
@@ -242,9 +245,8 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
     [source],
   );
   // Satu pintu analisa: dipakai tabel DAN tombol [SL] (quote baru, satpam sama).
-  const scanItem = useCallback(
-    (item: CandleItem, quote: LiveQuoteLike | null) =>
-      scanSymbol({
+  const inputFor = useCallback(
+    (item: CandleItem, quote: LiveQuoteLike | null): ScanInput => ({
         symbol: item.symbol,
         brokerId,
         csv: item.csv,
@@ -265,6 +267,24 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         dataQualityReason,
       }),
     [brokerId, equity, fxRates, reference, openPositions, pauseReason, newsEvents, nowServer, sessions, specHolds, scanAtMs, lolosStats, dataQualityReason],
+  );
+  const scanItem = useCallback(
+    (item: CandleItem, quote: LiveQuoteLike | null) => scanSymbol(inputFor(item, quote)),
+    [inputFor],
+  );
+  // LAB-2 (Opsi A): trade uji hanya di akun terbukti demo + mode Demo; Fahmi membuka sendiri di MT5.
+  const labOn = labAllowed(tradingMode.state.jenisAkun, tradingMode.state.mode);
+  const labTickets = useMemo<LabTicket[]>(
+    () =>
+      !labOn
+        ? []
+        : source
+            .map((item) => {
+              const d = scanSymbolDetailed(inputFor(item, item.quote));
+              return labTicket(d.row, d.setup, minLotFor(d.row.symbol, brokerId));
+            })
+            .filter((t): t is LabTicket => t !== null),
+    [labOn, source, inputFor, brokerId],
   );
   const rows = useMemo(
     () => sortScanRows(source.map((item) => scanItem(item, item.quote))),
@@ -384,6 +404,28 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         </span>
         {tradingMode.error !== null && <span className="text-rose-300">{tradingMode.error}</span>}
       </div>
+
+      {/* LAB-2: daftar trade uji (demo laboratorium, Opsi A — MDBKA tidak mengirim order). */}
+      {labOn && (
+        <div data-testid="lab-trades" className="mb-3 rounded-xl border border-sky-400/30 bg-sky-400/10 p-3 text-xs text-sky-100">
+          <p className="mb-1 font-semibold">
+            Trade uji demo ({labTickets.length}) — sinyal ditahan penjaga lunak, lot minimum, TIDAK setara Live.
+            Buka sendiri di MT5 dengan komentar <b>MDBKA-UJI</b>.
+          </p>
+          {labTickets.length === 0 ? (
+            <p className="text-sky-200/80">Belum ada sinyal yang ditahan penjaga lunak.</p>
+          ) : (
+            <ul className="space-y-0.5">
+              {labTickets.map((t) => (
+                <li key={`${t.symbol}|${t.direction}`}>
+                  <b>{t.symbol}</b> {t.direction} · entry {t.entry} · SL {t.stopLoss} · TP {t.takeProfit} (R:R {String(t.rr).replace(".", ",")}) · lot{" "}
+                  {t.lot === null ? "minimum broker" : String(t.lot).replace(".", ",")} · melewati: {t.penjagaDilewati} · komentar {t.komentar}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Langkah F: jeda / hitungan rugi beruntun broker ini. */}
       {lossPause.paused && !pauseLocked ? (

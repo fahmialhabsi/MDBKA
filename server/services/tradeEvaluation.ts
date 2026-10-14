@@ -15,6 +15,8 @@ export type ExitReason = "TP" | "SL" | "MANUAL";
 export type EntryGroup = string;
 export const GROUP_BEFORE_LOG = "SEBELUM_PENCATATAN";
 export const GROUP_NO_LOG = "TANPA_CATATAN";
+/** LAB-3 (13 Okt 2026): trade uji demo laboratorium (komentar MDBKA-UJI) — dipisah dari bukti Live. */
+export const GROUP_LAB = "UJI";
 
 export interface EvaluatedTrade {
   readonly positionId: string;
@@ -151,8 +153,10 @@ export function evaluateTrades(
     const sl = entry !== undefined && entry.sl > 0 ? entry.sl : null;
     const riskDist = sl === null ? 0 : side === "BUY" ? openPrice - sl : sl - openPrice;
     const move = side === "BUY" ? closePrice - openPrice : openPrice - closePrice;
-    const group =
-      entry === undefined
+    const isLab = ins.some((d) => d.comment.toUpperCase().includes("MDBKA-UJI"));
+    const group = isLab
+      ? GROUP_LAB
+      : entry === undefined
         ? GROUP_NO_LOG
         : entry.preExisting || entry.scan === null
           ? GROUP_BEFORE_LOG

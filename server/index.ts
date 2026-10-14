@@ -17,6 +17,9 @@ import { collectAccountEvaluations, parseAccountLabels } from "./routes/evaluati
 import { resolveAccountIdentity, type AccountIdentity } from "../src/lib/accountIdentity";
 import { accountsForActiveLogin, isLiveEquivalent, parseTradingMode, pauseLocks } from "../src/lib/tradingMode";
 import { modeFor, setRequestedMode } from "./services/tradingModeStore";
+import { collectEvidenceEvents } from "./services/evidenceEvents";
+import { evidencePace } from "../src/lib/evidencePace";
+import { GROUP_LAB } from "./services/tradeEvaluation";
 import { getCachedEcbRates } from "./routes/fxRoutes";
 import { resolveCommonFilesDir } from "./routes/marginRoutes";
 import { createTradeEntryLog } from "./services/tradeEntryLog";
@@ -289,6 +292,17 @@ app.post("/api/trading-mode", (req, res) => {
     return;
   }
   res.json({ broker, ...modeFor(modeDataDir, broker, identity.jenisAkun), login: identity.login, jenisAkun: identity.jenisAkun });
+});
+
+// LB-1 (13 Okt 2026): panel laju bukti — bayangan, trade uji, entry setara Live per golongan.
+app.get("/api/evidence-pace", (_req, res) => {
+  try {
+    const accounts = collectAccountEvaluations(resolveCommonFilesDir(), path.join(process.cwd(), "data", "trades"), parseAccountLabels(process.env.ACCOUNT_LABELS));
+    const lab = accounts.flatMap((a) => a.evaluation.trades.filter((t) => t.group === GROUP_LAB));
+    res.json({ rows: evidencePace(collectEvidenceEvents(path.join(process.cwd(), "data"), lab), Date.now()) });
+  } catch (e) {
+    res.status(500).json({ rows: [], error: e instanceof Error ? e.message : String(e) });
+  }
 });
 
 // Polling startup: tunggu data pertama kali tersedia
