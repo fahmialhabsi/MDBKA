@@ -342,6 +342,7 @@ import { structureBreak, trailSuggestion, TRAIL_PARAMS } from "../src/lib/trailS
 import { monitorCycle } from "../src/lib/monitorCycle";
 import { alertsTabFindings } from "../src/lib/alertsTab";
 import { buildSeriesCards, labelForR } from "../src/lib/seriesCard";
+import { patternsDuring, seriesInsight, seriesLossCause } from "../src/lib/seriesInsight";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
 import { evidencePace } from "../src/lib/evidencePace";
 import { collectEvidenceEvents } from "../server/services/evidenceEvents";
@@ -10478,6 +10479,21 @@ test("756. K3 catatan keputusan: indikator H1 terisi (dulu null) + konteks gelom
   const kosong = decisionContext("time,open,high,low,close\n", null, null, null);
   assert(kosong.adx === null && kosong.spread === null && kosong.jamServer === null && kosong.posisiMa50 === null && kosong.rasioVolume === null, "data kurang = null");
   assert(JSON.stringify(snapshotMaterial(input)).includes('"csv"') && !JSON.stringify(snapshotMaterial(input)).includes("konteks"), "sidik jari snapshot tidak ikut berubah");
+});
+test("757. K4 Tim 4 sebab rugi rangkaian dari MFE open 1 (ambang T-AUDIT) + Tim 5 pola H1 selama posisi (searah/melawan); data tidak ada = jujur", () => {
+  const ex = (mfeR: number | null, coverage: "PENUH" | "PARSIAL" | "TANPA_DATA" = "PENUH") => ({ coverage, ticks: 10, mfe: null, mae: null, mfeR, maeR: null });
+  assert(seriesLossCause(ex(0.6)) === "BERBALIK_SETELAH_0_5R" && seriesLossCause(ex(0.1)) === "MELAWAN_SEJAK_MASUK" && seriesLossCause(ex(0.4)) === "TANPA_SEBAB_PASTI", "ambang 0,5R / 0,3R");
+  assert(seriesLossCause(undefined) === "DATA_TIDAK_ADA" && seriesLossCause(ex(0.6, "TANPA_DATA")) === "DATA_TIDAK_ADA" && seriesLossCause(ex(null)) === "DATA_TIDAK_ADA", "tanpa rekaman");
+  const c = (time: string, o: number, h: number, l: number, cl: number) => ({ time, open: o, high: h, low: l, close: cl });
+  const h1 = [c("2026.10.14 06:00", 10, 10.2, 9.8, 10.1), c("2026.10.14 07:00", 10.1, 10.15, 9.5, 10.12), c("2026.10.14 08:00", 10.12, 10.6, 10.0, 10.05), c("2026.10.14 09:00", 10, 10.1, 9.9, 10)];
+  const p = patternsDuring(h1, "SELL", "2026.10.14 07:19:05", "2026.10.14 08:30:00");
+  assert(p !== null && p.length === 2 && p[0]?.withPosition === false && p[1]?.withPosition === true, JSON.stringify(p));
+  assert(patternsDuring(h1, "SELL", "2026.10.13 01:00:00", "2026.10.13 02:00:00") === null && patternsDuring(null, "BUY", "a", "b") === null, "di luar berkas H1 = null");
+  const card = { cardName: "Pupare Rebus #0001", label: "Pupare Rebus" as const, lossNote: "rugi kecil" as const, symbol: "XAGUSD", side: "SELL" as const, startTime: "2026.10.14 07:19:05", positions: ["7"], net: -6.81, riskOpen1: 17.1, r: -0.4, complete: true };
+  const trade = { positionId: "7", symbol: "XAGUSD", side: "SELL" as const, volume: 0.01, openTime: "2026.10.14 07:19:05", closeTime: "2026.10.14 08:30:00", net: -6.81, durationMin: 71, exit: "MANUAL" as const, rMultiple: -0.4, riskMoney: 17.1, group: "LOLOS" };
+  const ins = seriesInsight(card, [trade], { "7": ex(-0.06) }, () => h1);
+  assert(ins.lossCause === "MELAWAN_SEJAK_MASUK" && ins.mfeR === -0.06 && ins.patterns?.length === 2, JSON.stringify(ins));
+  assert(seriesInsight({ ...card, label: "Kasbi Bakar" }, [trade], undefined, () => null).lossCause === null, "sebab rugi hanya untuk Pupare Rebus");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
