@@ -10341,6 +10341,14 @@ test("749. T1 aba-aba struktur H1 rusak: tutup di bawah lembah (BELI) / di atas 
   const src = readSrc("src/lib/trailStop.ts");
   assert(!/fetch\(|from "react"|node:fs|Date\.now\(\)/.test(src), "modul murni");
 });
+test("750. T1 tampil di kartu posisi berjalan: candle M15+H1 per simbol (?tf=), saran geser SL & struktur rusak berlabel aturan uji", () => {
+  const hook = readSrc("src/hooks/useTrailCandles.ts");
+  assert(hook.includes("encodeURIComponent(symbol)") && hook.includes('const query = tf === "H1" ? "" : `?tf=${tf}`;') && hook.includes("window.setInterval(run, 60_000)"), "pengambil candle T1");
+  assert(hook.includes("if (!res.ok) return null;") && hook.includes("return candles.length === 0 ? null : candles;"), "belum ada = null, bukan tebakan");
+  const card = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(card.includes("const trailCandles = useTrailCandles(holding.symbol, !exited);") && card.includes("structureBreak(holding.direction, trailCandles.h1)"), "kartu memakai modul T1");
+  assert(card.includes('data-testid="holding-trail-sl"') && card.includes('data-testid="holding-structure-break"') && card.includes("aturan uji (T1)"), "tampilan berlabel uji");
+});
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

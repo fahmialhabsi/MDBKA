@@ -30,6 +30,8 @@ import { openingWarning } from "../../lib/openingGuard";
 import { useNowMs } from "../../hooks/useNowMs";
 import { serverUtcOffsetHours } from "../../lib/serverClock";
 import { useTradeSessions } from "../../hooks/useTradeSessions";
+import { useTrailCandles } from "../../hooks/useTrailCandles";
+import { structureBreak, trailSuggestion } from "../../lib/trailStop";
 
 const SIGNAL_STYLE: Record<ExitSignal, { label: string; className: string }> = {
   EXIT_TAKE_PROFIT: {
@@ -145,6 +147,21 @@ function HoldingCard({
       : null;
   const timeStop =
     exited || live === undefined ? null : checkTimeStop(holding, live.timestamp);
+  // T1 (Tahap 16): saran geser SL + aba-aba struktur H1 rusak (status UJI, saran saja).
+  const trailCandles = useTrailCandles(holding.symbol, !exited);
+  const trail =
+    exited || live === undefined
+      ? null
+      : trailSuggestion({
+          direction: holding.direction,
+          entryPrice: holding.entryPrice,
+          sl: holding.sl,
+          bid: live.bid,
+          ask: live.ask,
+          m15: trailCandles.m15,
+          h1: trailCandles.h1,
+        });
+  const broken = exited ? null : structureBreak(holding.direction, trailCandles.h1);
   const marginWarning = exited ? null : checkMarginGuard(holding, convert);
   // S4 Satpam Sesi: pasar tutup / segera tutup (jam resmi broker).
   const marketNotice = exited
@@ -337,6 +354,20 @@ function HoldingCard({
             TIME-STOP — lewat {TIME_STOP_HOURS} jam
           </p>
           <p className="mt-1 text-sm leading-6 text-amber-100">{timeStop.message}</p>
+        </div>
+      )}
+
+      {broken !== null && (
+        <div data-testid="holding-structure-break" className="mt-2 rounded-xl border border-rose-400/40 bg-rose-400/10 p-3">
+          <p className="text-sm font-bold text-rose-200">STRUKTUR RUSAK — aturan uji (T1)</p>
+          <p className="mt-1 text-sm leading-6 text-rose-100">{broken.message}</p>
+        </div>
+      )}
+
+      {trail !== null && (
+        <div data-testid="holding-trail-sl" className="mt-2 rounded-xl border border-sky-400/40 bg-sky-400/10 p-3">
+          <p className="text-sm font-bold text-sky-200">SARAN GESER SL — aturan uji (T1)</p>
+          <p className="mt-1 text-sm leading-6 text-sky-100">{trail.message}</p>
         </div>
       )}
 
