@@ -21,6 +21,8 @@ export interface StreakTrade {
 
 export interface StreakAccount {
   readonly broker: string | null;
+  /** Tahap 13 (K-4): login akun (dari /api/evaluation); absen = data lama. */
+  readonly login?: string;
   readonly evaluation: { readonly trades: readonly StreakTrade[] };
 }
 

@@ -85,6 +85,8 @@ export interface TradeEntryLogOptions {
   /** F4 (13 Okt 2026): versi spesifikasi broker saat entry; null / gagal = null. */
   readonly getSpecVersion?: () => string | null;
   /** F3 (13 Okt 2026): identitas akun terbukti (EA); gagal = login null, tidak-terbukti. */
+  /** J2 (Tahap 13): mode efektif LIVE = true (setara Live); DEMO = false; null/gagal = tidak diketahui. */
+  readonly getSetaraLive?: () => boolean | null;
   /** F2 (13 Okt 2026): alasan gerbang kualitas data; null/absen/gagal = lolos. */
   readonly getDataQualityReason?: () => string | null;
   readonly getIdentity?: () => { readonly login: string | null; readonly jenisAkun: "demo" | "live" | "tidak-terbukti" };
@@ -175,6 +177,13 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
             return id === undefined ? {} : { login: id.login, jenisAkun: id.jenisAkun };
           } catch {
             return {};
+          }
+        })(),
+        setaraLive: (() => {
+          try {
+            return opts.getSetaraLive?.() ?? null;
+          } catch {
+            return null;
           }
         })(),
         versiSpesifikasi: (() => {

@@ -333,6 +333,8 @@ import { auditCsv, buildDossiers, causeCounts, factorFindings, formatAuditSectio
 import { journalFindings, parseJournalText, terminalHealth } from "../src/lib/mt5Journal";
 import { evaluateDataQuality } from "../src/lib/dataQualityGate";
 import { readTerminalLogs, terminalDirFromFilesPath } from "../server/services/mt5JournalReader";
+import { accountsForActiveLogin, effectiveMode, isLiveEquivalent, parseTradingMode, pauseLocks } from "../src/lib/tradingMode";
+import { modeFor, requestedMode, setRequestedMode } from "../server/services/tradingModeStore";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
 import { convertIdrSnapshot, IdrEquitySource, parseAccountCurrency } from "../server/services/convertedEquity";
 import { getMifxSpec, MIFX_SPEC_SYMBOLS, mifxVolume } from "../src/lib/mifxSpecs";
@@ -10016,6 +10018,86 @@ test("733. TT-3 laporan tim Journal & Experts per jam (jam lokal log) + pembaca 
   } finally {
     nfs.rmSync(dir, { recursive: true, force: true });
   }
+});
+test("734. Tahap 13 mode A: default LIVE; DEMO hanya untuk akun terbukti demo; jeda mengunci hanya di LIVE; J2 setara Live", () => {
+  const live = effectiveMode("LIVE", "demo");
+  assert(live.mode === "LIVE" && pauseLocks(live.mode) && isLiveEquivalent(live.mode), "LIVE di akun demo = aturan Live penuh");
+  const demo = effectiveMode("DEMO", "demo");
+  assert(demo.mode === "DEMO" && !pauseLocks(demo.mode) && !isLiveEquivalent(demo.mode) && demo.alasan.includes("tidak mengunci"), demo.alasan);
+  const tolakLive = effectiveMode("DEMO", "live");
+  assert(tolakLive.mode === "LIVE" && tolakLive.alasan.includes("ditolak") && tolakLive.alasan.includes("LIVE"), tolakLive.alasan);
+  const tolakTakTerbukti = effectiveMode("DEMO", "tidak-terbukti");
+  assert(tolakTakTerbukti.mode === "LIVE" && tolakTakTerbukti.alasan.includes("belum terbukti demo"), "tanpa bukti = LIVE");
+  assert(parseTradingMode("DEMO") === "DEMO" && parseTradingMode("demo") === null && parseTradingMode(undefined) === null, "parse ketat");
+  const accts = [
+    { broker: "finex", login: "91811209", evaluation: { trades: [] } },
+    { broker: "finex", login: "61823011", evaluation: { trades: [] } },
+    { broker: "orbitraderberjangka", login: "70930952", evaluation: { trades: [] } },
+  ];
+  assert(accountsForActiveLogin(accts, "finex", "91811209").map((a) => a.login).join() === "91811209", "K-4: hanya login aktif");
+  assert(accountsForActiveLogin(accts, "finex", null).length === 2, "login tidak diketahui = semua akun broker (perilaku lama)");
+});
+test("735. Tahap 13 penyimpanan saklar mode: DEMO ditolak untuk akun live; tersimpan per broker; berkas rusak = LIVE", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "mode-"));
+  try {
+    assert(requestedMode(dir, "finex") === "LIVE", "bawaan LIVE");
+    const tolak = setRequestedMode(dir, "finex", "DEMO", "live");
+    assert(tolak !== null && tolak.includes("ditolak") && requestedMode(dir, "finex") === "LIVE", "akun live tidak bisa Demo");
+    assert(setRequestedMode(dir, "mifx", "DEMO", "demo") === null && requestedMode(dir, "mifx") === "DEMO", "akun demo bisa Demo");
+    assert(modeFor(dir, "mifx", "demo").mode === "DEMO", "efektif DEMO");
+    assert(modeFor(dir, "mifx", "live").mode === "LIVE", "login berganti ke live → otomatis LIVE walau tersimpan DEMO");
+    assert(setRequestedMode(dir, "mifx", "LIVE", "demo") === null && requestedMode(dir, "mifx") === "LIVE", "kembali LIVE");
+    nfs.writeFileSync(npath.join(dir, "mode-akun.json"), "{rusak");
+    assert(requestedMode(dir, "mifx") === "LIVE", "rusak = LIVE");
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test("736. Tahap 13 K-4: 3 rugi di akun DEMO tidak menjeda akun LIVE; mode Demo tidak mengunci jeda akun demo itu sendiri", () => {
+  const rugi = (t: string) => ({ symbol: "AUDJPY", closeTime: t, net: -0.94 });
+  const accts = [
+    { broker: "finex", login: "61823011", evaluation: { trades: [rugi("2026.10.12 10:00:00"), rugi("2026.10.12 11:00:00"), rugi("2026.10.12 12:00:00")] } },
+    { broker: "finex", login: "91811209", evaluation: { trades: [{ symbol: "GBPUSD", closeTime: "2026.10.12 09:00:00", net: 1.2 }] } },
+  ];
+  const now = "2026.10.12 13:00:00";
+  const lama = checkLossStreak(tradesForBroker(accts, "finex"), now);
+  assert(lama.paused, "perilaku lama: rugi demo ikut menjeda (yang diperbaiki)");
+  const live = checkLossStreak(tradesForBroker(accountsForActiveLogin(accts, "finex", "91811209"), "finex"), now);
+  assert(!live.paused && live.streak === 0, "akun live tidak terjeda oleh rugi demo");
+  const demo = checkLossStreak(tradesForBroker(accountsForActiveLogin(accts, "finex", "61823011"), "finex"), now);
+  assert(demo.paused && demo.streak === 3, "akun demo: jeda tetap dihitung");
+  assert(!(demo.paused && pauseLocks(effectiveMode("DEMO", "demo").mode)), "mode Demo: tidak mengunci");
+  assert(demo.paused && pauseLocks(effectiveMode("LIVE", "demo").mode), "mode Live di akun demo: tetap mengunci");
+});
+test("737. Tahap 13 J2: catatan entry menandai setara Live; server & pemindai memakai mode A; Hasil analisa tidak disentuh", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "j2-"));
+  try {
+    nfs.writeFileSync(npath.join(dir, "MDBKA_GBPUSD_H1.csv"), scanCsv(80));
+    const quotes = { getSymbols: () => ["GBPUSD"], getLatestBySymbol: () => [] };
+    const dataDir = npath.join(dir, "data");
+    const log = createTradeEntryLog({
+      file: npath.join(dataDir, "e.jsonl"), broker: "finex", commonDir: dir, quotes, getEquity: () => 10000, getFxRates: () => null,
+      decisionDataDir: dataDir, getSetaraLive: () => false, now: () => new Date("2026-10-08T06:15:00Z"),
+    });
+    log.ingest([]);
+    log.ingest([{ ticket: "7", symbol: "GBPUSD", side: "BUY", volume: 0.01, priceOpen: 1.3, sl: 1.29, tp: 1.31, timeOpen: "2026.10.08 09:15:00" }]);
+    const rec = readJsonlRecords(dataDir, "keputusan/keputusan-finex-2026-10.jsonl", "keputusan/1").records;
+    assert(rec.length === 1 && rec[0].setaraLive === false, `setaraLive: ${String(rec[0]?.setaraLive)}`);
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+  const idx = readSrc("server/index.ts");
+  assert(idx.includes("!pauseLocks(modeNow().mode) ? null : checkLossStreak(") && idx.includes("getSetaraLive: () => isLiveEquivalent(modeNow().mode),"), "server memakai mode A");
+  assert(idx.includes('app.post("/api/trading-mode"') && idx.includes("tradesForBroker(activeOnly(collectAccountEvaluations("), "endpoint mode + K-4");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes("const pauseLocked = lossPause.paused && pauseLocks(tradingMode.state.mode);") && panel.includes('data-testid="scan-mode"'), "pemindai: saklar + jeda tidak mengunci di Demo");
+  assert(!readSrc("src/App.tsx").includes("useTradingMode"), "Hasil analisa tidak diubah (aturan mutlak 1)");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

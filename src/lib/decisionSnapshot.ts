@@ -22,6 +22,8 @@ export interface DecisionMeta {
   /** F3: identitas akun terbukti (EA); absen = login null, tidak-terbukti. */
   readonly login?: string | null;
   readonly jenisAkun?: "demo" | "live" | "tidak-terbukti";
+  /** J2 (Tahap 13): entry di mode LIVE = setara Live; mode DEMO = tidak; absen = null. */
+  readonly setaraLive?: boolean | null;
 }
 
 /**
@@ -78,7 +80,7 @@ export function keputusanFromScan(input: ScanInput, row: ScanRow, meta: Decision
     broker,
     login: meta.login ?? null,
     jenisAkun: meta.jenisAkun ?? "tidak-terbukti",
-    setaraLive: null,
+    setaraLive: meta.setaraLive ?? null,
     simbol: input.symbol,
     golongan: riskGroupOf(input.symbol).id,
     versiSpesifikasi: meta.versiSpesifikasi ?? null,

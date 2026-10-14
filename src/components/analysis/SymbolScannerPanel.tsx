@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTradeSessions } from "../../hooks/useTradeSessions";
 import { useDataQuality } from "../../hooks/useDataQuality";
+import { useTradingMode } from "../../hooks/useTradingMode";
+import { accountsForActiveLogin, pauseLocks } from "../../lib/tradingMode";
 import { RefreshCw, ScanSearch } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
@@ -130,8 +132,12 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
           }),
     [positionsKey],
   );
+  // Tahap 13: saklar mode A + K-4 (jeda & bukti F5 hanya dari login aktif).
+  const tradingMode = useTradingMode(brokerId);
+  const activeLogin = tradingMode.state.login;
+  const activeAccounts = useMemo(() => accountsForActiveLogin(evalAccounts, brokerId, activeLogin), [evalAccounts, brokerId, activeLogin]);
   // F5: memo agar pemindai tidak dihitung ulang tiap render.
-  const lolosStats = useMemo(() => mergeGroupStats(evalAccounts, brokerId, "LOLOS"), [evalAccounts, brokerId]);
+  const lolosStats = useMemo(() => mergeGroupStats(activeAccounts, brokerId, "LOLOS"), [activeAccounts, brokerId]);
   const lolosView = {
     label: lolosLabel(lolosStats),
     className:
@@ -210,10 +216,12 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
     null,
   );
   const lossPause = useMemo(
-    () => checkLossStreak(tradesForBroker(evalAccounts, brokerId), nowServer),
-    [evalAccounts, brokerId, nowServer],
+    () => checkLossStreak(tradesForBroker(activeAccounts, brokerId), nowServer),
+    [activeAccounts, brokerId, nowServer],
   );
-  const pauseReason = lossPause.paused ? lossPause.reason : null;
+  // Mode Demo: jeda tetap dihitung & ditampilkan, tetapi TIDAK mengunci sinyal.
+  const pauseLocked = lossPause.paused && pauseLocks(tradingMode.state.mode);
+  const pauseReason = pauseLocked ? lossPause.reason : null;
   const newsEvents = calendar !== null && calendar.broker === brokerId ? calendar.events : null;
   const specHolds = specBook !== null && specBook.broker === brokerId ? specBook.holds : null;
   // Satpam Sesi S3: jam trading resmi broker.
@@ -357,8 +365,32 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         </p>
       )}
 
+      {/* Tahap 13: saklar mode A (Demo hanya untuk akun terbukti demo). */}
+      <div data-testid="scan-mode" className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-slate-500">Mode:</span>
+        {(["LIVE", "DEMO"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            disabled={m === "DEMO" && tradingMode.state.jenisAkun !== "demo"}
+            onClick={() => tradingMode.setMode(m)}
+            className={`rounded-full border px-3 py-1 ${tradingMode.state.mode === m ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-200" : "border-white/10 text-slate-300"} disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            {m === "LIVE" ? "Live" : "Demo"}
+          </button>
+        ))}
+        <span className="text-slate-500">
+          {tradingMode.state.login === null ? "login belum terverifikasi" : `#${tradingMode.state.login} (${tradingMode.state.jenisAkun})`} · {tradingMode.state.alasan}
+        </span>
+        {tradingMode.error !== null && <span className="text-rose-300">{tradingMode.error}</span>}
+      </div>
+
       {/* Langkah F: jeda / hitungan rugi beruntun broker ini. */}
-      {lossPause.paused ? (
+      {lossPause.paused && !pauseLocked ? (
+        <p data-testid="scan-loss-pause-demo" className="mb-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-200">
+          {lossPause.reason}. Mode Demo: TIDAK mengunci — trade sesudahnya dicatat tidak setara Live.
+        </p>
+      ) : lossPause.paused ? (
         <p
           data-testid="scan-loss-pause"
           className="mb-3 rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-200"

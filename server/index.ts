@@ -14,7 +14,9 @@ import * as path from "node:path";
 import { createApp } from "./app";
 import { checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
 import { collectAccountEvaluations, parseAccountLabels } from "./routes/evaluationRoutes";
-import { resolveAccountIdentity } from "../src/lib/accountIdentity";
+import { resolveAccountIdentity, type AccountIdentity } from "../src/lib/accountIdentity";
+import { accountsForActiveLogin, isLiveEquivalent, parseTradingMode, pauseLocks } from "../src/lib/tradingMode";
+import { modeFor, setRequestedMode } from "./services/tradingModeStore";
 import { getCachedEcbRates } from "./routes/fxRoutes";
 import { resolveCommonFilesDir } from "./routes/marginRoutes";
 import { createTradeEntryLog } from "./services/tradeEntryLog";
@@ -263,6 +265,32 @@ app.get("/api/data-quality", (req, res) => {
   res.json({ broker, ...dq.quality() });
 });
 
+// Tahap 13 (13 Okt 2026): saklar mode A per broker (data/mode-akun.json).
+const modeDataDir = path.join(process.cwd(), "data");
+const identityByBroker = new Map<string, () => AccountIdentity>();
+app.get("/api/trading-mode", (req, res) => {
+  const broker = typeof req.query.broker === "string" ? req.query.broker : "";
+  const identity = identityByBroker.get(broker)?.() ?? null;
+  const eff = modeFor(modeDataDir, broker, identity?.jenisAkun ?? "tidak-terbukti");
+  res.json({ broker, ...eff, login: identity?.login ?? null, jenisAkun: identity?.jenisAkun ?? "tidak-terbukti" });
+});
+app.post("/api/trading-mode", (req, res) => {
+  const body = (typeof req.body === "object" && req.body !== null ? req.body : {}) as { broker?: unknown; mode?: unknown };
+  const broker = typeof body.broker === "string" ? body.broker : "";
+  const mode = parseTradingMode(body.mode);
+  const identity = identityByBroker.get(broker)?.() ?? null;
+  if (identity === null || mode === null) {
+    res.status(400).json({ error: "broker/mode tidak sah (mode: LIVE | DEMO)" });
+    return;
+  }
+  const refused = setRequestedMode(modeDataDir, broker, mode, identity.jenisAkun);
+  if (refused !== null) {
+    res.status(409).json({ error: refused });
+    return;
+  }
+  res.json({ broker, ...modeFor(modeDataDir, broker, identity.jenisAkun), login: identity.login, jenisAkun: identity.jenisAkun });
+});
+
 // Polling startup: tunggu data pertama kali tersedia
 async function startServer() {
   let attempts = 0;
@@ -362,6 +390,11 @@ async function startServer() {
     dataQualityByBroker.set(src.broker, dq);
     const identityOf = () =>
       resolveAccountIdentity(equityReader?.getLatest() ?? null, parseAccountLabels(process.env.ACCOUNT_LABELS));
+    identityByBroker.set(src.broker, identityOf);
+    // Tahap 13: mode A (LIVE/DEMO) efektif = pilihan Fahmi + bukti server broker.
+    const modeNow = () => modeFor(modeDataDir, src.broker, identityOf().jenisAkun);
+    const activeOnly = <T extends { readonly broker: string | null; readonly login?: string }>(accts: readonly T[], broker: string): T[] =>
+      accountsForActiveLogin(accts, broker, identityOf().login);
     const log = createTradeEntryLog({
       file: path.join(tradesDir, `entries-${src.broker}.jsonl`),
       broker: src.broker,
@@ -371,11 +404,14 @@ async function startServer() {
       getFxRates: getCachedEcbRates,
       // Opsi 6a-2: jeda 3 rugi beruntun dari History MT5 (demo+live broker
       // ini), dinilai pada jam server entry — sama dengan pemindai di UI.
+      // Tahap 13 (K-4 + mode A): jeda hanya dari login aktif; mode Demo = tidak mengunci.
       getPauseReason: (serverTime) =>
-        checkLossStreak(
-          tradesForBroker(collectAccountEvaluations(resolveCommonFilesDir(), tradesDir, {}), src.broker),
+        !pauseLocks(modeNow().mode) ? null : checkLossStreak(
+          tradesForBroker(activeOnly(collectAccountEvaluations(resolveCommonFilesDir(), tradesDir, {}), src.broker), src.broker),
           serverTime,
         ).reason,
+      // J2: entry di mode LIVE = setara Live.
+      getSetaraLive: () => isLiveEquivalent(modeNow().mode),
       // K4c: kalender ekonomi broker yang sama (jam server); tidak ada = null.
       getNewsEvents: () => readCalendarForBroker(resolveCommonFilesDir(), src.broker)?.events ?? null,
       // S3: jam trading resmi broker yang sama; tidak ada = null.
@@ -453,8 +489,8 @@ async function startServer() {
         getEquity: () => equityReader?.getLatest()?.equity ?? null,
         getFxRates: getCachedEcbRates,
         getPauseReason: (serverTime) =>
-          checkLossStreak(
-            tradesForBroker(collectAccountEvaluations(resolveCommonFilesDir(), tradesDir, {}), src.broker),
+          !pauseLocks(modeNow().mode) ? null : checkLossStreak(
+            tradesForBroker(activeOnly(collectAccountEvaluations(resolveCommonFilesDir(), tradesDir, {}), src.broker), src.broker),
             serverTime,
           ).reason,
         getNewsEvents: () => readCalendarForBroker(resolveCommonFilesDir(), src.broker)?.events ?? null,
