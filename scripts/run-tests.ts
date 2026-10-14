@@ -341,6 +341,7 @@ import { combinedRisk } from "../src/lib/combinedRisk";
 import { structureBreak, trailSuggestion, TRAIL_PARAMS } from "../src/lib/trailStop";
 import { monitorCycle } from "../src/lib/monitorCycle";
 import { alertsTabFindings } from "../src/lib/alertsTab";
+import { buildSeriesCards, labelForR } from "../src/lib/seriesCard";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
 import { evidencePace } from "../src/lib/evidencePace";
 import { collectEvidenceEvents } from "../server/services/evidenceEvents";
@@ -10442,6 +10443,28 @@ test("754. TI-2 indikator gelombang 1: ADX & Bollinger sama dengan TA-Lib (pemba
   assert(wave1Context(cs, null).volumeRatio === null && wave1Context(cs, null).adx !== null, "potret konteks");
   const src = readSrc("src/lib/indicatorsWave1.ts");
   assert(!/fetch\(|from "react"|node:fs|Date\.now\(\)/.test(src) && !readSrc("src/lib/csvCandleParser.ts").includes("tick_volume"), "modul murni; parser tidak diubah");
+});
+test("755. K1/K2 rangkaian & label kartu: simbol+arah sama dalam 3 jam sejak open 1; R = total bersih ÷ risiko uang open 1 (K-5); 4 label; nomor per label", () => {
+  assert(labelForR(1) === "Kasbi Bakar" && labelForR(0.11) === "Popeda Sagu" && labelForR(0.1) === "Sagu Tumang" && labelForR(-0.1) === "Sagu Tumang" && labelForR(-0.11) === "Pupare Rebus", "batas label");
+  const tr = (positionId: string, symbol: string, side: "BUY" | "SELL", openTime: string, net: number, riskMoney: number | null, group = "LOLOS") =>
+    ({ positionId, symbol, side, volume: 0.01, openTime, closeTime: openTime, net, durationMin: 10, exit: "MANUAL" as const, rMultiple: null, riskMoney, group });
+  const cards = buildSeriesCards([
+    tr("1", "XAUUSD", "BUY", "2026.10.14 10:00:00", 0, 20),
+    tr("2", "XAUUSD", "BUY", "2026.10.14 11:30:00", 30, 15, "TAMBAH"),
+    tr("3", "XAUUSD", "SELL", "2026.10.14 11:40:00", -20, 20),
+    tr("4", "XAUUSD", "BUY", "2026.10.14 13:30:00", -9.5, 10),
+    tr("5", "GBPUSD", "BUY", "2026.10.14 09:00:00", 1, null, "TANPA_CATATAN"),
+  ]);
+  const byPos = (id: string) => cards.find((c) => c.positions.includes(id));
+  const s1 = byPos("1");
+  assert(s1 !== undefined && s1.positions.join() === "1,2" && s1.r === 1.5 && s1.cardName === "Kasbi Bakar #0001" && s1.complete, JSON.stringify(s1));
+  const s3 = byPos("3");
+  assert(s3 !== undefined && s3.positions.length === 1 && s3.label === "Pupare Rebus" && s3.lossNote === "rugi penuh" && s3.cardName === "Pupare Rebus #0001", JSON.stringify(s3));
+  const s4 = byPos("4");
+  assert(s4 !== undefined && s4.positions.join() === "4" && s4.lossNote === "rugi penuh" && s4.cardName === "Pupare Rebus #0002", "lewat 3 jam = rangkaian baru");
+  const s5 = byPos("5");
+  assert(s5 !== undefined && s5.r === null && s5.cardName === null && !s5.complete, "tanpa risiko = data tidak lengkap");
+  assert(readSrc("server/services/tradeEvaluation.ts").includes('riskMoney: riskDist > 0 && move !== 0 ? round2(Math.abs(total("profit") / move) * riskDist) : null,'), "risiko uang dari History");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

@@ -38,6 +38,11 @@ export interface EvaluatedTrade {
   readonly exit: ExitReason;
   readonly sl: number | null;
   readonly rMultiple: number | null;
+  /**
+   * R1 (Tahap 17): risiko uang posisi (mata uang akun) = jarak SL × uang per
+   * satuan harga (profit kotor ÷ gerak harga). Tanpa SL / gerak 0 = null.
+   */
+  readonly riskMoney?: number | null;
   readonly group: EntryGroup;
 }
 
@@ -183,6 +188,7 @@ export function evaluateTrades(
       exit: exitReason(last.comment),
       sl,
       rMultiple: riskDist > 0 ? Math.round((move / riskDist) * 100) / 100 : null,
+      riskMoney: riskDist > 0 && move !== 0 ? round2(Math.abs(total("profit") / move) * riskDist) : null,
       group,
     });
   }

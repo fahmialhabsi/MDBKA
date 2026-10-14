@@ -38,6 +38,8 @@ export interface EvalTrade {
   readonly durationMin: number | null;
   readonly exit: "TP" | "SL" | "MANUAL";
   readonly rMultiple: number | null;
+  /** R1 (Tahap 17): risiko uang posisi; server lama tidak mengirim. */
+  readonly riskMoney?: number | null;
   readonly group: string;
 }
 
