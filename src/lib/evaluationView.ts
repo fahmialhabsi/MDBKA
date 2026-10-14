@@ -76,6 +76,7 @@ const GROUP_LABELS: Readonly<Record<string, string>> = {
   SEBELUM_PENCATATAN: "Sudah terbuka saat pencatatan dimulai",
   LOLOS: "Mode Aman: lolos",
   UJI: "Trade uji demo laboratorium (MDBKA-UJI, tidak setara Live)",
+  TAMBAH: "Masuk lagi di simbol sama (demo, posisi pertama aman)",
   DITAHAN_BIAYA: "Entry saat ditahan biaya",
   DITAHAN_RISIKO: "Entry saat ditahan risiko",
   DITAHAN_KORELASI: "Entry saat taruhan ganda",

@@ -8,7 +8,8 @@ import { usdIdrRate, type ExchangeRates } from "../services/fxRateService";
 import type { AnalysisResult, BrokerSettings, MarketData } from "../types/analysis";
 import type { BrokerId } from "../types/broker";
 import { canonicalSymbolForBroker } from "./brokerSymbols";
-import { findDoubleBet, type OpenPositionLike } from "./correlationGuard";
+import { findDoubleBet } from "./correlationGuard";
+import { addOnDecision, type AddOnPosition } from "./addOnRule";
 import { findNewsHold, type NewsEventLike } from "./newsGuard";
 import { findSessionHold, type TradeSession } from "./sessionGuard";
 import { parseCsvCandles } from "./csvCandleParser";
@@ -21,6 +22,7 @@ import { getStrategy, type StrategyId } from "./strategyRegistry";
 import { tickSizeForSymbol } from "./tickSize";
 import { buildBlockedReasons } from "./validationView";
 import { withUsdPointValue } from "./usdPointValue";
+import { getInstrumentSpec32 } from "./instrumentSpecs32";
 
 /**
  * Langkah 3b (Mode Aman, 8 Okt 2026) — pemindai satu simbol.
@@ -60,7 +62,12 @@ export interface ScanInput {
    */
   readonly referenceCandleMs?: number | null;
   /** Langkah D: posisi terbuka broker ini; sinyal searah → DITAHAN_KORELASI. */
-  readonly openPositions?: readonly OpenPositionLike[];
+  readonly openPositions?: readonly AddOnPosition[];
+  /**
+   * T2 (13 Okt 2026): izinkan masuk lagi di simbol SAMA (akun terbukti demo +
+   * mode Demo). absen/false = perilaku lama (taruhan ganda).
+   */
+  readonly addOnAllowed?: boolean;
   /** Langkah F: alasan jeda 3 rugi beruntun (null = tidak jeda). */
   readonly pauseReason?: string | null;
   /**
@@ -119,6 +126,8 @@ export interface ScanRow {
    * status lain) — bahan "modal yang dibutuhkan" di rapor uji data lama.
    */
   readonly riskHold?: ScanRiskHold;
+  /** T2: true = LOLOS sebagai "masuk lagi" di simbol sama (kelompok bukti TAMBAH, demo). */
+  readonly addOn?: boolean;
 }
 
 export interface ScanRiskHold {
@@ -160,6 +169,23 @@ function dataRow(symbol: string, reason: string, candles: number): ScanRow {
     symbol, status: "DATA", decision: null, direction: null, held: false,
     score: null, reason, costShareOfRisk: null, candles,
   };
+}
+
+/** T2 (Tahap 15): awalan alasan untuk sinyal masuk lagi (kelompok TAMBAH). */
+export const ADD_ON_REASON_PREFIX = "Masuk lagi (TAMBAH, posisi pertama aman): ";
+
+/**
+ * E1 (Tahap 15): nilai poin USD per lot untuk simbol broker — sumber sama
+ * dengan pemindai (preset broker + konversi mata uang kuotasi). Kurs belum
+ * ada atau preset tidak dikenal (nilai 0) = null, bukan angka karangan.
+ */
+export function scanPointValueUsd(symbol: string, brokerId: BrokerId, fxRates: ExchangeRates | null): number | null {
+  if (fxRates === null) return null;
+  const sym = canonicalSymbolForBroker(symbol, brokerId);
+  // Finex: simbol di luar spec32 memakai nilai bawaan preset (bukan spesifikasi) → null.
+  if (brokerId === "finex" && getInstrumentSpec32(sym)?.broker !== "finex") return null;
+  const pv = withUsdPointValue(applyBrokerPreset({ ...ZERO_BROKER }, sym, brokerId), sym, brokerId, fxRates).pointValue;
+  return Number.isFinite(pv) && pv > 0 ? pv : null;
 }
 
 /** Selisih minimum (jam) terhadap candle terbaru broker agar dianggap basi. */
@@ -276,6 +302,8 @@ function scanCore(input: ScanInput, sink: { setup: StrategySetup | null }): Scan
   const setup = getStrategy(input.strategy).propose({ market, broker, candles: parsed.candles });
   sink.setup = setup;
   const result = applyRiskGates(market, broker, setup);
+  // T2: sinyal ini "masuk lagi" di simbol sama (kelompok bukti TAMBAH)?
+  let addOnHit = false;
   const status: ScanStatus =
     result.heldBy === "biaya"
       ? "DITAHAN_BIAYA"
@@ -407,7 +435,14 @@ function scanCore(input: ScanInput, sink: { setup: StrategySetup | null }): Scan
     (result.decision === "BELI" || result.decision === "JUAL") &&
     input.openPositions !== undefined
   ) {
-    const dobel = findDoubleBet(symbol, result.decision, input.openPositions);
+    const tambah = addOnDecision(symbol, result.decision, input.openPositions, input.addOnAllowed === true);
+    const dobel =
+      tambah.holdReason !== null
+        ? { reason: tambah.holdReason }
+        : tambah.addOn
+          ? findDoubleBet(symbol, result.decision, tambah.positionsForCorrelation)
+          : findDoubleBet(symbol, result.decision, input.openPositions);
+    if (tambah.addOn && dobel === null) addOnHit = true;
     if (dobel !== null) {
       return {
         symbol,
@@ -450,6 +485,7 @@ function scanCore(input: ScanInput, sink: { setup: StrategySetup | null }): Scan
     costShareOfRisk: result.costShareOfRisk ?? null,
     candles: count,
     plan,
+    ...(addOnHit ? { addOn: true } : {}),
     ...(status === "DITAHAN_RISIKO" && result.riskAtMinLot !== null
       ? {
           riskHold: {
@@ -461,7 +497,10 @@ function scanCore(input: ScanInput, sink: { setup: StrategySetup | null }): Scan
       : {}),
   };
   // F4: teks Alasan memuat bukti History MT5 yang sama dengan badge status.
-  return input.proof === undefined ? row : { ...row, reason: signalReason(result, input.proof) };
+  // T2: masuk lagi diberi awalan agar terbaca beda dari entry pertama.
+  const reasonText = input.proof === undefined ? row.reason : signalReason(result, input.proof);
+  if (!addOnHit && input.proof === undefined) return row;
+  return { ...row, reason: addOnHit ? `${ADD_ON_REASON_PREFIX}${reasonText}` : reasonText };
 }
 
 const STATUS_ORDER: Record<ScanStatus, number> = {

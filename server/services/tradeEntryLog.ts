@@ -36,6 +36,8 @@ export interface EntryScan {
   readonly score: number | null;
   readonly costShareOfRisk: number | null;
   readonly reason: string;
+  /** T2: entry ini "masuk lagi" di simbol sama (kelompok bukti TAMBAH). */
+  readonly addOn?: boolean;
 }
 
 export interface TradeEntryRecord {
@@ -85,6 +87,8 @@ export interface TradeEntryLogOptions {
   /** F4 (13 Okt 2026): versi spesifikasi broker saat entry; null / gagal = null. */
   readonly getSpecVersion?: () => string | null;
   /** F3 (13 Okt 2026): identitas akun terbukti (EA); gagal = login null, tidak-terbukti. */
+  /** T2 (Tahap 15): izinkan masuk lagi simbol sama (mode efektif DEMO); gagal = tidak. */
+  readonly getAddOnAllowed?: () => boolean;
   /** J2 (Tahap 13): mode efektif LIVE = true (setara Live); DEMO = false; null/gagal = tidak diketahui. */
   readonly getSetaraLive?: () => boolean | null;
   /** F2 (13 Okt 2026): alasan gerbang kualitas data; null/absen/gagal = lolos. */
@@ -203,7 +207,7 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
   const scanFor = (
     symbol: string,
     equity: number | null,
-    others: readonly { symbol: string; side: string }[],
+    others: readonly { symbol: string; side: string; priceOpen?: number; sl?: number }[],
     timeOpen: string,
     ticket: string,
   ): EntryScan => {
@@ -243,6 +247,13 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       specHolds: specHolds(),
       // O2b: pembukaan bursa pada jam nyata posisi pertama terlihat (≈ jam entry).
       openingNowMs: now().getTime(),
+      addOnAllowed: (() => {
+        try {
+          return opts.getAddOnAllowed?.() === true;
+        } catch {
+          return false;
+        }
+      })(),
       dataQualityReason: (() => {
         try {
           return opts.getDataQualityReason?.() ?? null;
@@ -259,6 +270,7 @@ export function createTradeEntryLog(opts: TradeEntryLogOptions): TradeEntryLog {
       score: row.score,
       costShareOfRisk: row.costShareOfRisk,
       reason: row.reason,
+      ...(row.addOn === true ? { addOn: true } : {}),
     };
   };
 

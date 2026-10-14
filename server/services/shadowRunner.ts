@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
-import type { OpenPositionLike } from "../../src/lib/correlationGuard";
+import type { AddOnPosition } from "../../src/lib/addOnRule";
 import { jsonlRelativePath, type BayanganRecord } from "../../src/lib/jsonlRecord";
 import type { NewsEventLike } from "../../src/lib/newsGuard";
 import type { TradeSession } from "../../src/lib/sessionGuard";
@@ -32,11 +32,13 @@ export interface ShadowSource {
   readonly getNewsEvents?: () => readonly NewsEventLike[] | null;
   readonly getSessions?: () => readonly TradeSession[] | null;
   readonly getSpecHolds?: () => ReadonlyMap<string, string> | null;
-  readonly getOpenPositions?: () => readonly OpenPositionLike[];
+  readonly getOpenPositions?: () => readonly AddOnPosition[];
   /** F3: login terbukti (EA); absen/gagal = null. */
   readonly getLogin?: () => string | null;
   /** F2: alasan gerbang kualitas data; teks = pemindai DATA (tidak ada bayangan). */
   readonly getDataQualityReason?: () => string | null;
+  /** T2: izinkan masuk lagi simbol sama (mode efektif DEMO). */
+  readonly getAddOnAllowed?: () => boolean;
 }
 
 const DAY_MS = 86_400_000;
@@ -125,6 +127,7 @@ export function createShadowsOnce(
         specHolds,
         openingNowMs: now.getTime(),
         dataQualityReason,
+        addOnAllowed: src.getAddOnAllowed === undefined ? false : safe(src.getAddOnAllowed, false),
       });
     } catch {
       continue;

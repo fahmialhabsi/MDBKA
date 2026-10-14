@@ -4,6 +4,7 @@ import { useDataQuality } from "../../hooks/useDataQuality";
 import { useTradingMode } from "../../hooks/useTradingMode";
 import { accountsForActiveLogin, pauseLocks } from "../../lib/tradingMode";
 import { labAllowed, labTicket, minLotFor, type LabTicket } from "../../lib/labTrades";
+import { combinedRisk } from "../../lib/combinedRisk";
 import { RefreshCw, ScanSearch } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
@@ -19,6 +20,7 @@ import { signalPageUrl } from "../../lib/signalPageView";
 import {
   lastCandleTimeMs,
   scanSymbol,
+  scanPointValueUsd,
   scanSymbolDetailed,
   sortScanRows,
   type ScanInput,
@@ -29,7 +31,7 @@ import { ScanCopyButtons } from "./ScanCopyButtons";
 import { specHoldMap } from "../../lib/specCompare";
 import { canonicalSymbolForBroker } from "../../lib/brokerSymbols";
 import { checkLossStreak, tradesForBroker } from "../../lib/lossStreakGuard";
-import type { ExchangeRates } from "../../services/fxRateService";
+import { usdIdrRate, type ExchangeRates } from "../../services/fxRateService";
 import type { BrokerId } from "../../types/broker";
 
 /**
@@ -121,8 +123,9 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
   }, []);
   // Langkah D: posisi terbuka broker aktif → blokir sinyal searah.
   const { positions } = useBrokerPositions(brokerId);
+  // T2 (Tahap 15): kunci memuat harga buka + SL (syarat "posisi pertama aman").
   const positionsKey = positions
-    .map((p) => `${p.symbol}:${p.side}`)
+    .map((p) => `${p.symbol}:${p.side}:${p.priceOpen}:${p.sl}`)
     .sort()
     .join(",");
   const openPositions = useMemo(
@@ -130,10 +133,27 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
       positionsKey === ""
         ? []
         : positionsKey.split(",").map((part) => {
-            const i = part.lastIndexOf(":");
-            return { symbol: part.slice(0, i), side: part.slice(i + 1) };
+            const cells = part.split(":");
+            const n = cells.length;
+            return {
+              symbol: cells.slice(0, n - 3).join(":"),
+              side: cells[n - 3] ?? "",
+              priceOpen: Number(cells[n - 2]),
+              sl: Number(cells[n - 1]),
+            };
           }),
     [positionsKey],
+  );
+  // E1/E2 (Tahap 15): rugi gabungan bila semua SL posisi terbuka kena.
+  const risk = useMemo(
+    () =>
+      combinedRisk(
+        positions,
+        (sym) => scanPointValueUsd(sym, brokerId, fxRates),
+        equity > 0 ? equity : null,
+        usdIdrRate(fxRates),
+      ),
+    [positions, brokerId, fxRates, equity],
   );
   // Tahap 13: saklar mode A + K-4 (jeda & bukti F5 hanya dari login aktif).
   const tradingMode = useTradingMode(brokerId);
@@ -255,6 +275,8 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         fxRates,
         referenceCandleMs: reference,
         openPositions,
+        // T2: masuk lagi simbol sama hanya di mode efektif Demo.
+        addOnAllowed: tradingMode.state.mode === "DEMO",
         pauseReason,
         // K4b: jam server terbaru broker (quote simbol tutup bisa basi).
         newsEvents,
@@ -266,7 +288,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
         proof: lolosStats,
         dataQualityReason,
       }),
-    [brokerId, equity, fxRates, reference, openPositions, pauseReason, newsEvents, nowServer, sessions, specHolds, scanAtMs, lolosStats, dataQualityReason],
+    [brokerId, equity, fxRates, reference, openPositions, tradingMode.state.mode, pauseReason, newsEvents, nowServer, sessions, specHolds, scanAtMs, lolosStats, dataQualityReason],
   );
   const scanItem = useCallback(
     (item: CandleItem, quote: LiveQuoteLike | null) => scanSymbol(inputFor(item, quote)),
@@ -383,6 +405,18 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
           Belum ada CSV candle untuk broker ini. Pastikan service AutoExportMDBKA
           berjalan dan simbol tampil di Market Watch.
         </p>
+      )}
+
+      {/* E2 (Tahap 15): risiko gabungan akun aktif (komisi tidak termasuk). */}
+      {risk.positions > 0 && (
+        <div data-testid="scan-combined-risk" className="mb-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-100">
+          Risiko gabungan {risk.positions} posisi terbuka: bila semua SL kena rugi ${risk.lossAllSlUsd.toFixed(2)}
+          {risk.lossAllSlIdr !== null && ` (≈Rp${risk.lossAllSlIdr.toLocaleString("id-ID")})`}
+          {risk.shareOfEquity !== null && ` = ${formatSharePercent(risk.shareOfEquity)}% equity`}
+          {risk.lockedSl > 0 && ` · ${risk.lockedSl} posisi SL sudah di titik impas`}
+          {risk.withoutSl.length > 0 && <span className="text-rose-300"> · TANPA SL (rugi tak terbatas): {risk.withoutSl.join(", ")}</span>}
+          {risk.notCounted.length > 0 && ` · belum terhitung (kurs/preset tidak ada): ${risk.notCounted.join(", ")}`}
+        </div>
       )}
 
       {/* Tahap 13: saklar mode A (Demo hanya untuk akun terbukti demo). */}

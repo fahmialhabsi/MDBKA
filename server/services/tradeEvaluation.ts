@@ -17,6 +17,8 @@ export const GROUP_BEFORE_LOG = "SEBELUM_PENCATATAN";
 export const GROUP_NO_LOG = "TANPA_CATATAN";
 /** LAB-3 (13 Okt 2026): trade uji demo laboratorium (komentar MDBKA-UJI) — dipisah dari bukti Live. */
 export const GROUP_LAB = "UJI";
+/** T2 (Tahap 15): masuk lagi di simbol sama — kelompok bukti tersendiri. */
+export const GROUP_ADD_ON = "TAMBAH";
 
 export interface EvaluatedTrade {
   readonly positionId: string;
@@ -160,7 +162,9 @@ export function evaluateTrades(
         ? GROUP_NO_LOG
         : entry.preExisting || entry.scan === null
           ? GROUP_BEFORE_LOG
-          : entry.scan.status;
+          : entry.scan.addOn === true
+            ? GROUP_ADD_ON
+            : entry.scan.status;
     trades.push({
       positionId,
       symbol: first.symbol,

@@ -44,7 +44,7 @@ import {
   excursionsForLogin,
   parseAccountLabels,
 } from "../server/routes/evaluationRoutes";
-import { lastCandleTimeMs, scanSymbol, scanSymbolDetailed, sortScanRows, type ScanRow, type ScanStatus } from "../src/lib/symbolScanner";
+import { ADD_ON_REASON_PREFIX, lastCandleTimeMs, scanPointValueUsd, scanSymbol, scanSymbolDetailed, sortScanRows, type ScanRow, type ScanStatus } from "../src/lib/symbolScanner";
 import { classifyScanStatus, LAB_HARD_STATUSES, LAB_SOFT_STATUSES, type GuardClass } from "../src/lib/guardClass";
 import { evaluateShadowTrade, validateShadowInput, type ShadowTick, type ShadowTradeInput } from "../src/lib/shadowTrade";
 import { canTransition, CAUSE_ROUTES, routeFor, type LossCause, type RecommendationStatus } from "../src/lib/lossLesson";
@@ -336,6 +336,8 @@ import { readTerminalLogs, terminalDirFromFilesPath } from "../server/services/m
 import { accountsForActiveLogin, effectiveMode, isLiveEquivalent, parseTradingMode, pauseLocks } from "../src/lib/tradingMode";
 import { modeFor, requestedMode, setRequestedMode } from "../server/services/tradingModeStore";
 import { isLabComment, labAllowed, labTicket, minLotFor } from "../src/lib/labTrades";
+import { addOnDecision, isBreakevenSafe, MAX_POSITIONS_PER_SYMBOL } from "../src/lib/addOnRule";
+import { combinedRisk } from "../src/lib/combinedRisk";
 import { evidencePace } from "../src/lib/evidencePace";
 import { collectEvidenceEvents } from "../server/services/evidenceEvents";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
@@ -10186,6 +10188,99 @@ test("741. LB-1 sumber laju bukti: bayangan SELESAI + entry setara Live + trade 
   }
   assert(readSrc("src/components/analysis/TradeEvaluationPanel.tsx").includes("<EvidencePacePanel />"), "panel laju bukti tampil");
   assert(readSrc("server/index.ts").includes('app.get("/api/evidence-pace"'), "endpoint laju bukti");
+});
+test("742. T2 masuk lagi simbol sama: hanya bila diizinkan, posisi pertama SL di titik impas, maks 2 posisi; simbol lain tetap dinilai korelasi", () => {
+  const aman = { symbol: "GBPUSD", side: "BUY", priceOpen: 1.3, sl: 1.3 };
+  const belum = { symbol: "GBPUSD", side: "BUY", priceOpen: 1.3, sl: 1.299 };
+  assert(isBreakevenSafe(aman) && !isBreakevenSafe(belum) && isBreakevenSafe({ symbol: "X", side: "SELL", priceOpen: 1.3, sl: 1.29 }), "impas BELI/JUAL");
+  assert(!isBreakevenSafe({ symbol: "X", side: "SELL", priceOpen: 1.3, sl: 0 }) && !isBreakevenSafe({ symbol: "X", side: "BUY" }), "tanpa SL / data = tidak aman");
+  const live = addOnDecision("GBPUSD", "BELI", [aman], false);
+  assert(!live.addOn && live.holdReason === null && live.positionsForCorrelation.length === 1, "Live = perilaku lama (penjaga korelasi)");
+  const ok = addOnDecision("GBPUSD", "BELI", [aman, { symbol: "EURUSD", side: "BUY" }], true);
+  assert(ok.addOn && ok.holdReason === null && ok.positionsForCorrelation.length === 1 && ok.positionsForCorrelation[0]?.symbol === "EURUSD", JSON.stringify(ok));
+  const blm = addOnDecision("GBPUSD", "BELI", [belum], true);
+  assert(!blm.addOn && blm.holdReason !== null && blm.holdReason.includes("belum aman"), String(blm.holdReason));
+  const penuh = addOnDecision("GBPUSD", "BELI", [aman, aman], true);
+  assert(MAX_POSITIONS_PER_SYMBOL === 2 && !penuh.addOn && penuh.holdReason !== null && penuh.holdReason.includes("maks 2"), String(penuh.holdReason));
+  const lawan = addOnDecision("GBPUSD", "JUAL", [aman], true);
+  assert(!lawan.addOn && lawan.holdReason === null, "arah berlawanan bukan masuk lagi");
+});
+test("743. T2 pemindai: sinyal LOLOS + posisi pertama aman + mode Demo = LOLOS bertanda TAMBAH; Live/belum aman = DITAHAN_KORELASI", () => {
+  const rates = { ...FALLBACK_RATES, IDR: 17000 * FALLBACK_RATES.USD };
+  const gelombang = (i: number) => 1.3 + 0.004 * Math.sin(i / 40) + 0.0006 * Math.sin(i / 3);
+  const lines = btCsv(700, gelombang).split("\n");
+  let lolos: { csv: string; row: ScanRow } | null = null;
+  for (let end = 260; end < lines.length && lolos === null; end++) {
+    const c = [lines[0], ...lines.slice(end - 200, end)].join("\n");
+    const row = scanSymbol({ symbol: "GBPUSD", brokerId: "finex", csv: c, quote: null, equity: 10000, fxRates: rates });
+    if (row.status === "LOLOS") lolos = { csv: c, row };
+  }
+  if (lolos === null) throw new Error("data uji harus memuat satu sinyal LOLOS");
+  const side = lolos.row.decision === "BELI" ? "BUY" : "SELL";
+  const base = { symbol: "GBPUSD", brokerId: "finex" as const, csv: lolos.csv, quote: null, equity: 10000, fxRates: rates };
+  const aman = [{ symbol: "GBPUSD", side, priceOpen: 1.3, sl: side === "BUY" ? 1.301 : 1.299 }];
+  const belum = [{ symbol: "GBPUSD", side, priceOpen: 1.3, sl: side === "BUY" ? 1.299 : 1.301 }];
+  const demo = scanSymbol({ ...base, openPositions: aman, addOnAllowed: true });
+  assert(demo.status === "LOLOS" && demo.addOn === true && demo.reason.startsWith(ADD_ON_REASON_PREFIX) && demo.plan !== null, JSON.stringify(demo));
+  const liveRow = scanSymbol({ ...base, openPositions: aman });
+  assert(liveRow.status === "DITAHAN_KORELASI" && liveRow.addOn === undefined, "Live tetap taruhan ganda");
+  const blm = scanSymbol({ ...base, openPositions: belum, addOnAllowed: true });
+  assert(blm.status === "DITAHAN_KORELASI" && blm.reason.includes("belum aman"), blm.reason);
+  assert(JSON.stringify(scanSymbol({ ...base, openPositions: [], addOnAllowed: true })) === JSON.stringify(lolos.row), "tanpa posisi = identik perilaku lama");
+});
+test("744. T2 catatan entry & evaluasi: entry bertanda addOn = kelompok TAMBAH (dipisah dari bukti LOLOS)", () => {
+  const deal = (positionId: string, time: string, type: string, entry: string, price: number, profit: number) => ({
+    dealTicket: `${positionId}-${entry}`, positionId, orderTicket: positionId, serverTime: time,
+    symbol: "GBPUSD", type, entry, volume: 0.01, price, commission: 0, swap: 0, profit, fee: 0,
+    comment: "", login: "1003997005", accountCurrency: "USD", idrAmount: null, sl: null, tp: null,
+  });
+  const entry = (ticket: string, addOn: boolean) => ({
+    ticket, broker: "mifx" as const, symbol: "GBPUSD", side: "BUY" as const, volume: 0.01, priceOpen: 1.3, sl: 1.299, tp: 0,
+    timeOpen: "", firstSeenUtc: "", preExisting: false, equity: 1000,
+    scan: { status: "LOLOS" as const, direction: "BELI" as const, score: 5, costShareOfRisk: 0.12, reason: "", ...(addOn ? { addOn: true } : {}) },
+  });
+  const ev = evaluateTrades(
+    [
+      deal("1", "2026.10.14 10:00:00", "BUY", "IN", 1.3, 0),
+      deal("1", "2026.10.14 11:00:00", "SELL", "OUT", 1.302, 2),
+      deal("2", "2026.10.14 10:30:00", "BUY", "IN", 1.301, 0),
+      deal("2", "2026.10.14 11:00:00", "SELL", "OUT", 1.302, 1),
+    ],
+    [entry("1", false), entry("2", true)],
+  );
+  const g = Object.fromEntries(ev.trades.map((t) => [t.positionId, t.group]));
+  assert(g["1"] === "LOLOS" && g["2"] === "TAMBAH", JSON.stringify(g));
+  assert(ev.byGroup.LOLOS?.n === 1 && ev.byGroup.TAMBAH?.n === 1, "statistik terpisah");
+  assert(groupLabel("TAMBAH").length > 0 && groupLabel("TAMBAH") !== "TAMBAH", groupLabel("TAMBAH"));
+  const log = readSrc("server/services/tradeEntryLog.ts");
+  assert(log.includes("opts.getAddOnAllowed?.() === true") && log.includes("...(row.addOn === true ? { addOn: true } : {}),"), "catatan entry belum membawa tanda TAMBAH");
+  const idx = readSrc("server/index.ts");
+  assert((idx.match(/getAddOnAllowed: \(\) => modeNow\(\)\.mode === "DEMO",/g) ?? []).length === 2 && idx.includes("priceOpen: p.priceOpen, sl: p.sl"), "server: entry + bayangan memakai mode efektif Demo");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes('addOnAllowed: tradingMode.state.mode === "DEMO",') && panel.includes("${p.priceOpen}:${p.sl}"), "pemindai UI belum memakai syarat masuk lagi");
+});
+test("745. E1/E2 risiko gabungan: rugi bila semua SL kena (USD + Rupiah + % equity); tanpa SL & nilai poin tak diketahui dipisah, bukan angka karangan", () => {
+  const pv = (sym: string): number | null => (sym === "GBPUSD" ? 100000 : sym === "XAUUSD" ? 100 : null);
+  const r = combinedRisk(
+    [
+      { ticket: "1", symbol: "GBPUSD", side: "BUY", volume: 0.1, priceOpen: 1.3, sl: 1.299 },
+      { ticket: "2", symbol: "XAUUSD", side: "SELL", volume: 0.01, priceOpen: 2400, sl: 2410 },
+      { ticket: "3", symbol: "GBPUSD", side: "BUY", volume: 0.1, priceOpen: 1.3, sl: 1.3005 },
+      { ticket: "4", symbol: "EURUSD", side: "BUY", volume: 0.1, priceOpen: 1.1, sl: 0 },
+      { ticket: "5", symbol: "ZZZ", side: "BUY", volume: 1, priceOpen: 10, sl: 9 },
+    ],
+    pv,
+    1000,
+    17000,
+  );
+  assert(Math.abs(r.lossAllSlUsd - 20) < 1e-9 && r.lossAllSlIdr === 340000 && r.shareOfEquity !== null && Math.abs(r.shareOfEquity - 0.02) < 1e-9, JSON.stringify(r));
+  assert(r.positions === 5 && r.lockedSl === 1 && r.withoutSl.join() === "#4 EURUSD" && r.notCounted.join() === "#5 ZZZ", JSON.stringify(r));
+  const kosong = combinedRisk([], pv, null, null);
+  assert(kosong.lossAllSlUsd === 0 && kosong.lossAllSlIdr === null && kosong.shareOfEquity === null, "tanpa kurs/equity = null");
+  assert(scanPointValueUsd("GBPUSD", "finex", FALLBACK_RATES) === 100000 && scanPointValueUsd("XAUUSD", "finex", FALLBACK_RATES) === 100, "nilai poin dari preset yang sama dengan pemindai");
+  assert(scanPointValueUsd("GBPUSD", "finex", null) === null && scanPointValueUsd("ZZZQQQ", "finex", FALLBACK_RATES) === null && scanPointValueUsd("ZZZ", "mifx", FALLBACK_RATES) === null, "kurs/spesifikasi tidak ada = null");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes('data-testid="scan-combined-risk"') && panel.includes("scanPointValueUsd(sym, brokerId, fxRates)"), "panel risiko gabungan di pemindai");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

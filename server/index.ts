@@ -426,6 +426,8 @@ async function startServer() {
         ).reason,
       // J2: entry di mode LIVE = setara Live.
       getSetaraLive: () => isLiveEquivalent(modeNow().mode),
+      // T2 (Tahap 15): masuk lagi simbol sama hanya di mode efektif DEMO.
+      getAddOnAllowed: () => modeNow().mode === "DEMO",
       // K4c: kalender ekonomi broker yang sama (jam server); tidak ada = null.
       getNewsEvents: () => readCalendarForBroker(resolveCommonFilesDir(), src.broker)?.events ?? null,
       // S3: jam trading resmi broker yang sama; tidak ada = null.
@@ -513,7 +515,8 @@ async function startServer() {
           const snap = readSpecsForBroker(resolveCommonFilesDir(), src.broker);
           return snap === null ? null : specHoldMap(snap.diffs);
         },
-        getOpenPositions: () => positions.getAll().map((p) => ({ symbol: p.symbol, side: p.side })),
+        getOpenPositions: () => positions.getAll().map((p) => ({ symbol: p.symbol, side: p.side, priceOpen: p.priceOpen, sl: p.sl })),
+        getAddOnAllowed: () => modeNow().mode === "DEMO",
         getLogin: () => identityOf().login,
         getDataQualityReason: () => dq.quality().alasan,
       });
