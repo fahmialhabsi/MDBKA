@@ -17,6 +17,8 @@ export interface TabPosition {
   readonly sl: number;
   readonly tp: number;
   readonly timeOpen: string;
+  /** TT-4: harga buka (positions.csv); absen = saran titik impas tidak dinilai. */
+  readonly priceOpen?: number;
 }
 
 export interface TabEquity {
@@ -183,7 +185,7 @@ export interface TabReportMeta {
   readonly login: string | null;
   /** F3: dari identitas akun terbukti; absen = tidak-terbukti. */
   readonly jenisAkun?: "demo" | "live" | "tidak-terbukti";
-  readonly tim: "TAB_TRADE" | "TAB_EXPOSURE" | "TAB_CALENDAR" | "TAB_JOURNAL" | "TAB_EXPERTS";
+  readonly tim: "TAB_TRADE" | "TAB_EXPOSURE" | "TAB_CALENDAR" | "TAB_JOURNAL" | "TAB_EXPERTS" | "TAB_ALERTS";
   readonly jendelaMulaiUtc: string;
   readonly jendelaSelesaiUtc: string;
   readonly sumberData: readonly { readonly berkas: string; readonly umurDetik: number | null }[];
@@ -196,6 +198,7 @@ const HANDOFF: Readonly<Record<TabReportMeta["tim"], readonly string[]>> = {
   TAB_CALENDAR: ["T-PENJAGA", "TIM_6B"],
   TAB_JOURNAL: ["T-GERBANG", "T-AKUN"],
   TAB_EXPERTS: ["T-GERBANG"],
+  TAB_ALERTS: ["T-MONITOR"],
 };
 
 export function buildTabReport(meta: TabReportMeta, findings: TabFindings): LaporanTimRecord {

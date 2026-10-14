@@ -36,6 +36,8 @@ import { MT5LogReader } from "./services/mt5LogReader";
 import { IdrEquitySource, parseAccountCurrency, type EquitySource } from "./services/convertedEquity";
 import { readUsdIdrBook, usdIdrOn } from "./services/ecbHistory";
 import { QuotesLogReader } from "./services/quotesLogReader";
+import { readCandleCsv } from "./routes/candlesRoutes";
+import { parseCsvCandles } from "../src/lib/csvCandleParser";
 import { PositionsLogReader } from "./services/positionsLogReader";
 import {
   DEFAULT_RETENTION_DAYS,
@@ -494,6 +496,15 @@ async function startServer() {
           const id = identityOf();
           return { login: id.login, jenisAkun: id.jenisAkun };
         },
+        // TT-4: tim Alerts — harga terbaru + candle H1 tertutup per simbol.
+        getQuote: (sym) => {
+          const q = quotes.getLatestBySymbol(sym, 1).at(-1);
+          return q === undefined ? null : { bid: q.bid, ask: q.ask };
+        },
+        getH1: (sym) => {
+          const found = readCandleCsv(resolveCommonFilesDir(), sym);
+          return found === null ? null : parseCsvCandles(found.csv).candles;
+        },
       });
     }
     if (tickArchiveDir[src.broker] !== undefined) {
@@ -546,8 +557,9 @@ async function startServer() {
 
   // TT-1/TT-2/G-7: laporan per jam (data/laporan/), sekali per tim per jendela jam.
   const tabReportsDone = new Set<string>();
+  const tabAlertMemory = new Map<string, ReadonlySet<string>>();
   tabReportSchedule = startTabReportSchedule(() =>
-    runTabReportsOnce(tabSources, shadowDataDir, new Date(), tabReportsDone),
+    runTabReportsOnce(tabSources, shadowDataDir, new Date(), tabReportsDone, undefined, tabAlertMemory),
   );
 
   const server = app.listen(PORT, () => {

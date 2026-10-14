@@ -340,6 +340,7 @@ import { addOnDecision, isBreakevenSafe, MAX_POSITIONS_PER_SYMBOL } from "../src
 import { combinedRisk } from "../src/lib/combinedRisk";
 import { structureBreak, trailSuggestion, TRAIL_PARAMS } from "../src/lib/trailStop";
 import { monitorCycle } from "../src/lib/monitorCycle";
+import { alertsTabFindings } from "../src/lib/alertsTab";
 import { evidencePace } from "../src/lib/evidencePace";
 import { collectEvidenceEvents } from "../server/services/evidenceEvents";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
@@ -10377,6 +10378,46 @@ test("752. T4 bukti TAMBAH per golongan: terpisah dari LOLOS, rumus sama; lolosB
   assert(JSON.stringify(lolosByRiskGroup(trades)) === JSON.stringify(byRiskGroupOf(trades, "LOLOS")) && lolosByRiskGroup(trades)[0]?.stats.n === 1, "LOLOS tidak tercampur TAMBAH");
   const panel = readSrc("src/components/analysis/TradeEvaluationPanel.tsx");
   assert(panel.includes('const addOnGroups = byRiskGroupOf(trades, "TAMBAH");') && panel.includes('data-testid="eval-addon-groups"'), "tabel TAMBAH di panel");
+});
+test("753. TT-4 tim Alerts: peringatan MDBKA per posisi (tanpa SL, titik impas, time-stop, struktur); yang masih ada jam berikutnya = BELUM DITINDAKLANJUTI", () => {
+  const pos = [
+    { ticket: "1", symbol: "GBPUSD", side: "BUY" as const, volume: 0.01, sl: 1.299, tp: 1.31, timeOpen: "2026.10.15 01:00:00", priceOpen: 1.3 },
+    { ticket: "2", symbol: "XAUUSD", side: "SELL" as const, volume: 0.01, sl: 0, tp: 0, timeOpen: "2026.10.15 03:00:00", priceOpen: 2400 },
+  ];
+  const quotes: Record<string, { bid: number; ask: number }> = { GBPUSD: { bid: 1.3006, ask: 1.3007 } };
+  const a1 = alertsTabFindings(pos, (s) => quotes[s] ?? null, () => null, "2026.10.15 04:10:00", null);
+  assert(a1.keys.join() === "TIMESTOP:1,IMPAS:1,TANPA_SL:2" && !a1.findings.kejadianPenting, a1.keys.join());
+  assert(a1.findings.temuan[0] === "3 peringatan aktif, 0 belum ditindaklanjuti" && a1.findings.temuan.some((t) => t.includes("XAUUSD SELL: harga terbaru tidak tersedia")), a1.findings.temuan.join(" | "));
+  const a2 = alertsTabFindings(pos, (s) => quotes[s] ?? null, () => null, "2026.10.15 05:10:00", new Set(["IMPAS:1"]));
+  assert(a2.findings.kejadianPenting && a2.findings.temuan[0] === "3 peringatan aktif, 1 belum ditindaklanjuti" && a2.findings.temuan.some((t) => t.includes("titik impas") && t.includes("BELUM DITINDAKLANJUTI")), a2.findings.temuan.join(" | "));
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dataDir = nfs.mkdtempSync(npath.join(os.tmpdir(), "alerts-"));
+  try {
+    const src = {
+      broker: "mifx" as const,
+      getPositions: () => pos,
+      getEquity: () => null,
+      getServerNow: () => "2026.10.15 04:10:00",
+      getCalendar: () => null,
+      getQuote: (s: string) => quotes[s] ?? null,
+    };
+    const done = new Set<string>();
+    const mem = new Map<string, ReadonlySet<string>>();
+    let n = 0;
+    const id = () => `A-${++n}`;
+    runTabReportsOnce([src], dataDir, new Date("2026-10-15T01:05:00Z"), done, id, mem);
+    runTabReportsOnce([src], dataDir, new Date("2026-10-15T02:05:00Z"), done, id, mem);
+    const book = readJsonlRecords(dataDir, "laporan/laporan-mifx-2026-10.jsonl", "laporan_tim/1");
+    const alerts = book.records.filter((r) => r.tim === "TAB_ALERTS") as unknown as { kejadianPenting: boolean; diserahkanKe: string[]; temuan: string[] }[];
+    assert(alerts.length === 2 && !alerts[0]?.kejadianPenting && alerts[1]?.kejadianPenting === true && (alerts[1]?.diserahkanKe ?? []).includes("T-MONITOR"), JSON.stringify(alerts.map((r) => r.temuan[0])));
+    assert(runTabReportsOnce([{ ...src, broker: "exness" as const, getQuote: undefined }], dataDir, new Date("2026-10-15T01:05:00Z"), new Set(), id) === 3, "tanpa getQuote = tim Alerts tidak melapor");
+  } finally {
+    nfs.rmSync(dataDir, { recursive: true, force: true });
+  }
+  const idx = readSrc("server/index.ts");
+  assert(idx.includes("runTabReportsOnce(tabSources, shadowDataDir, new Date(), tabReportsDone, undefined, tabAlertMemory)") && idx.includes("const found = readCandleCsv(resolveCommonFilesDir(), sym);"), "server: tim Alerts terpasang");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

@@ -14,6 +14,8 @@ import type { BrokerId } from "../../src/types/broker";
 import { appendJsonlRecord } from "./jsonlStore";
 import { journalFindings } from "../../src/lib/mt5Journal";
 import { localStamp, type TerminalLogs } from "./mt5JournalReader";
+import { alertsTabFindings, type AlertQuote } from "../../src/lib/alertsTab";
+import type { Candle } from "../../src/calculations/swingDetector";
 
 /**
  * TT-1/TT-2/G-7 (13 Okt 2026) — laporan per jam tim Trade, Exposure, Calendar
@@ -33,6 +35,10 @@ export interface TabReportSource {
   readonly getIdentity?: () => { readonly login: string | null; readonly jenisAkun: "demo" | "live" | "tidak-terbukti" };
   /** TT-3: log Journal + Experts terminal; null/absen = tim Journal/Experts tidak melapor. */
   readonly getLogs?: () => TerminalLogs | null;
+  /** TT-4: harga terbaru per simbol; absen = tim Alerts tidak melapor. */
+  readonly getQuote?: (symbol: string) => AlertQuote | null;
+  /** TT-4: candle H1 tertutup per simbol (struktur rusak); null = tidak dinilai. */
+  readonly getH1?: (symbol: string) => readonly Candle[] | null;
 }
 
 function safe<T>(fn: () => T, fallback: T): T {
@@ -49,6 +55,8 @@ export function runTabReportsOnce(
   now: Date,
   done: Set<string>,
   newId: () => string = () => randomUUID(),
+  /** TT-4: kunci peringatan laporan Alerts terakhir per broker (memori proses). */
+  alertMemory: Map<string, ReadonlySet<string>> = new Map(),
 ): number {
   const window = lastHourWindow(now.getTime());
   let written = 0;
@@ -64,6 +72,18 @@ export function runTabReportsOnce(
     // Jendela yang sama dalam jam LOKAL komputer (jam di log MT5).
     const fromLocal = localStamp(new Date(Date.parse(window.start)));
     const toLocal = localStamp(new Date(Date.parse(window.end)));
+    const getQuote = src.getQuote;
+    const getH1 = src.getH1;
+    const alerts =
+      positions === null || getQuote === undefined
+        ? null
+        : alertsTabFindings(
+            positions,
+            (sym) => safe(() => getQuote(sym), null),
+            (sym) => (getH1 === undefined ? null : safe(() => getH1(sym), null)),
+            serverNow,
+            alertMemory.get(src.broker) ?? null,
+          );
     const reports = [
       positions === null
         ? null
@@ -72,6 +92,7 @@ export function runTabReportsOnce(
       { tim: "TAB_CALENDAR" as const, findings: calendarTabFindings(calendar?.events ?? null, serverNow), berkas: [calendar?.file ?? "MDBKA_Calendar_<login>.csv (tidak ada)"] },
       logs === null ? null : { tim: "TAB_JOURNAL" as const, findings: journalFindings(logs.journal, login, fromLocal, toLocal, "JOURNAL"), berkas: ["Logs/<YYYYMMDD>.log"] },
       logs === null ? null : { tim: "TAB_EXPERTS" as const, findings: journalFindings(logs.experts, login, fromLocal, toLocal, "EXPERTS"), berkas: ["MQL5/Logs/<YYYYMMDD>.log"] },
+      alerts === null ? null : { tim: "TAB_ALERTS" as const, findings: alerts.findings, berkas: ["positions.csv", "quotes.csv", "MDBKA_<simbol>_H1.csv"] },
     ];
     for (const r of reports) {
       if (r === null) continue;
@@ -92,6 +113,7 @@ export function runTabReportsOnce(
       );
       appendJsonlRecord(dataDir, jsonlRelativePath("laporan", login ?? src.broker, window.end), rec);
       done.add(key);
+      if (r.tim === "TAB_ALERTS" && alerts !== null) alertMemory.set(src.broker, new Set(alerts.keys));
       written++;
     }
   }
