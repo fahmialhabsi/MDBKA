@@ -338,6 +338,7 @@ import { modeFor, requestedMode, setRequestedMode } from "../server/services/tra
 import { isLabComment, labAllowed, labTicket, minLotFor } from "../src/lib/labTrades";
 import { addOnDecision, isBreakevenSafe, MAX_POSITIONS_PER_SYMBOL } from "../src/lib/addOnRule";
 import { combinedRisk } from "../src/lib/combinedRisk";
+import { structureBreak, trailSuggestion, TRAIL_PARAMS } from "../src/lib/trailStop";
 import { evidencePace } from "../src/lib/evidencePace";
 import { collectEvidenceEvents } from "../server/services/evidenceEvents";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
@@ -10309,6 +10310,36 @@ test("747. F5 server: baca CSV per timeframe (MDBKA_<simbol>_<TF>.csv); tanpa tf
   }
   const route = readSrc("server/routes/candlesRoutes.ts");
   assert(route.includes("const tf = parseCandleTimeframe(req.query.tf);") && route.includes('res.json(tf === "H1" ? { symbol, ...found } : { symbol, tf, ...found });'), "route ?tf=");
+});
+function t1Candles(closes: readonly number[]) {
+  return closes.map((c, i) => ({ time: `2026.10.14 ${String(i).padStart(2, "0")}:00`, open: c, high: c + 0.2, low: c - 0.2, close: c }));
+}
+const T1_UP = [100, 100.5, 101, 101.5, 102, 101.5, 101, 101.5, 102, 102.5, 103, 103.5, 104, 103.5, 103, 103.5, 104, 104.5, 105, 104.5, 104, 103.5, 103.2, 103.6, 104, 104.6, 105.2, 105.8, 106.4, 107];
+test("748. T1 saran geser SL: lembah swing M15 terakhir, hanya maju, minimal impas, jarak ≥ 0,5×ATR; M15 belum ada → H1; data kurang = tanpa saran", () => {
+  const up = t1Candles(T1_UP);
+  const base = { direction: "BELI" as const, entryPrice: 102, sl: 101, bid: 107, ask: 107.02, m15: up, h1: null };
+  const s1 = trailSuggestion(base);
+  assert(s1 !== null && s1.slTarget === 103 && s1.source === "M15" && s1.swingTime === "2026.10.14 22:00" && s1.message.includes("SL hanya maju"), JSON.stringify(s1));
+  assert(trailSuggestion({ ...base, entryPrice: 104 }) === null, "di bawah titik impas = bukan urusan trailing");
+  assert(trailSuggestion({ ...base, sl: 103.5 }) === null, "SL sudah lebih maju = tidak dijauhkan");
+  assert(trailSuggestion({ ...base, bid: 103.2 }) === null, "terlalu dekat harga (< 0,5×ATR)");
+  const viaH1 = trailSuggestion({ ...base, m15: null, h1: up });
+  assert(viaH1 !== null && viaH1.source === "H1", "fallback H1");
+  assert(trailSuggestion({ ...base, m15: up.slice(0, TRAIL_PARAMS.minCandles - 1) }) === null && trailSuggestion({ ...base, sl: 0 }) === null, "data kurang / tanpa SL");
+  const down = t1Candles(T1_UP.map((c) => 210 - c));
+  const s2 = trailSuggestion({ direction: "JUAL", entryPrice: 108, sl: 109, bid: 102.98, ask: 103, m15: down, h1: null });
+  assert(s2 !== null && s2.slTarget === 107 && s2.message.includes("puncak swing M15"), JSON.stringify(s2));
+});
+test("749. T1 aba-aba struktur H1 rusak: tutup di bawah lembah (BELI) / di atas puncak (JUAL) swing terakhir; utuh = null", () => {
+  const up = t1Candles(T1_UP);
+  assert(structureBreak("BELI", up) === null && structureBreak("BELI", null) === null, "struktur utuh / tanpa data");
+  const rusak = structureBreak("BELI", [...up, { time: "2026.10.15 06:00", open: 106, high: 106, low: 102, close: 102.5 }]);
+  assert(rusak !== null && rusak.level === 103 && rusak.close === 102.5 && rusak.message.includes("Pertimbangkan keluar lebih awal"), JSON.stringify(rusak));
+  const down = t1Candles(T1_UP.map((c) => 210 - c));
+  const rusakJual = structureBreak("JUAL", [...down, { time: "2026.10.15 06:00", open: 104, high: 108, low: 104, close: 107.5 }]);
+  assert(rusakJual !== null && rusakJual.level === 107, JSON.stringify(rusakJual));
+  const src = readSrc("src/lib/trailStop.ts");
+  assert(!/fetch\(|from "react"|node:fs|Date\.now\(\)/.test(src), "modul murni");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
