@@ -339,6 +339,7 @@ import { isLabComment, labAllowed, labTicket, minLotFor } from "../src/lib/labTr
 import { addOnDecision, isBreakevenSafe, MAX_POSITIONS_PER_SYMBOL } from "../src/lib/addOnRule";
 import { combinedRisk } from "../src/lib/combinedRisk";
 import { structureBreak, trailSuggestion, TRAIL_PARAMS } from "../src/lib/trailStop";
+import { monitorCycle } from "../src/lib/monitorCycle";
 import { evidencePace } from "../src/lib/evidencePace";
 import { collectEvidenceEvents } from "../server/services/evidenceEvents";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
@@ -10348,6 +10349,23 @@ test("750. T1 tampil di kartu posisi berjalan: candle M15+H1 per simbol (?tf=), 
   const card = readSrc("src/components/holdings/HoldingsDashboard.tsx");
   assert(card.includes("const trailCandles = useTrailCandles(holding.symbol, !exited);") && card.includes("structureBreak(holding.direction, trailCandles.h1)"), "kartu memakai modul T1");
   assert(card.includes('data-testid="holding-trail-sl"') && card.includes('data-testid="holding-structure-break"') && card.includes("aturan uji (T1)"), "tampilan berlabel uji");
+});
+test("751. Siklus Tim 2: 30 menit, menilai menit 20–30, jendela 3 jam; Forex = TUTUP, emas = PANTAU_SELESAI (K-1)", () => {
+  const base = { symbol: "GBPUSD", direction: "BELI" as const, entryPrice: 1.3, sl: 1.299, bid: 1.3002, ask: 1.3003, openTime: "2026.10.15 01:00:00", serverNow: "2026.10.15 01:24:00", broken: null };
+  const c1 = monitorCycle(base);
+  assert(c1 !== null && c1.cycle === 1 && c1.minuteInCycle === 24 && c1.reviewing && c1.decision === "TAHAN", JSON.stringify(c1));
+  const c3 = monitorCycle({ ...base, serverNow: "2026.10.15 02:05:00", bid: 1.3006 });
+  assert(c3 !== null && c3.cycle === 3 && !c3.reviewing && c3.decision === "GESER_SL_IMPAS", JSON.stringify(c3));
+  assert(monitorCycle({ ...base, sl: 1.3 })?.decision === "AMAN", "SL di impas = aman, boleh masuk lagi");
+  const rusak = { level: 1.2995, swingTime: "x", closeTime: "y", close: 1.299, message: "Struktur H1 rusak" };
+  assert(monitorCycle({ ...base, sl: 1.3, broken: rusak })?.decision === "KELUAR_AWAL", "struktur rusak didahulukan");
+  const fx = monitorCycle({ ...base, serverNow: "2026.10.15 04:00:00" });
+  assert(fx !== null && fx.cycle === 0 && fx.decision === "TUTUP", JSON.stringify(fx));
+  const emas = monitorCycle({ ...base, symbol: "XAUUSD", serverNow: "2026.10.15 04:30:00" });
+  assert(emas !== null && emas.decision === "PANTAU_SELESAI" && emas.message.includes("tetap berjalan"), JSON.stringify(emas));
+  assert(monitorCycle({ ...base, openTime: "2026-10-15T01:00:00Z" }) === null && monitorCycle({ ...base, serverNow: "2026.10.15 00:59:00" }) === null, "format/jam tidak sah = null");
+  const card = readSrc("src/components/holdings/HoldingsDashboard.tsx");
+  assert(card.includes('data-testid="holding-cycle"') && card.includes("openTime: holding.entryTime,") && card.includes("serverNow: live.timestamp,"), "siklus tampil di kartu posisi");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

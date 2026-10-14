@@ -32,6 +32,7 @@ import { serverUtcOffsetHours } from "../../lib/serverClock";
 import { useTradeSessions } from "../../hooks/useTradeSessions";
 import { useTrailCandles } from "../../hooks/useTrailCandles";
 import { structureBreak, trailSuggestion } from "../../lib/trailStop";
+import { CYCLE_MINUTES, monitorCycle, WINDOW_HOURS } from "../../lib/monitorCycle";
 
 const SIGNAL_STYLE: Record<ExitSignal, { label: string; className: string }> = {
   EXIT_TAKE_PROFIT: {
@@ -162,6 +163,21 @@ function HoldingCard({
           h1: trailCandles.h1,
         });
   const broken = exited ? null : structureBreak(holding.direction, trailCandles.h1);
+  // T-SIKLUS: siklus tinjau Tim 2 tiap 30 mnt, jendela 3 jam (K-1).
+  const cycle =
+    exited || live === undefined
+      ? null
+      : monitorCycle({
+          symbol: holding.symbol,
+          direction: holding.direction,
+          entryPrice: holding.entryPrice,
+          sl: holding.sl,
+          bid: live.bid,
+          ask: live.ask,
+          openTime: holding.entryTime,
+          serverNow: live.timestamp,
+          broken,
+        });
   const marginWarning = exited ? null : checkMarginGuard(holding, convert);
   // S4 Satpam Sesi: pasar tutup / segera tutup (jam resmi broker).
   const marketNotice = exited
@@ -355,6 +371,20 @@ function HoldingCard({
           </p>
           <p className="mt-1 text-sm leading-6 text-amber-100">{timeStop.message}</p>
         </div>
+      )}
+
+      {cycle !== null && (
+        <p data-testid="holding-cycle" className="mt-2 text-xs text-slate-300">
+          <span className="font-semibold text-slate-200">
+            Tim 2 ·{" "}
+            {cycle.cycle === 0
+              ? `jendela ${WINDOW_HOURS} jam selesai`
+              : `siklus ${cycle.cycle}/${(WINDOW_HOURS * 60) / CYCLE_MINUTES} · menit ${cycle.minuteInCycle}${cycle.reviewing ? " (sedang menilai)" : ""}`}
+            {" — "}
+            {cycle.decision.replace(/_/g, " ")}:
+          </span>{" "}
+          {cycle.message}
+        </p>
       )}
 
       {broken !== null && (
