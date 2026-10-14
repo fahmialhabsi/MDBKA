@@ -341,6 +341,7 @@ import { combinedRisk } from "../src/lib/combinedRisk";
 import { structureBreak, trailSuggestion, TRAIL_PARAMS } from "../src/lib/trailStop";
 import { monitorCycle } from "../src/lib/monitorCycle";
 import { alertsTabFindings } from "../src/lib/alertsTab";
+import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
 import { evidencePace } from "../src/lib/evidencePace";
 import { collectEvidenceEvents } from "../server/services/evidenceEvents";
 import { pickLiveSource, resolveLiveBroker } from "../server/types/liveSource";
@@ -10418,6 +10419,29 @@ test("753. TT-4 tim Alerts: peringatan MDBKA per posisi (tanpa SL, titik impas, 
   }
   const idx = readSrc("server/index.ts");
   assert(idx.includes("runTabReportsOnce(tabSources, shadowDataDir, new Date(), tabReportsDone, undefined, tabAlertMemory)") && idx.includes("const found = readCandleCsv(resolveCommonFilesDir(), sym);"), "server: tim Alerts terpasang");
+});
+test("754. TI-2 indikator gelombang 1: ADX & Bollinger sama dengan TA-Lib (pembanding), Fractals terkonfirmasi, tick volume dibaca tanpa ubah parser", () => {
+  const cs = Array.from({ length: 60 }, (_, i) => {
+    const c = 100 + 3 * Math.sin(i / 5) + 0.1 * i;
+    return { time: String(i), open: c, high: c + 0.5 + 0.2 * Math.cos(i / 3), low: c - 0.5 - 0.2 * Math.sin(i / 4), close: c };
+  });
+  const near = (a: number | undefined, b: number) => a !== undefined && Math.abs(a - b) < 1e-6;
+  // Nilai pembanding: TA-Lib 0.8.2 ADX/PLUS_DI/MINUS_DI(14), BBANDS(20,2,2) pada deret yang sama.
+  const adx = adxWilder(cs);
+  assert(near(adx?.adx, 28.44931053128142) && near(adx?.plusDi, 15.736046261570868) && near(adx?.minusDi, 15.060059070232533), JSON.stringify(adx));
+  const bb = bollinger(cs.map((c) => c.close));
+  assert(near(bb?.upper, 107.56050296343642) && near(bb?.middle, 104.32490437841759) && near(bb?.lower, 101.08930579339875), JSON.stringify(bb));
+  assert(adxWilder(cs.slice(0, 28)) === null && bollinger([1, 2, 3]) === null, "data kurang = null");
+  const f = lastFractals([5, 6, 9, 6, 5, 4, 2, 4, 5, 6].map((v, i) => ({ time: `t${i}`, open: v, high: v + 0.1, low: v - 0.1, close: v })));
+  assert(f.up?.time === "t2" && f.down?.time === "t6", JSON.stringify(f));
+  assert(lastFractals([5, 6, 9, 8].map((v, i) => ({ time: `t${i}`, open: v, high: v, low: v, close: v }))).up === null, "belum 2 candle kanan = belum terkonfirmasi");
+  const csv = "time,open,high,low,close,tick_volume\n" + Array.from({ length: 21 }, (_, i) => `2026.10.14 ${String(i).padStart(2, "0")}:00,1,1,1,1,${i === 20 ? 300 : 100}`).join("\n");
+  const vols = readTickVolumes(csv);
+  assert(vols !== null && vols.length === 21 && volumeRatio(vols.map((v) => v.volume)) === 3, "volume terakhir 3× rata-rata");
+  assert(readTickVolumes("time,open,high,low,close\n1,1,1,1,1") === null && volumeRatio([1, 2]) === null, "tanpa kolom / data kurang = null");
+  assert(wave1Context(cs, null).volumeRatio === null && wave1Context(cs, null).adx !== null, "potret konteks");
+  const src = readSrc("src/lib/indicatorsWave1.ts");
+  assert(!/fetch\(|from "react"|node:fs|Date\.now\(\)/.test(src) && !readSrc("src/lib/csvCandleParser.ts").includes("tick_volume"), "modul murni; parser tidak diubah");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
