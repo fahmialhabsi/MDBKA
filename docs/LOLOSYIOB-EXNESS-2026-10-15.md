@@ -48,3 +48,48 @@ Aturannya sama dengan versi live: M15, rentang 1 jam > 2× median. Ukurannya ada
 | Ujian | 60,2% | 17,9% |
 
 **Peringatan Badai terbukti juga di Exness** (Finex: 58–61% vs 18%). Temuan ini berlaku umum, bukan khas satu broker.
+
+## Sinyal M1 MA200 + RSI 14 (XAUUSDm, permintaan Fahmi 15 Okt 2026 sore)
+
+**Aturan dasar:**
+- **BELI** saat harga baru menembus ke atas SMA200 M1, SMA200 naik dalam 20 menit, dan RSI 50–70.
+- **JUAL** cermin dari BELI.
+- SL dan TP = 1,5× ATR14; posisi ditutup paling lambat 30 menit.
+
+**Hasil:**
+- Latih: 1.397 trade, −0,034R.
+- Ujian: 914 trade, −0,021R, menang 49%.
+- **Vonis: TUNGGU** (rata-rata rugi).
+
+### Lama menunggu setelah tembusan
+
+Skrip: `scripts/research/xauusd_m1_ma200_tunggu_bt.py`.
+
+| Tunggu | Latih R | Ujian R |
+| --- | --- | --- |
+| 0 menit | −0,033 | −0,017 |
+| 5 menit | −0,039 | −0,087 |
+| 10 menit | −0,009 | −0,071 |
+| 15 menit | −0,034 | −0,058 |
+| 30 menit | −0,027 | −0,020 |
+| 60 menit | −0,040 | −0,111 |
+
+**Tidak ada lama tunggu yang membuat hasilnya positif.**
+
+### Analisa tambahan
+
+| Tambahan | Latih R (n) | Ujian R (n) | Konsisten? |
+| --- | --- | --- | --- |
+| H1 searah MA200 | −0,037 (712) | −0,031 (521) | Tidak (keduanya negatif) |
+| H4 searah | −0,021 (660) | −0,005 (536) | Tidak |
+| H1 & H4 searah | −0,010 (477) | −0,041 (399) | Tidak |
+| Jam 22–02 WIT | +0,058 (221) | −0,151 (139) | Tidak (berbalik) |
+| Jam London 16–21 WIT | −0,022 (389) | +0,033 (182) | Tidak (berbalik) |
+| Tidak badai | −0,034 | −0,018 | Tidak |
+| **Sedang badai** | **+0,067 (37)** | **+0,048 (21)** | Positif di keduanya, tetapi n sangat kecil |
+| H1&H4 + 22–02 WIT + tidak badai | +0,032 (57) | −0,172 (58) | Tidak |
+
+**Kesimpulan:**
+- Belum ada analisa tambahan yang terbukti mengubah TUNGGU menjadi BELI/JUAL.
+- "Tembusan MA200 M1 saat badai" adalah satu-satunya yang positif di latih dan ujian, tetapi hanya 58 trade dalam setahun dan keunggulannya tipis (+0,05R). Statusnya **hipotesis untuk uji maju**, bukan sinyal.
+- Karena delapan saringan diuji sekaligus, peluang satu saringan positif hanya karena kebetulan cukup besar.
