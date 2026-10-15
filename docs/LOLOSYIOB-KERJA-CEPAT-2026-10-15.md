@@ -266,3 +266,143 @@ python3 scripts/research/kerja_cepat_bt.py gabungan-m1.csv
 | LY-1 | Hentikan Lolosyiob; scalping tetap riset | Paling aman |
 | LY-2 | Rancang **Kerja Cepat v2** dengan bahan yang sama (bahan 1 + 2), memakai pembagian jujur: dirancang di 28 Sep 2025 – 30 Apr 2026, lalu diuji **satu kali** di 1 Mei – 15 Okt 2026 | Gagasan baru (misalnya hindari 07–09 UTC, atau batas waktu lebih panjang) hanya boleh dinilai di bagian ujian |
 | LY-3 | Uji maju (*forward*) tanpa uang dari 16 Okt 2026, tanpa mengubah apa pun | Lambat; v1 sudah terbukti negatif setahun, jadi kecil gunanya |
+
+## 13. Kerja Cepat v2 — "Prakiraan Cuaca" (logika BMKG, permintaan Fahmi 15 Okt 2026)
+
+**Bahan:** hanya bahan yang ada, yaitu riwayat M5 server Finex (OHLC, spread, MACD 12,26,9 dari MT5). Skrip: `scripts/research/prakiraan_cuaca_bt.py`.
+
+**Logika (dibekukan sebelum uji).** Data 1 jam ke belakang (12 candle M5) dibaca di setiap candle tertutup. "Perubahan saat itu" adalah selisih MACD main dan histogram dibanding 1 jam sebelumnya.
+
+| Prakiraan 30 menit | Syarat | Tindakan |
+| --- | --- | --- |
+| BADAI | Rentang 1 jam > 2× biasanya, atau spread > 2× biasanya | Jangan trading |
+| CERAH NAIK | MACD > 0, histogram > 0, keduanya menguat dalam 1 jam | BELI |
+| CERAH TURUN | Cermin CERAH NAIK | JUAL |
+| BERAWAN | Selain itu | Tidak ada prakiraan |
+
+**Uji trade:**
+- Masuk di close dan keluar 30 menit kemudian. SL = rentang 1 jam, dengan gerbang biaya 10%, korelasi, dan 1 posisi per pasangan.
+- **Latih:** 28 Sep 2025 – 30 Apr 2026, hanya untuk dilihat.
+- **Ujian:** 1 Mei – 15 Okt 2026, diuji sekali dan dibagi 7 blok.
+
+### 13.1 Ketepatan prakiraan arah dibanding klimatologi
+
+Klimatologi = peluang dasar arah yang sama di semua candle sesi, sudah termasuk spread.
+
+| | CERAH NAIK tepat | Dasar naik | CERAH TURUN tepat | Dasar turun |
+| --- | --- | --- | --- | --- |
+| Latih | 47,6% | 47,5% | 45,1% | 44,7% |
+| Ujian | **43,4%** | 45,8% | **41,0%** | 44,0% |
+
+**Prakiraan arah tidak punya kemampuan.** Di data latih ketepatannya sama dengan menebak. Di data ujian malah sedikit lebih buruk dari menebak, karena harga cenderung berbalik.
+
+### 13.2 Uji trade (ujian, Rupiah untuk lot 0,01)
+
+| Uji | Blok 2026 | Trade | R | Rupiah | Hasil |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1–24 Mei | 306 | −33,28 | −Rp803.372 | Tidak |
+| 2 | 24 Mei – 17 Jun | 300 | −26,05 | −Rp504.978 | Tidak |
+| 3 | 17 Jun – 11 Jul | 322 | −25,02 | −Rp630.219 | Tidak |
+| 4 | 11 Jul – 4 Agu | 301 | +13,22 | +Rp270.635 | Berhasil |
+| 5 | 4–27 Agu | 328 | −28,11 | −Rp540.117 | Tidak |
+| 6 | 27 Agu – 20 Sep | 272 | −21,82 | −Rp378.144 | Tidak |
+| 7 | 20 Sep – 14 Okt | 341 | −15,83 | −Rp450.179 | Tidak |
+
+**Ringkasan:**
+- **Ujian:** 2.170 trade, rata-rata −0,063R, PF 0,71.
+- **Latih:** 3.012 trade, rata-rata −0,049R, PF 0,77.
+- **Vonis: TIDAK BERHASIL** (K2, K3, K4, K6 dan K7 gagal).
+
+**Kontra-arah tidak diuji.** Membalik arah setelah melihat data ujian sama dengan mencocokkan jawaban dengan soal. Lagi pula, di data latih ketepatan arah juga nol.
+
+### 13.3 Temuan yang berguna: BADAI bisa diramalkan
+
+Ukurannya adalah peluang rentang 30 menit berikutnya > 1,5× rentang biasa (median 1 hari sebelumnya):
+
+| | BADAI | BERAWAN | CERAH NAIK | CERAH TURUN |
+| --- | --- | --- | --- | --- |
+| Latih | **64,0%** | 27,8% | 26,4% | 30,0% |
+| Ujian | **65,4%** | 29,8% | 25,9% | 30,1% |
+
+**Kesimpulan gaya BMKG:**
+- Yang bisa diramalkan dari data 1 jam adalah **kekuatan angin** (gerak besar atau kecil), bukan **arahnya**. Hasil ini konsisten di latih dan ujian.
+- Peringatan BADAI tidak berarti rugi. Artinya gerak 30 menit berikutnya ±2× lebih liar: SL lebih mudah tersentuh, dan risiko slippage lebih besar (sejalan dengan R-2).
+- Usulan **CU-1** (menunggu keputusan Fahmi): tampilkan "Peringatan Badai 30 menit" sebagai **catatan** di pemindai dan Monitor Posisi. Ini hanya peringatan, tanpa mengubah keputusan, `decisionEngine.ts`, maupun Hasil analisa.
+
+## 14. Kerja Cepat v3 — Prakiraan Cuaca + MA26 (permintaan Fahmi 15 Okt 2026)
+
+**Bahan tambahan:** MA26, yaitu SMA 26 dari close M5 (MA bawaan MT5). Logika v2 tidak diubah. Syarat tambahan untuk CERAH:
+- harga di atas MA26 dan MA26 naik dalam 1 jam (CERAH NAIK), atau
+- cerminnya (CERAH TURUN).
+
+Skrip: `scripts/research/prakiraan_cuaca_ma26_bt.py`.
+
+**Pola MA26 dibanding arah 30 menit berikutnya.** Gerak rata-rata dalam pip; angka JPY dan non-JPY dicampur, jadi hanya tandanya yang bermakna.
+
+| Pola | Latih | Ujian | Konsisten? |
+| --- | --- | --- | --- |
+| Di atas & MA naik | +0,03 | −0,12 | Tidak |
+| Di atas & MA turun/datar | +0,53 | −0,26 | Tidak |
+| Di bawah & MA naik/datar | −0,14 | −0,31 | Searah, tetapi kecil (< biaya ±0,8 pip) |
+| Di bawah & MA turun | +0,23 | −0,05 | Tidak |
+
+**Ketepatan prakiraan:**
+- **Ujian:** CERAH NAIK tepat 42,8% vs dasar 45,8%; CERAH TURUN 40,7% vs 44,0%.
+- **Latih:** sama dengan menebak.
+
+**Uji trade di data ujian:**
+- 1.698 trade, rata-rata −0,063R, PF 0,71, sekitar −Rp2,15 juta pada lot 0,01. Hanya 1 dari 7 blok yang untung.
+- Data latih: 2.431 trade, −0,048R.
+- **Vonis: TIDAK BERHASIL.**
+
+**Sebab:** MA26 dan MACD dihitung dari **harga close yang sama**. MACD sendiri sudah memakai EMA26. Menambah MA26 sama dengan membaca termometer yang sama dua kali; cuacanya tidak menjadi lebih jelas. MA26 hanya mengurangi jumlah trade (−22%) tanpa memperbaiki ketepatan.
+
+**Pelajaran untuk bahan berikutnya:** bahan yang bisa menambah informasi harus **independen dari harga close M5**. Contohnya:
+- jadwal berita (T-TAB-CALENDAR);
+- tick volume (aktivitas pasar);
+- arah H4/D1 (iklim, bukan cuaca);
+- pasangan lain yang berkorelasi.
+
+## 15. Kerja Cepat v4 — "Perjalanan ke Tengah" (cerita Fahmi 15 Okt 2026)
+
+**Cerita Fahmi:** "Saya di Selatan, tujuan di Tengah (±30 menit perjalanan). Di Utara sudah hujan, dan hujan akan tiba di Tengah dalam 45 menit. Syarat apa agar saya sampai di Tengah dalam 27–30 menit?"
+
+**Peta cerita ke harga** (dibekukan sebelum uji; skrip `scripts/research/perjalanan_tengah_bt.py`):
+
+| Cerita | Harga |
+| --- | --- |
+| Tengah | MA26 (SMA 26 close M5) |
+| Selatan → Tengah | Harga di bawah MA26 → BELI dengan TP di MA26. Cerminnya: Utara → JUAL |
+| Waktu tempuh 30 menit | 6 candle M5 |
+| Hujan tiba 45 menit | Batas keras: posisi ditutup paling lambat 40 menit |
+| S1 jarak bisa ditempuh | Jarak ke MA26 = 0,5–1,0× gerak 30 menit yang biasa |
+| S2 jalan tidak badai | Bukan BADAI (bagian 13.3) |
+| S3 sudah melangkah | Candle terakhir ditutup ke arah Tengah |
+| S4 Tengah tidak lari | MA26 tidak menjauh dalam 30 menit terakhir |
+| S5 ongkos | Biaya ≤ 10% jarak (gerbang MDBKA) |
+| Risiko | SL sejauh jarak ke Tengah, di sisi lain (1R) |
+
+**Hasil:**
+
+| | Latih | Ujian |
+| --- | --- | --- |
+| Trade | 309 | 92 |
+| Sampai di Tengah | 32,4% | 31,5% |
+| Menit tempuh median (yang sampai) | 20 | 20 |
+| Sampai ≤ 30 menit (dari yang sampai) | 86% | 86% |
+| Kena SL sebelum sampai | 43,0% | 45,7% |
+| Kena "hujan" (40 menit) | 24,6% | 22,8% |
+| Rata-rata R | −0,116 | −0,159 |
+| PF | 0,76 | 0,70 |
+| Rupiah (lot 0,01) | −Rp544.774 | −Rp221.509 |
+
+**Vonis: TIDAK BERHASIL.** Ketujuh blok ujian rugi.
+
+### 15.1 Jawaban atas pertanyaan "syarat apa"
+
+1. **Syarat waktu sudah terpenuhi.** Yang berhasil sampai rata-rata tiba dalam 20 menit, dan 86% tiba ≤ 30 menit. Jadi bila jaraknya ≤ 1× gerak 30 menit yang biasa, waktu tempuh 27–30 menit itu realistis.
+2. **Syarat yang kurang adalah peluang sampai.** Hanya ±32% yang sampai di Tengah, sedangkan ±45% berbalik dan kena SL lebih dulu. Agar impas dengan SL sejauh jarak tujuan (1R), peluang sampai harus > 50% ditambah biaya.
+3. **Syarat ongkos menyaring paling banyak.** Ada 2.291 calon yang ditolak karena jarak ke Tengah terlalu dekat (median ±10 pip), sehingga biaya > 10% jarak. Perjalanan pendek di Forex habis dimakan ongkos.
+4. **Hujan sebenarnya**, yaitu berita yang dijadwalkan, belum bisa diuji setahun karena kalender historis tidak tersimpan. Di MDBKA, penjaga berita sudah menahan sinyal menjelang berita.
+
+**Catatan kejujuran:** data ujian (Mei–Okt 2026) sudah dipakai untuk menilai v2, v3 dan v4. Makin sering satu data ujian dipakai, makin besar peluang sebuah versi tampak berhasil karena kebetulan. Bila nanti ada versi yang lolos, versi itu wajib diuji lagi di data baru setelah 15 Okt 2026.

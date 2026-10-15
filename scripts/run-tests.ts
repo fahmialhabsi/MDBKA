@@ -10648,6 +10648,13 @@ test("765. LOLOSYIOB bahan 2: script MT5 ekspor M5 panjang + spread + MACD(12,26
   assert(mq.includes("macdOk = false;") && mq.includes('return "";'), "MACD tak terbaca/bergeser = kosong, tidak dikarang");
 });
 
+test("766. XAUUSD M1: script MT5 ekspor M1 panjang + spread (tanpa MACD); M5/H1/H4/M15 tetap", () => {
+  const mq = readSrc("ea/ExportLongH1MDBKA.mq5");
+  assert(mq.includes("InpPeriod != PERIOD_M5 && InpPeriod != PERIOD_M1") && mq.includes('tf = "M1";'), "M1 diterima, file M1_LONG");
+  assert(mq.includes('FileWrite(handle, "time", "open", "high", "low", "close", "tick_volume", "spread");'), "header M1: spread tanpa MACD");
+  assert(mq.includes('"spread", "macd_main", "macd_signal"') && mq.includes('FileWrite(handle, "time", "open", "high", "low", "close", "tick_volume");'), "M5 & format lama tidak berubah");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

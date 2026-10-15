@@ -12,10 +12,12 @@
 //|   MDBKA_<simbol>_M5_LONG.csv + kolom spread (point), macd_main,  |
 //|   macd_signal (iMACD 12,26,9 close; sinyal MT5 = SMA dari main). |
 //|   Format H1/H4/M15 TIDAK berubah. InpSymbols membatasi simbol.   |
+//| XAUUSD M1 (15 Okt 2026, izin Fahmi): M1 -> MDBKA_<simbol>_M1_LONG |
+//|   .csv + kolom spread (tanpa MACD). Isi ~370000 candle = 1 tahun. |
 //+------------------------------------------------------------------+
 #property script_show_inputs
 
-input ENUM_TIMEFRAMES InpPeriod = PERIOD_H1; // timeframe: H1 (default), H4, atau M15
+input ENUM_TIMEFRAMES InpPeriod = PERIOD_H1; // timeframe: H1 (default), H4, M15, M5, atau M1
 input int InpCandleCount = 5000;   // jumlah candle tertutup (H1 ~10 bulan; H4 ~3 tahun; M15: isi 30000 ~1,2 tahun)
 input int InpRetry       = 5;      // coba ulang bila histori masih diunduh
 input string InpSymbols  = "";     // kosong = semua Market Watch; M5 disarankan: USDJPY,EURJPY,GBPUSD,GBPJPY,EURUSD (M5: isi 75000 ~1 tahun)
@@ -101,6 +103,9 @@ int ExportLong(const string symbol, const int candleCount)
    bool m5 = (InpPeriod == PERIOD_M5);
    if(m5)
       tf = "M5";
+   bool m1 = (InpPeriod == PERIOD_M1);
+   if(m1)
+      tf = "M1";
    string filename = "MDBKA_" + symbol + "_" + tf + "_LONG.csv";
    int handle = FileOpen(filename, FILE_COMMON | FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
    if(handle == INVALID_HANDLE)
@@ -118,10 +123,24 @@ int ExportLong(const string symbol, const int candleCount)
       PrintFormat("%s: MACD belum terbaca, kolom MACD dikosongkan", symbol);
    if(m5)
       FileWrite(handle, "time", "open", "high", "low", "close", "tick_volume", "spread", "macd_main", "macd_signal");
+   else if(m1)
+      FileWrite(handle, "time", "open", "high", "low", "close", "tick_volume", "spread");
    else
       FileWrite(handle, "time", "open", "high", "low", "close", "tick_volume");
    for(int i = 0; i < copied; i++)
       {
+      if(m1)
+         {
+         FileWrite(handle,
+                   TimeToString(rates[i].time, TIME_DATE | TIME_MINUTES),
+                   DoubleToString(rates[i].open, digits),
+                   DoubleToString(rates[i].high, digits),
+                   DoubleToString(rates[i].low, digits),
+                   DoubleToString(rates[i].close, digits),
+                   (string)rates[i].tick_volume,
+                   (string)rates[i].spread);
+         continue;
+         }
       if(m5)
          {
          string mMain = "", mSig = "";       // kosong bila MACD tidak terbaca
@@ -163,9 +182,9 @@ int ExportLong(const string symbol, const int candleCount)
 
 void OnStart()
    {
-   if(InpPeriod != PERIOD_H1 && InpPeriod != PERIOD_H4 && InpPeriod != PERIOD_M15 && InpPeriod != PERIOD_M5)
+   if(InpPeriod != PERIOD_H1 && InpPeriod != PERIOD_H4 && InpPeriod != PERIOD_M15 && InpPeriod != PERIOD_M5 && InpPeriod != PERIOD_M1)
       {
-      Print("GAGAL: InpPeriod wajib H1, H4, M15, atau M5 (yang dibaca MDBKA).");
+      Print("GAGAL: InpPeriod wajib H1, H4, M15, M5, atau M1 (yang dibaca MDBKA).");
       return;
       }
    PrintFormat("=== ExportLongH1MDBKA START (%s) | %s | %d candle/simbol ===",
