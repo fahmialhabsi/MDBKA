@@ -61,7 +61,7 @@ def jalan(data, cats):
         tp = float(x.ma[i]) if beli else float(x.ma[i]) + sp  # TP di Tengah (BELI keluar di bid; JUAL beli kembali di ask)
         dist = (tp - entry) if beli else (entry - tp)
         uj = float(jpy.asof(d.t[i])) if s.endswith("JPY") else None
-        com = 1.0 / 100000 if s.endswith("USD") else uj / 100000
+        com = v2.KOMISI * (1.0 / 100000 if s.endswith("USD") else uj / 100000)
         if not dist > 0 or (sp + com) > v2.MAX_COST * dist:
             tolak["S5 biaya 10% / jarak habis oleh spread"] = tolak.get("S5 biaya 10% / jarak habis oleh spread", 0) + 1
             continue

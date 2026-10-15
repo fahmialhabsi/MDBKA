@@ -33,6 +33,7 @@ BADAI_K, SPREAD_K, MAX_COST = 2.0, 2.0, 0.10
 SESI = (7 * 60, 16 * 60)
 LATIH_AKHIR = pd.Timestamp("2026-05-01", tz="UTC")
 KURS_IDR = 17880
+KOMISI = float(os.environ.get("MDBKA_COMM_PER_LOT", "1.0"))  # $/lot pulang-pergi (Finex 1, Exness 0)
 
 
 def load(folder):
@@ -40,8 +41,11 @@ def load(folder):
     for s in PAIRS:
         d = pd.read_csv(os.path.join(folder, f"MDBKA_{s}_M5_LONG.csv"))
         srv = pd.to_datetime(d.time, format="%Y.%m.%d %H:%M")
-        ny = (srv - pd.Timedelta(hours=7)).dt.tz_localize("America/New_York", ambiguous="NaT", nonexistent="NaT")
-        d["t"] = ny.dt.tz_convert("UTC")
+        if os.environ.get("MDBKA_TZ", "NY7") == "UTC":  # Exness: jam server = UTC
+            d["t"] = srv.dt.tz_localize("UTC")
+        else:  # Finex: jam server = New York + 7
+            ny = (srv - pd.Timedelta(hours=7)).dt.tz_localize("America/New_York", ambiguous="NaT", nonexistent="NaT")
+            d["t"] = ny.dt.tz_convert("UTC")
         d = d.dropna(subset=["t", "macd_main", "macd_signal"]).reset_index(drop=True)
         d["sp"] = d.spread * (0.001 if s.endswith("JPY") else 0.00001)
         out[s] = d
@@ -107,7 +111,7 @@ def trades(data, cats):
         dist = float(x.angin[i])
         sl = entry - dist if beli else entry + dist
         uj = float(jpy.asof(d.t[i])) if s.endswith("JPY") else None
-        com = 1.0 / 100000 if s.endswith("USD") else uj / 100000
+        com = KOMISI * (1.0 / 100000 if s.endswith("USD") else uj / 100000)
         if not dist > 0 or (sp + com) > MAX_COST * dist:
             tolak["gerbang biaya 10%"] = tolak.get("gerbang biaya 10%", 0) + 1
             continue

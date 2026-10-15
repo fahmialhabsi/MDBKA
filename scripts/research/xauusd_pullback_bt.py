@@ -10,8 +10,8 @@ import sys
 import numpy as np
 import pandas as pd
 
-PT = 0.01
-COMM = 0.01            # $1/lot pulang-pergi = $0,01 per oz
+PT = float(os.environ.get("MDBKA_XAU_POINT", "0.01"))  # Finex 0,01; Exness 0,001
+COMM = float(os.environ.get("MDBKA_COMM_PER_LOT", "1.0")) / 100  # $/lot -> $ per oz (Finex $1/lot = $0,01)
 SLIP_SL = 1.075        # R-2: rugi SL x 1,075
 SESI = (7 * 60, 17 * 60)
 KURS_IDR = 17880
@@ -21,8 +21,11 @@ LATIH_FRAC = 0.60
 def load(folder, tf):
     d = pd.read_csv(os.path.join(folder, f"MDBKA_XAUUSD_{tf}_LONG.csv"))
     srv = pd.to_datetime(d.time, format="%Y.%m.%d %H:%M")
-    ny = (srv - pd.Timedelta(hours=7)).dt.tz_localize("America/New_York", ambiguous="NaT", nonexistent="NaT")
-    d["t"] = ny.dt.tz_convert("UTC")
+    if os.environ.get("MDBKA_TZ", "NY7") == "UTC":  # Exness: jam server = UTC
+        d["t"] = srv.dt.tz_localize("UTC")
+    else:  # Finex: jam server = New York + 7
+        ny = (srv - pd.Timedelta(hours=7)).dt.tz_localize("America/New_York", ambiguous="NaT", nonexistent="NaT")
+        d["t"] = ny.dt.tz_convert("UTC")
     d = d.dropna(subset=["t"]).reset_index(drop=True)
     d["sp"] = d.spread * PT
     return d

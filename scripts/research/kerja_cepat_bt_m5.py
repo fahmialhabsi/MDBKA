@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kerja_cepat_bt as kc  # noqa: E402  (nilai_sinyal + parameter beku)
 
 N_BLOK = 7
+KOMISI = float(os.environ.get("MDBKA_COMM_PER_LOT", "1.0"))  # $/lot pulang-pergi (Finex 1, Exness 0)
 
 
 def load(folder: str) -> dict:
@@ -27,8 +28,11 @@ def load(folder: str) -> dict:
     for s in kc.PAIRS:
         d = pd.read_csv(os.path.join(folder, f"MDBKA_{s}_M5_LONG.csv"))
         srv = pd.to_datetime(d.time, format="%Y.%m.%d %H:%M")
-        ny = (srv - pd.Timedelta(hours=7)).dt.tz_localize("America/New_York", ambiguous="NaT", nonexistent="NaT")
-        d["t"] = ny.dt.tz_convert("UTC")
+        if os.environ.get("MDBKA_TZ", "NY7") == "UTC":  # Exness: jam server = UTC
+            d["t"] = srv.dt.tz_localize("UTC")
+        else:  # Finex: jam server = New York + 7
+            ny = (srv - pd.Timedelta(hours=7)).dt.tz_localize("America/New_York", ambiguous="NaT", nonexistent="NaT")
+            d["t"] = ny.dt.tz_convert("UTC")
         d = d.dropna(subset=["t"]).rename(columns={"open": "o", "high": "h", "low": "l", "close": "c"})
         pt = 0.001 if s.endswith("JPY") else 0.00001
         d["sp"] = d.spread * pt
@@ -83,7 +87,7 @@ def jalankan(data: dict, varian_b: bool, dari=None, sampai=None):
         sl = r["l30"] - sp_in if beli else r["h30"] + 2 * sp_in  # h30 bid -> ask + 1 spread
         risk = entry - sl if beli else sl - entry
         uj = float(jpy.asof(g.t)) if sym.endswith("JPY") else None
-        com = 1.0 / 100000 if sym.endswith("USD") else (uj / 100000 if uj else np.nan)
+        com = KOMISI * (1.0 / 100000 if sym.endswith("USD") else (uj / 100000 if uj else np.nan))
         if not (risk > 0) or np.isnan(com) or (sp_in + com) > kc.MAX_COST_SHARE * risk:
             tolak["P5 gerbang biaya 10%"] = tolak.get("P5 gerbang biaya 10%", 0) + 1
             continue
