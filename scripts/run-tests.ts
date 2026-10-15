@@ -10638,6 +10638,16 @@ test("764. R-1 cadangan slippage: pemindai/entry/bayangan memakai batas golongan
   assert(readSrc("src/lib/symbolScanner.ts").includes("const broker: BrokerSettings = withSlippageReserve({") && readSrc("src/App.tsx").includes("riskCap: riskCapFor(marketData.symbol, usdIdrRate(fxRates)),"), "pemindai pakai cadangan; App tidak disentuh");
   assert(readSrc("server/routes/keputusanRoutes.ts").includes("getUsdIdr: () => usdIdrRate(getCachedEcbRates()),"), "shadow server memakai kurs ECB");
 });
+test("765. LOLOSYIOB bahan 2: script MT5 ekspor M5 panjang + spread + MACD(12,26,9), format H1/H4/M15 tetap, simbol bisa dibatasi", () => {
+  const mq = readSrc("ea/ExportLongH1MDBKA.mq5");
+  assert(mq.includes("InpPeriod != PERIOD_M15 && InpPeriod != PERIOD_M5") && mq.includes('tf = "M5";'), "M5 diterima, file M5_LONG");
+  assert(mq.includes('"spread", "macd_main", "macd_signal"') && mq.includes("(string)rates[i].spread"), "kolom spread + MACD hanya M5");
+  assert(mq.includes('FileWrite(handle, "time", "open", "high", "low", "close", "tick_volume");'), "header H1/H4/M15 tidak berubah");
+  assert(mq.includes("#define MACD_SLOW   26") && mq.includes("iMACD(symbol, PERIOD_M5, MACD_FAST, MACD_SLOW, MACD_SIGNAL, PRICE_CLOSE)"), "MACD standar 12,26,9");
+  assert(mq.includes('input string InpSymbols  = "";') && mq.includes("if(!Wanted(sym))"), "simbol bisa dibatasi, kosong = semua");
+  assert(mq.includes("macdOk = false;") && mq.includes('return "";'), "MACD tak terbaca/bergeser = kosong, tidak dikarang");
+});
+
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =
     `<gesmes:Envelope><Cube><Cube time="2026-10-02">` +

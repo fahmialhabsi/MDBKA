@@ -1,6 +1,6 @@
 # Lolosyiob — Metode Analisa "Kerja Cepat" (15 Okt 2026)
 
-**Status:** uji putaran 1 **TIDAK BERHASIL** (kekurangan kejadian, bukan rugi). Tim, SOP dan workflow **belum ditetapkan**, sesuai perintah Fahmi: ditetapkan setelah uji berhasil.
+**Status:** uji putaran 2 (bahan 2, 1 tahun, 778 trade) **TIDAK BERHASIL — metode Kerja Cepat v1 tidak punya keunggulan** (bagian 12). Putaran 1 juga gagal karena kekurangan kejadian. Tim, SOP dan workflow **belum ditetapkan**, sesuai perintah Fahmi: ditetapkan setelah uji berhasil.
 **Bagian dari:** `docs/RANCANGAN-2026-10-15-scalping-finex-forex.md` (metode scalping Finex Forex).
 **Skrip uji:** `scripts/research/kerja_cepat_bt.py`.
 
@@ -160,6 +160,15 @@ Cara mendapatkannya:
 - Masuk dan keluar memakai harga candle M5 plus spread dari kolom spread. Batasnya: urutan SL dan TP di dalam satu candle tidak diketahui, sehingga dianggap kena SL (konservatif).
 - Bila berhasil, hasilnya dicocokkan dengan arsip tick bahan 1 di hari yang sama. Setelah itu baru tim, SOP dan workflow Lolosyiob ditetapkan.
 
+### 7a. Saksi MACD (diminta Fahmi; dibekukan sebelum data M5 ada)
+
+- **Pilihan:** MACD **12,26,9**, yaitu standar MT5 dan TA-Lib. "26" adalah EMA lambat. MACD 50 bukan pengaturan baku, jadi tidak dipakai.
+- **Bukan bahan baru:** MACD dihitung dari candle M5 yang sama (bahan 2). Kolom `macd_main` dan `macd_signal` di file M5 berguna untuk mencocokkan hitungan T-IND dengan MT5. Catatan: garis sinyal MT5 = **SMA** dari main, sedangkan TA-Lib memakai EMA.
+- **Varian B "Kerja Cepat + saksi MACD":** semua langkah P1–P6 sama, ditambah satu syarat di candle pemicu:
+  - BELI hanya bila `macd_main > 0`;
+  - JUAL hanya bila `macd_main < 0`.
+- **Urutan penilaian:** vonis utama tetap varian A (tanpa MACD). Varian B dilaporkan berdampingan, dan baru boleh dipilih bila lolos K1–K6 **dan** tidak lebih buruk dari A di ≥ 4 dari 7 blok. Dua varian diuji sekaligus, jadi peluang "beruntung" naik. Hal ini dicatat di rapor.
+
 ## 8. Batas data
 
 - Data tick bahan 1 hanya 7 hari uji, dengan celah, dan sampelnya ±2 detik (bukan setiap tick).
@@ -179,3 +188,81 @@ Cara mendapatkannya:
 python3 scripts/research/scalp_finex_agg.py data/history/finex/ticks-2026-10-XX.jsonl m1-XX.csv   (per hari, lalu gabung)
 python3 scripts/research/kerja_cepat_bt.py gabungan-m1.csv
 ```
+
+## 11. API MT5 untuk integrasi MDBKA (riset 15 Okt 2026)
+
+| Jalur | Siapa yang boleh memakai | Cocok untuk MDBKA? |
+| --- | --- | --- |
+| API khusus Finex | Tidak ditemukan di sumber publik (finex.co.id, ulasan broker) | — |
+| MT5 Manager API / Web API | **Broker**, untuk back-office | Tidak; bukan untuk nasabah |
+| Paket Python resmi MetaQuotes `MetaTrader5` | Siapa saja; tersambung ke terminal MT5 yang **sedang berjalan di komputer yang sama** (Windows), dengan akun apa pun termasuk Finex | **Ya, untuk membaca data**: `copy_rates_range` (candle), `copy_ticks_range` (tick bid/ask asli dari server), `positions_get`, `history_deals_get` |
+
+**Batas:**
+- Paket ini juga punya `order_send` (kirim order). MDBKA **tidak boleh** memakainya; hanya fungsi baca yang dipakai.
+- Seberapa jauh riwayat tick bisa ditarik tergantung server Finex. Harus dicoba dulu.
+- Ini perubahan arsitektur dari "EA menulis CSV" menjadi "skrip Python membaca terminal". Perlu keputusan Fahmi (usulan **API-1**). Untuk sekarang, jalur skrip MQL5 di bagian 7 sudah cukup.
+
+## 12. Hasil uji putaran 2 — bahan 2 (riwayat M5 server Finex)
+
+**Data:**
+- `MDBKA_<pasangan>_M5_LONG.csv`, 75.000 candle per pasangan, diekspor Fahmi 15 Okt 2026 pukul 13:27 WIT.
+- Rentang uji: 28 Sep 2025 – 15 Okt 2026 (UTC).
+- Skrip: `scripts/research/kerja_cepat_bt_m5.py`.
+- Langkah P1–P6 sama persis dengan putaran 1. Penyesuaian hanya karena bentuk data:
+  - candle MT5 = harga bid, dan ask = bid + kolom spread;
+  - jam server = jam New York + 7 (buka mingguan selalu Senin 01:00 server);
+  - jalur keluar dinilai per candle M5.
+
+**Pemeriksaan mesin uji:**
+- Di 6–14 Okt, 6 dari 7 trade putaran 1 (arsip tick) muncul lagi di **jam yang sama**, dengan SL dan R hampir sama. Contoh: GBPJPY 6 Okt 11:15 kena TP +1,49R di kedua data.
+- Satu-satunya yang tidak muncul lagi adalah USDJPY 13 Okt 13:45.
+- Riwayat M5 menemukan 15 trade di hari-hari itu (+3,08R), karena arsip tick bolong.
+- Kesimpulan: konversi jam dan logika sama dengan putaran 1.
+
+**Hasil (Rupiah untuk lot 0,01, kurs Rp17.880):**
+
+| Uji | Blok | Trade | Menang | R bersih | Rupiah | Hasil |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 28 Sep – 21 Nov 2025 | 148 | 62 | −4,29 | −Rp152.042 | Tidak |
+| 2 | 21 Nov 2025 – 15 Jan 2026 | 113 | 57 | +3,43 | +Rp135.717 | Berhasil |
+| 3 | 15 Jan – 10 Mar 2026 | 119 | 48 | −9,90 | −Rp174.243 | Tidak |
+| 4 | 10 Mar – 4 Mei 2026 | 105 | 41 | −19,08 | −Rp371.061 | Tidak |
+| 5 | 4 Mei – 28 Jun 2026 | 95 | 43 | −7,34 | −Rp43.220 | Tidak |
+| 6 | 28 Jun – 21 Agu 2026 | 104 | 43 | −15,89 | −Rp287.357 | Tidak |
+| 7 | 21 Agu – 15 Okt 2026 | 94 | 34 | −13,60 | −Rp340.258 | Tidak |
+| **Jumlah** | | **778** | **42%** | **−66,66** | **−Rp1.232.464** | |
+
+| Kriteria | Varian A (utama) | Varian B (+ saksi MACD) |
+| --- | --- | --- |
+| K1 n ≥ 20 | 778 ✔ | 768 ✔ |
+| K2 rata-rata > 0 | −0,086R ✘ | −0,085R ✘ |
+| K3 PF ≥ 1,2 | 0,79 ✘ | 0,79 ✘ |
+| K4 ≥ 5/7 blok | 1/7 ✘ | 1/7 ✘ |
+| K5 terburuk ≥ −1,1R | −1,02R ✔ | −1,02R ✔ |
+| K6 tanpa blok terbaik > 0 | −70,10R ✘ | −68,56R ✘ |
+| **Vonis** | **TIDAK BERHASIL** | **TIDAK BERHASIL** |
+
+### 12.1 Sebab gagal (analisa akar masalah)
+
+1. **Bukan karena biaya.** Biaya rata-rata hanya 0,067R per trade, dan gerbang 10% bekerja. Tanpa biaya pun hasilnya −0,019R per trade. **Pemicu "tembus setelah tenang" pada M5 memang tidak punya keunggulan** di 5 pasangan ini selama setahun.
+2. **Tembusan jarang berlanjut.**
+   - Hanya 11% trade yang mencapai TP 1,5R (85 dari 778), sedangkan 29% kena SL.
+   - Sebanyak 60% ditutup batas waktu 60 menit dengan gerak kecil.
+   - Ini sejalan dengan peringatan Volman bahwa tembusan biasa sering gagal karena dilawan pemain kontra.
+3. **Jam terburuk 07–09 UTC (16–18 WIT, pembukaan London):** −54,0R dari total −66,7R.
+4. **Saksi MACD tidak menambah informasi.** Hanya 28 dari ±800 sinyal yang disaring. Setelah harga bergerak ≥ 2× panjang candle dalam satu jam, MACD hampir selalu sudah searah, karena MACD dihitung dari harga yang sama.
+5. **Hasil putaran 1 (+0,83R) adalah kebetulan** dari 7 trade. Dengan data setahun, keunggulan itu hilang. Inilah alasan aturan n ≥ 20 dan uji di banyak blok.
+
+### 12.2 Keputusan proses
+
+- Bahan tambahan yang diizinkan (1 bahan) **sudah dipakai**. Kegagalan ini **bukan karena kekurangan bahan**, jadi menambah bahan lagi tidak menjawab sebabnya.
+- **Kerja Cepat v1 dinyatakan TIDAK LAYAK.** Tim, SOP dan workflow Lolosyiob **tidak ditetapkan**.
+- Parameter **tidak disetel ulang** di data yang sama. Itu sama dengan mencocokkan jawaban dengan soal.
+
+**Pilihan lanjutan (keputusan Fahmi):**
+
+| Kode | Pilihan | Catatan |
+| --- | --- | --- |
+| LY-1 | Hentikan Lolosyiob; scalping tetap riset | Paling aman |
+| LY-2 | Rancang **Kerja Cepat v2** dengan bahan yang sama (bahan 1 + 2), memakai pembagian jujur: dirancang di 28 Sep 2025 – 30 Apr 2026, lalu diuji **satu kali** di 1 Mei – 15 Okt 2026 | Gagasan baru (misalnya hindari 07–09 UTC, atau batas waktu lebih panjang) hanya boleh dinilai di bagian ujian |
+| LY-3 | Uji maju (*forward*) tanpa uang dari 16 Okt 2026, tanpa mengubah apa pun | Lambat; v1 sudah terbukti negatif setahun, jadi kecil gunanya |
