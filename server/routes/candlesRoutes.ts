@@ -4,6 +4,8 @@ import { join } from "node:path";
 import type { QuoteSnapshot } from "../types/quotes";
 import { pickLiveSource, resolveLiveBroker } from "../types/liveSource";
 import { resolveCommonFilesDir } from "./marginRoutes";
+import { parseCsvCandles } from "../../src/lib/csvCandleParser";
+import { stormWarning, type StormWarning } from "../../src/lib/stormWarning";
 
 /**
  * Langkah 3a (Mode Aman, 8 Okt 2026) — bahan pemindai simbol.
@@ -119,6 +121,20 @@ export function createCandlesRoutes(
       return;
     }
     res.json({ broker, items: collectCandleItems(source, commonDir) });
+  });
+
+  // CU-1: GET /api/candles/storm?symbols=A,B → { storms: [{ symbol, status, ratio, text }] } dari CSV M15.
+  // Simbol tanpa CSV M15 dilewati (tanpa data fiktif). Didaftarkan sebelum /:symbol.
+  router.get("/storm", (req: Request, res: Response) => {
+    const raw = typeof req.query.symbols === "string" ? req.query.symbols : "";
+    const symbols = [...new Set(raw.split(",").map((x) => x.trim()).filter((x) => x !== ""))].slice(0, 120);
+    const storms: Array<{ symbol: string } & StormWarning> = [];
+    for (const symbol of symbols) {
+      const found = readCandleCsvTf(commonDir, symbol, "M15");
+      if (found === null) continue;
+      storms.push({ symbol, ...stormWarning(parseCsvCandles(found.csv).candles) });
+    }
+    res.json({ storms });
   });
 
   // G2: GET /api/candles/:symbol → { symbol, csv, modified } | 404.

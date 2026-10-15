@@ -345,6 +345,7 @@ import { buildSeriesCards, labelForR } from "../src/lib/seriesCard";
 import { patternsDuring, seriesInsight, seriesLossCause } from "../src/lib/seriesInsight";
 import { buildPatternCards, contextFromDecision, d1DirectionAt, fingerprint2, fingerprintNotes, sessionBucket, volRegime } from "../src/lib/patternCards";
 import { CAUTION_DAYS, cautionNotes } from "../src/lib/cautionNotes";
+import { STORM_K, stormWarning } from "../src/lib/stormWarning";
 import { LAMP2_LOSS_TOLERANCE_R, lampRows } from "../src/lib/greenLamps";
 import { readBacktestLamps, saveBacktestLamps } from "../server/services/lampStore";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
@@ -10653,6 +10654,24 @@ test("766. XAUUSD M1: script MT5 ekspor M1 panjang + spread (tanpa MACD); M5/H1/
   assert(mq.includes("InpPeriod != PERIOD_M5 && InpPeriod != PERIOD_M1") && mq.includes('tf = "M1";'), "M1 diterima, file M1_LONG");
   assert(mq.includes('FileWrite(handle, "time", "open", "high", "low", "close", "tick_volume", "spread");'), "header M1: spread tanpa MACD");
   assert(mq.includes('"spread", "macd_main", "macd_signal"') && mq.includes('FileWrite(handle, "time", "open", "high", "low", "close", "tick_volume");'), "M5 & format lama tidak berubah");
+});
+
+test("767. CU-1 Peringatan Badai 30 menit: rentang 1 jam M15 > 2× median 96 jendela = BADAI; hanya peringatan di pemindai", () => {
+  const flat = (n: number, range: number) =>
+    Array.from({ length: n }, (_, i) => ({ time: `2026.10.15 ${String(i).padStart(4, "0")}`, open: 100, high: 100 + range / 2, low: 100 - range / 2, close: 100 }));
+  const normal = flat(140, 1);
+  const n = stormWarning(normal);
+  assert(n.status === "NORMAL" && n.ratio !== null && Math.abs(n.ratio - 1) < 1e-9, JSON.stringify(n));
+  const badai = stormWarning([...flat(136, 1), ...flat(4, 3)]);
+  assert(badai.status === "BADAI" && badai.ratio !== null && badai.ratio > STORM_K && badai.text.includes("Peringatan Badai 30 menit") && badai.text.includes("arah tidak diramal"), JSON.stringify(badai));
+  const tepat = stormWarning([...flat(136, 1), ...flat(4, 2)]);
+  assert(tepat.status === "NORMAL", "tepat 2× belum badai (harus > 2×)");
+  assert(stormWarning(flat(20, 1)).status === "DATA_KURANG" && stormWarning(flat(140, 0)).status === "DATA_KURANG", "data kurang / datar = tidak dinilai");
+  const route = readSrc("server/routes/candlesRoutes.ts");
+  assert(route.indexOf('router.get("/storm"') > 0 && route.indexOf('router.get("/storm"') < route.indexOf('router.get("/:symbol"') && route.includes('readCandleCsvTf(commonDir, symbol, "M15")'), "rute storm sebelum /:symbol, dari CSV M15");
+  const scan = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(scan.includes("useStorms(stormSymbols)") && scan.includes('w.status === "BADAI"') && scan.includes("scan-storm-"), "pemindai menampilkan baris badai");
+  assert(!readSrc("src/lib/stormWarning.ts").includes("decisionEngine"), "tidak menyentuh mesin keputusan");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

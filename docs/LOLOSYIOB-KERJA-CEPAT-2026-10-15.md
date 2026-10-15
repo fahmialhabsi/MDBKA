@@ -406,3 +406,26 @@ Skrip: `scripts/research/prakiraan_cuaca_ma26_bt.py`.
 4. **Hujan sebenarnya**, yaitu berita yang dijadwalkan, belum bisa diuji setahun karena kalender historis tidak tersimpan. Di MDBKA, penjaga berita sudah menahan sinyal menjelang berita.
 
 **Catatan kejujuran:** data ujian (Mei–Okt 2026) sudah dipakai untuk menilai v2, v3 dan v4. Makin sering satu data ujian dipakai, makin besar peluang sebuah versi tampak berhasil karena kebetulan. Bila nanti ada versi yang lolos, versi itu wajib diuji lagi di data baru setelah 15 Okt 2026.
+
+## 16. CU-1 dipasang — Peringatan Badai 30 menit (disetujui Fahmi 15 Okt 2026 16:00 WIT)
+
+**Uji ulang di M15**, karena MDBKA live memakai CSV M15, bukan M5:
+- Data: 5 pasangan Forex + XAUUSD Finex, Sep 2025 – Okt 2026.
+- Aturan: rentang 1 jam terakhir (4 candle M15) > 2× median 96 jendela sebelumnya.
+- Peluang rentang 30 menit berikutnya > 1,5× biasa:
+
+| | BADAI | Normal |
+| --- | --- | --- |
+| Latih | 57,9% | 17,5% |
+| Ujian | 60,5% | 17,9% |
+
+  Per pasangan (ujian, BADAI): 58–65% untuk Forex dan 45% untuk XAUUSD.
+- Syarat spread tidak dipakai di versi live, karena CSV M15 tidak memuat spread. Penjaga spread MDBKA tetap berjalan seperti biasa.
+
+**Pemasangan:**
+- `src/lib/stormWarning.ts` (murni);
+- `GET /api/candles/storm?symbols=…`;
+- `useStorms`;
+- baris 🌩 di pemindai.
+
+Sifatnya **hanya peringatan**: tidak menahan sinyal, dan tidak mengubah `decisionEngine.ts` maupun Hasil analisa. Uji 767.

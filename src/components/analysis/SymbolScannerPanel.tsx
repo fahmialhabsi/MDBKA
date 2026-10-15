@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTradeSessions } from "../../hooks/useTradeSessions";
 import { useDataQuality } from "../../hooks/useDataQuality";
 import { useCautions } from "../../hooks/useCautions";
+import { useStorms } from "../../hooks/useStorms";
 import { useTradingMode } from "../../hooks/useTradingMode";
 import { accountsForActiveLogin, pauseLocks } from "../../lib/tradingMode";
 import { labAllowed, labTicket, minLotFor, type LabTicket } from "../../lib/labTrades";
@@ -315,6 +316,17 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
     () => sortScanRows(source.map((item) => scanItem(item, item.quote))),
     [source, scanItem],
   );
+  // CU-1: Peringatan Badai 30 menit (CSV M15, nama simbol asli broker) — hanya peringatan.
+  const stormSymbols = useMemo(() => source.map((i) => i.symbol), [source]);
+  const storms = useStorms(stormSymbols);
+  const stormOf = useCallback(
+    (symbol: string) => {
+      const item = source.find((i) => canonicalSymbolForBroker(i.symbol, brokerId) === symbol);
+      const w = item === undefined ? undefined : storms.get(item.symbol);
+      return w !== undefined && w.status === "BADAI" ? w : null;
+    },
+    [source, storms, brokerId],
+  );
   const recomputePlan = useCallback(
     (symbol: string, quote: LiveQuoteLike) => {
       const item = source.find((i) => canonicalSymbolForBroker(i.symbol, brokerId) === symbol);
@@ -555,6 +567,11 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
                     {cautions.get(row.symbol) !== undefined && (
                       <span data-testid={`scan-caution-${row.symbol}`} className="mt-1 block text-xs text-amber-300">
                         ⚠ {cautions.get(row.symbol)?.text}
+                      </span>
+                    )}
+                    {stormOf(row.symbol) !== null && (
+                      <span data-testid={`scan-storm-${row.symbol}`} className="mt-1 block text-xs text-orange-300">
+                        🌩 {stormOf(row.symbol)?.text}
                       </span>
                     )}
                   </td>
