@@ -17,6 +17,7 @@ import { buildBacktestReport, capitalTopUp, formatCostHeldSection, formatGroupSe
 import { getStrategy, STRATEGY_WINDOWS } from "../src/lib/strategyRegistry";
 import { aggregateCandleCsv } from "../src/lib/candleAggregate";
 import { auditCsv, buildDossiers, formatAuditSection, type TradeDossier } from "../src/lib/tradeAudit";
+import { saveBacktestLamps } from "../server/services/lampStore";
 import {
   formatBacktestReport,
   parseBacktestArgs,
@@ -154,6 +155,19 @@ async function main(): Promise<number> {
   // P5: vonis latih/ujian per golongan (bukti tidak dicampur antar golongan).
   console.log("");
   console.log(formatGroupSection(groupReports(runs, usdIdr)));
+  // LAMPU-1: simpan vonis per golongan dengan equity akun (K-8: pakai equity Live) untuk panel 3 lampu.
+  if (process.argv.includes("--simpan-lampu")) {
+    const dateUtc = new Date().toISOString();
+    const rows = groupReports(runs, usdIdr, opt.equity).map((g) => ({
+      group: g.group,
+      verdict: g.verdict,
+      equityUsd: opt.equity,
+      strategy: opt.strategy,
+      broker: opt.brokerId,
+      dateUtc,
+    }));
+    console.log(`  Rapor lampu 1 disimpan: ${saveBacktestLamps(join(process.cwd(), "data"), opt.strategy, opt.brokerId, rows)}`);
+  }
   return 0;
 }
 

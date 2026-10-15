@@ -345,6 +345,8 @@ import { buildSeriesCards, labelForR } from "../src/lib/seriesCard";
 import { patternsDuring, seriesInsight, seriesLossCause } from "../src/lib/seriesInsight";
 import { buildPatternCards, contextFromDecision, d1DirectionAt, fingerprint2, fingerprintNotes, sessionBucket, volRegime } from "../src/lib/patternCards";
 import { CAUTION_DAYS, cautionNotes } from "../src/lib/cautionNotes";
+import { LAMP2_LOSS_TOLERANCE_R, lampRows } from "../src/lib/greenLamps";
+import { readBacktestLamps, saveBacktestLamps } from "../server/services/lampStore";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
 import { evidencePace } from "../src/lib/evidencePace";
 import { collectEvidenceEvents } from "../server/services/evidenceEvents";
@@ -10557,6 +10559,38 @@ test("760. TI-3 konteks entry K3 masuk kartu: rezim volatilitas & sesi (batas di
   const route = readSrc("server/routes/evaluationRoutes.ts");
   assert(route.includes('if (rec.jalur !== "entry" || typeof rec.tiket !== "string" || rec.tiket === "") continue;') && route.includes("notes2: fingerprintNotes(views, 2),"), "server membaca keputusan entry per tiket");
   assert(readSrc("src/components/analysis/PatternCardsPanel.tsx").includes('data-testid="pattern-notes2"'), "panel tingkat 2");
+});
+test("761. LAMPU-1 panel 3 lampu: lampu 1 dari rapor tersimpan (equity Live), lampu 2 = 20 rangkaian demo setara Live (rata-rata > 0, rugi ≤ 1R, tanpa entry DATA), lampu 3 menunggu 1 & 2", () => {
+  const card = (r: number, extra: Partial<{ setaraLive: boolean | null; jenisAkun: "demo" | "live" | null; dataViolation: boolean; group: string }> = {}) =>
+    ({ group: "FOREX", r, complete: true, setaraLive: true, jenisAkun: "demo" as "demo" | "live" | null, dataViolation: false, ...extra });
+  const bt = (verdict: "LAYAK_DEMO" | "MODAL_KURANG" | "TIDAK_LAYAK" | "BELUM_CUKUP") => ({ group: "FOREX", verdict, equityUsd: 29, strategy: "skor", broker: "finex", dateUtc: "2026-10-15T01:00:00.000Z" });
+  const twenty = Array.from({ length: 20 }, (_, i) => card(i % 2 === 0 ? 1 : -0.5));
+  const green = lampRows(twenty, [bt("LAYAK_DEMO")])[0];
+  assert(green?.lamp1.state === "HIJAU" && green.lamp2.state === "HIJAU" && green.lamp3.state === "BELUM" && green.lamp3.text.includes("0/20"), JSON.stringify(green));
+  assert(lampRows(twenty, [bt("MODAL_KURANG")])[0]?.lamp1.state === "MERAH" && lampRows(twenty, [])[0]?.lamp1.state === "BELUM", "K-8: MODAL_KURANG = merah; tanpa rapor = belum");
+  assert(lampRows(twenty.slice(0, 19), [])[0]?.lamp2.text.startsWith("19/20") === true, "kurang dari 20 = belum");
+  const lebih = [...twenty.slice(0, 19), card(-(1 + LAMP2_LOSS_TOLERANCE_R) - 0.05)];
+  assert(lampRows(lebih, [])[0]?.lamp2.state === "MERAH" && (lampRows(lebih, [])[0]?.lamp2.text ?? "").includes("ada rugi > 1R"), "rugi > 1R = merah");
+  const bukanSetara = twenty.map((c) => ({ ...c, setaraLive: null }));
+  assert(lampRows(bukanSetara, [])[0]?.lamp2.text.startsWith("0/20") === true && lampRows(twenty.map((c) => ({ ...c, jenisAkun: "live" as const })), [])[0]?.lamp2.text.startsWith("0/20") === true, "hanya demo + setara Live");
+  assert(lampRows([...twenty.slice(1), card(1, { dataViolation: true })], [])[0]?.lamp2.state === "MERAH", "entry saat DATA = merah");
+  const live = Array.from({ length: 20 }, (_, i) => card(i % 2 === 0 ? 1 : -0.5, { jenisAkun: "live" }));
+  assert(lampRows([...twenty, ...live], [bt("LAYAK_DEMO")])[0]?.lamp3.state === "HIJAU", "lampu 3 hijau bila Live tidak lebih buruk 0,2R");
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const nfs = require("node:fs") as unknown as typeof import("node:fs");
+  const npath = require("node:path") as unknown as typeof import("node:path");
+  const dir = nfs.mkdtempSync(npath.join(os.tmpdir(), "lampu-"));
+  try {
+    saveBacktestLamps(dir, "skor", "finex", [bt("TIDAK_LAYAK")]);
+    nfs.writeFileSync(npath.join(dir, "lampu", "backtest-rusak-x.json"), "{bukan json");
+    const back = readBacktestLamps(dir);
+    assert(back.length === 1 && back[0]?.verdict === "TIDAK_LAYAK", JSON.stringify(back));
+  } finally {
+    nfs.rmSync(dir, { recursive: true, force: true });
+  }
+  const cli = readSrc("scripts/backtest.ts");
+  assert(cli.includes('if (process.argv.includes("--simpan-lampu")) {') && cli.includes("groupReports(runs, usdIdr, opt.equity)"), "CLI menyimpan rapor lampu hanya bila diminta, dengan equity yang diuji");
+  assert(readSrc("server/routes/evaluationRoutes.ts").includes('router.get("/lamps"') && readSrc("src/components/analysis/TradeEvaluationPanel.tsx").includes("<GreenLampsPanel />"), "route + panel");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

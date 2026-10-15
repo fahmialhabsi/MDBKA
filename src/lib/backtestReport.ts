@@ -428,7 +428,12 @@ export interface GroupBacktestRow {
  * 3 poin di atas titik impas). Bukti emas tidak menolong Forex, dan sebaliknya.
  * Batas waktu latih|ujian dihitung per golongan dari data simbolnya.
  */
-export function groupReports(runs: readonly BacktestRun[], usdIdr: number | null): GroupBacktestRow[] {
+export function groupReports(
+  runs: readonly BacktestRun[],
+  usdIdr: number | null,
+  /** LAMPU-1 (K-8): equity akun Live → vonis per golongan ikut menilai MODAL_KURANG. Absen = perilaku lama. */
+  equityUsd?: number,
+): GroupBacktestRow[] {
   const byGroup = new Map<string, BacktestRun[]>();
   for (const r of runs) {
     if (r.error !== null) continue;
@@ -439,7 +444,7 @@ export function groupReports(runs: readonly BacktestRun[], usdIdr: number | null
   return [...byGroup.entries()]
     .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
     .map(([group, list]) => {
-      const rep = buildBacktestReport(list, usdIdr);
+      const rep = equityUsd === undefined ? buildBacktestReport(list, usdIdr) : buildBacktestReport(list, usdIdr, undefined, equityUsd);
       return {
         group,
         label: RISK_GROUPS[group as keyof typeof RISK_GROUPS]?.label ?? group,

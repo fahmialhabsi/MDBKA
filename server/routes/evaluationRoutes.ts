@@ -15,6 +15,9 @@ import type { Candle } from "../../src/calculations/swingDetector";
 import { buildPatternCards, contextFromDecision, fingerprintNotes, type CardContext, type FingerprintNote, type PatternCardView } from "../../src/lib/patternCards";
 import { parseJsonlText, type KeputusanRecord } from "../../src/lib/jsonlRecord";
 import { cautionNotes } from "../../src/lib/cautionNotes";
+import { lampRows, type LampCard } from "../../src/lib/greenLamps";
+import { riskGroupOf } from "../../src/lib/riskGroup";
+import { readBacktestLamps } from "../services/lampStore";
 
 /**
  * Langkah 4c — GET /api/evaluation
@@ -142,11 +145,25 @@ export interface AccountCards {
   readonly notes2: readonly FingerprintNote[];
   /** PR-2: catatan waspada per simbol (hanya peringatan). */
   readonly cautions: ReturnType<typeof cautionNotes>;
+  /** LAMPU-1: bahan lampu 2/3 (semua kartu, bukan hanya 30 terbaru). */
+  readonly lampCards: readonly LampCard[];
+}
+
+/** LAMPU-1: ringkasan baris keputusan entry per tiket (konteks + setara Live + jenis akun + gerbang data). */
+export interface EntryDecision {
+  readonly context: CardContext;
+  readonly setaraLive: boolean | null;
+  readonly jenisAkun: "demo" | "live" | "tidak-terbukti";
+  readonly dataViolation: boolean;
 }
 
 /** TI-3: konteks entry per tiket dari data/keputusan/keputusan-<broker>-*.jsonl (jalur entry). */
 export function entryContexts(dataDir: string, broker: BrokerId): Map<string, CardContext> {
-  const out = new Map<string, CardContext>();
+  return new Map([...entryDecisions(dataDir, broker)].map(([k, v]) => [k, v.context]));
+}
+
+export function entryDecisions(dataDir: string, broker: BrokerId): Map<string, EntryDecision> {
+  const out = new Map<string, EntryDecision>();
   const dir = join(dataDir, "keputusan");
   if (!existsSync(dir)) return out;
   for (const name of readdirSync(dir).sort()) {
@@ -160,7 +177,12 @@ export function entryContexts(dataDir: string, broker: BrokerId): Map<string, Ca
     for (const raw of parseJsonlText(text, "keputusan/1").records) {
       const rec = raw as unknown as KeputusanRecord;
       if (rec.jalur !== "entry" || typeof rec.tiket !== "string" || rec.tiket === "") continue;
-      out.set(rec.tiket, contextFromDecision(rec));
+      out.set(rec.tiket, {
+        context: contextFromDecision(rec),
+        setaraLive: rec.setaraLive ?? null,
+        jenisAkun: rec.jenisAkun,
+        dataViolation: rec.hasil.status === "DATA",
+      });
     }
   }
   return out;
@@ -182,7 +204,8 @@ export function collectAccountCards(
     return cache.get(key) ?? null;
   };
   return collectAccountEvaluations(commonDir, tradesDir, labels).map((a) => {
-    const ctx = a.broker === null ? new Map<string, CardContext>() : entryContexts(dirname(tradesDir), a.broker);
+    const dec = a.broker === null ? new Map<string, EntryDecision>() : entryDecisions(dirname(tradesDir), a.broker);
+    const ctx = new Map([...dec].map(([k, v]) => [k, v.context]));
     const views = buildPatternCards(a.evaluation.trades, a.excursions, candlesOf("H1"), candlesOf("D1"), (id) => ctx.get(id) ?? null);
     const notes = fingerprintNotes(views);
     return {
@@ -194,6 +217,17 @@ export function collectAccountCards(
       notes,
       notes2: fingerprintNotes(views, 2),
       cautions: cautionNotes(views, notes, Date.now()),
+      lampCards: views.map((v) => {
+        const d = v.card.positions[0] === undefined ? undefined : dec.get(v.card.positions[0]);
+        return {
+          group: riskGroupOf(v.card.symbol).id,
+          r: v.card.r,
+          complete: v.card.complete,
+          setaraLive: d?.setaraLive ?? null,
+          jenisAkun: d?.jenisAkun ?? null,
+          dataViolation: d?.dataViolation ?? false,
+        };
+      }),
     };
   });
 }
@@ -223,6 +257,14 @@ export function createEvaluationRoutes(
   router.get("/cards", (_req: Request, res: Response) => {
     try {
       res.json({ accounts: cards() });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+  // LAMPU-1: GET /api/evaluation/lamps → { rows } status 3 lampu per golongan (tampilan saja).
+  router.get("/lamps", (_req: Request, res: Response) => {
+    try {
+      res.json({ rows: lampRows(cards().flatMap((a) => a.lampCards), readBacktestLamps(dirname(tradesDir))) });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }

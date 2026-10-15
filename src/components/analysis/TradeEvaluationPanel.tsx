@@ -21,6 +21,7 @@ import {
 import { usdIdrRate, type ExchangeRates } from "../../services/fxRateService";
 import { EvidencePacePanel } from "./EvidencePacePanel";
 import { PatternCardsPanel } from "./PatternCardsPanel";
+import { GreenLampsPanel } from "./GreenLampsPanel";
 
 /**
  * Langkah 4c-2 (Mode Aman, 8 Okt 2026) — panel "Evaluasi trade".
@@ -373,6 +374,9 @@ export function TradeEvaluationPanel({ fxRates }: Props) {
           terminal MT5.
         </p>
       )}
+
+      {/* LAMPU-1: 3 lampu hijau per golongan. */}
+      <GreenLampsPanel />
 
       {/* LB-1: laju bukti per golongan. */}
       <EvidencePacePanel />
