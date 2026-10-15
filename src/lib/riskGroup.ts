@@ -132,6 +132,30 @@ export function riskCapFor(
   };
 }
 
+/**
+ * R-1 (disetujui Fahmi 15 Okt 2026): cadangan slippage SL. Rencana risiko per
+ * posisi ≤ batas golongan ÷ 1,1, sehingga rugi nyata terburuk (−1,075R, K-10)
+ * tetap di bawah batas Rupiah. HANYA jalur pemindai/entry/bayangan; Hasil
+ * analisa (App.tsx) tetap memakai riskCapFor apa adanya (aturan mutlak 1) dan
+ * selisihnya dicatat lewat shadow. Rumus decisionEngine.ts tidak diubah.
+ */
+export const RISK_CAP_SLIPPAGE_RESERVE = 1.1;
+
+export function withSlippageReserve<T extends { readonly riskCap?: { label: string; idr: number | null; usd: number | null; usdIdr: number | null } | null }>(
+  broker: T,
+): T {
+  const cap = broker.riskCap;
+  if (cap === undefined || cap === null) return broker;
+  return {
+    ...broker,
+    riskCap: {
+      ...cap,
+      idr: cap.idr === null ? null : Math.round(cap.idr / RISK_CAP_SLIPPAGE_RESERVE),
+      usd: cap.usd === null ? null : cap.usd / RISK_CAP_SLIPPAGE_RESERVE,
+    },
+  };
+}
+
 /** Nama baku yang dikenal golongan bernama (bukan saham/lainnya). */
 const isKnownBase = (s: string): boolean =>
   FOREX.has(s) || FOREX_JPY.has(s) || FOREX_TIDAK_LAZIM.has(s) || LOGAM.has(s) || MINYAK.has(s) || INDEKS.has(s);

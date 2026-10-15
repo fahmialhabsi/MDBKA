@@ -151,7 +151,7 @@ Total langkah di semua rancangan sekarang 53 + 12 = 65.
 | --- | --- | --- |
 | K-10 | Lampu 2 (C5): "rugi terbesar per rangkaian ≤ 1R" diberi toleransi 0,1R (melanggar bila R < −1,1), karena R kartu tidak memasukkan biaya dan slippage SL. Dasar data: 15 trade SL Finex/MIFX, terburuk −1,075R. Tinjauan tim: `docs/TINJAUAN-RISIKO-2026-10-15-toleransi-lampu2.md` | **Disetujui Fahmi** (10:35 WIT) |
 
-| R-1 | Rencana risiko per posisi ≤ batas golongan ÷ 1,1 (cadangan slippage SL); rumus `decisionEngine.ts` tidak diubah, hanya batas masukan | **Disetujui Fahmi** (10:47 WIT) — belum dikerjakan |
+| R-1 | Rencana risiko per posisi ≤ batas golongan ÷ 1,1 (cadangan slippage SL); rumus `decisionEngine.ts` tidak diubah, hanya batas masukan | **Disetujui Fahmi** (10:47 WIT); cakupan dipilih Fahmi 11:40 WIT: pemindai, entry, bayangan, backtest + shadow untuk Hasil analisa (aturan mutlak 1 utuh) — dikerjakan 15 Okt 2026 (test 764) |
 | R-2 | Skenario stres di panel risiko gabungan: rugi bila semua SL kena × 1,075 (SOP-09 langkah 3) | **Disetujui Fahmi** (10:47 WIT) — dikerjakan 15 Okt 2026 (test 763) |
 | R-3 | Evaluasi membaca mata uang akun (Exness demo = IDR) | **Disetujui Fahmi** (10:47 WIT) — dikerjakan 15 Okt 2026 (test 762) |
 | K-11 | Akun Exness demo 413925678 (milik saudara Fahmi) = **akun pembelajaran**: tujuannya mencari titik lemah dan titik baik sebagai bahan T-AUDIT, T-BELAJAR-RUGI dan T-KARTU. Datanya boleh dipakai untuk analisa dan evaluasi, tetapi **tidak dihitung sebagai bukti lampu 2/3** (bukan rangkaian setara Live, lot dan SL tidak mengikuti aturan MDBKA) | **Ditetapkan Fahmi** (11:10 WIT) |

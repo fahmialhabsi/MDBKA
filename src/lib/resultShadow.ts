@@ -2,7 +2,7 @@
 import type { AnalysisResult, Decision } from "../types/analysis";
 import type { BrokerId } from "../types/broker";
 import type { KeputusanRecord } from "./jsonlRecord";
-import { riskGroupOf } from "./riskGroup";
+import { RISK_CAP_SLIPPAGE_RESERVE, riskCapFor, riskGroupOf } from "./riskGroup";
 import { findSessionHold, type TradeSession } from "./sessionGuard";
 
 /** Bagian hasil terlihat yang dibaca shadow (dikirim App ke server). */
@@ -13,13 +13,15 @@ export interface ShownSummary {
   readonly takeProfit: number | null;
   readonly suggestedLot: number | null;
   readonly costShareOfRisk: number | null;
+  /** R-1: risiko USD pada lot minimum (absen = App lama; R-1 tidak dinilai). */
+  readonly riskAtMinLot?: number | null;
 }
 
 export interface ResultShadow {
   readonly shownDecision: Decision;
   readonly shadowDecision: Decision;
   readonly differs: boolean;
-  readonly shadowCode: "DITAHAN_SESI" | null;
+  readonly shadowCode: "DITAHAN_SESI" | "DITAHAN_RISIKO" | null;
   readonly shadowReason: string | null;
   readonly closesInMin: number | null;
 }
@@ -39,6 +41,7 @@ export function summarizeShown(shown: Readonly<AnalysisResult>): ShownSummary {
     takeProfit: finiteOrNull(shown.takeProfit),
     suggestedLot: finiteOrNull(shown.suggestedLot),
     costShareOfRisk: finiteOrNull(shown.costShareOfRisk),
+    riskAtMinLot: finiteOrNull(shown.riskAtMinLot),
   };
 }
 
@@ -51,6 +54,8 @@ export function computeResultShadow(
   symbol: string,
   serverNow: string | null,
   sessions: readonly TradeSession[] | null,
+  /** R-1: kurs USD→Rp; null/absen = cadangan slippage tidak dinilai. */
+  usdIdr: number | null = null,
 ): ResultShadow | null {
   if (serverNow === null || !SERVER_TIME.test(serverNow)) return null;
   if (sessions === null || sessions.length === 0) return null;
@@ -59,6 +64,20 @@ export function computeResultShadow(
   }
   const hold = findSessionHold(symbol, serverNow, sessions);
   if (hold === null) {
+    // R-1: lolos batas golongan penuh, tetapi melewati batas ÷1,1 → pemindai akan menahan.
+    const cap = riskCapFor(symbol, usdIdr);
+    const risk = shown.riskAtMinLot ?? null;
+    if (cap.usd !== null && cap.idr !== null && risk !== null && risk > cap.usd / RISK_CAP_SLIPPAGE_RESERVE && risk <= cap.usd) {
+      const rp = cap.usdIdr === null ? null : Math.round(risk * cap.usdIdr);
+      return {
+        shownDecision: shown.decision,
+        shadowDecision: "TUNGGU",
+        differs: true,
+        shadowCode: "DITAHAN_RISIKO",
+        shadowReason: `R-1: risiko lot minimum ${rp === null ? `$${risk.toFixed(2)}` : `Rp${rp.toLocaleString("id-ID")}`} > batas ${cap.label} ÷ ${String(RISK_CAP_SLIPPAGE_RESERVE).replace(".", ",")} (Rp${Math.round(cap.idr / RISK_CAP_SLIPPAGE_RESERVE).toLocaleString("id-ID")})`,
+        closesInMin: null,
+      };
+    }
     return { shownDecision: shown.decision, shadowDecision: shown.decision, differs: false, shadowCode: null, shadowReason: null, closesInMin: null };
   }
   return {
@@ -111,11 +130,14 @@ export function buildShadowRecord(meta: ShadowRecordMeta, shown: ShownSummary, s
     penjaga: [
       {
         nama: "sesi",
-        hasil: shadow.shadowCode === null ? "LULUS" : "GAGAL",
-        kodeAlasan: shadow.shadowCode,
+        hasil: shadow.shadowCode === "DITAHAN_SESI" ? "GAGAL" : "LULUS",
+        kodeAlasan: shadow.shadowCode === "DITAHAN_SESI" ? shadow.shadowCode : null,
         sumberData: "MDBKA_Sessions",
         umurDataDetik: null,
       },
+      ...(shadow.shadowCode === "DITAHAN_RISIKO"
+        ? [{ nama: "risiko_cadangan_r1", hasil: "GAGAL" as const, kodeAlasan: shadow.shadowCode, sumberData: "riskGroup", umurDataDetik: null }]
+        : []),
     ],
     hasil: {
       status: shadow.shadowCode,

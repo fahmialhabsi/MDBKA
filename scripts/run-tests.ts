@@ -284,7 +284,7 @@ import { buildBalanceRows, usdToIdrText } from "../src/lib/accountBalanceView";
 import { applyDoubleBetHold, exposureOf, findDoubleBet } from "../src/lib/correlationGuard";
 import { applyLossPauseHold, checkLossStreak, tradesForBroker } from "../src/lib/lossStreakGuard";
 import { formatPrice, priceDigits, tickSizeForSymbol } from "../src/lib/tickSize";
-import { baseRiskSymbol, RISK_GROUPS, riskCapFor, riskGroupOf, riskGroupTable } from "../src/lib/riskGroup";
+import { baseRiskSymbol, RISK_CAP_SLIPPAGE_RESERVE, RISK_GROUPS, riskCapFor, riskGroupOf, riskGroupTable, withSlippageReserve } from "../src/lib/riskGroup";
 import { computeExcursion } from "../server/services/tradeExcursion";
 import { computeExcursionsFromArchive, excursionFileNames } from "../server/services/excursionReader";
 import {
@@ -10621,6 +10621,22 @@ test("763. R-2 skenario stres risiko gabungan: rugi semua SL × 1,075 (slippage 
   assert(aman.stressLossUsd === 0 && aman.stressLossIdr === null && aman.stressShareOfEquity === null, "SL terkunci = tanpa rugi stres");
   const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
   assert(panel.includes('data-testid="scan-combined-stress"') && panel.includes("risk.stressLossUsd.toFixed(2)"), "baris stres di panel risiko gabungan");
+});
+test("764. R-1 cadangan slippage: pemindai/entry/bayangan memakai batas golongan ÷1,1; Hasil analisa (App) tetap riskCapFor; selisihnya dicatat shadow DITAHAN_RISIKO", () => {
+  const cap = riskCapFor("XTIUSD", 17880);
+  const r = withSlippageReserve({ riskCap: cap });
+  assert(RISK_CAP_SLIPPAGE_RESERVE === 1.1 && r.riskCap?.idr === 136364 && cap.usd !== null && Math.abs((r.riskCap?.usd ?? 0) - cap.usd / 1.1) < 1e-9 && r.riskCap?.label === cap.label, JSON.stringify(r));
+  assert(withSlippageReserve({ riskCap: null }).riskCap === null && withSlippageReserve({ riskCap: riskCapFor("#BMW", 17880) }).riskCap?.idr === null, "tanpa batas / golongan tidak diperdagangkan tetap");
+  const ses = [{ symbol: "XTIUSD", day: 4, from: "00:00", to: "23:59" }] as unknown as Parameters<typeof computeResultShadow>[3];
+  const shown = { decision: "BELI" as const, entry: 60, stopLoss: 59, takeProfit: 62, suggestedLot: 0.01, costShareOfRisk: 0.05, riskAtMinLot: 8.0 };
+  const sh = computeResultShadow(shown, "XTIUSD", "2026.10.15 10:00:00", ses, 17880);
+  assert(sh !== null && sh.differs && sh.shadowCode === "DITAHAN_RISIKO" && sh.shadowDecision === "TUNGGU" && (sh.shadowReason ?? "").includes("Rp143.040") && (sh.shadowReason ?? "").includes("Rp136.364"), JSON.stringify(sh));
+  assert(computeResultShadow({ ...shown, riskAtMinLot: 7.4 }, "XTIUSD", "2026.10.15 10:00:00", ses, 17880)?.differs === false, "Rp132 rb < Rp136 rb = lolos");
+  assert(computeResultShadow({ ...shown, riskAtMinLot: 8.0 }, "XTIUSD", "2026.10.15 10:00:00", ses, null)?.differs === false && computeResultShadow({ ...shown, riskAtMinLot: undefined }, "XTIUSD", "2026.10.15 10:00:00", ses, 17880)?.differs === false, "tanpa kurs / App lama = tidak dinilai");
+  const rec = buildShadowRecord({ keputusanId: "k", waktuUtc: "2026-10-15T01:00:00Z", broker: "finex", symbol: "XTIUSD", serverNow: "2026.10.15 10:00:00" }, shown, sh as NonNullable<typeof sh>);
+  assert(rec.penjaga.some((p) => p.nama === "risiko_cadangan_r1" && p.hasil === "GAGAL") && rec.penjaga.find((p) => p.nama === "sesi")?.hasil === "LULUS" && rec.hasil.status === "DITAHAN_RISIKO", JSON.stringify(rec.penjaga));
+  assert(readSrc("src/lib/symbolScanner.ts").includes("const broker: BrokerSettings = withSlippageReserve({") && readSrc("src/App.tsx").includes("riskCap: riskCapFor(marketData.symbol, usdIdrRate(fxRates)),"), "pemindai pakai cadangan; App tidak disentuh");
+  assert(readSrc("server/routes/keputusanRoutes.ts").includes("getUsdIdr: () => usdIdrRate(getCachedEcbRates()),"), "shadow server memakai kurs ECB");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

@@ -13,6 +13,8 @@ import type { BrokerId } from "../../src/types/broker";
 import { appendJsonlRecord } from "../services/jsonlStore";
 import { readSessionsForBroker } from "../services/sessionReader";
 import { resolveCommonFilesDir } from "./marginRoutes";
+import { getCachedEcbRates } from "./fxRoutes";
+import { usdIdrRate } from "../../src/services/fxRateService";
 
 /**
  * S2 (13 Okt 2026) — POST /api/keputusan/shadow (fondasi A8).
@@ -27,6 +29,8 @@ export interface ShadowDeps {
   readonly now: () => Date;
   readonly newId: () => string;
   readonly seen: Set<string>;
+  /** R-1: kurs USD→Rp; absen = cadangan slippage tidak dinilai. */
+  readonly getUsdIdr?: () => number | null;
 }
 
 export interface ShadowReply {
@@ -54,7 +58,9 @@ function parseShown(value: unknown): ShownSummary | null {
   if (entry === undefined || stopLoss === undefined || takeProfit === undefined || suggestedLot === undefined || costShareOfRisk === undefined) {
     return null;
   }
-  return { decision: v.decision, entry, stopLoss, takeProfit, suggestedLot, costShareOfRisk };
+  // R-1: opsional (App lama tidak mengirim).
+  const riskAtMinLot = numOrNull(v.riskAtMinLot);
+  return { decision: v.decision, entry, stopLoss, takeProfit, suggestedLot, costShareOfRisk, ...(riskAtMinLot === undefined ? {} : { riskAtMinLot }) };
 }
 
 export function handleShadowRequest(body: unknown, deps: ShadowDeps): ShadowReply {
@@ -73,7 +79,7 @@ export function handleShadowRequest(body: unknown, deps: ShadowDeps): ShadowRepl
   const shown = parseShown(b.shown);
   if (shown === null) return { status: 400, body: { recorded: false, reason: "ringkasan hasil tidak sah" } };
 
-  const shadow = computeResultShadow(shown, b.symbol, b.serverNow, deps.getSessions(broker));
+  const shadow = computeResultShadow(shown, b.symbol, b.serverNow, deps.getSessions(broker), deps.getUsdIdr?.() ?? null);
   if (shadow === null) return { status: 200, body: { recorded: false, reason: "data sesi tidak ada" } };
   if (!shadow.differs) return { status: 200, body: { recorded: false, reason: "sama dengan hasil terlihat" } };
   const key = shadowDedupKey(broker, b.symbol, b.serverNow);
@@ -104,6 +110,7 @@ export function createKeputusanRoutes(
         now: () => new Date(),
         newId: () => randomUUID(),
         seen,
+        getUsdIdr: () => usdIdrRate(getCachedEcbRates()),
       });
       res.status(reply.status).json(reply.body);
     } catch (error) {

@@ -14,7 +14,7 @@ import { findNewsHold, type NewsEventLike } from "./newsGuard";
 import { findSessionHold, type TradeSession } from "./sessionGuard";
 import { parseCsvCandles } from "./csvCandleParser";
 import { resolveCsvBidAsk, type LiveQuoteLike } from "./csvQuote";
-import { riskCapFor } from "./riskGroup";
+import { riskCapFor, withSlippageReserve } from "./riskGroup";
 import { applyBrokerPreset, createEmptyMarketForSymbol } from "./marketReset";
 import { signalReason } from "./signalReason";
 import { proofHoldReason, type EvalTradeStats } from "./evaluationView";
@@ -287,10 +287,11 @@ function scanCore(input: ScanInput, sink: { setup: StrategySetup | null }): Scan
     input.brokerId,
   );
   // Mode Aman R3: batas risiko golongan (Rupiah) ikut dinilai pemindai.
-  const broker: BrokerSettings = {
+  // R-1 (15 Okt 2026): dengan cadangan slippage ÷1,1 (hanya pemindai/entry/bayangan).
+  const broker: BrokerSettings = withSlippageReserve({
     ...withUsdPointValue(preset, symbol, input.brokerId, input.fxRates),
     riskCap: riskCapFor(symbol, usdIdrRate(input.fxRates)),
-  };
+  });
   const reasons = buildBlockedReasons({
     market,
     broker: preset,
