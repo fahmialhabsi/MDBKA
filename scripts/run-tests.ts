@@ -344,6 +344,7 @@ import { alertsTabFindings } from "../src/lib/alertsTab";
 import { buildSeriesCards, labelForR } from "../src/lib/seriesCard";
 import { patternsDuring, seriesInsight, seriesLossCause } from "../src/lib/seriesInsight";
 import { buildPatternCards, d1DirectionAt, fingerprintNotes } from "../src/lib/patternCards";
+import { CAUTION_DAYS, cautionNotes } from "../src/lib/cautionNotes";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
 import { evidencePace } from "../src/lib/evidencePace";
 import { collectEvidenceEvents } from "../server/services/evidenceEvents";
@@ -10519,6 +10520,26 @@ test("758. K5 kartu pola: arah D1 dari candle D1 yang sudah tutup, sidik jari ti
   assert(route.includes('router.get("/cards"') && route.includes('buildPatternCards(a.evaluation.trades, a.excursions, candlesOf("H1"), candlesOf("D1"))') && route.includes("cards: views.slice(0, CARDS_PER_ACCOUNT)"), "route kartu");
   const panel = readSrc("src/components/analysis/PatternCardsPanel.tsx");
   assert(panel.includes("/api/evaluation/cards") && panel.includes('data-testid="pattern-cards"') && readSrc("src/components/analysis/TradeEvaluationPanel.tsx").includes("<PatternCardsPanel />"), "panel kartu di Evaluasi");
+});
+test("759. PR-2 catatan waspada: rangkaian rugi ≤ 14 hari per simbol + sebab (Tim 4, arah D1) + rekomendasi + sidik jari; hanya peringatan di pemindai", () => {
+  const card = (symbol: string, startTime: string, label: "Pupare Rebus" | "Kasbi Bakar", n: number) => ({
+    cardName: `${label} #000${n}`, label, lossNote: null, symbol, side: "BUY" as const, startTime, positions: [String(n)], net: -10, riskOpen1: 10, r: -1, complete: true,
+  });
+  const view = (c: ReturnType<typeof card>, d1: "NAIK" | "TURUN" | "NETRAL" | null, cause: "MELAWAN_SEJAK_MASUK" | "BERBALIK_SETELAH_0_5R" | "TANPA_SEBAB_PASTI" | null) =>
+    ({ card: c, insight: { lossCause: cause, mfeR: null, maeR: null, patterns: null }, d1, fingerprint: `FOREX_JPY|BUY|${d1 ?? "?"}` });
+  const views = [
+    view(card("AUDJPY", "2026.10.10 02:00:00", "Pupare Rebus", 1), "TURUN", "MELAWAN_SEJAK_MASUK"),
+    view(card("AUDJPY", "2026.10.12 02:27:27", "Pupare Rebus", 2), "TURUN", "BERBALIK_SETELAH_0_5R"),
+    view(card("XAUUSD", "2026.09.01 07:00:00", "Pupare Rebus", 3), "NETRAL", "MELAWAN_SEJAK_MASUK"),
+    view(card("EURUSD", "2026.10.12 07:00:00", "Kasbi Bakar", 4), "NAIK", null),
+  ];
+  const now = Date.parse("2026-10-15T00:00:00Z");
+  const out = cautionNotes(views, fingerprintNotes(views), now);
+  assert(CAUTION_DAYS === 14 && out.length === 1 && out[0]?.symbol === "AUDJPY" && out[0]?.cardName === "Pupare Rebus #0002", JSON.stringify(out));
+  assert(out[0]?.causes.join() === "BERBALIK_SETELAH_0_5R,MELAWAN_ARAH_D1" && (out[0]?.text ?? "").includes("Titik impas lebih awal atau geser SL") && (out[0]?.text ?? "").includes("Terapkan penyaring arah D1") && (out[0]?.text ?? "").endsWith("Hanya peringatan, tidak menahan."), out[0]?.text ?? "");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes("const cautions = useCautions(brokerId);") && panel.includes("data-testid={`scan-caution-${row.symbol}`}") && panel.includes("{row.reason}"), "catatan tampil di bawah alasan, status tidak berubah");
+  assert(readSrc("server/routes/evaluationRoutes.ts").includes('router.get("/cautions"'), "route catatan waspada");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

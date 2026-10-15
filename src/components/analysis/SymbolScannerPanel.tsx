@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTradeSessions } from "../../hooks/useTradeSessions";
 import { useDataQuality } from "../../hooks/useDataQuality";
+import { useCautions } from "../../hooks/useCautions";
 import { useTradingMode } from "../../hooks/useTradingMode";
 import { accountsForActiveLogin, pauseLocks } from "../../lib/tradingMode";
 import { labAllowed, labTicket, minLotFor, type LabTicket } from "../../lib/labTrades";
@@ -251,6 +252,8 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
   const sessions = useTradeSessions(brokerId);
   // F2: terminal putus / ekspor EA berhenti → semua sinyal status DATA (lebih aman).
   const dataQualityReason = useDataQuality(brokerId);
+  // PR-2: catatan waspada per simbol (hanya peringatan, tidak menahan).
+  const cautions = useCautions(brokerId);
   // K6: berita Tinggi mendatang (jam server broker ini).
   const upcoming = useMemo(() => upcomingHighNews(newsEvents, nowServer), [newsEvents, nowServer]);
 
@@ -540,7 +543,14 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
                       ? "-"
                       : `${formatSharePercent(row.costShareOfRisk)}%`}
                   </td>
-                  <td className="py-2 text-slate-400">{row.reason}</td>
+                  <td className="py-2 text-slate-400">
+                    {row.reason}
+                    {cautions.get(row.symbol) !== undefined && (
+                      <span data-testid={`scan-caution-${row.symbol}`} className="mt-1 block text-xs text-amber-300">
+                        ⚠ {cautions.get(row.symbol)?.text}
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

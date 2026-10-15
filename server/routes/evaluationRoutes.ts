@@ -13,6 +13,7 @@ import { readCandleCsvTf, type CandleTimeframe } from "./candlesRoutes";
 import { parseCsvCandles } from "../../src/lib/csvCandleParser";
 import type { Candle } from "../../src/calculations/swingDetector";
 import { buildPatternCards, fingerprintNotes, type FingerprintNote, type PatternCardView } from "../../src/lib/patternCards";
+import { cautionNotes } from "../../src/lib/cautionNotes";
 
 /**
  * Langkah 4c — GET /api/evaluation
@@ -127,13 +128,17 @@ export function collectAccountEvaluations(
 
 /** K5: kartu terbaru yang dikirim per akun (catatan sidik jari dihitung dari SEMUA kartu). */
 export const CARDS_PER_ACCOUNT = 30;
+export const CARDS_CACHE_MS = 60_000;
 
 export interface AccountCards {
   readonly login: string;
   readonly label: string;
+  readonly broker: BrokerId | null;
   readonly total: number;
   readonly cards: readonly PatternCardView[];
   readonly notes: readonly FingerprintNote[];
+  /** PR-2: catatan waspada per simbol (hanya peringatan). */
+  readonly cautions: ReturnType<typeof cautionNotes>;
 }
 
 /** K5 (Tahap 17): kartu pola per akun dari History + candle H1/D1 Common\Files. */
@@ -153,7 +158,16 @@ export function collectAccountCards(
   };
   return collectAccountEvaluations(commonDir, tradesDir, labels).map((a) => {
     const views = buildPatternCards(a.evaluation.trades, a.excursions, candlesOf("H1"), candlesOf("D1"));
-    return { login: a.login, label: a.label, total: views.length, cards: views.slice(0, CARDS_PER_ACCOUNT), notes: fingerprintNotes(views) };
+    const notes = fingerprintNotes(views);
+    return {
+      login: a.login,
+      label: a.label,
+      broker: a.broker,
+      total: views.length,
+      cards: views.slice(0, CARDS_PER_ACCOUNT),
+      notes,
+      cautions: cautionNotes(views, notes, Date.now()),
+    };
   });
 }
 
@@ -170,11 +184,27 @@ export function createEvaluationRoutes(
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
   });
-  // K5: GET /api/evaluation/cards → { accounts: AccountCards[] }
+  // K5: GET /api/evaluation/cards → { accounts: AccountCards[] } (cache 60 dtk; History besar).
+  let cached: { at: number; accounts: AccountCards[] } | null = null;
+  const cards = (): AccountCards[] => {
+    if (cached === null || Date.now() - cached.at > CARDS_CACHE_MS) {
+      const labels = parseAccountLabels(process.env?.["ACCOUNT_LABELS"]);
+      cached = { at: Date.now(), accounts: collectAccountCards(commonDir, tradesDir, labels) };
+    }
+    return cached.accounts;
+  };
   router.get("/cards", (_req: Request, res: Response) => {
     try {
-      const labels = parseAccountLabels(process.env?.["ACCOUNT_LABELS"]);
-      res.json({ accounts: collectAccountCards(commonDir, tradesDir, labels) });
+      res.json({ accounts: cards() });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+  // PR-2: GET /api/evaluation/cautions?broker= → { cautions } dari akun broker itu.
+  router.get("/cautions", (req: Request, res: Response) => {
+    try {
+      const broker = typeof req.query.broker === "string" ? req.query.broker : "";
+      res.json({ cautions: cards().filter((a) => a.broker === broker).flatMap((a) => a.cautions) });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
