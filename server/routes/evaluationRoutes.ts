@@ -42,6 +42,8 @@ export interface AccountEvaluation {
    * ada di sini → UI menampilkan "sedang dihitung".
    */
   readonly excursions: Readonly<Record<string, TradeExcursion>>;
+  /** R-3 (15 Okt 2026): mata uang akun dari kolom AccountCurrency History ("USD", "IDR"; kosong = ""). */
+  readonly currency: string;
 }
 
 export function parseAccountLabels(raw: string | undefined): Record<string, string> {
@@ -125,6 +127,7 @@ export function collectAccountEvaluations(
       evaluation: evaluateTrades(deals, entries),
       balance: summarizeAccountBalance(deals),
       excursions: broker === null ? {} : excursionsForLogin(tradesDir, broker, login),
+      currency: deals.find((d) => d.accountCurrency !== "")?.accountCurrency.toUpperCase() ?? "",
     });
   }
   return out;

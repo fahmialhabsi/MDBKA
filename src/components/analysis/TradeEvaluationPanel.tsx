@@ -11,6 +11,7 @@ import {
   groupLabel,
   isLegacyGroup,
   lolosByRiskGroup,
+  accountInUsd,
   byRiskGroupOf,
   proofLabel,
   proofStatus,
@@ -112,6 +113,7 @@ function AccountCard({ account, kurs }: { account: EvalAccount; kurs: number | n
           <span className="text-xs font-normal text-slate-500">#{account.login}</span>
         </h3>
         <span className="text-xs text-slate-500">
+          {(account.currency ?? "").toUpperCase() === "IDR" ? "Mata uang akun IDR (USD = setara kurs hari ini) · " : ""}
           {openPositions > 0 ? `${openPositions} posisi masih terbuka · ` : ""}
           {account.company}
         </span>
@@ -384,9 +386,17 @@ export function TradeEvaluationPanel({ fxRates }: Props) {
       <PatternCardsPanel />
 
       <div className="space-y-4">
-        {(accounts ?? []).map((a) => (
-          <AccountCard key={a.login} account={a} kurs={kurs} />
-        ))}
+        {(accounts ?? []).map((a) => {
+          // R-3: akun IDR (Exness) → angka uang diubah ke USD setara; kurs belum ada = uang tidak ditampilkan.
+          const shown = accountInUsd(a, kurs);
+          return shown === null ? (
+            <p key={a.login} data-testid={`eval-currency-${a.login}`} className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+              {a.label} #{a.login}: mata uang akun {a.currency} — kurs belum tersedia, angka uang tidak ditampilkan agar tidak salah.
+            </p>
+          ) : (
+            <AccountCard key={a.login} account={shown} kurs={kurs} />
+          );
+        })}
       </div>
 
       <p className="mt-4 text-xs leading-5 text-slate-500">

@@ -222,7 +222,7 @@ Hasil demo hanya boleh dipakai di Live bila memenuhi tiga syarat:
 | Lampu | Syarat (per golongan, per versi aturan) |
 | --- | --- |
 | 1 — Backtest | Rapor data latih DAN ujian "layak" (untung ≥ 3% di atas titik impas, `MIN_EDGE_OVER_BREAKEVEN`) dan tetap untung di sebagian besar periode uji bergulir. Tambahan (K-8, disetujui Fahmi 13 Okt 2026): rapor dijalankan dengan equity akun Live, dan tidak boleh berstatus MODAL KURANG (pemeriksaan modal yang sudah ada di `backtestReport.ts`) |
-| 2 — Demo | ≥ 20 rangkaian setara Live; rata-rata hasil > 0 sesudah dihitung ulang dengan biaya Live; rugi terbesar per rangkaian ≤ 1R; tidak ada pelanggaran gerbang kualitas data |
+| 2 — Demo | ≥ 20 rangkaian setara Live; rata-rata hasil > 0 sesudah dihitung ulang dengan biaya Live; rugi terbesar per rangkaian ≤ 1R (toleransi 0,1R untuk biaya dan slippage SL, K-10 disetujui Fahmi 15 Okt 2026); tidak ada pelanggaran gerbang kualitas data |
 | 3 — Percobaan Live | 20 rangkaian di akun Live dengan lot minimum; rata-rata hasil tetap > 0 dan tidak lebih buruk dari demo melebihi 0,2R |
 
 Sesudah ketiga lampu hijau, status menjadi LIVE dengan lot normal (risiko 1% dan batas golongan).

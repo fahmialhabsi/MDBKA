@@ -57,6 +57,42 @@ export interface EvalAccount {
   };
   /** Langkah 5c: MFE/MAE per positionId (opsional: server lama tidak mengirim). */
   readonly excursions?: Readonly<Record<string, EvalExcursion>>;
+  /** R-3: mata uang akun ("USD", "IDR"); absen/kosong = dianggap USD (perilaku lama). */
+  readonly currency?: string;
+}
+
+/**
+ * R-3 (15 Okt 2026, T-GERBANG) — akun ber-mata uang IDR (mis. Exness demo):
+ * semua angka uang History dalam Rupiah. Tampilan memakai USD + Rupiah, jadi
+ * angka uang dibagi kurs → USD setara (Rupiah = angka asli). R, win rate, n
+ * tidak berubah. Kurs tidak ada → null (uang tidak ditampilkan, bukan dikarang).
+ * Mata uang USD/kosong → akun dikembalikan apa adanya.
+ */
+export function accountInUsd(account: EvalAccount, kurs: number | null): EvalAccount | null {
+  const cur = (account.currency ?? "").toUpperCase();
+  if (cur === "" || cur === "USD") return account;
+  if (cur !== "IDR" || kurs === null || !Number.isFinite(kurs) || kurs <= 0) return null;
+  const k = (v: number): number => Math.round((v / kurs) * 100) / 100;
+  const kn = (v: number | null): number | null => (v === null ? null : k(v));
+  const stats = (s: EvalTradeStats): EvalTradeStats => ({ ...s, net: k(s.net), avgWin: kn(s.avgWin), avgLoss: kn(s.avgLoss), expectancy: kn(s.expectancy) });
+  const map = (r: Readonly<Record<string, EvalTradeStats>>): Record<string, EvalTradeStats> =>
+    Object.fromEntries(Object.entries(r).map(([key, s]) => [key, stats(s)]));
+  const ev = account.evaluation;
+  return {
+    ...account,
+    evaluation: {
+      ...ev,
+      trades: ev.trades.map((t) => ({
+        ...t,
+        net: k(t.net),
+        ...(t.grossProfit !== undefined ? { grossProfit: k(t.grossProfit) } : {}),
+        ...(t.riskMoney !== undefined && t.riskMoney !== null ? { riskMoney: k(t.riskMoney) } : {}),
+      })),
+      overall: stats(ev.overall),
+      byGroup: map(ev.byGroup),
+      bySymbol: map(ev.bySymbol),
+    },
+  };
 }
 
 /** Cermin TradeExcursion (server/services/tradeExcursion.ts). */

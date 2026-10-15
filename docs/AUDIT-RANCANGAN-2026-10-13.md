@@ -144,3 +144,13 @@ Total langkah di semua rancangan sekarang 53 + 12 = 65.
 | Trade uji dibuka manual oleh Fahmi (Opsi A); MDBKA tetap tidak mengirim order | Disetujui |
 
 **Tambahan ke peta urutan induk:** fase 0: PL-1, TB-1, TB-2 (Finex, OTB), LAB-1, PR-1. Fase 2: LAB-2, LAB-3, LB-1. Fase 5: PR-2. Fase 6: PR-3, PL-3. Mesin bukti ditempatkan di fase awal supaya bukti mulai terkumpul sebelum fitur lain selesai.
+
+## 10. Keputusan 15 Okt 2026
+
+| Kode | Keputusan | Status |
+| --- | --- | --- |
+| K-10 | Lampu 2 (C5): "rugi terbesar per rangkaian ≤ 1R" diberi toleransi 0,1R (melanggar bila R < −1,1), karena R kartu tidak memasukkan biaya dan slippage SL. Dasar data: 15 trade SL Finex/MIFX, terburuk −1,075R. Tinjauan tim: `docs/TINJAUAN-RISIKO-2026-10-15-toleransi-lampu2.md` | **Disetujui Fahmi** (10:35 WIT) |
+
+| R-1 | Rencana risiko per posisi ≤ batas golongan ÷ 1,1 (cadangan slippage SL); rumus `decisionEngine.ts` tidak diubah, hanya batas masukan | **Disetujui Fahmi** (10:47 WIT) — belum dikerjakan |
+| R-2 | Skenario stres di panel risiko gabungan: rugi bila semua SL kena × 1,075 (SOP-09 langkah 3) | **Disetujui Fahmi** (10:47 WIT) — belum dikerjakan |
+| R-3 | Evaluasi membaca mata uang akun (Exness demo = IDR) | **Disetujui Fahmi** (10:47 WIT) — dikerjakan 15 Okt 2026 (test 762) |

@@ -376,6 +376,7 @@ import {
   applyProofHold,
   lolosByRiskGroup,
   byRiskGroupOf,
+  accountInUsd,
   lolosLabel,
   mergeGroupStats,
   proofHoldReason,
@@ -10591,6 +10592,25 @@ test("761. LAMPU-1 panel 3 lampu: lampu 1 dari rapor tersimpan (equity Live), la
   const cli = readSrc("scripts/backtest.ts");
   assert(cli.includes('if (process.argv.includes("--simpan-lampu")) {') && cli.includes("groupReports(runs, usdIdr, opt.equity)"), "CLI menyimpan rapor lampu hanya bila diminta, dengan equity yang diuji");
   assert(readSrc("server/routes/evaluationRoutes.ts").includes('router.get("/lamps"') && readSrc("src/components/analysis/TradeEvaluationPanel.tsx").includes("<GreenLampsPanel />"), "route + panel");
+});
+test("762. R-3 akun ber-mata uang IDR: angka uang History dibaca sebagai Rupiah (USD setara = ÷ kurs); R/n tidak berubah; USD apa adanya; kurs tidak ada = tidak ditampilkan", () => {
+  const st = (net: number) => ({ n: 2, wins: 1, losses: 1, winRate: 0.5, net, avgWin: 35760, avgLoss: -53640, expectancy: net / 2, avgR: -0.2, rCount: 2 });
+  const acc = {
+    login: "413925678", label: "Exness demo", company: "Exness Technologies Ltd", broker: "exness", currency: "IDR",
+    evaluation: {
+      trades: [{ positionId: "1", symbol: "XAUUSDm", side: "BUY" as const, volume: 0.01, openTime: "", closeTime: "", net: -17880, grossProfit: -17880, durationMin: 5, exit: "SL" as const, rMultiple: -1, riskMoney: 17880, group: "TANPA_CATATAN" }],
+      overall: st(-17880), byGroup: { TANPA_CATATAN: st(-17880) }, bySymbol: { XAUUSDm: st(-17880) }, openPositions: 0,
+    },
+  };
+  const v = accountInUsd(acc, 17880);
+  assert(v !== null && v.evaluation.trades[0]?.net === -1 && v.evaluation.trades[0]?.riskMoney === 1 && v.evaluation.trades[0]?.rMultiple === -1, JSON.stringify(v?.evaluation.trades[0]));
+  assert(v !== null && v.evaluation.overall.net === -1 && v.evaluation.overall.avgWin === 2 && v.evaluation.overall.n === 2 && v.evaluation.byGroup.TANPA_CATATAN?.expectancy === -0.5, JSON.stringify(v?.evaluation.overall));
+  assert(accountInUsd(acc, null) === null && accountInUsd({ ...acc, currency: "EUR" }, 17880) === null, "kurs tidak ada / mata uang lain = tidak ditampilkan");
+  const usd = { ...acc, currency: "USD" };
+  assert(accountInUsd(usd, 17880) === usd && accountInUsd({ ...acc, currency: undefined }, 17880)?.evaluation.overall.net === -17880, "USD/kosong = perilaku lama");
+  assert(readSrc("server/routes/evaluationRoutes.ts").includes('currency: deals.find((d) => d.accountCurrency !== "")?.accountCurrency.toUpperCase() ?? "",'), "server membaca AccountCurrency");
+  const panel = readSrc("src/components/analysis/TradeEvaluationPanel.tsx");
+  assert(panel.includes("const shown = accountInUsd(a, kurs);") && panel.includes("angka uang tidak ditampilkan agar tidak salah"), "panel memakai angka terkonversi");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

@@ -6,7 +6,7 @@
  *    MODAL_KURANG / TIDAK_LAYAK / BELUM_CUKUP).
  *  Lampu 2 (demo): rangkaian (kartu) akun DEMO yang open 1-nya entry setara Live
  *    (mode LIVE, J2): ≥ 20, rata-rata R > 0, rugi terbesar ≤ 1R (+ toleransi
- *    biaya LAMP2_LOSS_TOLERANCE_R, usulan — menunggu keputusan Fahmi), tanpa
+ *    biaya LAMP2_LOSS_TOLERANCE_R = 0,1R, K-10 disetujui Fahmi 15 Okt 2026), tanpa
  *    entry saat gerbang kualitas data menahan (status DATA).
  *  Lampu 3 (percobaan Live): baru dihitung setelah lampu 1 & 2 hijau: ≥ 20
  *    rangkaian akun LIVE, rata-rata R > 0 dan tidak lebih buruk dari demo > 0,2R.
@@ -14,7 +14,10 @@
 import { RISK_GROUPS } from "./riskGroup";
 
 export const LAMP_MIN_SERIES = 20;
-/** Usulan Claude: SL kena + spread/komisi sering memberi −1,01 s.d. −1,08R; menunggu keputusan Fahmi. */
+/**
+ * K-10 (disetujui Fahmi 15 Okt 2026): R kartu tanpa biaya; SL kena + komisi/slippage nyata −1,001 s.d. −1,075R
+ * (15 trade Finex/MIFX). Tinjauan: docs/TINJAUAN-RISIKO-2026-10-15-toleransi-lampu2.md.
+ */
 export const LAMP2_LOSS_TOLERANCE_R = 0.1;
 export const LAMP3_MAX_DROP_R = 0.2;
 
