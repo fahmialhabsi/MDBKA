@@ -13,6 +13,7 @@ interface AccountCards {
   readonly total: number;
   readonly cards: readonly PatternCardView[];
   readonly notes: readonly FingerprintNote[];
+  readonly notes2?: readonly FingerprintNote[];
 }
 
 const LABEL_CLASS: Record<string, string> = {
@@ -65,6 +66,15 @@ export function PatternCardsPanel() {
               ))}
             </ul>
           )}
+          {(a.notes2 ?? []).length > 0 && (
+            <ul data-testid="pattern-notes2" className="mt-2 space-y-0.5 text-xs text-slate-400">
+              {(a.notes2 ?? []).slice(0, 6).map((n) => (
+                <li key={n.fingerprint}>
+                  <span className="text-slate-300">Tingkat 2 · {n.fingerprint.replace(/\|/g, " · ")}</span>: {n.text}
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="mt-2 overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="uppercase tracking-wide text-slate-500">
@@ -75,6 +85,7 @@ export function PatternCardsPanel() {
                   <th className="py-1.5 pr-3 text-right">Posisi</th>
                   <th className="py-1.5 pr-3 text-right">R</th>
                   <th className="py-1.5 pr-3">Arah D1</th>
+                  <th className="py-1.5 pr-3">Konteks entry</th>
                   <th className="py-1.5">Catatan Tim 4/5</th>
                 </tr>
               </thead>
@@ -92,6 +103,18 @@ export function PatternCardsPanel() {
                       <td className="py-1.5 pr-3 text-right">{v.card.positions.length}</td>
                       <td className="py-1.5 pr-3 text-right">{fmtR(v.card.r)}</td>
                       <td className="py-1.5 pr-3">{v.d1 ?? "—"}</td>
+                      <td className="py-1.5 pr-3">
+                        {v.context === null || v.context === undefined
+                          ? "—"
+                          : [
+                              v.context.adx === null ? null : `ADX ${Math.round(v.context.adx)}`,
+                              v.context.rsi === null ? null : `RSI ${Math.round(v.context.rsi)}`,
+                              v.context.bbLebar === null ? null : `BB ${(v.context.bbLebar * 100).toFixed(1).replace(".", ",")}%`,
+                              v.fingerprint2 === null || v.fingerprint2 === undefined ? null : v.fingerprint2.split("|").slice(3).join(" · "),
+                            ]
+                              .filter((x): x is string => x !== null)
+                              .join(" · ")}
+                      </td>
                       <td className="py-1.5">
                         {v.insight.lossCause !== null ? CAUSE_TEXT[v.insight.lossCause] : ""}
                         {v.insight.patterns === null

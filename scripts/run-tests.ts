@@ -343,7 +343,7 @@ import { monitorCycle } from "../src/lib/monitorCycle";
 import { alertsTabFindings } from "../src/lib/alertsTab";
 import { buildSeriesCards, labelForR } from "../src/lib/seriesCard";
 import { patternsDuring, seriesInsight, seriesLossCause } from "../src/lib/seriesInsight";
-import { buildPatternCards, d1DirectionAt, fingerprintNotes } from "../src/lib/patternCards";
+import { buildPatternCards, contextFromDecision, d1DirectionAt, fingerprint2, fingerprintNotes, sessionBucket, volRegime } from "../src/lib/patternCards";
 import { CAUTION_DAYS, cautionNotes } from "../src/lib/cautionNotes";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
 import { evidencePace } from "../src/lib/evidencePace";
@@ -10517,7 +10517,7 @@ test("758. K5 kartu pola: arah D1 dari candle D1 yang sudah tutup, sidik jari ti
   const fx = notes.find((n) => n.fingerprint === "FOREX|BUY|NAIK");
   assert(fx !== undefined && fx.n === 2 && !fx.enough && fx.text === "Pola ini pernah 1× Kasbi Bakar, 1× Pupare Rebus (n=2 < 20: catatan saja, belum mengubah keputusan)", JSON.stringify(fx));
   const route = readSrc("server/routes/evaluationRoutes.ts");
-  assert(route.includes('router.get("/cards"') && route.includes('buildPatternCards(a.evaluation.trades, a.excursions, candlesOf("H1"), candlesOf("D1"))') && route.includes("cards: views.slice(0, CARDS_PER_ACCOUNT)"), "route kartu");
+  assert(route.includes('router.get("/cards"') && route.includes('buildPatternCards(a.evaluation.trades, a.excursions, candlesOf("H1"), candlesOf("D1"), (id) => ctx.get(id) ?? null)') /* TI-3 (15 Okt 2026): diubah sengaja — kartu kini menerima konteks entry K3 (argumen ke-5) */ && route.includes("cards: views.slice(0, CARDS_PER_ACCOUNT)"), "route kartu");
   const panel = readSrc("src/components/analysis/PatternCardsPanel.tsx");
   assert(panel.includes("/api/evaluation/cards") && panel.includes('data-testid="pattern-cards"') && readSrc("src/components/analysis/TradeEvaluationPanel.tsx").includes("<PatternCardsPanel />"), "panel kartu di Evaluasi");
 });
@@ -10540,6 +10540,23 @@ test("759. PR-2 catatan waspada: rangkaian rugi ≤ 14 hari per simbol + sebab (
   const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
   assert(panel.includes("const cautions = useCautions(brokerId);") && panel.includes("data-testid={`scan-caution-${row.symbol}`}") && panel.includes("{row.reason}"), "catatan tampil di bawah alasan, status tidak berubah");
   assert(readSrc("server/routes/evaluationRoutes.ts").includes('router.get("/cautions"'), "route catatan waspada");
+});
+test("760. TI-3 konteks entry K3 masuk kartu: rezim volatilitas & sesi (batas dikunci), sidik jari tingkat 2; tanpa catatan keputusan = null", () => {
+  assert(volRegime(0.004) === "SEMPIT" && volRegime(0.015) === "SEDANG" && volRegime(0.02) === "LEBAR" && volRegime(null) === null, "rezim");
+  assert(sessionBucket(3) === "ASIA" && sessionBucket(7) === "EROPA" && sessionBucket(13) === "EROPA_AS" && sessionBucket(18) === "AS" && sessionBucket(22) === "SEPI" && sessionBucket(null) === null, "sesi UTC");
+  const ctx = contextFromDecision({ waktuUtc: "2026-10-15T08:20:00Z", masukan: { rsi: 55.2 }, konteks: { adx: 24.6, bbLebar: 0.0246, posisiMa50: "DI_ATAS" } });
+  assert(ctx.jamUtc === 8 && ctx.rsi === 55.2 && ctx.adx === 24.6 && fingerprint2("LOGAM|BUY|NAIK", ctx) === "LOGAM|BUY|NAIK|LEBAR|EROPA", JSON.stringify(ctx));
+  assert(fingerprint2("X", contextFromDecision({ waktuUtc: "2026-10-15T08:20:00Z", masukan: { rsi: null } })) === null && fingerprint2("X", null) === null, "tanpa konteks K3 = null");
+  const tr = (positionId: string, openTime: string, net: number) =>
+    ({ positionId, symbol: "XAUUSD", side: "BUY" as const, volume: 0.01, openTime, closeTime: openTime, net, durationMin: 10, exit: "MANUAL" as const, rMultiple: null, riskMoney: 10, group: "LOLOS" });
+  const views = buildPatternCards([tr("1", "2026.10.15 10:00:00", 12), tr("2", "2026.10.16 10:00:00", -10)], undefined, () => null, () => null, (id) => (id === "1" ? ctx : null));
+  const v1 = views.find((v) => v.card.positions[0] === "1");
+  assert(v1?.fingerprint2 === "LOGAM|BUY|?|LEBAR|EROPA" && views.find((v) => v.card.positions[0] === "2")?.fingerprint2 === null, JSON.stringify(views.map((v) => v.fingerprint2)));
+  const n2 = fingerprintNotes(views, 2);
+  assert(n2.length === 1 && n2[0]?.n === 1 && fingerprintNotes(views, 1)[0]?.n === 2, "tingkat 2 hanya kartu berkonteks");
+  const route = readSrc("server/routes/evaluationRoutes.ts");
+  assert(route.includes('if (rec.jalur !== "entry" || typeof rec.tiket !== "string" || rec.tiket === "") continue;') && route.includes("notes2: fingerprintNotes(views, 2),"), "server membaca keputusan entry per tiket");
+  assert(readSrc("src/components/analysis/PatternCardsPanel.tsx").includes('data-testid="pattern-notes2"'), "panel tingkat 2");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

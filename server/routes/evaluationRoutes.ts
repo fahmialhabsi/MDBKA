@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { BrokerId } from "../../src/types/broker";
 import { evaluateTrades, type TradeEvaluation } from "../services/tradeEvaluation";
 import { summarizeAccountBalance, type AccountBalance } from "../services/accountBalance";
@@ -12,7 +12,8 @@ import { resolveCommonFilesDir } from "./marginRoutes";
 import { readCandleCsvTf, type CandleTimeframe } from "./candlesRoutes";
 import { parseCsvCandles } from "../../src/lib/csvCandleParser";
 import type { Candle } from "../../src/calculations/swingDetector";
-import { buildPatternCards, fingerprintNotes, type FingerprintNote, type PatternCardView } from "../../src/lib/patternCards";
+import { buildPatternCards, contextFromDecision, fingerprintNotes, type CardContext, type FingerprintNote, type PatternCardView } from "../../src/lib/patternCards";
+import { parseJsonlText, type KeputusanRecord } from "../../src/lib/jsonlRecord";
 import { cautionNotes } from "../../src/lib/cautionNotes";
 
 /**
@@ -137,8 +138,32 @@ export interface AccountCards {
   readonly total: number;
   readonly cards: readonly PatternCardView[];
   readonly notes: readonly FingerprintNote[];
+  /** TI-3: catatan sidik jari tingkat 2 (+ rezim volatilitas + sesi). */
+  readonly notes2: readonly FingerprintNote[];
   /** PR-2: catatan waspada per simbol (hanya peringatan). */
   readonly cautions: ReturnType<typeof cautionNotes>;
+}
+
+/** TI-3: konteks entry per tiket dari data/keputusan/keputusan-<broker>-*.jsonl (jalur entry). */
+export function entryContexts(dataDir: string, broker: BrokerId): Map<string, CardContext> {
+  const out = new Map<string, CardContext>();
+  const dir = join(dataDir, "keputusan");
+  if (!existsSync(dir)) return out;
+  for (const name of readdirSync(dir).sort()) {
+    if (!name.startsWith(`keputusan-${broker}-`) || !name.endsWith(".jsonl")) continue;
+    let text: string;
+    try {
+      text = readFileSync(join(dir, name), "utf8");
+    } catch {
+      continue;
+    }
+    for (const raw of parseJsonlText(text, "keputusan/1").records) {
+      const rec = raw as unknown as KeputusanRecord;
+      if (rec.jalur !== "entry" || typeof rec.tiket !== "string" || rec.tiket === "") continue;
+      out.set(rec.tiket, contextFromDecision(rec));
+    }
+  }
+  return out;
 }
 
 /** K5 (Tahap 17): kartu pola per akun dari History + candle H1/D1 Common\Files. */
@@ -157,7 +182,8 @@ export function collectAccountCards(
     return cache.get(key) ?? null;
   };
   return collectAccountEvaluations(commonDir, tradesDir, labels).map((a) => {
-    const views = buildPatternCards(a.evaluation.trades, a.excursions, candlesOf("H1"), candlesOf("D1"));
+    const ctx = a.broker === null ? new Map<string, CardContext>() : entryContexts(dirname(tradesDir), a.broker);
+    const views = buildPatternCards(a.evaluation.trades, a.excursions, candlesOf("H1"), candlesOf("D1"), (id) => ctx.get(id) ?? null);
     const notes = fingerprintNotes(views);
     return {
       login: a.login,
@@ -166,6 +192,7 @@ export function collectAccountCards(
       total: views.length,
       cards: views.slice(0, CARDS_PER_ACCOUNT),
       notes,
+      notes2: fingerprintNotes(views, 2),
       cautions: cautionNotes(views, notes, Date.now()),
     };
   });
