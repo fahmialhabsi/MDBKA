@@ -337,7 +337,7 @@ import { accountsForActiveLogin, effectiveMode, isLiveEquivalent, parseTradingMo
 import { modeFor, requestedMode, setRequestedMode } from "../server/services/tradingModeStore";
 import { isLabComment, labAllowed, labTicket, minLotFor } from "../src/lib/labTrades";
 import { addOnDecision, isBreakevenSafe, MAX_POSITIONS_PER_SYMBOL } from "../src/lib/addOnRule";
-import { combinedRisk } from "../src/lib/combinedRisk";
+import { combinedRisk, STRESS_SLIPPAGE_FACTOR } from "../src/lib/combinedRisk";
 import { structureBreak, trailSuggestion, TRAIL_PARAMS } from "../src/lib/trailStop";
 import { monitorCycle } from "../src/lib/monitorCycle";
 import { alertsTabFindings } from "../src/lib/alertsTab";
@@ -10611,6 +10611,16 @@ test("762. R-3 akun ber-mata uang IDR: angka uang History dibaca sebagai Rupiah 
   assert(readSrc("server/routes/evaluationRoutes.ts").includes('currency: deals.find((d) => d.accountCurrency !== "")?.accountCurrency.toUpperCase() ?? "",'), "server membaca AccountCurrency");
   const panel = readSrc("src/components/analysis/TradeEvaluationPanel.tsx");
   assert(panel.includes("const shown = accountInUsd(a, kurs);") && panel.includes("angka uang tidak ditampilkan agar tidak salah"), "panel memakai angka terkonversi");
+});
+test("763. R-2 skenario stres risiko gabungan: rugi semua SL × 1,075 (slippage SL nyata terburuk, K-10); tampil di panel; tanpa posisi berisiko = 0", () => {
+  const pv = (sym: string): number | null => (sym === "GBPUSD" ? 100000 : null);
+  const r = combinedRisk([{ ticket: "1", symbol: "GBPUSD", side: "BUY", volume: 0.1, priceOpen: 1.3, sl: 1.299 }], pv, 1000, 17000);
+  assert(STRESS_SLIPPAGE_FACTOR === 1.075 && Math.abs(r.lossAllSlUsd - 10) < 1e-9 && r.stressLossUsd === 10.75 && r.stressLossIdr === 182750, JSON.stringify(r));
+  assert(r.stressShareOfEquity !== null && Math.abs(r.stressShareOfEquity - 0.01075) < 1e-12, "porsi equity stres");
+  const aman = combinedRisk([{ ticket: "2", symbol: "GBPUSD", side: "BUY", volume: 0.1, priceOpen: 1.3, sl: 1.301 }], pv, null, null);
+  assert(aman.stressLossUsd === 0 && aman.stressLossIdr === null && aman.stressShareOfEquity === null, "SL terkunci = tanpa rugi stres");
+  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  assert(panel.includes('data-testid="scan-combined-stress"') && panel.includes("risk.stressLossUsd.toFixed(2)"), "baris stres di panel risiko gabungan");
 });
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {
   const xml =

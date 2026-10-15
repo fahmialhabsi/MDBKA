@@ -5,7 +5,7 @@ import { useCautions } from "../../hooks/useCautions";
 import { useTradingMode } from "../../hooks/useTradingMode";
 import { accountsForActiveLogin, pauseLocks } from "../../lib/tradingMode";
 import { labAllowed, labTicket, minLotFor, type LabTicket } from "../../lib/labTrades";
-import { combinedRisk } from "../../lib/combinedRisk";
+import { combinedRisk, STRESS_SLIPPAGE_FACTOR } from "../../lib/combinedRisk";
 import { RefreshCw, ScanSearch } from "lucide-react";
 import { API_BASE_URL } from "../../lib/apiBaseUrl";
 import type { LiveQuoteLike } from "../../lib/csvQuote";
@@ -417,6 +417,13 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
           {risk.lossAllSlIdr !== null && ` (≈Rp${risk.lossAllSlIdr.toLocaleString("id-ID")})`}
           {risk.shareOfEquity !== null && ` = ${formatSharePercent(risk.shareOfEquity)}% equity`}
           {risk.lockedSl > 0 && ` · ${risk.lockedSl} posisi SL sudah di titik impas`}
+          {risk.lossAllSlUsd > 0 && (
+            <span data-testid="scan-combined-stress" className="block text-amber-200/80">
+              Skenario stres (slippage SL nyata terburuk ×{String(STRESS_SLIPPAGE_FACTOR).replace(".", ",")}): rugi ${risk.stressLossUsd.toFixed(2)}
+              {risk.stressLossIdr !== null && ` (≈Rp${risk.stressLossIdr.toLocaleString("id-ID")})`}
+              {risk.stressShareOfEquity !== null && ` = ${formatSharePercent(risk.stressShareOfEquity)}% equity`}
+            </span>
+          )}
           {risk.withoutSl.length > 0 && <span className="text-rose-300"> · TANPA SL (rugi tak terbatas): {risk.withoutSl.join(", ")}</span>}
           {risk.notCounted.length > 0 && ` · belum terhitung (kurs/preset tidak ada): ${risk.notCounted.join(", ")}`}
         </div>

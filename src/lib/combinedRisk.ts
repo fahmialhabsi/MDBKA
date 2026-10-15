@@ -7,6 +7,13 @@
  */
 import { normalizeDirection } from "./correlationGuard";
 
+/**
+ * R-2 (disetujui Fahmi 15 Okt 2026, SOP-09 langkah 3): skenario stres slippage SL.
+ * Faktor = rugi nyata terburuk ÷ risiko SL dari 15 trade SL Finex/MIFX (−1,075R),
+ * docs/TINJAUAN-RISIKO-2026-10-15-toleransi-lampu2.md. Hanya tampilan; batas tidak diubah.
+ */
+export const STRESS_SLIPPAGE_FACTOR = 1.075;
+
 export interface RiskPosition {
   readonly ticket: string;
   readonly symbol: string;
@@ -26,6 +33,10 @@ export interface CombinedRisk {
   readonly notCounted: readonly string[];
   /** SL di titik impas atau lebih baik (terkunci). */
   readonly lockedSl: number;
+  /** R-2: rugi bila semua SL kena dengan slippage nyata terburuk (× STRESS_SLIPPAGE_FACTOR). */
+  readonly stressLossUsd: number;
+  readonly stressLossIdr: number | null;
+  readonly stressShareOfEquity: number | null;
 }
 
 export function combinedRisk(
@@ -57,6 +68,7 @@ export function combinedRisk(
     loss += adverse * pv * p.volume;
   }
   const lossUsd = Math.round(loss * 100) / 100;
+  const stressUsd = Math.round(loss * STRESS_SLIPPAGE_FACTOR * 100) / 100;
   return {
     positions: positions.length,
     lossAllSlUsd: lossUsd,
@@ -65,5 +77,8 @@ export function combinedRisk(
     withoutSl,
     notCounted,
     lockedSl: locked,
+    stressLossUsd: stressUsd,
+    stressLossIdr: usdIdr === null ? null : Math.round(stressUsd * usdIdr),
+    stressShareOfEquity: equityUsd === null || !(equityUsd > 0) ? null : stressUsd / equityUsd,
   };
 }
