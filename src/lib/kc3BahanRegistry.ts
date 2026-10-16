@@ -11,6 +11,7 @@ import type { PolaCalon } from "./branchArchitecture";
 import { BADAI_MIN_TRADE, BADAI_POLA_ID, polaBadai, tambangBadai } from "./kc3Penambang";
 import { MANCING_POLA_ID, polaMancing, tambangMancing } from "./kc3BahanMancing";
 import { PETANI_POLA_ID, polaPetani, tambangPetani } from "./kc3BahanPetani";
+import { FAKTA_POLA_ID, polaFakta, tambangFakta } from "./kc3BahanFakta";
 import type { HasilTambangBahan } from "./kc3BahanShared";
 
 /** Minimum percobaan sebelum Penyaring Kebetulan menilai (selaras semua bahan, bukan hanya Badai). */
@@ -31,8 +32,18 @@ export interface BahanDefinisi {
   readonly nama: string;
   /** M15 (Badai) atau H1 (M-1/P-1/F-1) — menentukan file Common Files mana yang dibaca penjalan. */
   readonly timeframe: "M15" | "H1";
+  /** MURNI, selalu sinkron — pemanggil (kc3Runner/kc4Runner) yang memutuskan jalan di thread utama atau worker (lihat beratDiThreadTerpisah). */
   readonly tambang: (opts: BahanTambangOpts) => HasilTambangBahan;
   readonly bungkus: (hasil: HasilTambangBahan) => PolaCalon;
+  /**
+   * true HANYA untuk F-1 (audit A-3, 16-17 Okt 2026): tambangFakta() memindai ulang runBacktest()
+   * PENUH per simbol secara sinkron dan terbukti membekukan SELURUH backend >4,5 menit saat diuji
+   * nyata (curl ke endpoint lain ikut timeout). Dengan flag ini, kc3Runner/kc4Runner menjalankan
+   * bahan.tambang() di worker_threads terpisah (server/workers/kc3BahanWorker.ts) alih-alih
+   * memanggilnya langsung di thread utama -- CPU berat pindah ke thread lain, event loop utama
+   * (dan live quotes/equity/request lain) tetap responsif selama F-1 menambang.
+   */
+  readonly beratDiThreadTerpisah?: boolean;
 }
 
 export const DAFTAR_BAHAN: readonly BahanDefinisi[] = [
@@ -57,15 +68,18 @@ export const DAFTAR_BAHAN: readonly BahanDefinisi[] = [
     tambang: (o) => tambangPetani(o.bySimbol, o.spread, o.pointValueUsd, o.komisiUsdPerLot),
     bungkus: polaPetani,
   },
-  // F-1 Pencari Fakta SENGAJA belum diaktifkan (audit A-3, 16 Okt 2026): terverifikasi di browser
-  // dengan data nyata (81 simbol broker finex, ~763 hari) kalau sinyalSkorDariCandles() memindai ulang
-  // runBacktest() PENUH per simbol secara sinkron -- backend sempat tidak merespon APA PUN (termasuk
-  // live quotes/equity, dicek lewat curl) selama >4,5 menit untuk LATIH saja, belum TRY-OUT, dan masih
-  // berjalan saat diputuskan dihentikan. Kode F-1 sudah benar & lolos test (805/806) dengan data kecil,
-  // tapi BELUM aman dipakai sampai tambang() dijalankan di luar thread utama (worker_threads) atau
-  // dijadwalkan non-blocking -- bukan sekadar "pelan", tapi membekukan SELURUH backend. Lihat
-  // kc3BahanFakta.ts (cacheSinyal sudah menolong run ULANG, tidak menolong run PERTAMA).
-  // Aktifkan lagi dengan menambahkan entri F-1 (lihat git history commit sebelum ini) setelah diperbaiki.
+  {
+    id: FAKTA_POLA_ID,
+    nama: "F-1 Pencari Fakta",
+    timeframe: "H1",
+    tambang: (o) => tambangFakta(o.bySimbol, o.brokerId, o.fxRates, o.spread, o.pointValueUsd, o.komisiUsdPerLot),
+    bungkus: polaFakta,
+    // Diaktifkan lagi 17 Okt 2026 (audit A-3 lanjutan) setelah kc3Runner/kc4Runner dibuat menjalankan
+    // bahan ini di worker_threads (lihat beratDiThreadTerpisah di BahanDefinisi di atas) -- bukan lagi
+    // disinkron di thread utama. Verifikasi live: backend TETAP merespon endpoint lain selama F-1
+    // menambang (lihat catatan verifikasi di commit yang menambahkan flag ini).
+    beratDiThreadTerpisah: true,
+  },
 ];
 
 export function bahanById(id: string): BahanDefinisi | null {

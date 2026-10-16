@@ -355,6 +355,8 @@ import { formulirKc2, KATALOG_FUNGSI, periksaMasalah, scanCandles } from "../src
 import { runKc2 } from "../server/services/kc2Runner";
 import { formulirKc3Pembagian, kepalaSekolah, rentangBersamaH1 } from "../src/lib/kc3Kepala";
 import { Kc3Error, ringkasanBahan, runKc3 } from "../server/services/kc3Runner";
+import { jalankanTambang } from "../server/services/kc3WorkerRunner";
+import { bahanById } from "../src/lib/kc3BahanRegistry";
 import { BADAI_ATR_PERIOD, BADAI_MIN_TRADE, BADAI_POLA_ID, BADAI_SL_ATR, BADAI_TARGET_RR, polaBadai, tambangBadai, tambangBadaiSimbol, type BadaiTrade } from "../src/lib/kc3Penambang";
 import {
   atrSimple14,
@@ -445,6 +447,18 @@ function test(name: string, fn: () => void): void {
       `FAIL - ${name}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+/**
+ * Antrean test ASYNC (runKc3/runKc4 jadi async sejak F-1 dijalankan di worker_threads, audit A-3
+ * lanjutan) — didaftarkan di posisi aslinya (nomor urut tetap dekat test KC-3/KC-4 lain) tapi
+ * DIJALANKAN belakangan, di dalam IIFE async di akhir file (test() sendiri sengaja tetap sinkron,
+ * lihat IIFE utama). Urutan EKSEKUSI boleh beda dari urutan baca source; tidak ada test yang
+ * bergantung pada urutan jalan test lain (tiap test bikin tmpdir sendiri).
+ */
+const asyncTests: { name: string; fn: () => Promise<void> }[] = [];
+function testAsync(name: string, fn: () => Promise<void>): void {
+  asyncTests.push({ name, fn });
 }
 
 function assert(condition: boolean, message: string): void {
@@ -10994,7 +11008,7 @@ test("781. KC-3 Kepala Sekolah murni: irisan rentang H1 semua simbol, Pembagian 
   assert(kepalaSekolah("finex", []).masalah?.includes("Tidak ada file H1") === true, "tanpa file H1 -> masalah jelas");
 });
 
-test("782. KC-3 penjalan: wajib PILIHAN_BROKER KC-1 + DAFTAR_DATA KC-2 broker sama; simpan PEMBAGIAN_DATA; Formulir R hanya bila data kurang", () => {
+testAsync("782. KC-3 penjalan: wajib PILIHAN_BROKER KC-1 + DAFTAR_DATA KC-2 broker sama; simpan PEMBAGIAN_DATA; Formulir R hanya bila data kurang", async () => {
   const os = require("node:os") as unknown as { tmpdir(): string };
   const fs = require("node:fs") as unknown as typeof import("node:fs");
   const path = require("node:path") as unknown as typeof import("node:path");
@@ -11006,7 +11020,7 @@ test("782. KC-3 penjalan: wajib PILIHAN_BROKER KC-1 + DAFTAR_DATA KC-2 broker sa
 
   let blocked = false;
   try {
-    runKc3({ dataDir, commonDir, now });
+    await runKc3({ dataDir, commonDir, now });
   } catch (e) {
     blocked = e instanceof Kc3Error && e.message.includes("PILIHAN_BROKER");
   }
@@ -11015,20 +11029,20 @@ test("782. KC-3 penjalan: wajib PILIHAN_BROKER KC-1 + DAFTAR_DATA KC-2 broker sa
   saveHasil(dataDir, "KC-1", "PILIHAN_BROKER", { broker: "finex", alasan: "uji", rekomendasi: "R-KC-1-x" }, now);
   let blockedData = false;
   try {
-    runKc3({ dataDir, commonDir, now });
+    await runKc3({ dataDir, commonDir, now });
   } catch (e) {
     blockedData = e instanceof Kc3Error && e.message.includes("DAFTAR_DATA");
   }
   assert(blockedData, "tanpa DAFTAR_DATA KC-2 berhenti");
 
   saveHasil(dataDir, "KC-2", "DAFTAR_DATA", { broker: "finex", files: [{ simbol: "EURUSD", golongan: "FOREX", timeframe: "H1", dari: "2026-01-01 00:00", sampai: "2026-02-01 00:00", jumlahCandle: 10, lubang: 0, hari: 31 }] }, now);
-  const r1 = runKc3({ dataDir, commonDir, now });
+  const r1 = await runKc3({ dataDir, commonDir, now });
   assert(r1.split !== null && r1.masalah !== null && r1.rec !== null && r1.rec.cabang === "KC-3", `data kurang -> tetap simpan split + Formulir R (${r1.masalah})`);
   assert(readLatestHasil(dataDir, "KC-3", "PEMBAGIAN_DATA") !== null, "map PEMBAGIAN_DATA tersimpan");
   assert(r1.tambang === null && r1.tambangMasalah?.includes("M15") === true && r1.tambangRec !== null, "tanpa file M15 -> tambang BADAI tidak jalan, Formulir R terpisah");
 
   saveHasil(dataDir, "KC-2", "DAFTAR_DATA", { broker: "finex", files: [{ simbol: "EURUSD", golongan: "FOREX", timeframe: "H1", dari: "2024-01-01 00:00", sampai: "2026-02-01 00:00", jumlahCandle: 10000, lubang: 0, hari: 762 }] }, now);
-  const r2 = runKc3({ dataDir, commonDir, now });
+  const r2 = await runKc3({ dataDir, commonDir, now });
   assert(r2.split !== null && r2.masalah === null && r2.rec === null, "data cukup -> tanpa Formulir R Pembagian Data");
   assert(
     readSrc("src/components/branch/BranchPage.tsx").includes("<Kc3Panel onDone={load} />") && readSrc("server/routes/cabangRoutes.ts").includes('router.post("/KC-3/jalankan"'),
@@ -11036,7 +11050,7 @@ test("782. KC-3 penjalan: wajib PILIHAN_BROKER KC-1 + DAFTAR_DATA KC-2 broker sa
   );
 });
 
-test("784. KC-3 Penambang Fakta penjalan: pindai file M15 Common Files, saring LATIH saja, simpan POLA_CALON; < 20 percobaan -> Formulir R terpisah", () => {
+testAsync("784. KC-3 Penambang Fakta penjalan: pindai file M15 Common Files, saring LATIH saja, simpan POLA_CALON; < 20 percobaan -> Formulir R terpisah", async () => {
   const os = require("node:os") as unknown as { tmpdir(): string };
   const fs = require("node:fs") as unknown as typeof import("node:fs");
   const path = require("node:path") as unknown as typeof import("node:path");
@@ -11062,7 +11076,7 @@ test("784. KC-3 Penambang Fakta penjalan: pindai file M15 Common Files, saring L
   // File M15 simbol LAIN (bukan punya broker ini) -> tidak ikut dibaca.
   fs.writeFileSync(path.join(commonDir, "MDBKA_XAUUSD_M15_LONG.csv"), rows.join("\n") + "\n");
 
-  const r = runKc3({ dataDir, commonDir, now });
+  const r = await runKc3({ dataDir, commonDir, now });
   assert(r.tambang !== null && r.tambang.n === 0 && r.tambang.rataR === null, `candle tenang -> 0 percobaan BADAI ${JSON.stringify(r.tambang)}`);
   assert(r.tambangMasalah?.includes("kurang dari 20") === true && r.tambangRec !== null && r.tambangRec.cabang === "KC-3", "percobaan < 20 -> Formulir R terpisah");
   const pola = readLatestHasil(dataDir, "KC-3", "POLA_CALON");
@@ -11170,7 +11184,7 @@ test("785. KC-3 Penyaring Kebetulan & Pengawas Try-out murni: ambang naik, konsi
   assert(form.judul.includes("KC3-BADAI-ARAH-1") && form.usulan.includes("finex") && form.usulan.includes("KC-4"), JSON.stringify(form));
 });
 
-test("786. KC-3 penjalan penuh (Penambang -> Penyaring -> Try-out): lolos -> POLA_CALON diperbarui + Formulir R \"Pola Calon\" ke Pusat", () => {
+testAsync("786. KC-3 penjalan penuh (Penambang -> Penyaring -> Try-out): lolos -> POLA_CALON diperbarui + Formulir R \"Pola Calon\" ke Pusat", async () => {
   const os = require("node:os") as unknown as { tmpdir(): string };
   const fs = require("node:fs") as unknown as typeof import("node:fs");
   const path = require("node:path") as unknown as typeof import("node:path");
@@ -11216,7 +11230,7 @@ test("786. KC-3 penjalan penuh (Penambang -> Penyaring -> Try-out): lolos -> POL
   for (const simbol of simbolLatih) writeSimbol(simbol, Date.parse(split.dari));
   for (const simbol of simbolTryout) writeSimbol(simbol, Date.parse(split.latihSampai));
 
-  const r = runKc3({ dataDir, commonDir, now });
+  const r = await runKc3({ dataDir, commonDir, now });
   assert(r.tambang !== null && r.tambang.n >= BADAI_MIN_TRADE && r.tambang.menang === r.tambang.n, `semua TP di LATIH ${JSON.stringify(r.tambang)}`);
   assert(r.tambangMasalah === null, `tanpa masalah tambang ${r.tambangMasalah}`);
   assert(r.saring?.status === "LOLOS", `saring lolos (1 bulan, konsisten, menang 100%) ${JSON.stringify(r.saring)}`);
@@ -11312,7 +11326,7 @@ test("789. KC-4 Auditor Trade murni: sebab rugi (melawan sejak masuk / keluar ka
   assert(hasilWaktu.keluarKarenaWaktu === 6 && hasilWaktu.persenWaktu === 0.6 && hasilWaktu.tolak && hasilWaktu.sebab.some((s) => s.includes("batas waktu")), JSON.stringify(hasilWaktu));
 });
 
-test("788. KC-4 penjalan penuh: wajib Pola Calon disetujui Pusat + satu pola sekali uji; UJIAN bersegel -> vonis LULUS + Formulir R", () => {
+testAsync("788. KC-4 penjalan penuh: wajib Pola Calon disetujui Pusat + satu pola sekali uji; UJIAN bersegel -> vonis LULUS + Formulir R", async () => {
   const os = require("node:os") as unknown as { tmpdir(): string };
   const fs = require("node:fs") as unknown as typeof import("node:fs");
   const path = require("node:path") as unknown as typeof import("node:path");
@@ -11345,7 +11359,7 @@ test("788. KC-4 penjalan penuh: wajib Pola Calon disetujui Pusat + satu pola sek
 
   let ditolakRentang = false;
   try {
-    runKc4({ dataDir, commonDir, now });
+    await runKc4({ dataDir, commonDir, now });
   } catch (e) {
     ditolakRentang = e instanceof Kc4Error && e.message.includes("Rentang data bersama");
   }
@@ -11387,7 +11401,7 @@ test("788. KC-4 penjalan penuh: wajib Pola Calon disetujui Pusat + satu pola sek
 
   let blocked = false;
   try {
-    runKc4({ dataDir, commonDir, now });
+    await runKc4({ dataDir, commonDir, now });
   } catch (e) {
     blocked = e instanceof Kc4Error && e.message.includes("DISETUJUI");
   }
@@ -11395,7 +11409,7 @@ test("788. KC-4 penjalan penuh: wajib Pola Calon disetujui Pusat + satu pola sek
 
   saveDecision(dataDir, "KC-3", recPola.id, { keputusan: "SETUJU", catatan: "" }, now);
 
-  const r = runKc4({ dataDir, commonDir, now });
+  const r = await runKc4({ dataDir, commonDir, now });
   assert(r.vonis === "LULUS" && r.k1k7.lulus && r.k1k7.n >= 20 && r.k1k7.blokPositif >= 5, `vonis LULUS ${JSON.stringify(r.k1k7)}`);
   assert(r.rec.cabang === "KC-4" && r.rec.judul.includes("LULUS"), `Formulir R vonis ${JSON.stringify(r.rec)}`);
   const vonisTersimpan = readLatestHasil(dataDir, "KC-4", "VONIS_UJIAN");
@@ -11403,7 +11417,7 @@ test("788. KC-4 penjalan penuh: wajib Pola Calon disetujui Pusat + satu pola sek
 
   let diujiLagi = false;
   try {
-    runKc4({ dataDir, commonDir, now });
+    await runKc4({ dataDir, commonDir, now });
   } catch (e) {
     diujiLagi = e instanceof Kc4Error && e.message.includes("sudah pernah diuji");
   }
@@ -15011,9 +15025,9 @@ test("807. kc3Runner ringkasanBahan: status per bahan (Badai+M-1/P-1/F-1) lengka
   const now = new Date("2026-10-16T05:00:00.000Z");
 
   const kosong = ringkasanBahan(dataDir);
-  // F-1 Pencari Fakta sengaja belum di DAFTAR_BAHAN (audit A-3: backend tidak merespon sama sekali
-  // >4,5 menit saat diuji nyata, lihat kc3BahanRegistry.ts) -- 3 bahan aktif: Badai, M-1, P-1.
-  assert(kosong.length === 3 && kosong.every((b) => b.status === "BELUM_DITAMBANG" && b.pola === null && b.perbaikan === null), `3 bahan aktif, semua belum ditambang: ${JSON.stringify(kosong)}`);
+  // F-1 Pencari Fakta diaktifkan lagi (audit A-3 lanjutan, 17 Okt 2026): sekarang jalan di
+  // worker_threads terpisah (lihat kc3BahanRegistry.ts/beratDiThreadTerpisah) -- 4 bahan aktif.
+  assert(kosong.length === 4 && kosong.every((b) => b.status === "BELUM_DITAMBANG" && b.pola === null && b.perbaikan === null), `4 bahan aktif, semua belum ditambang: ${JSON.stringify(kosong)}`);
 
   const polaMancing = { id: MANCING_POLA_ID, kondisi: "uji", bahan: [], angkaBeku: {}, latih: { n: 30, rataR: -0.1 }, tryout: { n: 0, rataR: null } };
   saveHasil(dataDir, "KC-3", "POLA_CALON", polaMancing, now);
@@ -15064,6 +15078,44 @@ test("808. audit A-3 strip status kesehatan: harga live (quotes.csv) dicek TERPI
     "strip status terpasang di header dashboard utama (bukan terkubur di panel lain)",
   );
   assert(readSrc("src/hooks/useDataQualitySemua.ts").includes("/api/data-quality/semua"), "hook memanggil endpoint agregat");
+});
+
+testAsync("809. kc3WorkerRunner jalankanTambang: F-1 (beratDiThreadTerpisah) jalan di worker_threads terpisah dan hasilnya IDENTIK dengan panggilan langsung; bahan biasa (Badai) tidak lewat worker", async () => {
+  // Data sintetis sama gayanya dengan tes 805/806 (25 hari datar + ramp tipis di jam terakhir) --
+  // cukup untuk melewati SMA20 D1 & indikator strategi skor di dalam tambangFakta()/runBacktest(),
+  // tidak perlu benar-benar menghasilkan trade (yang penting: worker & panggilan langsung SAMA).
+  const p2 = (v: number): string => String(v).padStart(2, "0");
+  const waktu = (idx: number): string => {
+    const d = new Date(Date.UTC(2026, 0, 1, 0, 0) + idx * 3_600_000);
+    return `${d.getUTCFullYear()}.${p2(d.getUTCMonth() + 1)}.${p2(d.getUTCDate())} ${p2(d.getUTCHours())}:00`;
+  };
+  const candles: Candle[] = [];
+  for (let day = 0; day < 25; day += 1) {
+    for (let h = 0; h < 24; h += 1) {
+      const idx = day * 24 + h;
+      const close = h === 23 && day >= 20 ? 100 + (day - 19) : 100;
+      candles.push({ time: waktu(idx), open: close, high: close + 0.3, low: close - 0.3, close });
+    }
+  }
+  const bySimbol = new Map([["TESTSYM", candles]]);
+  const spread = new Map([["TESTSYM", 0]]);
+  const pointValueUsd = new Map([["TESTSYM", 1]]);
+  const komisiUsdPerLot = new Map([["TESTSYM", 0]]);
+
+  const faktaBahan = bahanById(FAKTA_POLA_ID);
+  assert(faktaBahan !== null && faktaBahan.beratDiThreadTerpisah === true, "F-1 terdaftar & ditandai beratDiThreadTerpisah");
+  const langsung = tambangFakta(bySimbol, "finex", null, spread, pointValueUsd, komisiUsdPerLot);
+  const lewatWorker = await jalankanTambang(faktaBahan as NonNullable<typeof faktaBahan>, { bySimbol, brokerId: "finex", fxRates: null, spread, pointValueUsd, komisiUsdPerLot });
+  assert(JSON.stringify(lewatWorker) === JSON.stringify(langsung), `hasil worker harus identik dengan panggilan langsung: worker=${JSON.stringify(lewatWorker)} langsung=${JSON.stringify(langsung)}`);
+
+  // Bahan biasa (Badai, M15, TANPA beratDiThreadTerpisah) -> jalankanTambang tetap async (Promise),
+  // tapi TIDAK lewat worker -- hasilnya identik dengan memanggil bahan.tambang() langsung.
+  const badaiBahan = bahanById(BADAI_POLA_ID);
+  assert(badaiBahan !== null && badaiBahan.beratDiThreadTerpisah === undefined, "Badai TIDAK ditandai beratDiThreadTerpisah");
+  const m15Opts = { bySimbol: new Map([["TESTSYM", candles]]), brokerId: "finex" as const, fxRates: null, spread: new Map(), pointValueUsd: new Map(), komisiUsdPerLot: new Map() };
+  const badaiLangsung = (badaiBahan as NonNullable<typeof badaiBahan>).tambang(m15Opts);
+  const badaiLewatRunner = await jalankanTambang(badaiBahan as NonNullable<typeof badaiBahan>, m15Opts);
+  assert(JSON.stringify(badaiLewatRunner) === JSON.stringify(badaiLangsung), "bahan tanpa flag -> jalankanTambang() == panggilan langsung (tanpa worker)");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +
@@ -15367,6 +15419,17 @@ test("808. audit A-3 strip status kesehatan: harga live (quotes.csv) dicek TERPI
   } catch (e) {
     failed += 1;
     console.log(`FAIL - 710. TB-2 penyelesaian bayangan: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  for (const t of asyncTests) {
+    try {
+      await t.fn();
+      passed += 1;
+      console.log(`ok - ${t.name}`);
+    } catch (error) {
+      failed += 1;
+      console.log(`FAIL - ${t.name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   console.log(

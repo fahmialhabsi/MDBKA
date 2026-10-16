@@ -66,10 +66,10 @@ export function createCabangRoutes(
     }
   });
 
-  router.post("/KC-3/jalankan", (_req, res) => {
+  router.post("/KC-3/jalankan", async (_req, res) => {
     try {
       const rates = getCachedEcbRates() ?? FALLBACK_RATES;
-      const r = runKc3({ dataDir, commonDir: commonDir(), now: now(), faktaFile, rates });
+      const r = await runKc3({ dataDir, commonDir: commonDir(), now: now(), faktaFile, rates });
       res.status(201).json(r);
     } catch (e) {
       res.status(e instanceof Kc3Error ? 409 : 500).json({ error: e instanceof Error ? e.message : String(e) });
@@ -80,10 +80,10 @@ export function createCabangRoutes(
     res.json({ bahan: ringkasanBahan(dataDir) });
   });
 
-  router.post("/KC-4/jalankan", (_req, res) => {
+  router.post("/KC-4/jalankan", async (_req, res) => {
     try {
       const rates = getCachedEcbRates() ?? FALLBACK_RATES;
-      const r = runKc4({ dataDir, commonDir: commonDir(), now: now(), faktaFile, rates });
+      const r = await runKc4({ dataDir, commonDir: commonDir(), now: now(), faktaFile, rates });
       res.status(201).json(r);
     } catch (e) {
       res.status(e instanceof Kc4Error ? 409 : 500).json({ error: e instanceof Error ? e.message : String(e) });

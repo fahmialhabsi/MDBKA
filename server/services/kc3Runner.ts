@@ -18,6 +18,7 @@ import type { HasilTambangBahan } from "../../src/lib/kc3BahanShared";
 import { candleTimeMs } from "../../src/lib/symbolScanner";
 import { readAllHasil, readBranch, readLatestHasil, saveHasil, saveRecommendation } from "./branchStore";
 import { readFaktaBroker } from "./kc1Runner";
+import { jalankanTambang } from "./kc3WorkerRunner";
 
 /**
  * KC-3 (16 Okt 2026, digeneralisasi A-3) — penjalan Kepala Sekolah + Penambang Fakta + Penyaring
@@ -203,7 +204,7 @@ export function resolveBiaya(commonDir: string, faktaFile: string, brokerId: Bro
 }
 
 /** Tambang + Penyaring Kebetulan + Pengawas Try-out untuk SATU bahan (dipakai Badai & bahanLain — identik). */
-function prosesBahan(
+async function prosesBahan(
   dataDir: string,
   broker: string,
   brokerId: BrokerId,
@@ -214,7 +215,7 @@ function prosesBahan(
   fxRates: ExchangeRates | null,
   tanggal: string,
   now: Date,
-): Kc3BahanHasil {
+): Promise<Kc3BahanHasil> {
   const kosong: Omit<Kc3BahanHasil, "tambang" | "tambangMasalah" | "tambangRec"> = {
     id: bahan.id, nama: bahan.nama, saring: null, tryout: null, perbaikan: null, polaRec: null,
   };
@@ -226,7 +227,7 @@ function prosesBahan(
   }
   const latihBySimbol = saringBySimbol(rawBySimbol, split.dari, split.latihSampai);
   const opts = { spread: biaya.spread, pointValueUsd: biaya.pointValueUsd, komisiUsdPerLot: biaya.komisiUsdPerLot, brokerId, fxRates };
-  const tambang = bahan.tambang({ bySimbol: latihBySimbol, ...opts });
+  const tambang = await jalankanTambang(bahan, { bySimbol: latihBySimbol, ...opts });
   const pola: PolaCalon = bahan.bungkus(tambang);
   saveHasil(dataDir, "KC-3", "POLA_CALON", pola, now);
   if (tambang.n < BAHAN_MIN_TRADE) {
@@ -242,7 +243,7 @@ function prosesBahan(
   if (saring.status === "LOLOS") {
     // Pengawas Try-out: uji SEKALI di bagian TRY-OUT, belum pernah diintip sebelumnya.
     const tryoutBySimbol = saringBySimbol(rawBySimbol, split.latihSampai, split.tryoutSampai);
-    const tryoutTambang = bahan.tambang({ bySimbol: tryoutBySimbol, ...opts });
+    const tryoutTambang = await jalankanTambang(bahan, { bySimbol: tryoutBySimbol, ...opts });
     const tryout = pengawasTryout(tryoutTambang.trades);
     if (tryout.lolos) {
       saveHasil(dataDir, "KC-3", "POLA_CALON", { ...pola, tryout: { n: tryout.n, rataR: tryout.rataR } }, now);
@@ -260,13 +261,13 @@ function prosesBahan(
   return { id: bahan.id, nama: bahan.nama, tambang, tambangMasalah: null, tambangRec: null, saring, tryout: null, perbaikan: null, polaRec: null };
 }
 
-export function runKc3(opts: {
+export async function runKc3(opts: {
   readonly dataDir: string;
   readonly commonDir: string;
   readonly now: Date;
   readonly faktaFile?: string;
   readonly rates?: ExchangeRates | null;
-}): Kc3Run {
+}): Promise<Kc3Run> {
   const pilihan = readLatestHasil(opts.dataDir, "KC-1", "PILIHAN_BROKER");
   const pilihanData = pilihan?.data as { broker?: unknown } | null | undefined;
   const broker = typeof pilihanData?.broker === "string" ? pilihanData.broker : null;
@@ -299,16 +300,22 @@ export function runKc3(opts: {
     // semua H1) — sebelum fix ini tiap bahan H1 baca ulang 81 file Common Files dari disk sendiri-sendiri,
     // bikin KC-3 menggantung menit-menitan (audit A-3, terbukti saat verifikasi di browser).
     const candlePerTimeframe = new Map<BahanDefinisi["timeframe"], Map<string, Candle[]>>();
-    DAFTAR_BAHAN.forEach((bahan, i) => {
+    // for...of berurutan (BUKAN forEach/Promise.all): bahan selain F-1 tetap jalan sinkron di thread
+    // utama seperti sebelumnya (urutan + efek samping saveHasil sama persis); F-1 saja yang pindah ke
+    // worker (jalankanTambang -> kc3WorkerRunner.ts), jadi await di sini hanya benar-benar "menunggu
+    // thread lain" untuk bahan itu -- bahan lain tetap selesai seketika seperti biasa.
+    let i = 0;
+    for (const bahan of DAFTAR_BAHAN) {
       let raw = candlePerTimeframe.get(bahan.timeframe);
       if (raw === undefined) {
         raw = bacaBahan(opts.commonDir, simbolBroker, bahan);
         candlePerTimeframe.set(bahan.timeframe, raw);
       }
-      const hasilBahan = prosesBahan(opts.dataDir, broker, brokerId, bahan, split, raw, biaya, opts.rates ?? null, tanggal, opts.now);
+      const hasilBahan = await prosesBahan(opts.dataDir, broker, brokerId, bahan, split, raw, biaya, opts.rates ?? null, tanggal, opts.now);
       if (i === 0) badai = hasilBahan;
       else bahanLain.push(hasilBahan);
-    });
+      i += 1;
+    }
   }
 
   return {

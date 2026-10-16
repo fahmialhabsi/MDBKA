@@ -8,6 +8,7 @@ import { formulirVonis, ujiK1K7, type HasilK1K7, type VonisUjian } from "../../s
 import { auditTrade, type HasilAuditor } from "../../src/lib/kc4Auditor";
 import { bahanById } from "../../src/lib/kc3BahanRegistry";
 import { bacaBahan, resolveBiaya, saringBySimbol } from "./kc3Runner";
+import { jalankanTambang } from "./kc3WorkerRunner";
 import { readAllHasil, readBranch, readLatestHasil, saveHasil, saveRecommendation } from "./branchStore";
 
 /**
@@ -69,13 +70,13 @@ function cariPolaSiapUji(dataDir: string): CariPolaHasil {
   return disetujuiTapiSudahDiuji !== null ? { status: "SUDAH_DIUJI", polaId: disetujuiTapiSudahDiuji } : { status: "BELUM_ADA" };
 }
 
-export function runKc4(opts: {
+export async function runKc4(opts: {
   readonly dataDir: string;
   readonly commonDir: string;
   readonly now: Date;
   readonly faktaFile?: string;
   readonly rates?: ExchangeRates | null;
-}): Kc4Run {
+}): Promise<Kc4Run> {
   const pilihan = readLatestHasil(opts.dataDir, "KC-1", "PILIHAN_BROKER");
   const pilihanData = pilihan?.data as { broker?: unknown } | null | undefined;
   const broker = typeof pilihanData?.broker === "string" ? pilihanData.broker : null;
@@ -121,8 +122,12 @@ export function runKc4(opts: {
   const raw = bacaBahan(opts.commonDir, simbolBroker, bahan);
   const ujianBySimbol = saringBySimbol(raw, split.ujianDari, split.sampai);
   const latihBySimbol = saringBySimbol(raw, split.dari, split.latihSampai);
-  const ujian = bahan.tambang({ bySimbol: ujianBySimbol, ...tambangOpts });
-  const latih = bahan.tambang({ bySimbol: latihBySimbol, ...tambangOpts });
+  // ujian & latih independen (baca candle beda, tanpa efek samping) -> aman dijalankan bersamaan;
+  // untuk F-1 ini juga berarti DUA worker_threads sekaligus, bukan menunggu satu-satu (audit A-3 lanjutan).
+  const [ujian, latih] = await Promise.all([
+    jalankanTambang(bahan, { bySimbol: ujianBySimbol, ...tambangOpts }),
+    jalankanTambang(bahan, { bySimbol: latihBySimbol, ...tambangOpts }),
+  ]);
 
   const k1k7 = ujiK1K7(ujian.trades, latih.trades, split.ujianDari, split.sampai);
   const auditor = auditTrade(ujian.trades);
