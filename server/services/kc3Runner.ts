@@ -41,8 +41,8 @@ export interface Kc3Run extends HasilKepalaSekolah {
 
 export class Kc3Error extends Error {}
 
-/** File M15 (MDBKA_<simbol>_M15_LONG.csv) milik simbol broker terpilih, candle apa adanya (belum disaring LATIH). */
-function bacaM15(commonDir: string, simbolBroker: ReadonlySet<string>): Map<string, Candle[]> {
+/** File M15 (MDBKA_<simbol>_M15_LONG.csv) milik simbol broker terpilih, candle apa adanya (belum disaring ke bagian mana pun). Dipakai ulang KC-4. */
+export function bacaM15(commonDir: string, simbolBroker: ReadonlySet<string>): Map<string, Candle[]> {
   const out = new Map<string, Candle[]>();
   if (!existsSync(commonDir)) return out;
   for (const name of readdirSync(commonDir)) {
@@ -65,7 +65,8 @@ function saringRentang(candles: readonly Candle[], dariIso: string, sampaiIso: s
   });
 }
 
-function saringBySimbol(m15: ReadonlyMap<string, Candle[]>, dariIso: string, sampaiIso: string): Map<string, Candle[]> {
+/** Saring candle tiap simbol ke satu bagian [dariIso, sampaiIso) sekaligus. Dipakai ulang KC-4. */
+export function saringBySimbol(m15: ReadonlyMap<string, Candle[]>, dariIso: string, sampaiIso: string): Map<string, Candle[]> {
   const out = new Map<string, Candle[]>();
   for (const [simbol, candles] of m15) out.set(simbol, saringRentang(candles, dariIso, sampaiIso));
   return out;

@@ -357,6 +357,8 @@ import { formulirKc3Pembagian, kepalaSekolah, rentangBersamaH1 } from "../src/li
 import { Kc3Error, runKc3 } from "../server/services/kc3Runner";
 import { BADAI_ATR_PERIOD, BADAI_MIN_TRADE, BADAI_POLA_ID, BADAI_SL_ATR, BADAI_TARGET_RR, polaBadai, tambangBadai, tambangBadaiSimbol, type BadaiTrade } from "../src/lib/kc3Penambang";
 import { bulanRentang, catatanPerbaikan, formulirPolaCalon, pengawasTryout, pilihJalan, saringKebetulan, titikImpas } from "../src/lib/kc3Perbaikan";
+import { bagiBlok, formulirVonis, ujiK1K7 } from "../src/lib/kc4Kepala";
+import { Kc4Error, runKc4 } from "../server/services/kc4Runner";
 import { LAMP2_LOSS_TOLERANCE_R, lampRows } from "../src/lib/greenLamps";
 import { readBacktestLamps, saveBacktestLamps } from "../server/services/lampStore";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
@@ -10759,10 +10761,15 @@ test("772. A-1 arsitektur KC-1..KC-3: kontrak map bersih, alur dihitung dari kon
   // kc3-perbaikan (Penyaring Kebetulan & Pengawas Try-out) yang masih DITUNDA.
   // Diubah lagi 16 Okt 2026 17:00: Penyaring Kebetulan & Pengawas Try-out dibangun (AKTIF) -> semua
   // petugas KC-1..KC-3 kini AKTIF.
-  assert(PETUGAS.every((p) => p.status === "AKTIF"), "semua petugas KC-1..KC-3 AKTIF");
-  assert(PETUGAS.every((p) => p.cabang === "KC-1" || p.cabang === "KC-2" || p.cabang === "KC-3"), "hanya KC-1..KC-3");
+  // Diubah lagi 16 Okt 2026 18:00: KC-4 Kepala Ruang Ujian & Penguji Data Lama dibangun (AKTIF, lampu 1
+  // saja) -> arsitektur kini KC-1..KC-4.
+  assert(PETUGAS.every((p) => p.status === "AKTIF"), "semua petugas KC-1..KC-4 AKTIF");
+  assert(PETUGAS.every((p) => ["KC-1", "KC-2", "KC-3", "KC-4"].includes(p.cabang)), "hanya KC-1..KC-4");
   const flows = branchFlows().map((f) => `${f.dari}>${f.ke}:${f.hasil}`).sort().join(" ");
-  assert(flows === "KC-1>KC-2:PILIHAN_BROKER KC-1>KC-3:PILIHAN_BROKER KC-2>KC-1:DAFTAR_DATA KC-2>KC-3:DAFTAR_DATA KC-2>KC-3:KATALOG_FUNGSI KC-3>KC-2:CATATAN_PERBAIKAN", flows);
+  assert(
+    flows === "KC-1>KC-2:PILIHAN_BROKER KC-1>KC-3:PILIHAN_BROKER KC-2>KC-1:DAFTAR_DATA KC-2>KC-3:DAFTAR_DATA KC-2>KC-3:KATALOG_FUNGSI KC-3>KC-2:CATATAN_PERBAIKAN KC-3>KC-4:POLA_CALON",
+    flows,
+  );
   const bad = contractErrors([{ id: "x", cabang: "KC-3", jabatan: "x", membaca: [], menulis: "PILIHAN_BROKER", status: "DITUNDA" }]);
   assert(bad.length === 1 && bad[0]?.includes("milik KC-1") === true, "menulis map cabang lain ditolak");
   assert(readSrc("src/components/branch/BranchPage.tsx").includes('data-testid="branch-architecture"'), "halaman menampilkan arsitektur");
@@ -11183,6 +11190,149 @@ test("786. KC-3 penjalan penuh (Penambang -> Penyaring -> Try-out): lolos -> POL
   const data = pola?.data as { tryout?: { n?: unknown; rataR?: unknown } } | null;
   assert(data?.tryout?.n === r.tryout?.n && data?.tryout?.rataR === r.tryout?.rataR, "map POLA_CALON diperbarui dengan hasil try-out");
   assert(readAllHasil(dataDir, "KC-3", "CATATAN_PERBAIKAN").length === 0, "lolos -> tanpa CatatanPerbaikan");
+});
+
+test("787. KC-4 Kepala Ruang Ujian & Penguji Data Lama murni: kriteria K1-K7 sama dengan riset strategi versi MDBKA", () => {
+  const dari = "2026-01-01T00:00:00.000Z";
+  const sampai = "2026-01-08T00:00:00.000Z"; // 7 hari -> 7 blok, 1 blok = 1 hari
+  const trade = (jam: number, rMultiple: number): BadaiTrade => ({
+    simbol: "EURUSD",
+    signalTime: new Date(Date.parse(dari) + jam * 3_600_000).toISOString(),
+    direction: "BELI",
+    outcome: rMultiple > 0 ? "TP" : "SL",
+    rMultiple,
+  });
+
+  assert(bagiBlok([trade(0, 1), trade(25, 1), trade(170, 1)], dari, sampai).join(",") === "1,1,0,0,0,0,1", "bagiBlok: jam 0/25/170 -> blok 0/1/6");
+  assert(bagiBlok([], dari, sampai).join(",") === "0,0,0,0,0,0,0", "tanpa trade -> 7 blok nol");
+
+  // Skenario LULUS: 21 trade (3/hari x 7 hari), tiap hari 2 menang +1,3R + 1 kalah -1,0R; LATIH juga positif.
+  const ujianLolos = Array.from({ length: 7 }, (_, hari) => [trade(hari * 24 + 1, 1.3), trade(hari * 24 + 9, 1.3), trade(hari * 24 + 17, -1.0)]).flat();
+  const latihPositif = [trade(-10, 0.5), trade(-20, 0.5), trade(-30, 0.5)];
+  const lolos = ujiK1K7(ujianLolos, latihPositif, dari, sampai);
+  assert(lolos.lulus && lolos.gagal.length === 0 && lolos.n === 21 && lolos.blokPositif === 7, `semua K1-K7 lolos ${JSON.stringify(lolos)}`);
+  assert(Math.abs((lolos.rataR ?? 0) - (11.2 / 21)) < 0.01 && lolos.profitFactor !== null && lolos.profitFactor >= 1.2, `angka K1-K7 benar ${JSON.stringify(lolos)}`);
+
+  // K1 gagal: n < 20 (ambil 2 hari pertama saja dari skenario lolos).
+  const kurang = ujiK1K7(ujianLolos.slice(0, 6), latihPositif, dari, sampai);
+  assert(!kurang.lulus && kurang.gagal.includes("K1"), `n<20 -> K1 gagal ${JSON.stringify(kurang)}`);
+
+  // K5 gagal: satu kekalahan melebihi -1,1R (hari pertama kalah -1,5R), sisanya sama seperti skenario lolos.
+  const k5Gagal = ujiK1K7([trade(1, 1.3), trade(9, 1.3), trade(17, -1.5), ...ujianLolos.slice(3)], latihPositif, dari, sampai);
+  assert(!k5Gagal.lulus && k5Gagal.gagal.includes("K5") && k5Gagal.terburuk === -1.5, `rugi >1,1R -> K5 gagal ${JSON.stringify(k5Gagal)}`);
+
+  // K7 gagal: UJIAN tetap lolos semua, tapi LATIH kosong (belum terbukti di luar bagian ujian).
+  const k7Gagal = ujiK1K7(ujianLolos, [], dari, sampai);
+  assert(!k7Gagal.lulus && k7Gagal.gagal.join(",") === "K7", `LATIH kosong -> hanya K7 gagal ${JSON.stringify(k7Gagal)}`);
+
+  // K4 & K6 gagal bersama: untung menumpuk di SATU blok (hari pertama), hari lain rugi tipis.
+  const timpang = [
+    trade(1, 10), trade(9, 10), trade(17, 10),
+    ...Array.from({ length: 6 }, (_, h) => [trade((h + 1) * 24 + 1, -0.1), trade((h + 1) * 24 + 9, -0.1), trade((h + 1) * 24 + 17, -0.1)]).flat(),
+  ];
+  const timpangHasil = ujiK1K7(timpang, latihPositif, dari, sampai);
+  assert(!timpangHasil.lulus && timpangHasil.gagal.includes("K4") && timpangHasil.gagal.includes("K6"), `untung satu blok saja -> K4+K6 gagal ${JSON.stringify(timpangHasil)}`);
+
+  // PF tak terhingga (tanpa rugi sama sekali) -> K3 tetap lolos otomatis, bukan digugurkan karena null.
+  const tanpaRugi = ujiK1K7(ujianLolos.map((t) => ({ ...t, rMultiple: Math.abs(t.rMultiple), outcome: "TP" as const })), latihPositif, dari, sampai);
+  assert(tanpaRugi.rugiNol && tanpaRugi.profitFactor === null && tanpaRugi.k3, `tanpa rugi -> PF tak terhingga, K3 lolos ${JSON.stringify(tanpaRugi)}`);
+
+  const formLulus = formulirVonis("KC3-BADAI-ARAH-1", "finex", lolos, "LULUS", "2026-10-16");
+  assert(formLulus.judul.includes("LULUS") && formLulus.usulan.includes("UJI_DEMO") && formLulus.fakta[1]?.teks.includes("Semua K1-K7 lolos"), JSON.stringify(formLulus));
+  const formGagal = formulirVonis("KC3-BADAI-ARAH-1", "finex", k5Gagal, "GAGAL", "2026-10-16");
+  assert(formGagal.judul.includes("GAGAL") && formGagal.usulan.includes("arsipkan") && formGagal.fakta[1]?.teks.includes("K5"), JSON.stringify(formGagal));
+  const formTakTerhingga = formulirVonis("KC3-BADAI-ARAH-1", "finex", tanpaRugi, "LULUS", "2026-10-16");
+  assert(formTakTerhingga.fakta[0]?.teks.includes("tak terhingga"), JSON.stringify(formTakTerhingga));
+});
+
+test("788. KC-4 penjalan penuh: wajib Pola Calon disetujui Pusat + satu pola sekali uji; UJIAN bersegel -> vonis LULUS + Formulir R", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "kc4-"));
+  const dataDir = path.join(root, "data");
+  const commonDir = path.join(root, "common");
+  fs.mkdirSync(commonDir);
+  const now = new Date("2026-10-16T05:00:00.000Z");
+
+  saveHasil(dataDir, "KC-1", "PILIHAN_BROKER", { broker: "finex", alasan: "uji", rekomendasi: "R-KC-1-x" }, now);
+
+  const nUjianSimbol = 21;
+  const simbolUjian = Array.from({ length: nUjianSimbol }, (_, i) => `UJI${String(i + 1).padStart(2, "0")}`);
+  const simbolLatih = ["LAT01", "LAT02", "LAT03"];
+  const dariH1 = "2026-01-01 00:00";
+  const sampaiH1 = "2026-02-10 00:00"; // 40 hari -> ujian 8 hari terakhir (7 blok ~1,14 hari)
+  const files = [...simbolUjian, ...simbolLatih].map((simbol) => ({ simbol, golongan: "FOREX", timeframe: "H1", dari: dariH1, sampai: sampaiH1, jumlahCandle: 1000, lubang: 0, hari: 40 }));
+  saveHasil(dataDir, "KC-2", "DAFTAR_DATA", { broker: "finex", files }, now);
+
+  const split = kepalaSekolah("finex", files).split;
+  if (split === null) throw new Error("konstruksi tes salah: split null");
+  saveHasil(dataDir, "KC-3", "PEMBAGIAN_DATA", { ...split, hariBersama: 40 }, now);
+
+  const pola = { id: "KC3-BADAI-ARAH-1", kondisi: "uji", bahan: ["Peringatan Badai"], angkaBeku: { stormK: 2 }, latih: { n: 39, rataR: 0.3 }, tryout: { n: 10, rataR: 0.4 } };
+  saveHasil(dataDir, "KC-3", "POLA_CALON", pola, now);
+  const judulLolos = `Pola Calon KC-3 lolos try-out: ${pola.id}`;
+  const recPola = saveRecommendation(dataDir, "KC-3", { judul: judulLolos, fakta: [], batasData: "", usulan: "", risiko: "" }, now);
+
+  const writeSimbol = (simbol: string, mulaiMs: number): void => {
+    let t = mulaiMs;
+    const waktu = (): string => {
+      const d = new Date(t);
+      const p = (v: number): string => String(v).padStart(2, "0");
+      const s = `${d.getUTCFullYear()}.${p(d.getUTCMonth() + 1)}.${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+      t += 15 * 60_000;
+      return s;
+    };
+    const calm = (n: number) => Array.from({ length: n }, () => ({ time: waktu(), open: 100, high: 100.05, low: 99.95, close: 100 }));
+    const spike = () => ({ time: waktu(), open: 100, high: 111, low: 97, close: 108 });
+    // Langkah kecil (< rentang tenang 0,1) supaya drift sendiri tidak terbaca BADAI baru (lihat test 783);
+    // lebih pendek dari test 786 (100 candle, bukan 250) supaya selesai dalam satu blok ~1,14 hari.
+    const drift = (n: number) => Array.from({ length: n }, (_, k) => {
+      const level = 108 + 0.04 * k;
+      return { time: waktu(), open: level, high: level + 0.06, low: level, close: level + 0.04 };
+    });
+    const candles = [...calm(50), spike(), ...drift(100)];
+    const rows = ["time,open,high,low,close,tick_volume", ...candles.map((c) => `${c.time},${c.open},${c.high},${c.low},${c.close},10`)];
+    fs.writeFileSync(path.join(commonDir, `MDBKA_${simbol}_M15_LONG.csv`), rows.join("\n") + "\n");
+  };
+
+  // 3 simbol per blok UJIAN (7 blok x 3 = 21), semua menang -> K1..K6 lolos.
+  const ujianDariMs = Date.parse(split.ujianDari);
+  const sampaiMs = Date.parse(split.sampai);
+  const lebarBlokMs = (sampaiMs - ujianDariMs) / 7;
+  for (let blok = 0; blok < 7; blok += 1) {
+    for (let k = 0; k < 3; k += 1) writeSimbol(simbolUjian[blok * 3 + k] as string, ujianDariMs + blok * lebarBlokMs);
+  }
+  for (const simbol of simbolLatih) writeSimbol(simbol, Date.parse(split.dari));
+
+  let blocked = false;
+  try {
+    runKc4({ dataDir, commonDir, now });
+  } catch (e) {
+    blocked = e instanceof Kc4Error && e.message.includes("belum disetujui");
+  }
+  assert(blocked, "tanpa persetujuan Pusat KC-4 berhenti");
+
+  saveDecision(dataDir, "KC-3", recPola.id, { keputusan: "SETUJU", catatan: "" }, now);
+
+  const r = runKc4({ dataDir, commonDir, now });
+  assert(r.vonis === "LULUS" && r.k1k7.lulus && r.k1k7.n >= 20 && r.k1k7.blokPositif >= 5, `vonis LULUS ${JSON.stringify(r.k1k7)}`);
+  assert(r.rec.cabang === "KC-4" && r.rec.judul.includes("LULUS"), `Formulir R vonis ${JSON.stringify(r.rec)}`);
+  const vonisTersimpan = readLatestHasil(dataDir, "KC-4", "VONIS_UJIAN");
+  assert(vonisTersimpan !== null && (vonisTersimpan.data as { polaId?: unknown })?.polaId === pola.id, "map VONIS_UJIAN tersimpan");
+
+  let diujiLagi = false;
+  try {
+    runKc4({ dataDir, commonDir, now });
+  } catch (e) {
+    diujiLagi = e instanceof Kc4Error && e.message.includes("sudah pernah diuji");
+  }
+  assert(diujiLagi, "satu pola hanya diuji SEKALI -> percobaan kedua ditolak");
+
+  assert(
+    readSrc("src/components/branch/BranchPage.tsx").includes("<Kc4Panel onDone={load} />") && readSrc("server/routes/cabangRoutes.ts").includes('router.post("/KC-4/jalankan"'),
+    "panel + route KC-4",
+  );
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

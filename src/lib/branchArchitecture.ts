@@ -1,10 +1,14 @@
 /**
- * A-1 (16 Okt 2026) — Arsitektur KC-1 s/d KC-3. MURNI.
- * Rancangan: docs/ARSITEKTUR-2026-10-16-kc1-kc3.md.
+ * A-1 (16 Okt 2026) — Arsitektur KC-1 s/d KC-4. MURNI.
+ * Rancangan: docs/ARSITEKTUR-2026-10-16-kc1-kc3.md (KC-4 menyusul, belum didokumenkan terpisah).
  * Kerangka saja: kontrak hasil tiap cabang, alur antar-cabang, status petugas,
  * dan pembagian data latih / try-out / ujian (segel). Semua petugas KC-1, KC-2, KC-3 AKTIF (dibangun
  * 16 Okt 2026) — KC-3: Kepala Sekolah (Pembagian Data), Penambang Fakta (bahan pertama: Peringatan
- * Badai jadi pemicu arah), Penyaring Kebetulan & Pengawas Try-out + Jalur Perbaikan (src/lib/kc3Penambang.ts, src/lib/kc3Perbaikan.ts).
+ * Badai jadi pemicu arah), Penyaring Kebetulan & Pengawas Try-out + Jalur Perbaikan
+ * (src/lib/kc3Penambang.ts, src/lib/kc3Perbaikan.ts).
+ * KC-4 Kepala Ruang Ujian & Penguji Data Lama AKTIF (lampu 1 saja — K1-K7 di bagian UJIAN bersegel,
+ * src/lib/kc4Kepala.ts); Pengawas Demo/Live Minimum (lampu 2/3) dan Auditor Trade belum dibangun
+ * (butuh trade demo/live nyata berjalan, bukan data historis).
  * Angka tidak diketahui = null (bukan tebakan).
  */
 import type { BranchCode } from "./branchOffice";
@@ -33,7 +37,8 @@ export type HasilKind =
   | "KATALOG_FUNGSI" // KC-2: fungsi MT5 tersedia vs dibutuhkan
   | "PEMBAGIAN_DATA" // KC-3: batas latih / try-out / ujian (segel)
   | "POLA_CALON" // KC-3: pola lolos latih + try-out, angka dibekukan
-  | "CATATAN_PERBAIKAN"; // KC-3: diagnosis + jalan Jalur Perbaikan
+  | "CATATAN_PERBAIKAN" // KC-3: diagnosis + jalan Jalur Perbaikan
+  | "VONIS_UJIAN"; // KC-4: K1-K7 di bagian UJIAN bersegel, vonis LULUS/GAGAL + lampu 1
 
 export const HASIL_OWNER: Readonly<Record<HasilKind, BranchCode>> = {
   KARTU_BROKER: "KC-1",
@@ -43,6 +48,7 @@ export const HASIL_OWNER: Readonly<Record<HasilKind, BranchCode>> = {
   PEMBAGIAN_DATA: "KC-3",
   POLA_CALON: "KC-3",
   CATATAN_PERBAIKAN: "KC-3",
+  VONIS_UJIAN: "KC-4",
 };
 
 /** Satu nilai bernomor + sumbernya; null = belum diketahui. */
@@ -135,7 +141,7 @@ export function jalanBoleh(percobaanKe: number, jalan: JalanPerbaikan): boolean 
   return percobaanKe >= MAX_PERCOBAAN ? jalan === "E_ARSIP" : true;
 }
 
-// ---------- Petugas KC-1..KC-3 (semua DITUNDA) ----------
+// ---------- Petugas KC-1..KC-4 ----------
 
 export const PETUGAS: readonly PetugasSlot[] = [
   { id: "kc1-kepala", cabang: "KC-1", jabatan: "Kepala Cabang (Penilai Akhir)", membaca: ["KARTU_BROKER"], menulis: "PILIHAN_BROKER", status: "AKTIF" },
@@ -148,6 +154,7 @@ export const PETUGAS: readonly PetugasSlot[] = [
   { id: "kc3-kepala", cabang: "KC-3", jabatan: "Kepala Sekolah", membaca: ["DAFTAR_DATA", "PILIHAN_BROKER"], menulis: "PEMBAGIAN_DATA", status: "AKTIF" },
   { id: "kc3-penambang", cabang: "KC-3", jabatan: "Penambang Fakta", membaca: ["PEMBAGIAN_DATA", "KATALOG_FUNGSI"], menulis: "POLA_CALON", status: "AKTIF" },
   { id: "kc3-perbaikan", cabang: "KC-3", jabatan: "Penyaring Kebetulan & Pengawas Try-out", membaca: ["POLA_CALON"], menulis: "CATATAN_PERBAIKAN", status: "AKTIF" },
+  { id: "kc4-kepala", cabang: "KC-4", jabatan: "Kepala Ruang Ujian & Penguji Data Lama", membaca: ["POLA_CALON"], menulis: "VONIS_UJIAN", status: "AKTIF" },
 ];
 
 /** Alur antar-cabang dari kontrak petugas: [dari cabang, ke cabang, jenis hasil]. */
