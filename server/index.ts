@@ -270,6 +270,21 @@ app.get("/api/data-quality", (req, res) => {
   res.json({ broker, ...dq.quality() });
 });
 
+// Audit A-3 (16 Okt 2026): strip status kesehatan di dashboard utama — SEMUA broker sekaligus,
+// bukan satu-satu seperti /api/data-quality (dipakai SymbolScannerPanel untuk broker aktif saja).
+// Dibangun setelah EA MDBKAMultiLive (quotes.csv Finex) lepas dari chart ±4 jam tanpa terdeteksi.
+app.get("/api/data-quality/semua", (_req, res) => {
+  const broker = ["finex", "orbitraderberjangka", "mifx", "exness"] as const;
+  res.json({
+    broker: broker.map((b) => {
+      const dq = dataQualityByBroker.get(b);
+      return dq === undefined
+        ? { broker: b, lulus: true, alasan: null, pemeriksaan: [], catatan: "Broker belum terpasang — gerbang tidak dinilai" }
+        : { broker: b, ...dq.quality() };
+    }),
+  });
+});
+
 // Tahap 13 (13 Okt 2026): saklar mode A per broker (data/mode-akun.json).
 const modeDataDir = path.join(process.cwd(), "data");
 const identityByBroker = new Map<string, () => AccountIdentity>();

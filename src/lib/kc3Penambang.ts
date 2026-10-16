@@ -16,8 +16,9 @@
 import { atrWilder } from "../calculations/indicators";
 import type { Candle } from "../calculations/swingDetector";
 import type { PolaCalon } from "./branchArchitecture";
-import { simulateTrade, type BacktestOutcome, type BacktestPlan } from "./backtest";
+import { simulateTrade, type BacktestPlan } from "./backtest";
 import { STORM_K, STORM_WINDOW, stormWarning } from "./stormWarning";
+import { ringkasTambang, type HasilTambangBahan, type MinedTrade } from "./kc3BahanShared";
 
 export const BADAI_ATR_PERIOD = 14;
 /** = STRATEGY_DEFAULTS.atrMultiplier (src/lib/marketReset.ts), dipakai apa adanya. */
@@ -31,15 +32,8 @@ export const BADAI_MIN_TRADE = 20;
 
 export const BADAI_POLA_ID = "KC3-BADAI-ARAH-1";
 
-export interface BadaiTrade {
-  readonly simbol: string;
-  readonly signalTime: string;
-  readonly direction: "BELI" | "JUAL";
-  readonly outcome: Exclude<BacktestOutcome, "TERBUKA">;
-  readonly rMultiple: number;
-  /** MFE (titik untung tertinggi selama posisi berjalan, kelipatan R) — dipakai Auditor Trade KC-4. */
-  readonly mfeR: number;
-}
+/** = MinedTrade (kc3BahanShared.ts) — alias dipertahankan: nama lama dipakai luas (kc3Perbaikan.ts, kc4Kepala.ts, dst), lihat audit A-3. */
+export type BadaiTrade = MinedTrade;
 
 interface Percobaan extends BadaiTrade {
   readonly exitIndex: number;
@@ -99,21 +93,14 @@ export function tambangBadaiSimbol(simbol: string, candles: readonly Candle[]): 
   return out.map(({ exitIndex: _exitIndex, ...t }) => t);
 }
 
-export interface HasilPenambangBadai {
-  readonly n: number;
-  readonly menang: number;
-  readonly rataR: number | null;
-  readonly trades: readonly BadaiTrade[];
-}
+/** = HasilTambangBahan (kc3BahanShared.ts) — alias dipertahankan, nama lama dipakai luas. */
+export type HasilPenambangBadai = HasilTambangBahan;
 
 /** Tambang BADAI→trade di beberapa simbol sekaligus (satu Map per simbol, candle M15 bagian LATIH). */
 export function tambangBadai(bySimbol: ReadonlyMap<string, readonly Candle[]>): HasilPenambangBadai {
   const trades: BadaiTrade[] = [];
   for (const [simbol, candles] of bySimbol) trades.push(...tambangBadaiSimbol(simbol, candles));
-  const n = trades.length;
-  const menang = trades.filter((t) => t.outcome === "TP").length;
-  const rataR = n === 0 ? null : Math.round((trades.reduce((s, t) => s + t.rMultiple, 0) / n) * 100) / 100;
-  return { n, menang, rataR, trades };
+  return ringkasTambang(trades);
 }
 
 /** Bungkus hasil tambang BADAI jadi satu entri POLA_CALON (try-out masih kosong — Pengawas Try-out belum dibangun). */

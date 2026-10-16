@@ -10,12 +10,15 @@ import {
   Activity,
   BarChart3,
   Briefcase,
+  Building2,
   History,
   Landmark,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 
+import { branchPageUrl } from "./lib/branchOffice";
+import { StatusKesehatanStrip } from "./components/dashboard/StatusKesehatanStrip";
 import BrokerSettingsForm from "./components/analysis/BrokerSettingsForm";
 import ExtractedDataForm from "./components/extraction/ExtractedDataForm";
 import ValidationSummaryCard from "./components/analysis/ValidationSummaryCard";
@@ -931,13 +934,21 @@ export default function App() {
       <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 backdrop-blur">
         {/* Header rapi (9 Okt): judul + 3 kotak sama tinggi dalam satu grid. */}
         <div className="mx-auto grid w-full max-w-[1600px] grid-cols-1 items-stretch gap-3 px-3 py-3 sm:px-4 md:grid-cols-2 lg:px-6 xl:grid-cols-[auto_repeat(3,minmax(0,1fr))]">
-          <div className="flex flex-col justify-center pr-2">
+          <div className="flex flex-col justify-center gap-2 pr-2">
             <p className="text-xs font-bold tracking-[0.35em] text-emerald-400">
               MDBKA
             </p>
-            <h1 className="mt-1 text-lg font-bold leading-tight">
+            <h1 className="text-lg font-bold leading-tight">
               Merangkak Dari Bawah Ke Atas
             </h1>
+            <a
+              href={branchPageUrl(null)}
+              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/15 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-white/5"
+            >
+              <Building2 size={14} className="text-emerald-400" />
+              Kantor Cabang
+            </a>
+            <StatusKesehatanStrip />
           </div>
           <ServerClock
             brokerId={activeBrokerId}

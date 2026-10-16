@@ -1,23 +1,30 @@
+import { join } from "node:path";
 import { recommendationStatus, type Recommendation } from "../../src/lib/branchOffice";
+import type { BrokerId } from "../../src/types/broker";
+import type { ExchangeRates } from "../../src/services/fxRateService";
 import type { PembagianData, PolaCalon } from "../../src/lib/branchArchitecture";
 import { DATA_CUKUP_HARI } from "../../src/lib/kc1Assessment";
 import { formulirVonis, ujiK1K7, type HasilK1K7, type VonisUjian } from "../../src/lib/kc4Kepala";
 import { auditTrade, type HasilAuditor } from "../../src/lib/kc4Auditor";
-import { tambangBadai } from "../../src/lib/kc3Penambang";
-import { bacaM15, saringBySimbol } from "./kc3Runner";
+import { bahanById } from "../../src/lib/kc3BahanRegistry";
+import { bacaBahan, resolveBiaya, saringBySimbol } from "./kc3Runner";
 import { readAllHasil, readBranch, readLatestHasil, saveHasil, saveRecommendation } from "./branchStore";
 
 /**
- * KC-4 (16 Okt 2026) — penjalan Kepala Ruang Ujian & Penguji Data Lama + Auditor Trade (lampu 1 saja;
- * lampu 2/3 belum dibangun — butuh trade demo/live nyata berjalan, bukan data historis).
+ * KC-4 (16 Okt 2026, digeneralisasi A-3) — penjalan Kepala Ruang Ujian & Penguji Data Lama + Auditor
+ * Trade (lampu 1 saja; lampu 2/3 belum dibangun — butuh trade demo/live nyata berjalan, bukan data
+ * historis).
  * Syarat jalan: (1) rentang data bersama Pembagian Data KC-3 >= DATA_CUKUP_HARI (365 hari, HARD-GATE
- * sejak audit A-2 16 Okt 2026 atas keputusan Fahmi — sebelumnya cuma advisory); (2) Pola Calon KC-3
- * sudah ada DAN Formulir R "lolos try-out"-nya sudah DISETUJUI Pusat; (3) pola ini belum pernah diuji
- * KC-4 sebelumnya (satu pola, satu kali uji — gagal = gugur).
+ * sejak audit A-2 16 Okt 2026 atas keputusan Fahmi — sebelumnya cuma advisory); (2) ADA Pola Calon KC-3
+ * (bahan mana pun di kc3BahanRegistry.ts — Badai/M-1/P-1/F-1) yang Formulir R "lolos try-out"-nya sudah
+ * DISETUJUI Pusat DAN belum pernah diuji KC-4 (satu pola, satu kali uji — gagal = gugur; banyak bahan
+ * bisa disetujui bersamaan sejak A-3, jadi dicari yang PALING LAMA menunggu & belum diuji, bukan asal
+ * "map POLA_CALON terbaru" yang sejak A-3 bisa milik bahan mana saja).
  * Uji di bagian UJIAN bersegel (hanya KC-4 yang boleh membaca), memakai mesin tambang yang SAMA dengan
- * Penambang Fakta KC-3 (tambangBadai, kc3Penambang.ts): kriteria K1-K7 (kc4Kepala.ts) DAN Auditor
- * Trade (kc4Auditor.ts) — LULUS hanya bila KEDUANYA lolos (gerbang terpisah, bukan digabung jadi satu).
- * HANYA MEMBACA map cabang lain + file MT5; tidak mengubah EA/skrip/.env; tidak mengirim order.
+ * bahan yang menghasilkan pola itu (kc3BahanRegistry.ts, bukan selalu Badai lagi): kriteria K1-K7
+ * (kc4Kepala.ts) DAN Auditor Trade (kc4Auditor.ts) — LULUS hanya bila KEDUANYA lolos (gerbang terpisah).
+ * HANYA MEMBACA map cabang lain + file MT5 + config/kc1-fakta-broker.json; tidak mengubah EA/skrip/.env;
+ * tidak mengirim order.
  */
 export interface Kc4Run {
   readonly broker: string;
@@ -30,7 +37,45 @@ export interface Kc4Run {
 
 export class Kc4Error extends Error {}
 
-export function runKc4(opts: { readonly dataDir: string; readonly commonDir: string; readonly now: Date }): Kc4Run {
+type CariPolaHasil =
+  | { readonly status: "SIAP"; readonly pola: PolaCalon }
+  | { readonly status: "SUDAH_DIUJI"; readonly polaId: string }
+  | { readonly status: "BELUM_ADA" };
+
+/** Pola Calon mana pun (bahan apa pun) yang Formulir R "lolos try-out"-nya SUDAH DISETUJUI Pusat DAN belum diuji KC-4 — paling lama menunggu dipilih lebih dulu. */
+function cariPolaSiapUji(dataDir: string): CariPolaHasil {
+  const semua = readAllHasil(dataDir, "KC-3", "POLA_CALON")
+    .map((h) => h.data as PolaCalon | null)
+    .filter((p): p is PolaCalon => p !== null);
+  const terbaruPerId = new Map<string, PolaCalon>();
+  for (const p of semua) terbaruPerId.set(p.id, p); // readAllHasil lama -> baru, terakhir per id menang
+  const kc3Recs = readBranch(dataDir, "KC-3");
+  const vonisAda = new Set(
+    readAllHasil(dataDir, "KC-4", "VONIS_UJIAN")
+      .map((h) => (h.data as { polaId?: unknown } | null)?.polaId)
+      .filter((id): id is string => typeof id === "string"),
+  );
+  let disetujuiTapiSudahDiuji: string | null = null;
+  for (const p of terbaruPerId.values()) {
+    const judul = `Pola Calon KC-3 lolos try-out: ${p.id}`;
+    const disetujui = kc3Recs.some((x) => x.rec.judul === judul && recommendationStatus(x.decisions) === "DISETUJUI");
+    if (!disetujui) continue;
+    if (vonisAda.has(p.id)) {
+      disetujuiTapiSudahDiuji = p.id;
+      continue;
+    }
+    return { status: "SIAP", pola: p };
+  }
+  return disetujuiTapiSudahDiuji !== null ? { status: "SUDAH_DIUJI", polaId: disetujuiTapiSudahDiuji } : { status: "BELUM_ADA" };
+}
+
+export function runKc4(opts: {
+  readonly dataDir: string;
+  readonly commonDir: string;
+  readonly now: Date;
+  readonly faktaFile?: string;
+  readonly rates?: ExchangeRates | null;
+}): Kc4Run {
   const pilihan = readLatestHasil(opts.dataDir, "KC-1", "PILIHAN_BROKER");
   const pilihanData = pilihan?.data as { broker?: unknown } | null | undefined;
   const broker = typeof pilihanData?.broker === "string" ? pilihanData.broker : null;
@@ -55,22 +100,29 @@ export function runKc4(opts: { readonly dataDir: string; readonly commonDir: str
     throw new Kc4Error(`Rentang data bersama ${berapa} (kurang dari ${DATA_CUKUP_HARI}); KC-4 tidak boleh menguji sampai KC-2 punya data H1 lebih panjang dan KC-3 dijalankan ulang.`);
   }
 
-  const polaHasil = readLatestHasil(opts.dataDir, "KC-3", "POLA_CALON");
-  const pola = polaHasil?.data as PolaCalon | null | undefined;
-  if (pola === null || pola === undefined) throw new Kc4Error("Belum ada Pola Calon KC-3 untuk diuji.");
+  const cari = cariPolaSiapUji(opts.dataDir);
+  if (cari.status === "SUDAH_DIUJI") {
+    throw new Kc4Error(`Pola Calon "${cari.polaId}" sudah pernah diuji KC-4 — satu pola hanya diuji SEKALI (gagal = gugur, lulus = tidak diuji ulang).`);
+  }
+  if (cari.status === "BELUM_ADA") {
+    throw new Kc4Error('Tidak ada Pola Calon KC-3 (bahan mana pun) yang Formulir R "lolos try-out"-nya sudah DISETUJUI Pusat dan belum diuji KC-4.');
+  }
+  const pola = cari.pola;
 
-  const judulLolos = `Pola Calon KC-3 lolos try-out: ${pola.id}`;
-  const disetujui = readBranch(opts.dataDir, "KC-3").some((x) => x.rec.judul === judulLolos && recommendationStatus(x.decisions) === "DISETUJUI");
-  if (!disetujui) throw new Kc4Error(`Pola Calon "${pola.id}" belum disetujui Pusat (Formulir R "${judulLolos}" belum SETUJU).`);
+  const bahan = bahanById(pola.id);
+  if (bahan === null) throw new Kc4Error(`Pola Calon "${pola.id}" bukan bahan yang terdaftar (kc3BahanRegistry.ts) — tidak tahu mesin tambang mana yang dipakai.`);
 
-  const sudahDiuji = readAllHasil(opts.dataDir, "KC-4", "VONIS_UJIAN").some((h) => (h.data as { polaId?: unknown } | null)?.polaId === pola.id);
-  if (sudahDiuji) throw new Kc4Error(`Pola Calon "${pola.id}" sudah pernah diuji KC-4 — satu pola hanya diuji SEKALI (gagal = gugur, lulus = tidak diuji ulang).`);
+  const brokerId = broker as BrokerId;
+  const faktaFile = opts.faktaFile ?? join(process.cwd(), "config", "kc1-fakta-broker.json");
+  const rates = opts.rates ?? null;
+  const biaya = resolveBiaya(opts.commonDir, faktaFile, brokerId, rates);
+  const tambangOpts = { spread: biaya.spread, pointValueUsd: biaya.pointValueUsd, komisiUsdPerLot: biaya.komisiUsdPerLot, brokerId, fxRates: rates };
 
-  const m15 = bacaM15(opts.commonDir, simbolBroker);
-  const ujianBySimbol = saringBySimbol(m15, split.ujianDari, split.sampai);
-  const latihBySimbol = saringBySimbol(m15, split.dari, split.latihSampai);
-  const ujian = tambangBadai(ujianBySimbol);
-  const latih = tambangBadai(latihBySimbol);
+  const raw = bacaBahan(opts.commonDir, simbolBroker, bahan);
+  const ujianBySimbol = saringBySimbol(raw, split.ujianDari, split.sampai);
+  const latihBySimbol = saringBySimbol(raw, split.dari, split.latihSampai);
+  const ujian = bahan.tambang({ bySimbol: ujianBySimbol, ...tambangOpts });
+  const latih = bahan.tambang({ bySimbol: latihBySimbol, ...tambangOpts });
 
   const k1k7 = ujiK1K7(ujian.trades, latih.trades, split.ujianDari, split.sampai);
   const auditor = auditTrade(ujian.trades);

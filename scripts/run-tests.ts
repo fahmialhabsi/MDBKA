@@ -354,8 +354,34 @@ import { fileSpanDays, runKc1 } from "../server/services/kc1Runner";
 import { formulirKc2, KATALOG_FUNGSI, periksaMasalah, scanCandles } from "../src/lib/kc2Bridge";
 import { runKc2 } from "../server/services/kc2Runner";
 import { formulirKc3Pembagian, kepalaSekolah, rentangBersamaH1 } from "../src/lib/kc3Kepala";
-import { Kc3Error, runKc3 } from "../server/services/kc3Runner";
+import { Kc3Error, ringkasanBahan, runKc3 } from "../server/services/kc3Runner";
 import { BADAI_ATR_PERIOD, BADAI_MIN_TRADE, BADAI_POLA_ID, BADAI_SL_ATR, BADAI_TARGET_RR, polaBadai, tambangBadai, tambangBadaiSimbol, type BadaiTrade } from "../src/lib/kc3Penambang";
+import {
+  atrSimple14,
+  attachYesterdayDaily,
+  buildDaily,
+  buildLastOfDayFlags,
+  dayKeyOf,
+  lolosGerbangBiaya,
+  mfeROf,
+  ringkasTambang,
+  rMultipleOf,
+  simulateTrailing,
+  utcHourOfServerTime,
+} from "../src/lib/kc3BahanShared";
+import {
+  MANCING_ATR_WINDOW,
+  MANCING_POLA_ID,
+  MANCING_SESI_DARI_UTC,
+  MANCING_SESI_SAMPAI_UTC,
+  MANCING_SL_ATR,
+  MANCING_TARGET_RR,
+  polaMancing,
+  tambangMancing,
+  tambangMancingSimbol,
+} from "../src/lib/kc3BahanMancing";
+import { PETANI_POLA_ID, polaPetani, tambangPetani, tambangPetaniSimbol } from "../src/lib/kc3BahanPetani";
+import { FAKTA_POLA_ID, polaFakta, sinyalSkorDariCandles, tambangFakta, tambangFaktaSimbol } from "../src/lib/kc3BahanFakta";
 import { bulanRentang, catatanPerbaikan, formulirPolaCalon, pengawasTryout, pilihJalan, saringKebetulan, titikImpas } from "../src/lib/kc3Perbaikan";
 import { bagiBlok, formulirVonis, ujiK1K7 } from "../src/lib/kc4Kepala";
 import { Kc4Error, runKc4 } from "../server/services/kc4Runner";
@@ -9985,13 +10011,17 @@ test("731. F2 gerbang kualitas data: ekspor EA ≤ 120 dtk + koneksi terminal (u
   const lain = parseJournalText("A\t1\t09:00:00.000\tNetwork\t'1': authorization on X-Real failed (Invalid account)", "20261013");
   assert(terminalHealth([...ev, ...lain], "61823011").koneksi === "TERSAMBUNG", "login gagal akun LAIN tidak memutus");
   const now = Date.parse("2026-10-13T10:00:00Z");
-  const ok = evaluateDataQuality({ nowMs: now, equityModifiedMs: now - 5000, health: terminalHealth(ev, "61823011") });
-  assert(ok.lulus && ok.alasan === null && ok.pemeriksaan.length === 2 && ok.pemeriksaan[0].umurDataDetik === 5, JSON.stringify(ok));
-  const basi = evaluateDataQuality({ nowMs: now, equityModifiedMs: now - 300_000, health: null });
-  assert(!basi.lulus && basi.alasan !== null && basi.alasan.includes("ekspor EA berhenti 300 dtk") && basi.pemeriksaan[1].hasil === "TIDAK_DINILAI", JSON.stringify(basi));
-  const putus = evaluateDataQuality({ nowMs: now, equityModifiedMs: now, health: terminalHealth(ev.slice(0, 1), "61823011") });
+  const ok = evaluateDataQuality({ nowMs: now, equityModifiedMs: now - 5000, quotesModifiedMs: now - 3000, health: terminalHealth(ev, "61823011") });
+  assert(ok.lulus && ok.alasan === null && ok.pemeriksaan.length === 3 && ok.pemeriksaan[0].umurDataDetik === 5 && ok.pemeriksaan[1].umurDataDetik === 3, JSON.stringify(ok));
+  const basi = evaluateDataQuality({ nowMs: now, equityModifiedMs: now - 300_000, quotesModifiedMs: now - 5000, health: null });
+  assert(!basi.lulus && basi.alasan !== null && basi.alasan.includes("ekspor EA berhenti 300 dtk") && basi.pemeriksaan[2].hasil === "TIDAK_DINILAI", JSON.stringify(basi));
+  // Audit A-3 (16 Okt 2026): harga live (quotes.csv) bisa BEKU sementara equity.csv (EA lain) tetap
+  // segar -- persis kejadian nyata EA MDBKAMultiLive Finex lepas dari chart ±4 jam. Dicek TERPISAH.
+  const hargaBeku = evaluateDataQuality({ nowMs: now, equityModifiedMs: now - 5000, quotesModifiedMs: now - 14_400_000, health: terminalHealth(ev, "61823011") });
+  assert(!hargaBeku.lulus && hargaBeku.alasan !== null && hargaBeku.alasan.includes("harga live (quotes.csv) berhenti 14400 dtk") && hargaBeku.pemeriksaan[0].hasil === "LULUS", JSON.stringify(hargaBeku));
+  const putus = evaluateDataQuality({ nowMs: now, equityModifiedMs: now, quotesModifiedMs: now, health: terminalHealth(ev.slice(0, 1), "61823011") });
   assert(!putus.lulus && putus.alasan !== null && putus.alasan.includes("koneksi terminal putus sejak 2026.10.13 00:02:36"), String(putus.alasan));
-  const kosong = evaluateDataQuality({ nowMs: now, equityModifiedMs: null, health: null });
+  const kosong = evaluateDataQuality({ nowMs: now, equityModifiedMs: null, quotesModifiedMs: null, health: null });
   assert(kosong.lulus && kosong.pemeriksaan.every((c) => c.hasil === "TIDAK_DINILAI"), "tidak terbaca = tidak menahan");
 });
 test("732. F2 gerbang menahan sinyal (status DATA) di pemindai, pencatat entry, dan trade bayangan; Hasil analisa tidak disentuh", () => {
@@ -11359,7 +11389,7 @@ test("788. KC-4 penjalan penuh: wajib Pola Calon disetujui Pusat + satu pola sek
   try {
     runKc4({ dataDir, commonDir, now });
   } catch (e) {
-    blocked = e instanceof Kc4Error && e.message.includes("belum disetujui");
+    blocked = e instanceof Kc4Error && e.message.includes("DISETUJUI");
   }
   assert(blocked, "tanpa persetujuan Pusat KC-4 berhenti");
 
@@ -14729,6 +14759,311 @@ test("472. kanonis + profil preservasi nama bertitik/bertanda", () => {
     canonicalSymbolForBroker("gbpusd", "finex") === "GBPUSD",
     "alias Finex rusak",
   );
+});
+
+test("792. kc3BahanShared atrSimple14: rata-rata TR 14 candle TUTUP (anti-lookahead), null bila data kurang", () => {
+  const mk = (h: number, l: number, c: number): Candle => ({ time: "2026.01.01 00:00", open: c, high: h, low: l, close: c });
+  const candles: Candle[] = Array.from({ length: 20 }, () => mk(101, 99, 100));
+  assert(atrSimple14(candles, 15) === 2, `TR konstan 2 -> ATR 2, dapat ${atrSimple14(candles, 15)}`);
+  assert(atrSimple14(candles, 14) === null, "at-14=0 (<1, butuh prevClose) -> null");
+  assert(atrSimple14(candles, 0) === null, "tanpa riwayat -> null");
+});
+
+test("793. kc3BahanShared buildDaily/attachYesterdayDaily/buildLastOfDayFlags: agregasi D1 + sma20 + shift(5) + join KEMARIN", () => {
+  const p2 = (v: number): string => String(v).padStart(2, "0");
+  // 25 hari, 1 candle/hari, close naik 100..124 -> sma20 hari ke-20 (idx19) = rata-rata 100..119 = 109,5.
+  const candles: Candle[] = Array.from({ length: 25 }, (_, i) => ({
+    time: `2026.01.${p2(i + 1)} 00:00`, open: 100 + i, high: 100 + i + 1, low: 100 + i - 1, close: 100 + i,
+  }));
+  const daily = buildDaily(candles);
+  assert(daily.length === 25 && daily[19]?.sma20 === 109.5, `sma20 hari ke-20 = 109,5, dapat ${daily[19]?.sma20}`);
+  assert(daily[24]?.sma20Lag5 === daily[19]?.sma20, `sma20Lag5 hari ke-25 = sma20 hari ke-20 (shift 5 BARIS)`);
+  assert(daily[18]?.sma20 === null, "hari ke-19 (<20 bar) -> sma20 null");
+  const kemarin = attachYesterdayDaily(candles, daily);
+  assert(kemarin[0] === null && kemarin[1]?.close === daily[0]?.close, "candle hari pertama -> null; hari ke-2 -> DailyBar hari pertama");
+  // Multi-candle per hari: 2 hari x 2 candle -> last_of_day true hanya di candle TERAKHIR tiap hari.
+  const dua: Candle[] = [
+    { time: "2026.02.01 00:00", open: 1, high: 1, low: 1, close: 1 },
+    { time: "2026.02.01 12:00", open: 1, high: 1, low: 1, close: 1 },
+    { time: "2026.02.02 00:00", open: 1, high: 1, low: 1, close: 1 },
+    { time: "2026.02.02 12:00", open: 1, high: 1, low: 1, close: 1 },
+  ];
+  assert(JSON.stringify(buildLastOfDayFlags(dua)) === JSON.stringify([false, true, false, true]), "last_of_day hanya candle terakhir tiap hari (+ candle terakhir array)");
+  assert(dayKeyOf("2026.02.01 12:00") === "2026-02-01" && dayKeyOf("bukan tanggal") === null, "dayKeyOf format & invalid");
+});
+
+test("794. kc3BahanShared utcHourOfServerTime: server dianggap NY+7, NY->UTC sadar DST (EDT Okt / EST Jan)", () => {
+  assert(utcHourOfServerTime("2026.10.16 12:00") === 9, `Okt (EDT, NY=UTC-4): dapat ${utcHourOfServerTime("2026.10.16 12:00")}`);
+  assert(utcHourOfServerTime("2026.01.15 12:00") === 10, `Jan (EST, NY=UTC-5): dapat ${utcHourOfServerTime("2026.01.15 12:00")}`);
+  assert(utcHourOfServerTime("bukan tanggal") === null, "format tidak sah -> null");
+});
+
+test("795. kc3BahanShared simulateTrailing: TP normal (bukan candle pertama)", () => {
+  const c = (o: number, h: number, l: number, cl: number): Candle => ({ time: "2026.01.01 00:00", open: o, high: h, low: l, close: cl });
+  const candles: Candle[] = [c(100, 101, 99, 100), c(101, 103, 100, 102), c(103, 106, 102, 105)];
+  const r = simulateTrailing(candles, 0, "BELI", 100, 95, 105, 0, { firstCandleIsEntry: false, beAt1R: false, maxBars: null });
+  assert(r !== null && r.outcome === "TP" && r.exitIndex === 2 && r.exitPrice === 105, JSON.stringify(r));
+});
+
+test("796. kc3BahanShared simulateTrailing: firstCandleIsEntry=true -> candle awal hanya dicek SL, TP diabaikan (M-1)", () => {
+  const c = (o: number, h: number, l: number, cl: number): Candle => ({ time: "2026.01.01 00:00", open: o, high: h, low: l, close: cl });
+  const candles: Candle[] = [c(100, 106, 99, 105), c(105, 107, 104, 106)];
+  const r = simulateTrailing(candles, 0, "BELI", 100, 95, 105, 0, { firstCandleIsEntry: true, beAt1R: false, maxBars: null });
+  assert(r !== null && r.outcome === "TP" && r.exitIndex === 1, `TP candle pertama diabaikan (high106>=tp105 tapi first) -> keluar di candle ke-2, dapat ${JSON.stringify(r)}`);
+});
+
+test("797. kc3BahanShared simulateTrailing: beAt1R geser SL ke impas setelah +1R, lalu tersentuh -> IMPAS (bukan SL) (P-1)", () => {
+  const c = (o: number, h: number, l: number, cl: number): Candle => ({ time: "2026.01.01 00:00", open: o, high: h, low: l, close: cl });
+  const candles: Candle[] = [c(100, 101, 99, 100), c(100, 106, 99, 105), c(105, 107, 100, 106)];
+  const r = simulateTrailing(candles, 0, "BELI", 100, 95, 115, 0, { firstCandleIsEntry: false, beAt1R: true, maxBars: null });
+  assert(r !== null && r.outcome === "IMPAS" && r.exitIndex === 2 && r.exitPrice === 100, JSON.stringify(r));
+});
+
+test("798. kc3BahanShared simulateTrailing: maxBars dihitung BAR (bukan jam) -> WAKTU", () => {
+  const c = (o: number, h: number, l: number, cl: number): Candle => ({ time: "2026.01.01 00:00", open: o, high: h, low: l, close: cl });
+  const candles: Candle[] = [c(100, 101, 99, 100), c(100, 102, 99, 101), c(101, 103, 100, 102), c(102, 104, 101, 103)];
+  const r = simulateTrailing(candles, 0, "BELI", 100, 90, 200, 0, { firstCandleIsEntry: false, beAt1R: false, maxBars: 2 });
+  assert(r !== null && r.outcome === "WAKTU" && r.exitIndex === 2 && r.exitPrice === 102, JSON.stringify(r));
+});
+
+test("799. kc3BahanShared simulateTrailing: d1Exit() true -> MUSIM, harga keluar = close (P-1)", () => {
+  const c = (o: number, h: number, l: number, cl: number): Candle => ({ time: "2026.01.01 00:00", open: o, high: h, low: l, close: cl });
+  const candles: Candle[] = [c(100, 101, 99, 100), c(100, 102, 99, 101), c(101, 103, 100, 102.5)];
+  const r = simulateTrailing(candles, 0, "BELI", 100, 90, 200, 0, { firstCandleIsEntry: false, beAt1R: false, maxBars: null, d1Exit: (idx) => idx === 2 });
+  assert(r !== null && r.outcome === "MUSIM" && r.exitIndex === 2 && r.exitPrice === 102.5, JSON.stringify(r));
+});
+
+test("800. kc3BahanShared gerbang biaya 10% + rMultipleOf + mfeROf: rumus r_of()/MFE porting Python", () => {
+  assert(lolosGerbangBiaya(0.3, 0.1, 5) === true, "0,4 <= 10% dari 5(=0,5) -> lolos");
+  assert(lolosGerbangBiaya(0.6, 0.1, 5) === false, "0,7 > 0,5 -> tidak lolos");
+  assert(lolosGerbangBiaya(1, 0, 0) === false, "risk<=0 -> tidak lolos");
+  assert(rMultipleOf("BELI", 100, 105, 5, 0.1) === 0.98, `(105-100)/5 - 0,1/5 = 0,98, dapat ${rMultipleOf("BELI", 100, 105, 5, 0.1)}`);
+  assert(rMultipleOf("JUAL", 100, 95, 5, 0) === 1, "JUAL untung penuh 1R tanpa komisi");
+  const candles: Candle[] = [
+    { time: "t", open: 100, high: 101, low: 99, close: 100 },
+    { time: "t", open: 100, high: 108, low: 99, close: 105 },
+    { time: "t", open: 105, high: 106, low: 104, close: 105 },
+  ];
+  assert(mfeROf(candles, 0, 2, "BELI", 100, 5) === 1.6, `MFE tertinggi high108 -> (108-100)/5=1,6, dapat ${mfeROf(candles, 0, 2, "BELI", 100, 5)}`);
+});
+
+test("801. kc3BahanMancing tambangMancingSimbol: umpan BELI tersentuh sekali di sesi 07-20 UTC, TP 1R; hari lain/jam0 tersaring", () => {
+  const p2 = (v: number): string => String(v).padStart(2, "0");
+  const waktu = (idx: number): string => {
+    const d = new Date(Date.UTC(2026, 9, 1, 0, 0) + idx * 3_600_000); // pembangun kalender jam SERVER (naik 1 jam/index)
+    return `${d.getUTCFullYear()}.${p2(d.getUTCMonth() + 1)}.${p2(d.getUTCDate())} ${p2(d.getUTCHours())}:00`;
+  };
+  const N = 134;
+  // Baseline naik lembut (low = 100 + 0,05k): TR konstan 0,4 (range dominan), "hari ini" selalu di ATAS
+  // bait "D1 kemarin" KECUALI jam-0 tiap hari (persis sama dengan D1 kemarin) -- dan jam-0 selalu di luar
+  // sesi 07-20 UTC (~21 UTC, Okt/EDT), jadi tersaring otomatis sebelum sempat dicek.
+  const candles: Candle[] = Array.from({ length: N }, (_, k): Candle => {
+    const low = 100 + 0.05 * k;
+    return { time: waktu(k), open: low + 0.2, high: low + 0.4, low, close: low + 0.2 };
+  });
+  const idxSinyal = 132; // hari index-5, jam server 12:00 -> UTC 9 (dalam sesi)
+  const atr = 0.4;
+  const d1Low = 100 + 0.05 * (4 * 24); // D1 kemarin = hari index-4 (mulai index 96)
+  const entry = d1Low + MANCING_ATR_WINDOW * atr;
+  const sl = d1Low - MANCING_SL_ATR * atr;
+  const risk = entry - sl;
+  const tp = entry + risk * MANCING_TARGET_RR;
+  candles[idxSinyal] = { time: waktu(idxSinyal), open: entry + 0.2, high: entry + 0.4, low: d1Low, close: entry - 0.1 };
+  candles[idxSinyal + 1] = { time: waktu(idxSinyal + 1), open: entry - 0.1, high: tp + 0.3, low: entry - 0.2, close: tp + 0.1 };
+
+  const trades = tambangMancingSimbol("TESTSYM", candles, 0, 1, 0);
+  assert(trades.length === 1, `tepat satu trade, dapat ${trades.length}: ${JSON.stringify(trades)}`);
+  const t = trades[0];
+  assert(t !== undefined && t.direction === "BELI" && t.outcome === "TP" && t.signalTime === waktu(idxSinyal), JSON.stringify(t));
+  const jam = t === undefined ? null : utcHourOfServerTime(t.signalTime);
+  assert(jam !== null && jam >= MANCING_SESI_DARI_UTC && jam < MANCING_SESI_SAMPAI_UTC, `sinyal dalam sesi 07-20 UTC, jam=${jam}`);
+  assert(t !== undefined && t.rMultiple === 1, `TP tepat 1R tanpa komisi -> rMultiple 1, dapat ${t?.rMultiple}`);
+});
+
+test("802. kc3BahanMancing tambangMancing/polaMancing: agregasi lintas simbol + bungkus PolaCalon", () => {
+  const h = ringkasTambang([
+    { simbol: "A", signalTime: "t", direction: "BELI", outcome: "TP", rMultiple: 1, mfeR: 1 },
+    { simbol: "B", signalTime: "t", direction: "JUAL", outcome: "SL", rMultiple: -1, mfeR: 0.1 },
+  ]);
+  assert(h.n === 2 && h.menang === 1 && h.rataR === 0, `ringkasTambang: n=2 menang=1 rataR=0, dapat ${JSON.stringify(h)}`);
+  const pola = polaMancing(h);
+  assert(pola.id === MANCING_POLA_ID && pola.latih.n === 2 && pola.latih.rataR === 0 && pola.tryout.n === 0, JSON.stringify(pola));
+  assert(Object.keys(pola.angkaBeku).length === 6, "angkaBeku mencatat semua angka dibekukan M-1");
+  const kosong = tambangMancing(new Map(), new Map(), new Map(), new Map());
+  assert(kosong.n === 0 && kosong.rataR === null, "tanpa simbol -> 0 percobaan");
+});
+
+test("803. kc3BahanPetani tambangPetaniSimbol: musim BELI + pullback MA50 -> trade terbentuk, sl/tp/risk sah sesuai arah", () => {
+  const p2 = (v: number): string => String(v).padStart(2, "0");
+  const waktu = (idx: number): string => {
+    const d = new Date(Date.UTC(2026, 0, 1, 0, 0) + idx * 3_600_000);
+    return `${d.getUTCFullYear()}.${p2(d.getUTCMonth() + 1)}.${p2(d.getUTCDate())} ${p2(d.getUTCHours())}:00`;
+  };
+  // Latar 20 hari datar (close 100) lalu 5 hari naik sedikit di jam TERAKHIR tiap hari (101..105)
+  // -> musim D1 "BELI" (d1.close > sma20 > sma20Lag5) menyala persis di hari ke-25 (indeks hari 24).
+  const closesLatar: number[] = [];
+  const background: Candle[] = [];
+  for (let day = 0; day < 25; day += 1) {
+    for (let h = 0; h < 24; h += 1) {
+      const idx = day * 24 + h;
+      const close = h === 23 && day >= 20 ? 100 + (day - 19) : 100;
+      closesLatar.push(close);
+      background.push({ time: waktu(idx), open: close, high: close + 0.3, low: close - 0.3, close });
+    }
+  }
+  // Pastikan musim benar-benar "BELI" di D1 kemarin milik candle j (dibuktikan lewat buildDaily/attachYesterdayDaily
+  // yang sudah teruji di tes 793 -- di sini hanya memverifikasi data latar memenuhi syarat sebelum dipakai).
+  const dailyLatar = buildDaily(background);
+  const hari24 = dailyLatar[24];
+  assert(hari24 !== undefined && hari24.sma20 !== null && hari24.sma20Lag5 !== null && hari24.close > hari24.sma20 && hari24.sma20 > hari24.sma20Lag5, `konstruksi tes salah: musim hari-24 belum BELI ${JSON.stringify(hari24)}`);
+
+  const idxI = 600; // jam pertama hari ke-26 (indeks hari 25) = candle pullback
+  const idxJ = 601; // candle konfirmasi
+  const ma50AtI = sma(closesLatar.slice(-49).concat([100]), 50) as number;
+  const candleI: Candle = { time: waktu(idxI), open: ma50AtI + 1, high: ma50AtI + 1.2, low: ma50AtI - 1, close: 100 };
+  const closesUptoI = [...closesLatar, 100];
+  const ma50AtJ = sma(closesUptoI.slice(-49).concat([ma50AtI + 1]), 50) as number;
+  const candleJ: Candle = { time: waktu(idxJ), open: ma50AtI + 0.5, high: ma50AtJ + 1.5, low: ma50AtI - 0.5, close: ma50AtJ + 1 };
+  assert(candleI.open > ma50AtI && candleI.low <= ma50AtI, "candle pullback: open di atas MA50, low menyentuh/menembus MA50");
+  assert(candleJ.close > ma50AtJ, "candle konfirmasi: tutup kembali di atas MA50");
+
+  const candles: Candle[] = [...background, candleI, candleJ];
+  // Lanjutan datar (bukan badai) agar simulasi posisi (TP 3R/impas/10 hari) punya ruang menyelesaikan trade.
+  for (let h = 2; h < 24 * 15; h += 1) {
+    const level = ma50AtJ + 1;
+    candles.push({ time: waktu(idxI + h), open: level, high: level + 0.3, low: level - 0.3, close: level });
+  }
+
+  const trades = tambangPetaniSimbol("TESTSYM", candles, 0, 1, 0);
+  assert(trades.length >= 1, `trade terbentuk dari musim BELI + pullback MA50, dapat ${trades.length}`);
+  const t = trades[0];
+  assert(t !== undefined && t.direction === "BELI", `arah BELI (musim naik), dapat ${JSON.stringify(t)}`);
+  assert(t !== undefined && t.signalTime === waktu(idxJ), `masuk di candle konfirmasi (close), dapat ${t?.signalTime}`);
+  assert(t !== undefined && (t.outcome === "TP" || t.outcome === "IMPAS" || t.outcome === "MUSIM" || t.outcome === "10HARI"), `outcome P-1 yang sah, dapat ${t?.outcome}`);
+});
+
+test("804. kc3BahanPetani tambangPetani/polaPetani: agregasi lintas simbol + bungkus PolaCalon", () => {
+  const h = ringkasTambang([{ simbol: "A", signalTime: "t", direction: "BELI", outcome: "TP", rMultiple: 3, mfeR: 3 }]);
+  const pola = polaPetani(h);
+  assert(pola.id === PETANI_POLA_ID && pola.latih.n === 1 && pola.latih.rataR === 3, JSON.stringify(pola));
+  assert(Object.keys(pola.angkaBeku).length === 4, "angkaBeku mencatat semua angka dibekukan P-1");
+  const kosong = tambangPetani(new Map(), new Map(), new Map(), new Map());
+  assert(kosong.n === 0, "tanpa simbol -> 0 percobaan");
+});
+
+test("805. kc3BahanFakta tambangFaktaSimbol: saksi 1 (tembus high sinyal) + saksi 2 (musim D1) -> masuk, SL/TP dari dist sinyal asli", () => {
+  const p2 = (v: number): string => String(v).padStart(2, "0");
+  const waktu = (idx: number): string => {
+    const d = new Date(Date.UTC(2026, 0, 1, 0, 0) + idx * 3_600_000);
+    return `${d.getUTCFullYear()}.${p2(d.getUTCMonth() + 1)}.${p2(d.getUTCDate())} ${p2(d.getUTCHours())}:00`;
+  };
+  // Latar sama dengan tes 803 (20 hari datar + 5 hari naik tipis di jam terakhir) -> musim D1 "BELI" menyala di hari ke-25.
+  const background: Candle[] = [];
+  for (let day = 0; day < 25; day += 1) {
+    for (let h = 0; h < 24; h += 1) {
+      const idx = day * 24 + h;
+      const close = h === 23 && day >= 20 ? 100 + (day - 19) : 100;
+      background.push({ time: waktu(idx), open: close, high: close + 0.3, low: close - 0.3, close });
+    }
+  }
+  const idxSinyal = 600; // candle sinyal skor (laporan awal)
+  const idxSaksi = 601; // saksi 1: close menembus high candle sinyal
+  const candleSinyal: Candle = { time: waktu(idxSinyal), open: 100, high: 100.5, low: 99.7, close: 100 };
+  const candleSaksi: Candle = { time: waktu(idxSaksi), open: 100.2, high: 101.2, low: 100, close: 101 }; // close 101 > high 100,5 -> saksi 1 lolos
+  const candleExit: Candle = { time: waktu(idxSaksi + 1), open: 101, high: 109, low: 100, close: 108 }; // TP di candle berikutnya
+  const candles: Candle[] = [...background, candleSinyal, candleSaksi, candleExit];
+
+  const sinyalSkor: BacktestTrade = {
+    direction: "BELI", entry: 100, stopLoss: 95, takeProfit: 107.5,
+    signalTime: candleSinyal.time, exitTime: candleSinyal.time, exitPrice: 100,
+    outcome: "TERBUKA", bars: 0, priceResult: 0, rMultiple: 0, lot: 0.01, netUsd: 0,
+  };
+  const trades = tambangFaktaSimbol("TESTSYM", candles, [sinyalSkor], 0, 1, 0);
+  assert(trades.length === 1, `satu trade (saksi 1 & 2 terpenuhi), dapat ${trades.length}: ${JSON.stringify(trades)}`);
+  const t = trades[0];
+  // dist asli = |100-95| = 5; entry baru = close saksi (101) + spread(0); TP = entry + 1,5*5 = 108,5.
+  assert(t !== undefined && t.direction === "BELI" && t.signalTime === candleSaksi.time && t.outcome === "TP", JSON.stringify(t));
+  assert(t !== undefined && t.rMultiple === 1.5, `TP 1,5x dist asli -> rMultiple 1,5, dapat ${t?.rMultiple}`);
+
+  // Tanpa saksi 1 (candle berikutnya tidak menembus high) -> tidak ada trade.
+  const candlesTanpaSaksi: Candle[] = [...background, candleSinyal, { ...candleSaksi, close: 100.1 }, candleExit];
+  const tanpaSaksi = tambangFaktaSimbol("TESTSYM", candlesTanpaSaksi, [sinyalSkor], 0, 1, 0);
+  assert(tanpaSaksi.length === 0, "close tidak menembus high candle sinyal dalam 2 candle -> tidak masuk");
+});
+
+test("806. kc3BahanFakta: sinyalSkorDariCandles reuse runBacktest() (bukan tulis ulang indikator); tambangFakta/polaFakta bungkus PolaCalon", () => {
+  assert(readSrc("src/lib/kc3BahanFakta.ts").includes('import { runBacktest, type BacktestTrade } from "./backtest"'), "F-1 reuse runBacktest(), bukan indikator sendiri");
+  assert(sinyalSkorDariCandles("EURUSD", "finex", [], null, 0.0001).length === 0, "candle kurang -> runBacktest error -> [] (bukan crash)");
+  const h = ringkasTambang([{ simbol: "A", signalTime: "t", direction: "BELI", outcome: "TP", rMultiple: 1.5, mfeR: 1.5 }]);
+  const pola = polaFakta(h);
+  assert(pola.id === FAKTA_POLA_ID && pola.latih.n === 1 && pola.latih.rataR === 1.5, JSON.stringify(pola));
+  assert(Object.keys(pola.angkaBeku).length === 3, "angkaBeku mencatat semua angka dibekukan F-1");
+  const kosong = tambangFakta(new Map(), "finex", null, new Map(), new Map(), new Map());
+  assert(kosong.n === 0, "tanpa simbol -> 0 percobaan");
+});
+
+test("807. kc3Runner ringkasanBahan: status per bahan (Badai+M-1/P-1/F-1) lengkap, lepas dari runKc3() -- dipakai GET /api/cabang/KC-3/bahan", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "kc3-ringkasan-"));
+  const dataDir = path.join(root, "data");
+  const now = new Date("2026-10-16T05:00:00.000Z");
+
+  const kosong = ringkasanBahan(dataDir);
+  // F-1 Pencari Fakta sengaja belum di DAFTAR_BAHAN (audit A-3: backend tidak merespon sama sekali
+  // >4,5 menit saat diuji nyata, lihat kc3BahanRegistry.ts) -- 3 bahan aktif: Badai, M-1, P-1.
+  assert(kosong.length === 3 && kosong.every((b) => b.status === "BELUM_DITAMBANG" && b.pola === null && b.perbaikan === null), `3 bahan aktif, semua belum ditambang: ${JSON.stringify(kosong)}`);
+
+  const polaMancing = { id: MANCING_POLA_ID, kondisi: "uji", bahan: [], angkaBeku: {}, latih: { n: 30, rataR: -0.1 }, tryout: { n: 0, rataR: null } };
+  saveHasil(dataDir, "KC-3", "POLA_CALON", polaMancing, now);
+  const setelahTambang = ringkasanBahan(dataDir).find((b) => b.id === MANCING_POLA_ID);
+  assert(setelahTambang?.status === "DIPROSES", `baru ditambang, belum ada perbaikan -> DIPROSES, dapat ${setelahTambang?.status}`);
+
+  const catatan = { polaId: MANCING_POLA_ID, percobaanKe: 1, diagnosis: "tidak konsisten", jalan: "C_GANTI_TEMPAT", hasil: null };
+  saveHasil(dataDir, "KC-3", "CATATAN_PERBAIKAN", catatan, now);
+  const setelahGagal = ringkasanBahan(dataDir).find((b) => b.id === MANCING_POLA_ID);
+  assert(setelahGagal?.status === "GAGAL" && setelahGagal.perbaikan?.jalan === "C_GANTI_TEMPAT", `ada CatatanPerbaikan -> GAGAL, dapat ${JSON.stringify(setelahGagal)}`);
+
+  const polaPetani = { id: PETANI_POLA_ID, kondisi: "uji", bahan: [], angkaBeku: {}, latih: { n: 30, rataR: 0.3 }, tryout: { n: 10, rataR: 0.4 } };
+  saveHasil(dataDir, "KC-3", "POLA_CALON", polaPetani, now);
+  const lolosTryout = ringkasanBahan(dataDir).find((b) => b.id === PETANI_POLA_ID);
+  assert(lolosTryout?.status === "MENUNGGU_PERSETUJUAN", `lolos try-out, Formulir R belum dikirim -> tetap MENUNGGU_PERSETUJUAN, dapat ${lolosTryout?.status}`);
+
+  const judul = `Pola Calon KC-3 lolos try-out: ${PETANI_POLA_ID}`;
+  const rec = saveRecommendation(dataDir, "KC-3", { judul, fakta: [{ teks: "x", sumber: "x" }], batasData: "x", usulan: "x", risiko: "x" }, now);
+  const sebelumSetuju = ringkasanBahan(dataDir).find((b) => b.id === PETANI_POLA_ID);
+  assert(sebelumSetuju?.status === "MENUNGGU_PERSETUJUAN", "Formulir R terkirim tapi belum SETUJU -> tetap MENUNGGU_PERSETUJUAN");
+
+  saveDecision(dataDir, "KC-3", rec.id, { keputusan: "SETUJU", catatan: "" }, now);
+  const disetujui = ringkasanBahan(dataDir).find((b) => b.id === PETANI_POLA_ID);
+  assert(disetujui?.status === "DISETUJUI", `Pusat SETUJU -> DISETUJUI, dapat ${disetujui?.status}`);
+
+  saveHasil(dataDir, "KC-4", "VONIS_UJIAN", { polaId: PETANI_POLA_ID, broker: "finex", vonis: "LULUS" }, now);
+  const sudahDiuji = ringkasanBahan(dataDir).find((b) => b.id === PETANI_POLA_ID);
+  assert(sudahDiuji?.status === "SUDAH_DIUJI_KC4", `sudah ada VONIS_UJIAN -> SUDAH_DIUJI_KC4, dapat ${sudahDiuji?.status}`);
+
+  assert(
+    readSrc("src/components/branch/Kc3Panel.tsx").includes('/api/cabang/KC-3/bahan') && readSrc("server/routes/cabangRoutes.ts").includes('router.get("/KC-3/bahan"'),
+    "panel KC-3 pakai endpoint ringkasan bahan (readSrc)",
+  );
+});
+
+test("808. audit A-3 strip status kesehatan: harga live (quotes.csv) dicek TERPISAH dari ekspor EA (equity.csv), wiring dashboard utama (readSrc)", () => {
+  // Kejadian nyata 16 Okt 2026: EA MDBKAMultiLive (quotes.csv Finex) lepas dari chart ±4 jam sementara
+  // equity.csv (EA lain) tetap diperbarui -- gerbang lama (hanya equityModifiedMs) tidak akan menangkap
+  // ini. Nama check "harga_live" HARUS beda dari "ekspor_ea" supaya keduanya independen.
+  assert(
+    readSrc("src/lib/dataQualityGate.ts").includes('nama: "harga_live"') && readSrc("src/lib/dataQualityGate.ts").includes('nama: "ekspor_ea"'),
+    "gerbang punya 2 check terpisah: harga_live (quotes.csv) dan ekspor_ea (equity.csv)",
+  );
+  assert(readSrc("server/services/dataQuality.ts").includes("statSync(src.quotesPath)"), "mtime quotes.csv dibaca langsung, bukan ditebak dari equity");
+  assert(readSrc("server/index.ts").includes('app.get("/api/data-quality/semua"'), "route agregat semua broker terdaftar");
+  assert(
+    readSrc("src/App.tsx").includes("<StatusKesehatanStrip />") && readSrc("src/App.tsx").includes('import { StatusKesehatanStrip }'),
+    "strip status terpasang di header dashboard utama (bukan terkubur di panel lain)",
+  );
+  assert(readSrc("src/hooks/useDataQualitySemua.ts").includes("/api/data-quality/semua"), "hook memanggil endpoint agregat");
 });
 
 // Test 310-317 (QuotesLogReader) + 318-329 (SSE envelope/stream) +

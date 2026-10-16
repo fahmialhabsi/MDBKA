@@ -35,13 +35,78 @@ interface CatatanPerbaikan {
   readonly hasil: string | null;
 }
 
+type Kc3BahanStatus = "BELUM_DITAMBANG" | "DIPROSES" | "GAGAL" | "MENUNGGU_PERSETUJUAN" | "DISETUJUI" | "SUDAH_DIUJI_KC4";
+
+interface Kc3BahanRingkasan {
+  readonly id: string;
+  readonly nama: string;
+  readonly timeframe: "M15" | "H1";
+  readonly pola: PolaCalon | null;
+  readonly perbaikan: CatatanPerbaikan | null;
+  readonly status: Kc3BahanStatus;
+}
+
+const STATUS_STYLE: Record<Kc3BahanStatus, string> = {
+  BELUM_DITAMBANG: "bg-slate-500/20 text-slate-300",
+  DIPROSES: "bg-amber-500/15 text-amber-300",
+  GAGAL: "bg-rose-500/15 text-rose-300",
+  MENUNGGU_PERSETUJUAN: "bg-amber-500/15 text-amber-300",
+  DISETUJUI: "bg-emerald-500/15 text-emerald-300",
+  SUDAH_DIUJI_KC4: "bg-sky-500/15 text-sky-300",
+};
+const STATUS_LABEL: Record<Kc3BahanStatus, string> = {
+  BELUM_DITAMBANG: "Belum ditambang",
+  DIPROSES: "Diproses",
+  GAGAL: "Gagal — Jalur Perbaikan",
+  MENUNGGU_PERSETUJUAN: "Lolos try-out — menunggu Pusat",
+  DISETUJUI: "Disetujui Pusat — siap KC-4",
+  SUDAH_DIUJI_KC4: "Sudah diuji KC-4",
+};
+
 const tgl = (iso: string): string => iso.slice(0, 10);
 
-/** KC-3 Kepala Sekolah (Pembagian Data) + Penambang Fakta (tambang BADAI jadi Pola Calon) + Penyaring Kebetulan/Pengawas Try-out (Jalur Perbaikan). */
+/** Satu kartu bahan (Badai M15, atau M-1/P-1/F-1 H1) di dalam panel KC-3 — audit A-3 (16 Okt 2026). */
+function BahanCard({ bahan }: { bahan: Kc3BahanRingkasan }) {
+  return (
+    <div className="space-y-1 rounded-xl border border-white/10 bg-white/[0.02] p-3" data-testid={`kc3-bahan-${bahan.id}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="font-semibold">{bahan.nama}</p>
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-slate-300">{bahan.timeframe}</span>
+        <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[bahan.status]}`}>{STATUS_LABEL[bahan.status]}</span>
+      </div>
+      {bahan.pola === null ? (
+        <p className="text-slate-400">Belum ada Pola Calon. Butuh Pembagian Data (di atas) dan file {bahan.timeframe} Common Files broker terpilih.</p>
+      ) : (
+        <>
+          <p className="text-slate-300">{bahan.pola.kondisi}</p>
+          <p className="text-slate-400">
+            Angka dibekukan: {Object.entries(bahan.pola.angkaBeku).map(([k, v]) => `${k}=${v}`).join(" · ")}
+          </p>
+          <p>
+            <span className="font-semibold text-emerald-300">LATIH</span>{" "}
+            {bahan.pola.latih.n} percobaan · rata-rata R {bahan.pola.latih.rataR === null ? "…" : bahan.pola.latih.rataR}
+          </p>
+          <p>
+            <span className="font-semibold text-amber-300">TRY-OUT</span>{" "}
+            {bahan.pola.tryout.n === 0 ? "belum diuji (Penyaring Kebetulan belum meloloskan)" : `${bahan.pola.tryout.n} percobaan · rata-rata R ${bahan.pola.tryout.rataR ?? "…"}`}
+          </p>
+        </>
+      )}
+      {bahan.perbaikan !== null ? (
+        <div className="border-t border-white/10 pt-2">
+          <p className="font-semibold">Jalur Perbaikan — percobaan ke-{bahan.perbaikan.percobaanKe}</p>
+          <p className="text-slate-300">{bahan.perbaikan.diagnosis}</p>
+          <p className="text-amber-300">Jalan: {JALAN_LABEL[bahan.perbaikan.jalan] ?? bahan.perbaikan.jalan}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** KC-3 Kepala Sekolah (Pembagian Data) + Penambang Fakta (Badai M15 + M-1/P-1/F-1 H1) + Penyaring Kebetulan/Pengawas Try-out per bahan. */
 export function Kc3Panel({ onDone }: { onDone: () => void }) {
   const [split, setSplit] = useState<{ tanggalUtc: string; data: PembagianData } | null>(null);
-  const [pola, setPola] = useState<{ tanggalUtc: string; data: PolaCalon } | null>(null);
-  const [perbaikan, setPerbaikan] = useState<{ tanggalUtc: string; data: CatatanPerbaikan } | null>(null);
+  const [bahan, setBahan] = useState<readonly Kc3BahanRingkasan[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,14 +115,10 @@ export function Kc3Panel({ onDone }: { onDone: () => void }) {
       .then((r) => (r.ok ? r.json() : { hasil: null }))
       .then((j: { hasil: { tanggalUtc: string; data: PembagianData } | null }) => setSplit(j.hasil))
       .catch(() => setSplit(null));
-    fetch(`${API_BASE_URL}/api/cabang/KC-3/hasil/POLA_CALON`)
-      .then((r) => (r.ok ? r.json() : { hasil: null }))
-      .then((j: { hasil: { tanggalUtc: string; data: PolaCalon } | null }) => setPola(j.hasil))
-      .catch(() => setPola(null));
-    fetch(`${API_BASE_URL}/api/cabang/KC-3/hasil/CATATAN_PERBAIKAN`)
-      .then((r) => (r.ok ? r.json() : { hasil: null }))
-      .then((j: { hasil: { tanggalUtc: string; data: CatatanPerbaikan } | null }) => setPerbaikan(j.hasil))
-      .catch(() => setPerbaikan(null));
+    fetch(`${API_BASE_URL}/api/cabang/KC-3/bahan`)
+      .then((r) => (r.ok ? r.json() : { bahan: [] }))
+      .then((j: { bahan?: Kc3BahanRingkasan[] }) => setBahan(j.bahan ?? []))
+      .catch(() => setBahan([]));
   }, []);
 
   useEffect(() => {
@@ -108,34 +169,14 @@ export function Kc3Panel({ onDone }: { onDone: () => void }) {
           </p>
         </div>
       )}
-      <div className="border-t border-white/10 pt-3">
-        <p className="font-semibold">Penambang Fakta — Pola Calon</p>
-        {pola === null ? (
-          <p className="text-slate-400">Belum ada Pola Calon. Butuh Pembagian Data (di atas) dan file M15 Common Files broker terpilih.</p>
+      <div className="space-y-2 border-t border-white/10 pt-3">
+        <p className="font-semibold">Penambang Fakta — Pola Calon per bahan</p>
+        {bahan.length === 0 ? (
+          <p className="text-slate-400">Belum ada bahan ditambang.</p>
         ) : (
-          <div className="space-y-1" data-testid="kc3-pola">
-            <p className="text-slate-300">{pola.data.kondisi}</p>
-            <p className="text-slate-400">
-              Angka dibekukan: {Object.entries(pola.data.angkaBeku).map(([k, v]) => `${k}=${v}`).join(" · ")}
-            </p>
-            <p>
-              <span className="text-emerald-300 font-semibold">LATIH</span>{" "}
-              {pola.data.latih.n} percobaan · rata-rata R {pola.data.latih.rataR === null ? "…" : pola.data.latih.rataR}
-            </p>
-            <p>
-              <span className="text-amber-300 font-semibold">TRY-OUT</span>{" "}
-              {pola.data.tryout.n === 0 ? "belum diuji (Penyaring Kebetulan belum meloloskan)" : `${pola.data.tryout.n} percobaan · rata-rata R ${pola.data.tryout.rataR ?? "…"}`}
-            </p>
-          </div>
+          bahan.map((b) => <BahanCard key={b.id} bahan={b} />)
         )}
       </div>
-      {perbaikan !== null ? (
-        <div className="border-t border-white/10 pt-3" data-testid="kc3-perbaikan">
-          <p className="font-semibold">Jalur Perbaikan — percobaan ke-{perbaikan.data.percobaanKe}</p>
-          <p className="text-slate-300">{perbaikan.data.diagnosis}</p>
-          <p className="text-amber-300">Jalan: {JALAN_LABEL[perbaikan.data.jalan] ?? perbaikan.data.jalan}</p>
-        </div>
-      ) : null}
     </section>
   );
 }

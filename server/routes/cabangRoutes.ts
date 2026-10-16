@@ -10,7 +10,7 @@ import {
 import { deliverLampiran, readBranch, readLatestHasil, saveDecision, saveRecommendation } from "../services/branchStore";
 import { runKc1 } from "../services/kc1Runner";
 import { Kc2Error, runKc2 } from "../services/kc2Runner";
-import { Kc3Error, runKc3 } from "../services/kc3Runner";
+import { Kc3Error, ringkasanBahan, runKc3 } from "../services/kc3Runner";
 import { Kc4Error, runKc4 } from "../services/kc4Runner";
 import { runKc5 } from "../services/kc5Runner";
 import { resolveCommonFilesDir } from "./marginRoutes";
@@ -30,6 +30,7 @@ import { FALLBACK_RATES, usdIdrRate } from "../../src/services/fxRateService";
  * POST /api/cabang/KC-4/jalankan           KC-4: uji Pola Calon disetujui di UJIAN bersegel (K1-K7) → vonis + Formulir R
  * POST /api/cabang/KC-5/jalankan           KC-5: status cicilan Bank Jago + ringkasan Jurnal Pajak → Laporan Bulanan + Formulir R
  * GET  /api/cabang/:kode/hasil/:jenis      map hasil terbaru (mis. KC-1/hasil/KARTU_BROKER)
+ * GET  /api/cabang/KC-3/bahan              status TIAP bahan (Badai+M-1/P-1/F-1): pola, perbaikan, status (audit A-3)
  */
 export function createCabangRoutes(
   dataDir: string = join(process.cwd(), "data"),
@@ -67,16 +68,22 @@ export function createCabangRoutes(
 
   router.post("/KC-3/jalankan", (_req, res) => {
     try {
-      const r = runKc3({ dataDir, commonDir: commonDir(), now: now() });
+      const rates = getCachedEcbRates() ?? FALLBACK_RATES;
+      const r = runKc3({ dataDir, commonDir: commonDir(), now: now(), faktaFile, rates });
       res.status(201).json(r);
     } catch (e) {
       res.status(e instanceof Kc3Error ? 409 : 500).json({ error: e instanceof Error ? e.message : String(e) });
     }
   });
 
+  router.get("/KC-3/bahan", (_req, res) => {
+    res.json({ bahan: ringkasanBahan(dataDir) });
+  });
+
   router.post("/KC-4/jalankan", (_req, res) => {
     try {
-      const r = runKc4({ dataDir, commonDir: commonDir(), now: now() });
+      const rates = getCachedEcbRates() ?? FALLBACK_RATES;
+      const r = runKc4({ dataDir, commonDir: commonDir(), now: now(), faktaFile, rates });
       res.status(201).json(r);
     } catch (e) {
       res.status(e instanceof Kc4Error ? 409 : 500).json({ error: e instanceof Error ? e.message : String(e) });
