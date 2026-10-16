@@ -360,6 +360,8 @@ import { bulanRentang, catatanPerbaikan, formulirPolaCalon, pengawasTryout, pili
 import { bagiBlok, formulirVonis, ujiK1K7 } from "../src/lib/kc4Kepala";
 import { Kc4Error, runKc4 } from "../server/services/kc4Runner";
 import { AUDITOR_AMBANG_PERSEN, auditTrade } from "../src/lib/kc4Auditor";
+import { formulirSetoran, H_PERINGATAN, jadwalSetoran, judulSetoran, PINJAMAN, statusSetoran } from "../src/lib/kc5Cicilan";
+import { runKc5 } from "../server/services/kc5Runner";
 import { LAMP2_LOSS_TOLERANCE_R, lampRows } from "../src/lib/greenLamps";
 import { readBacktestLamps, saveBacktestLamps } from "../server/services/lampStore";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
@@ -10764,8 +10766,10 @@ test("772. A-1 arsitektur KC-1..KC-3: kontrak map bersih, alur dihitung dari kon
   // petugas KC-1..KC-3 kini AKTIF.
   // Diubah lagi 16 Okt 2026 18:00: KC-4 Kepala Ruang Ujian & Penguji Data Lama dibangun (AKTIF, lampu 1
   // saja) -> arsitektur kini KC-1..KC-4.
-  assert(PETUGAS.every((p) => p.status === "AKTIF"), "semua petugas KC-1..KC-4 AKTIF");
-  assert(PETUGAS.every((p) => ["KC-1", "KC-2", "KC-3", "KC-4"].includes(p.cabang)), "hanya KC-1..KC-4");
+  // Diubah lagi 16 Okt 2026 19:00: KC-4 Auditor Trade + KC-5 Kepala Cabang & Petugas Cicilan dibangun
+  // (AKTIF) -> arsitektur kini KC-1..KC-5.
+  assert(PETUGAS.every((p) => p.status === "AKTIF"), "semua petugas KC-1..KC-5 AKTIF");
+  assert(PETUGAS.every((p) => ["KC-1", "KC-2", "KC-3", "KC-4", "KC-5"].includes(p.cabang)), "hanya KC-1..KC-5");
   const flows = branchFlows().map((f) => `${f.dari}>${f.ke}:${f.hasil}`).sort().join(" ");
   assert(
     flows === "KC-1>KC-2:PILIHAN_BROKER KC-1>KC-3:PILIHAN_BROKER KC-2>KC-1:DAFTAR_DATA KC-2>KC-3:DAFTAR_DATA KC-2>KC-3:KATALOG_FUNGSI KC-3>KC-2:CATATAN_PERBAIKAN KC-3>KC-4:POLA_CALON",
@@ -11362,6 +11366,68 @@ test("788. KC-4 penjalan penuh: wajib Pola Calon disetujui Pusat + satu pola sek
   assert(
     readSrc("src/components/branch/BranchPage.tsx").includes("<Kc4Panel onDone={load} />") && readSrc("server/routes/cabangRoutes.ts").includes('router.post("/KC-4/jalankan"'),
     "panel + route KC-4",
+  );
+});
+
+test("790. KC-5 Petugas Cicilan murni: 9 jatuh tempo tanggal 14 Nov2026-Jul2027, status H-3, Formulir R = sumber LUNAS", () => {
+  const jadwal = jadwalSetoran();
+  assert(jadwal.length === PINJAMAN.tenorBulan && jadwal.length === 9, `9 setoran ${jadwal.length}`);
+  const tanggal = jadwal.map((j) => j.tanggal).join(",");
+  assert(
+    tanggal === "2026-11-14,2026-12-14,2027-01-14,2027-02-14,2027-03-14,2027-04-14,2027-05-14,2027-06-14,2027-07-14",
+    tanggal,
+  );
+  assert(jadwal.every((j) => j.jumlahRp === PINJAMAN.cicilanRp && j.jumlahRp === 68_506), "tiap cicilan Rp68.506 (dikonfirmasi Fahmi, bukan Rp250.000)");
+  assert(jadwal[0]?.ke === 1 && jadwal[8]?.ke === 9, "nomor urut 1..9");
+
+  const s = jadwal[0] as (typeof jadwal)[number]; // jatuh tempo 2026-11-14
+  assert(statusSetoran(s, new Date("2026-11-01T00:00:00.000Z"), false) === "BELUM_JATUH_TEMPO", "masih > H-3");
+  assert(statusSetoran(s, new Date("2026-11-11T00:00:00.000Z"), false) === "PERLU_DIINGATKAN", `tepat H-${H_PERINGATAN}`);
+  assert(statusSetoran(s, new Date("2026-11-14T00:00:00.000Z"), false) === "PERLU_DIINGATKAN", "hari H, belum lewat");
+  assert(statusSetoran(s, new Date("2026-11-15T00:00:00.000Z"), false) === "TERLAMBAT", "lewat jatuh tempo, belum disetujui");
+  assert(statusSetoran(s, new Date("2026-12-01T00:00:00.000Z"), true) === "LUNAS", "sudah disetujui -> LUNAS, terlepas dari tanggal");
+
+  assert(judulSetoran(s) === "Setoran Bank Jago ke-1/9 jatuh tempo 2026-11-14", judulSetoran(s));
+  const form = formulirSetoran(s);
+  assert(form.judul === judulSetoran(s), "judul Formulir R SAMA dengan judulSetoran() -- dipakai mencocokkan status SETUJU");
+  assert(form.usulan.includes("68.506") && form.usulan.includes("Setuju") && form.batasData.includes("jadwal angsuran resmi"), JSON.stringify(form));
+});
+
+test("791. KC-5 penjalan: Formulir R sekali per setoran (tidak dobel), SETUJU -> LUNAS, Laporan Bulanan tersimpan", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "kc5-"));
+  const dataDir = path.join(root, "data");
+  const commonDir = path.join(root, "common");
+  fs.mkdirSync(commonDir);
+
+  const jauh = new Date("2026-10-20T00:00:00.000Z"); // jauh dari H-3 setoran pertama (2026-11-14)
+  const r0 = runKc5({ dataDir, commonDir, now: jauh });
+  assert(r0.cicilan.length === 9 && r0.cicilan.every((c) => c.status === "BELUM_JATUH_TEMPO") && r0.diingatkan.length === 0, `belum ada yang diingatkan ${JSON.stringify(r0.cicilan.map((c) => c.status))}`);
+
+  const dekat = new Date("2026-11-12T00:00:00.000Z"); // H-2 dari 2026-11-14
+  const r1 = runKc5({ dataDir, commonDir, now: dekat });
+  assert(r1.cicilan[0]?.status === "PERLU_DIINGATKAN" && r1.diingatkan.length === 1 && r1.diingatkan[0]?.judul === "Setoran Bank Jago ke-1/9 jatuh tempo 2026-11-14", JSON.stringify(r1.diingatkan));
+
+  const r2 = runKc5({ dataDir, commonDir, now: dekat });
+  assert(r2.diingatkan.length === 0, "dipanggil lagi di hari yang sama -> tidak dobel kirim Formulir R");
+  assert(readBranch(dataDir, "KC-5").length === 1, "tetap satu Formulir R untuk setoran ke-1");
+
+  const id = r1.diingatkan[0]?.id as string;
+  saveDecision(dataDir, "KC-5", id, { keputusan: "SETUJU", catatan: "sudah transfer" }, dekat);
+  const r3 = runKc5({ dataDir, commonDir, now: dekat });
+  assert(r3.cicilan[0]?.status === "LUNAS" && r3.cicilan[1]?.status === "BELUM_JATUH_TEMPO", `setoran 1 LUNAS, sisanya belum ${JSON.stringify(r3.cicilan.map((c) => c.status))}`);
+  assert(r3.diingatkan.length === 0, "yang sudah SETUJU tidak diingatkan lagi");
+  assert(r3.hasilTrading === null, "belum ada berkas Jurnal Pajak -> null, bukan dikarang");
+
+  const laporan = readLatestHasil(dataDir, "KC-5", "LAPORAN_BULANAN");
+  const data = laporan?.data as { cicilan?: unknown[] } | null;
+  assert(laporan !== null && Array.isArray(data?.cicilan) && data.cicilan.length === 9, "map LAPORAN_BULANAN tersimpan");
+
+  assert(
+    readSrc("src/components/branch/BranchPage.tsx").includes("<Kc5Panel onDone={load} />") && readSrc("server/routes/cabangRoutes.ts").includes('router.post("/KC-5/jalankan"'),
+    "panel + route KC-5",
   );
 });
 

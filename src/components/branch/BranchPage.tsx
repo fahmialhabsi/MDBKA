@@ -17,6 +17,7 @@ import { Kc1Panel } from "./Kc1Panel";
 import { Kc2Panel } from "./Kc2Panel";
 import { Kc3Panel } from "./Kc3Panel";
 import { Kc4Panel } from "./Kc4Panel";
+import { Kc5Panel } from "./Kc5Panel";
 
 interface Summary {
   readonly code: BranchCode;
@@ -207,6 +208,7 @@ export function BranchPage({ params }: { params: BranchPageParams }) {
         {branch?.code === "KC-2" ? <Kc2Panel onDone={load} /> : null}
         {branch?.code === "KC-3" ? <Kc3Panel onDone={load} /> : null}
         {branch?.code === "KC-4" ? <Kc4Panel onDone={load} /> : null}
+        {branch?.code === "KC-5" ? <Kc5Panel onDone={load} /> : null}
 
         <section className="space-y-3">
           <h2 className="text-lg font-bold">{branch === null ? "Meja Rekomendasi (menunggu keputusan)" : "Rekomendasi cabang ini"}</h2>
