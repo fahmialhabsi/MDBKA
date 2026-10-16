@@ -356,6 +356,7 @@ import { runKc2 } from "../server/services/kc2Runner";
 import { formulirKc3Pembagian, kepalaSekolah, rentangBersamaH1 } from "../src/lib/kc3Kepala";
 import { Kc3Error, ringkasanBahan, runKc3 } from "../server/services/kc3Runner";
 import { jalankanTambang } from "../server/services/kc3WorkerRunner";
+import { profitAtTp, profitRangeOf, TARGET_PROFIT_MAX_IDR, TARGET_PROFIT_MIN_IDR } from "../src/lib/profitTarget";
 import { bahanById } from "../src/lib/kc3BahanRegistry";
 import { BADAI_ATR_PERIOD, BADAI_MIN_TRADE, BADAI_POLA_ID, BADAI_SL_ATR, BADAI_TARGET_RR, polaBadai, tambangBadai, tambangBadaiSimbol, type BadaiTrade } from "../src/lib/kc3Penambang";
 import {
@@ -15078,6 +15079,27 @@ test("808. audit A-3 strip status kesehatan: harga live (quotes.csv) dicek TERPI
     "strip status terpasang di header dashboard utama (bukan terkubur di panel lain)",
   );
   assert(readSrc("src/hooks/useDataQualitySemua.ts").includes("/api/data-quality/semua"), "hook memanggil endpoint agregat");
+});
+
+test("810. profitTarget: profit bersih di TP (rumus biaya = mesin keputusan) + rentang Rp5.000-50.000 + wiring pemindai/detail (readSrc)", () => {
+  // EURUSD-like: jarak TP 0,0030, 1 lot = 100.000 USD per 1,0 harga, lot 0,01, spread 0,0001, slippage 0, komisi $7/lot.
+  const p = profitAtTp({ targetDistance: 0.003, lot: 0.01, pointValueUsd: 100_000, spread: 0.0001, slippage: 0, commissionUsdPerLot: 7 });
+  // gross = 0,003 x 100000 x 0,01 = 3,00 ; biaya/lot = 0,0001 x 100000 + 7 = 17 -> net = (300 - 17) x 0,01 = 2,83
+  assert(p !== null && Math.abs(p.grossUsd - 3) < 1e-9 && Math.abs(p.netUsd - 2.83) < 1e-9, JSON.stringify(p));
+  const rugiBiaya = profitAtTp({ targetDistance: 0.0001, lot: 0.01, pointValueUsd: 100_000, spread: 0.0002, slippage: 0, commissionUsdPerLot: 7 });
+  assert(rugiBiaya !== null && rugiBiaya.netUsd < 0, "biaya > hasil -> net negatif (jujur, bukan dipotong ke 0)");
+  assert(profitAtTp({ targetDistance: null, lot: 0.01, pointValueUsd: 1, spread: 0, slippage: 0, commissionUsdPerLot: 0 }) === null, "tanpa jarak TP -> null");
+  assert(profitAtTp({ targetDistance: 1, lot: null, pointValueUsd: 1, spread: 0, slippage: 0, commissionUsdPerLot: 0 }) === null, "tanpa lot -> null");
+  assert(profitAtTp({ targetDistance: 1, lot: 0.01, pointValueUsd: 0, spread: 0, slippage: 0, commissionUsdPerLot: 0 }) === null, "nilai poin 0 -> null, bukan angka karangan");
+
+  assert(TARGET_PROFIT_MIN_IDR === 5_000 && TARGET_PROFIT_MAX_IDR === 50_000, "rentang sesuai permintaan Fahmi");
+  assert(profitRangeOf(4_999) === "DI_BAWAH" && profitRangeOf(5_000) === "DALAM_RENTANG", "batas bawah inklusif");
+  assert(profitRangeOf(50_000) === "DALAM_RENTANG" && profitRangeOf(50_001) === "DI_ATAS", "batas atas inklusif");
+  assert(profitRangeOf(null) === "TAK_ADA" && profitRangeOf(Number.NaN) === "TAK_ADA", "tak bisa dihitung -> TAK_ADA");
+
+  assert(readSrc("src/lib/symbolScanner.ts").includes("profitAtTpUsd") && readSrc("src/lib/symbolScanner.ts").includes('from "./profitTarget"'), "ScanPlan membawa profit di TP");
+  assert(readSrc("src/components/analysis/SymbolScannerPanel.tsx").includes('data-testid="scan-profit-filter"') && readSrc("src/components/analysis/SymbolScannerPanel.tsx").includes("Profit di TP"), "pemindai: kolom + filter rentang");
+  assert(readSrc("src/components/analysis/SignalDetailPage.tsx").includes('data-testid="detail-profit-tp"'), "halaman detail sinyal menampilkan profit di TP");
 });
 
 testAsync("809. kc3WorkerRunner jalankanTambang: F-1 (beratDiThreadTerpisah) jalan di worker_threads terpisah dan hasilnya IDENTIK dengan panggilan langsung; bahan biasa (Badai) tidak lewat worker", async () => {

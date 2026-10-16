@@ -12,6 +12,7 @@ import { specHoldMap } from "../../lib/specCompare";
 import { lastCandleTimeMs, scanSymbol, type ScanRow } from "../../lib/symbolScanner";
 import { formatPrice } from "../../lib/tickSize";
 import { fetchBackendRates, usdIdrRate, type ExchangeRates } from "../../services/fxRateService";
+import { PROFIT_RANGE_LABEL, profitRangeOf } from "../../lib/profitTarget";
 import type { BrokerId } from "../../types/broker";
 
 interface CandleItem {
@@ -110,6 +111,12 @@ export function SignalDetailPage({ broker, symbol, equity }: { broker: BrokerId;
     () => (plan === null || plan.riskAtMinLot === null || kurs === null ? null : Math.round(plan.riskAtMinLot * kurs)),
     [plan, kurs],
   );
+  const profitUsd = plan?.profitAtTpUsd ?? null;
+  const profitIdr = useMemo(
+    () => (profitUsd === null || kurs === null ? null : Math.round(profitUsd * kurs)),
+    [profitUsd, kurs],
+  );
+  const profitRange = profitRangeOf(profitIdr);
 
   const copy = (text: string | null, key: string): void => {
     if (text === null) return;
@@ -205,6 +212,13 @@ export function SignalDetailPage({ broker, symbol, equity }: { broker: BrokerId;
                 Buka Kalkulator ↗
               </a>
             </div>
+            <p data-testid="detail-profit-tp" className="text-sm text-slate-300">
+              Profit bila TP kena (bersih, lot {plan.suggestedLot ?? "-"}):{" "}
+              <b className={profitRange === "DALAM_RENTANG" ? "text-emerald-300" : "text-slate-200"}>
+                {profitIdr === null ? "-" : `Rp${profitIdr.toLocaleString("id-ID")}`}
+              </b>
+              {profitUsd !== null && ` ($${profitUsd.toFixed(2)})`} · {PROFIT_RANGE_LABEL[profitRange]}
+            </p>
             <p className="text-sm text-slate-300">
               Risiko lot minimum: <b>{riskIdr === null ? "-" : `Rp${riskIdr.toLocaleString("id-ID")}`}</b>
               {plan.riskAtMinLot !== null && ` ($${plan.riskAtMinLot.toFixed(2)})`} · batas yang dipakai ${plan.maxRiskUsd.toFixed(2)}

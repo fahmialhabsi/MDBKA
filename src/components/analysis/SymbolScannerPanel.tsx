@@ -26,6 +26,7 @@ import {
   scanSymbolDetailed,
   sortScanRows,
   type ScanInput,
+  type ScanRow,
   type ScanStatus,
 } from "../../lib/symbolScanner";
 import { useBrokerPositions } from "../../hooks/useBrokerPositions";
@@ -34,6 +35,7 @@ import { specHoldMap } from "../../lib/specCompare";
 import { canonicalSymbolForBroker } from "../../lib/brokerSymbols";
 import { checkLossStreak, tradesForBroker } from "../../lib/lossStreakGuard";
 import { usdIdrRate, type ExchangeRates } from "../../services/fxRateService";
+import { PROFIT_RANGE_LABEL, TARGET_PROFIT_MAX_IDR, TARGET_PROFIT_MIN_IDR, profitRangeOf } from "../../lib/profitTarget";
 import type { BrokerId } from "../../types/broker";
 
 /**
@@ -90,6 +92,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
   const [scanAtMs, setScanAtMs] = useState<number | null>(null);
   const [tick, setTick] = useState(0);
   const [showAll, setShowAll] = useState(false);
+  const [onlyInRange, setOnlyInRange] = useState(false);
   const key = `${brokerId}|${tick}`;
   // Satpam Kalender K4b: kalender broker aktif (null = tidak tersedia).
   const [calendar, setCalendar] = useState<{
@@ -341,7 +344,15 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
     (acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }),
     { LOLOS: 0, DITAHAN_BIAYA: 0, DITAHAN_RISIKO: 0, DITAHAN_KORELASI: 0, DITAHAN_JEDA: 0, DITAHAN_BERITA: 0, DITAHAN_SESI: 0, DITAHAN_SPEK: 0, DITAHAN_BUKA: 0, DITAHAN_BUKTI: 0, TUNGGU: 0, PASAR_TUTUP: 0, DATA: 0 },
   );
-  const visible = showAll ? rows : rows.slice(0, COLLAPSED_ROWS);
+  // Profit bersih di TP (Rupiah) per sinyal LOLOS + filter rentang Rp5.000–50.000 (permintaan Fahmi 17 Okt 2026).
+  const kursProfit = usdIdrRate(fxRates);
+  const profitIdrOf = (row: ScanRow): number | null => {
+    const usd = row.status === "LOLOS" ? (row.plan?.profitAtTpUsd ?? null) : null;
+    return usd !== null && kursProfit !== null ? Math.round(usd * kursProfit) : null;
+  };
+  const inRangeCount = rows.filter((r) => profitRangeOf(profitIdrOf(r)) === "DALAM_RENTANG").length;
+  const shownRows = onlyInRange ? rows.filter((r) => profitRangeOf(profitIdrOf(r)) === "DALAM_RENTANG") : rows;
+  const visible = showAll ? shownRows : shownRows.slice(0, COLLAPSED_ROWS);
   const loading =
     loadedKey === null || (itemsBroker !== brokerId && error === null);
 
@@ -502,6 +513,21 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
       ) : null}
 
       {rows.length > 0 && (
+        <label data-testid="scan-profit-filter" className="mb-3 flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+          <input type="checkbox" checked={onlyInRange} onChange={(e) => setOnlyInRange(e.target.checked)} />
+          Hanya sinyal dengan profit di TP Rp{TARGET_PROFIT_MIN_IDR.toLocaleString("id-ID")}–{TARGET_PROFIT_MAX_IDR.toLocaleString("id-ID")}
+          <span className="text-xs text-slate-500">
+            ({kursProfit === null ? "kurs belum ada" : `${inRangeCount} simbol`}; profit bersih setelah spread, slippage & komisi)
+          </span>
+        </label>
+      )}
+      {rows.length > 0 && onlyInRange && shownRows.length === 0 && (
+        <p data-testid="scan-profit-empty" className="mb-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+          Belum ada sinyal Lolos dengan profit di TP dalam rentang ini. Matikan filter untuk melihat semua simbol.
+        </p>
+      )}
+
+      {rows.length > 0 && shownRows.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-slate-500">
@@ -511,6 +537,7 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
                 <th className="py-2 pr-3">Arah</th>
                 <th className="py-2 pr-3 text-right">Skor</th>
                 <th className="py-2 pr-3 text-right">Biaya</th>
+                <th className="py-2 pr-3 text-right">Profit di TP</th>
                 <th className="py-2">Alasan</th>
               </tr>
             </thead>
@@ -562,6 +589,22 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
                       ? "-"
                       : `${formatSharePercent(row.costShareOfRisk)}%`}
                   </td>
+                  <td data-testid={`scan-profit-${row.symbol}`} className="py-2 pr-3 text-right">
+                    {(() => {
+                      const idr = profitIdrOf(row);
+                      if (idr === null) return <span className="text-slate-500">-</span>;
+                      const range = profitRangeOf(idr);
+                      return (
+                        <span
+                          title={`Profit bersih perkiraan bila TP kena: ${PROFIT_RANGE_LABEL[range]}`}
+                          className={range === "DALAM_RENTANG" ? "font-semibold text-emerald-300" : "text-slate-400"}
+                        >
+                          Rp{idr.toLocaleString("id-ID")}
+                          {range === "DALAM_RENTANG" ? " ✓" : ""}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td className="py-2 text-slate-400">
                     {row.reason}
                     {cautions.get(row.symbol) !== undefined && (
@@ -579,13 +622,13 @@ export function SymbolScannerPanel({ brokerId, equity, fxRates, onOpenAnalysis }
               ))}
             </tbody>
           </table>
-          {rows.length > COLLAPSED_ROWS && (
+          {shownRows.length > COLLAPSED_ROWS && (
             <button
               type="button"
               onClick={() => setShowAll((v) => !v)}
               className="mt-3 text-xs text-emerald-300 hover:underline"
             >
-              {showAll ? "Tampilkan ringkas" : `Tampilkan semua (${rows.length})`}
+              {showAll ? "Tampilkan ringkas" : `Tampilkan semua (${shownRows.length})`}
             </button>
           )}
         </div>

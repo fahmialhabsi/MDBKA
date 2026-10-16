@@ -5,6 +5,7 @@ import { validateAnalysisInputs } from "../calculations/inputValidator";
 import { detectScaleMismatch } from "../calculations/scaleValidator";
 import { resolveSwingLevels } from "../calculations/swingDetector";
 import { usdIdrRate, type ExchangeRates } from "../services/fxRateService";
+import { profitAtTp } from "./profitTarget";
 import type { AnalysisResult, BrokerSettings, MarketData } from "../types/analysis";
 import type { BrokerId } from "../types/broker";
 import { canonicalSymbolForBroker } from "./brokerSymbols";
@@ -150,6 +151,8 @@ export interface ScanPlan {
   readonly maxRiskUsd: number;
   readonly riskDistance: number | null;
   readonly targetDistance: number | null;
+  /** Profit bersih perkiraan (USD) bila TP kena, pada lot yang disarankan; null = tak bisa dihitung. */
+  readonly profitAtTpUsd?: number | null;
 }
 
 const ZERO_MARKET: MarketData = {
@@ -473,6 +476,15 @@ function scanCore(input: ScanInput, sink: { setup: StrategySetup | null }): Scan
           maxRiskUsd: result.maxRiskUsd,
           riskDistance: result.riskDistance,
           targetDistance: result.targetDistance,
+          profitAtTpUsd:
+            profitAtTp({
+              targetDistance: result.targetDistance,
+              lot: result.suggestedLot,
+              pointValueUsd: broker.pointValue,
+              spread: Math.abs(market.ask - market.bid),
+              slippage: broker.slippage,
+              commissionUsdPerLot: broker.commission,
+            })?.netUsd ?? null,
         }
       : null;
   const row: ScanRow = {
