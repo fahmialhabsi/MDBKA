@@ -72,7 +72,35 @@ KC-5 Pembukuan & Pajak ── berjalan sendiri, setiap bulan ──────�
 | Pengawas Try-out | skrip try-out (baru) | Menguji pola di potongan latih yang disisihkan |
 | Pustakawan | `tradeAudit` + arsip Lolosyiob | Fakta kegagalan lama sebagai daftar "jangan diulang" |
 
-**SOP KC-3:** (1) terima data dari broker latih KC-1 lewat KC-2 → (2) bagi data: latih 60% · try-out 20% · ujian 20% (segel, hanya KC-4) → (3) tambang → saring → try-out → (4) bekukan angka → (5) Formulir R ke Pusat → (6) bila disetujui, serahkan ke KC-4.
+**SOP KC-3:** (1) terima data dari broker latih KC-1 lewat KC-2 → (2) bagi data: latih 60% · try-out 20% · ujian 20% (segel, hanya KC-4) → (3) tambang → saring → try-out → (4) gagal → Jalur Perbaikan (6a); lolos → bekukan angka → (5) Formulir R ke Pusat → (6) bila disetujui, serahkan ke KC-4.
+
+### 6a. Jalur Perbaikan — bila data dan fakta belum bagus (diminta Fahmi 16 Okt 2026)
+Pola yang gagal **tidak langsung dibuang**. KC-3 wajib mendiagnosis dulu, lalu memilih **satu** jalan per percobaan.
+| Diagnosis (dari angka, bukan perasaan) | Jalan yang dipilih |
+|---|---|
+| Bahan berasal dari sumber yang sama (mis. MA/RSI/MACD semuanya dari close) | **A. Tambah bahan bakar** dari sumber lain (lihat daftar di bawah) |
+| Bahan bagus, tetapi pertanyaannya keliru (mis. menebak arah padahal yang terbukti adalah besar gerak) | **B. Logika lebih tepat**: ganti pertanyaan (arah → besar gerak, waktu, cara keluar) |
+| Pola hanya bagus di satu golongan atau satu broker | **C. Ganti tempat**: uji di golongan/broker lain dengan angka yang sama |
+| Biaya memakan > 50% hasil | **D. Ganti ukuran**: horizon lebih panjang atau simbol berbiaya kecil |
+| Sudah 7 percobaan tanpa perbaikan | **E. Arsip**: masuk daftar "jangan diulang" Pustakawan |
+
+**Daftar bahan bakar (Buku Bahan Bakar, dirawat KC-3 bersama KC-2):**
+| Bahan | Sumber | Mandiri dari harga close? | Status |
+|---|---|---|---|
+| Peringatan Badai (besar gerak) | candle M15 | sebagian (dari rentang) | TERBUKTI meramal besar gerak (CU-1) |
+| Jam & hari, sesi | jam server → UTC | ya | diuji AP-2: belum memberi keunggulan arah |
+| Spread & biaya per jam | file quotes/Margin | ya | belum diuji sebagai bahan |
+| Tick volume | kolom tick_volume candle | ya | belum diuji |
+| Kalender berita historis | MT5 Calendar (perlu fungsi baru KC-2) | ya | belum ada data sejarah |
+| Kekuatan mata uang (gabungan banyak pasangan) | semua pasangan Forex | sebagian | belum diuji |
+| Timeframe besar (D1/W1) | dirakit dari H1 | sebagian | diuji P-1/F-1: belum cukup |
+| Data broker lain (Exness M5/M1 setahun) | KC-1/KC-2 | ya (sumber berbeda) | tersedia, belum ditambang |
+
+**Aturan jalur perbaikan:**
+1. Satu percobaan = satu perubahan (satu bahan baru *atau* satu logika baru), angka dibekukan sebelum diuji.
+2. Setiap percobaan dicatat: diagnosis → jalan yang dipilih → hasil, agar kegagalan juga menjadi fakta.
+3. Bahan baru yang belum ada datanya → KC-3 mengirim Formulir R **"Permintaan Bahan Bakar"** ke Pusat; bila disetujui, KC-2 yang menyediakannya.
+4. Data ujian tetap bersegel; perbaikan hanya memakai data latih + try-out.
 
 ## 7. KC-4 "Ruang Ujian" — pengujian
 **Hasil untuk Pusat:** vonis LULUS/GAGAL per pola per golongan, dan status lampu 1-2-3.
