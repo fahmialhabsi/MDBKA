@@ -4,11 +4,12 @@ import {
   readFileSync,
   readdirSync,
   statSync,
+  statfsSync,
   writeFileSync,
 } from "node:fs";
 import { copyFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 /**
  * Backup data MDBKA (8 Okt 2026).
@@ -114,12 +115,63 @@ function stamp(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
+let berjalan = false;
+
+/** Kunci bersama: backup manual (route) dan otomatis (jadwal) tidak boleh menyalin berbarengan. */
+export function backupSedangJalan(): boolean {
+  return berjalan;
+}
+
+/** Ruang kosong (byte) di drive tempat `path` berada (naik ke folder induk yang ada); null = tak bisa dibaca. */
+export function freeBytesAt(path: string): number | null {
+  let p = path;
+  while (!existsSync(p)) {
+    const up = dirname(p);
+    if (up === p) return null;
+    p = up;
+  }
+  try {
+    const s = statfsSync(p);
+    return Number(s.bavail) * Number(s.bsize);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Perkiraan RUANG TAMBAHAN (byte) yang dibutuhkan backup sekarang: snapshot file penting (salinan baru
+ * utuh) + arsip tick yang belum ter-mirror. File tick yang sudah ada di tujuan hanya tertimpa, jadi
+ * yang dihitung cuma selisih ukurannya (bukan seluruh file) — kalau tidak, file harian GB dihitung
+ * dua kali dan backup ditunda tanpa alasan.
+ */
+export function estimateBackupBytes(dataDir: string, backupDir: string = resolveBackupDir()): number {
+  const important = listFiles(dataDir, HISTORY_DIR_NAME).reduce((s, f) => s + f.size, 0);
+  const mirrorRoot = join(backupDir, HISTORY_DIR_NAME);
+  const pending = listFiles(join(dataDir, HISTORY_DIR_NAME), null)
+    .filter((f) => historyNeedsCopy(f, mirrorRoot))
+    .reduce((s, f) => {
+      const dest = join(mirrorRoot, f.rel);
+      const sudahAda = existsSync(dest) ? statSync(dest).size : 0;
+      return s + Math.max(0, f.size - sudahAda);
+    }, 0);
+  return important + pending;
+}
+
 /** Asinkron: arsip tick bisa GB — jangan blok event loop backend. */
 export async function runBackup(
   dataDir: string,
   backupDir: string = resolveBackupDir(),
   now: Date = new Date(),
 ): Promise<BackupMarker> {
+  berjalan = true;
+  try {
+    return await jalankanBackup(dataDir, backupDir, now);
+  } finally {
+    berjalan = false;
+  }
+}
+
+async function jalankanBackup(dataDir: string, backupDir: string, now: Date): Promise<BackupMarker> {
   const snapshot = stamp(now);
   const snapRoot = join(backupDir, snapshot);
   const important = listFiles(dataDir, HISTORY_DIR_NAME);

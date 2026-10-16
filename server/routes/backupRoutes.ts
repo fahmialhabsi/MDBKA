@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { join } from "node:path";
 import {
+  backupSedangJalan,
   getBackupStatus,
   resolveBackupDir,
   runBackup,
@@ -17,22 +18,20 @@ export function createBackupRoutes(
   backupDir: string = resolveBackupDir(),
 ): Router {
   const router = Router();
-  let running = false;
 
   router.get("/status", (_req: Request, res: Response) => {
     try {
-      res.json({ running, status: getBackupStatus(dataDir, backupDir) });
+      res.json({ running: backupSedangJalan(), status: getBackupStatus(dataDir, backupDir) });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
   });
 
   router.post("/run", async (_req: Request, res: Response) => {
-    if (running) {
+    if (backupSedangJalan()) {
       res.status(409).json({ error: "Backup sedang berjalan." });
       return;
     }
-    running = true;
     try {
       const marker = await runBackup(dataDir, backupDir);
       console.log(
@@ -42,8 +41,6 @@ export function createBackupRoutes(
       res.json({ marker, status: getBackupStatus(dataDir, backupDir) });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
-    } finally {
-      running = false;
     }
   });
 

@@ -31,6 +31,8 @@ import { runExcursionPass, startExcursionSchedule } from "./services/excursionJo
 import { trackSpecVersion } from "./services/specVersion";
 import { createDataQualityService, type DataQualityService } from "./services/dataQuality";
 import { runTabReportsOnce, startTabReportSchedule, type TabReportSource } from "./services/tabReportJob";
+import { BACKUP_INTERVAL_MS, runBackupOnce, startBackupSchedule } from "./services/backupJob";
+import { resolveBackupDir } from "./services/dataBackup";
 import { createShadowsOnce, settleShadowsOnce, startShadowSchedule, type ShadowSource, type ShadowTickCache } from "./services/shadowRunner";
 import { MT5LogReader } from "./services/mt5LogReader";
 import { IdrEquitySource, parseAccountCurrency, type EquitySource } from "./services/convertedEquity";
@@ -577,6 +579,11 @@ async function startServer() {
     runTabReportsOnce(tabSources, shadowDataDir, new Date(), tabReportsDone, undefined, tabAlertMemory),
   );
 
+  // Backup otomatis data MDBKA (17 Okt 2026): menggantikan pengingat di dashboard. Lihat backupJob.ts.
+  const backupDir = resolveBackupDir();
+  backupSchedule = startBackupSchedule(() => runBackupOnce(shadowDataDir, backupDir));
+  console.log(`✓ Backup otomatis aktif: tiap ${BACKUP_INTERVAL_MS / 3_600_000} jam bila data berubah → ${backupDir}`);
+
   const server = app.listen(PORT, () => {
     const latest = reader.getLatest();
     console.log(`✓ Backend running on http://localhost:${PORT}`);
@@ -607,6 +614,7 @@ async function startServer() {
 let excursionSchedule: { stop: () => void } | null = null;
 let shadowSchedule: { stop: () => void } | null = null;
 let tabReportSchedule: { stop: () => void } | null = null;
+let backupSchedule: { stop: () => void } | null = null;
 const serverPromise = startServer();
 
 function shutdown(): void {
@@ -626,6 +634,7 @@ function shutdown(): void {
   excursionSchedule?.stop();
   shadowSchedule?.stop();
   tabReportSchedule?.stop();
+  backupSchedule?.stop();
   serverPromise
     .then((server) => {
       server.close(() => {

@@ -36,7 +36,8 @@ import {
 import { formatSharePercent, signalReason } from "../src/lib/signalReason";
 import { collectCandleItems, parseCandleTimeframe, readCandleCsv, readCandleCsvTf } from "../server/routes/candlesRoutes";
 import { createTradeEntryLog } from "../server/services/tradeEntryLog";
-import { getBackupStatus, runBackup } from "../server/services/dataBackup";
+import { backupSedangJalan, estimateBackupBytes, getBackupStatus, runBackup } from "../server/services/dataBackup";
+import { BACKUP_INTERVAL_MS, BACKUP_RESERVE_BYTES, runBackupOnce, startBackupSchedule } from "../server/services/backupJob";
 import { evaluateTrades, GROUP_BEFORE_LOG, GROUP_NO_LOG } from "../server/services/tradeEvaluation";
 import {
   brokerFromCompany,
@@ -15166,6 +15167,69 @@ test("812. KC-4 Pengawas Demo penjalan: simpan map RANGKAIAN_DEMO, Formulir R se
     readSrc("server/routes/cabangRoutes.ts").includes('router.post("/KC-4/demo/jalankan"') && readSrc("src/components/branch/BranchPage.tsx").includes("<Kc4DemoPanel onDone={load} />"),
     "route + panel Pengawas Demo terpasang",
   );
+});
+
+testAsync("813. backup otomatis: jalan hanya bila data berubah + lewat jarak minimum + ruang cukup; jadwal tidak bertumpuk & kegagalan dilog; pengingat dashboard dihapus (readSrc)", async () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "bk-auto-"));
+  const dataDir = path.join(root, "data");
+  const backupDir = path.join(root, "backup");
+  fs.mkdirSync(path.join(dataDir, "trades"), { recursive: true });
+  fs.mkdirSync(path.join(dataDir, "history", "finex"), { recursive: true });
+  const berkas = path.join(dataDir, "trades", "a.jsonl");
+  fs.writeFileSync(berkas, "x\n");
+  fs.writeFileSync(path.join(dataDir, "history", "finex", "t.jsonl"), "tick\n");
+  const base = Date.now();
+  const sentuh = (ms: number): void => fs.utimesSync(berkas, new Date(base + ms), new Date(base + ms));
+  const marker = (): { at: string } => JSON.parse(fs.readFileSync(path.join(backupDir, "last-backup.json"), "utf8")) as { at: string };
+
+  const r1 = await runBackupOnce(dataDir, backupDir, new Date(base + 1000), { freeBytes: () => null });
+  assert(r1.includes("Backup otomatis MDBKA") && fs.existsSync(path.join(backupDir, "history", "finex", "t.jsonl")), `belum pernah backup -> jalan: ${r1}`);
+  assert((await runBackupOnce(dataDir, backupDir, new Date(base + 2000), { freeBytes: () => null })) === "", "tidak ada data berubah -> dilewati");
+
+  sentuh(5000);
+  assert((await runBackupOnce(dataDir, backupDir, new Date(base + 6000), { freeBytes: () => null })) === "", "data berubah tapi belum lewat jarak minimum 6 jam -> dilewati (snapshot tidak menumpuk)");
+  const r3 = await runBackupOnce(dataDir, backupDir, new Date(base + 6000), { freeBytes: () => null, minGapMs: 0 });
+  assert(r3.includes("Backup otomatis MDBKA"), `jarak minimum terpenuhi -> jalan: ${r3}`);
+
+  // Perkiraan ruang: file tick yang sudah ter-mirror dan tumbuh 10 byte dihitung SELISIHNYA saja (+ snapshot file penting 2 byte).
+  fs.appendFileSync(path.join(dataDir, "history", "finex", "t.jsonl"), "0123456789");
+  assert(estimateBackupBytes(dataDir, backupDir) === 12, `ruang tambahan = selisih tick (10) + file penting (2), dapat ${estimateBackupBytes(dataDir, backupDir)}`);
+
+  sentuh(9000);
+  const sebelum = marker().at;
+  const r4 = await runBackupOnce(dataDir, backupDir, new Date(base + 10000), { freeBytes: () => 100, minGapMs: 0 });
+  assert(r4.startsWith("⚠ Backup otomatis ditunda") && marker().at === sebelum, `ruang kurang -> ditunda tanpa menyentuh backup lama: ${r4}`);
+  assert(backupSedangJalan() === false, "kunci backup dilepas setelah selesai");
+
+  const logs: string[] = [];
+  let calls = 0;
+  let active = 0;
+  let maxActive = 0;
+  const jadwal = startBackupSchedule(
+    async () => {
+      calls += 1;
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((r) => setTimeout(r, 60));
+      active -= 1;
+      if (calls === 1) return "halo";
+      throw new Error("disk penuh");
+    },
+    (m) => logs.push(m),
+    5,
+    10,
+  );
+  await new Promise((r) => setTimeout(r, 250));
+  jadwal.stop();
+  assert(maxActive === 1 && calls >= 2, `putaran tidak pernah bertumpuk (maks ${maxActive}, ${calls} putaran)`);
+  assert(logs[0] === "halo" && logs.some((l) => l.startsWith("⚠ Backup otomatis gagal: disk penuh")), `hasil dan kegagalan dilog: ${JSON.stringify(logs.slice(0, 3))}`);
+
+  assert(BACKUP_INTERVAL_MS === 6 * 60 * 60_000 && BACKUP_RESERVE_BYTES === 2 * 1024 ** 3, "konstanta jadwal/cadangan ruang");
+  assert(readSrc("server/index.ts").includes("startBackupSchedule(") && readSrc("server/index.ts").includes("backupSchedule?.stop()"), "jadwal terpasang & dihentikan di server");
+  assert(!readSrc("src/App.tsx").includes("BackupBanner") && !fs.existsSync(path.join(process.cwd(), "src", "components", "layout", "BackupBanner.tsx")), "pengingat backup dihapus dari dashboard");
 });
 
 testAsync("809. kc3WorkerRunner jalankanTambang: F-1 (beratDiThreadTerpisah) jalan di worker_threads terpisah dan hasilnya IDENTIK dengan panggilan langsung; bahan biasa (Badai) tidak lewat worker", async () => {

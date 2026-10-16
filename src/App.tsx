@@ -82,7 +82,6 @@ import type { BrokerId } from "./types/broker";
 import CsvFileConnector from "./components/analysis/CsvFileConnector";
 import { SymbolScannerPanel } from "./components/analysis/SymbolScannerPanel";
 import { RiskGroupsPanel } from "./components/analysis/RiskGroupsPanel";
-import { BackupBanner } from "./components/layout/BackupBanner";
 import { TradeEvaluationPanel } from "./components/analysis/TradeEvaluationPanel";
 import { AutoPositionsSection } from "./components/holdings/AutoPositionsSection";
 import {
@@ -1112,9 +1111,6 @@ export default function App() {
             </p>
           )}
         </section>
-
-        {/* Pengingat + tombol backup data (catatan entry, jurnal pajak, arsip tick). */}
-        <BackupBanner />
 
         {/* Langkah 3c Mode Aman: pemindai semua simbol ber-CSV broker aktif. */}
         <SymbolScannerPanel
