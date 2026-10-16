@@ -2,7 +2,9 @@
  * A-1 (16 Okt 2026) — Arsitektur KC-1 s/d KC-3. MURNI.
  * Rancangan: docs/ARSITEKTUR-2026-10-16-kc1-kc3.md.
  * Kerangka saja: kontrak hasil tiap cabang, alur antar-cabang, status petugas,
- * dan pembagian data latih / try-out / ujian (segel). Petugas KC-1 & KC-2 AKTIF (dibangun 16 Okt 2026); KC-3 DITUNDA.
+ * dan pembagian data latih / try-out / ujian (segel). Semua petugas KC-1, KC-2, KC-3 AKTIF (dibangun
+ * 16 Okt 2026) — KC-3: Kepala Sekolah (Pembagian Data), Penambang Fakta (bahan pertama: Peringatan
+ * Badai jadi pemicu arah), Penyaring Kebetulan & Pengawas Try-out + Jalur Perbaikan (src/lib/kc3Penambang.ts, src/lib/kc3Perbaikan.ts).
  * Angka tidak diketahui = null (bukan tebakan).
  */
 import type { BranchCode } from "./branchOffice";
@@ -143,9 +145,9 @@ export const PETUGAS: readonly PetugasSlot[] = [
   { id: "kc1-terbukti", cabang: "KC-1", jabatan: "Petugas Prinsip Terbukti", membaca: ["DAFTAR_DATA"], menulis: "KARTU_BROKER", status: "AKTIF" },
   { id: "kc2-kepala", cabang: "KC-2", jabatan: "Kepala Cabang", membaca: ["PILIHAN_BROKER"], menulis: "DAFTAR_DATA", status: "AKTIF" },
   { id: "kc2-katalog", cabang: "KC-2", jabatan: "Petugas Katalog Fungsi", membaca: ["CATATAN_PERBAIKAN"], menulis: "KATALOG_FUNGSI", status: "AKTIF" },
-  { id: "kc3-kepala", cabang: "KC-3", jabatan: "Kepala Sekolah", membaca: ["DAFTAR_DATA", "PILIHAN_BROKER"], menulis: "PEMBAGIAN_DATA", status: "DITUNDA" },
-  { id: "kc3-penambang", cabang: "KC-3", jabatan: "Penambang Fakta", membaca: ["PEMBAGIAN_DATA", "KATALOG_FUNGSI"], menulis: "POLA_CALON", status: "DITUNDA" },
-  { id: "kc3-perbaikan", cabang: "KC-3", jabatan: "Penyaring Kebetulan & Pengawas Try-out", membaca: ["POLA_CALON"], menulis: "CATATAN_PERBAIKAN", status: "DITUNDA" },
+  { id: "kc3-kepala", cabang: "KC-3", jabatan: "Kepala Sekolah", membaca: ["DAFTAR_DATA", "PILIHAN_BROKER"], menulis: "PEMBAGIAN_DATA", status: "AKTIF" },
+  { id: "kc3-penambang", cabang: "KC-3", jabatan: "Penambang Fakta", membaca: ["PEMBAGIAN_DATA", "KATALOG_FUNGSI"], menulis: "POLA_CALON", status: "AKTIF" },
+  { id: "kc3-perbaikan", cabang: "KC-3", jabatan: "Penyaring Kebetulan & Pengawas Try-out", membaca: ["POLA_CALON"], menulis: "CATATAN_PERBAIKAN", status: "AKTIF" },
 ];
 
 /** Alur antar-cabang dari kontrak petugas: [dari cabang, ke cabang, jenis hasil]. */

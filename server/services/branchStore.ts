@@ -137,6 +137,23 @@ export function readLatestHasil(dataDir: string, code: BranchCode, kind: string)
   return null;
 }
 
+/** Semua map hasil satu jenis, lama ke baru (mis. hitung percobaan Jalur Perbaikan ke berapa). */
+export function readAllHasil(dataDir: string, code: BranchCode, kind: string): StoredHasil[] {
+  const dir = join(branchDir(dataDir, code), "hasil");
+  if (!existsSync(dir)) return [];
+  const names = readdirSync(dir).filter((n) => n.startsWith(`${kind}-`) && n.endsWith(".json")).sort();
+  const out: StoredHasil[] = [];
+  for (const name of names) {
+    try {
+      const j = JSON.parse(readFileSync(join(dir, name), "utf8")) as Partial<StoredHasil>;
+      if (typeof j.tanggalUtc === "string") out.push({ jenis: kind, tanggalUtc: j.tanggalUtc, data: j.data ?? null });
+    } catch {
+      // berkas rusak dilewati
+    }
+  }
+  return out;
+}
+
 /** Rekomendasi satu nomor (untuk lampiran saat Pusat SETUJU). */
 export function readRecommendation(dataDir: string, code: BranchCode, id: string): Recommendation | null {
   if (!isRecommendationId(id)) return null;

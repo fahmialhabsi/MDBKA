@@ -1,6 +1,6 @@
 # Struktur Organisasi, SOP dan Alur Kerja KC-1 s/d KC-3
 
-**Dibuat otomatis dari `src/lib/branchOffice.ts` (16 Okt 2026).** Petugas KC-1 AKTIF; KC-2 dan KC-3 DITUNDA. Halaman: `/?halaman=cabang&kode=KC-n`.
+**Dibuat dari `src/lib/branchOffice.ts` (16 Okt 2026, diperbarui setelah KC-2 dan KC-3 Kepala Sekolah dibangun).** Petugas KC-1 dan KC-2 AKTIF; KC-3 Kepala Sekolah AKTIF (Pembagian Data), Penambang Fakta dan Penyaring Kebetulan/Pengawas Try-out masih DITUNDA. Halaman: `/?halaman=cabang&kode=KC-n`.
 
 ## KC-1 Pilih Pijakan
 
@@ -79,12 +79,12 @@ Map PILIHAN_BROKER ke KC-2 dan KC-3
 
 | Jabatan | Pemegang | Tugas | Tanggung jawab | Batas wewenang |
 |---|---|---|---|---|
-| Kepala Cabang | Program bridgeHealth (belum dibangun) | Menyusun Daftar Data broker terpilih dan Formulir R bila data macet atau perlu fungsi baru. | Data yang dipakai cabang lain jelas rentangnya, jumlah candle dan lubangnya. | Boleh mengusulkan EA/skrip baru. Tidak boleh mengubah EA, skrip, atau .env tanpa izin Pusat. Tidak pernah mengirim order dan tidak memutuskan apa pun — hanya mengusulkan. |
+| Kepala Cabang | Program runKc2 (src/lib/kc2Bridge.ts) — AKTIF | Menyusun Daftar Data broker terpilih dan Formulir R bila data macet atau perlu fungsi baru. | Data yang dipakai cabang lain jelas rentangnya, jumlah candle dan lubangnya. | Boleh mengusulkan EA/skrip baru. Tidak boleh mengubah EA, skrip, atau .env tanpa izin Pusat. Tidak pernah mengirim order dan tidak memutuskan apa pun — hanya mengusulkan. |
 | Petugas Harga Live | EA MDBKAMultiLive (di terminal MT5) | Menulis harga bid/ask live semua simbol Market Watch. | Tetap terpasang di terminal; bila berhenti, gerbang data menahan semua sinyal. | Hanya membaca dari MT5. Tidak pernah mengirim order. |
 | Petugas Arsip Candle | Skrip ExportLongH1MDBKA (H4/H1/M15/M5/M1) + AutoExportMDBKAService | Mengekspor candle sejarah dan candle baru ke Common Files. | File lengkap tanpa lubang yang tidak dijelaskan; jam server dicatat. | Hanya membaca dari MT5. |
 | Petugas Spesifikasi | Skrip ExportMarginMDBKA + file SymbolSpecs | Mengekspor spread, margin dan ukuran kontrak tiap simbol. | File diperbarui sebelum KC-1 menghitung biaya. | Hanya membaca dari MT5. |
 | Petugas Swap & History | EA MDBKASwapLogger + pembaca mt5Journal | Mencatat swap per jam dan riwayat transaksi/terminal. | Catatan tidak diubah setelah ditulis. | Hanya membaca dari MT5. |
-| Petugas Katalog Fungsi | Daftar katalog (belum dibangun), membaca map CATATAN_PERBAIKAN dari KC-3 | Mencatat fungsi MT5 yang tersedia dan yang dibutuhkan (mis. kalender berita historis, paket Python MetaTrader5). | Setiap permintaan bahan dari KC-3 dijawab: tersedia / perlu dibuat / tidak mungkin. | Hanya mengusulkan; pembuatan EA/skrip baru menunggu keputusan Pusat. |
+| Petugas Katalog Fungsi | Katalog tetap KATALOG_FUNGSI (src/lib/kc2Bridge.ts) — AKTIF; membaca map CATATAN_PERBAIKAN dari KC-3 bila ada | Mencatat fungsi MT5 yang tersedia dan yang dibutuhkan (mis. kalender berita historis, paket Python MetaTrader5). | Setiap permintaan bahan dari KC-3 dijawab: tersedia / perlu dibuat / tidak mungkin. | Hanya mengusulkan; pembuatan EA/skrip baru menunggu keputusan Pusat. |
 
 ### SOP
 
@@ -120,7 +120,7 @@ Keputusan Pusat
 
 | Jabatan | Pemegang | Tugas | Tanggung jawab | Batas wewenang |
 |---|---|---|---|---|
-| Kepala Sekolah | Program patternBook (belum dibangun) | Membuat Pembagian Data 60/20/20, menjaga segel ujian, menyusun Formulir R "Pola Calon". | Setiap pola yang diajukan sudah lolos latih dan try-out dengan angka yang dibekukan. | Tidak boleh membaca data ujian, mengubah angka setelah dibekukan, atau memasukkan pola ke Buku Aturan. Tidak pernah mengirim order dan tidak memutuskan apa pun — hanya mengusulkan. |
+| Kepala Sekolah | kepalaSekolah() (src/lib/kc3Kepala.ts) — AKTIF | Membuat Pembagian Data 60/20/20, menjaga segel ujian, menyusun Formulir R "Pola Calon". | Setiap pola yang diajukan sudah lolos latih dan try-out dengan angka yang dibekukan. | Tidak boleh membaca data ujian, mengubah angka setelah dibekukan, atau memasukkan pola ke Buku Aturan. Tidak pernah mengirim order dan tidak memutuskan apa pun — hanya mengusulkan. |
 | Penambang Fakta | Skrip penambang (belum dibangun) | Membedah data latih per kondisi dari Buku Bahan Bakar (badai, jam, spread, tick volume, level, golongan): peluang dan rata-rata R. | Semua kondisi yang dicoba dicatat, termasuk yang gagal. | Hanya membaca bagian LATIH. |
 | Penyaring Kebetulan | Aturan statistik tetap (belum dibangun) | Membuang pola yang hanya bagus di sebagian data latih; makin banyak pola dicoba, makin ketat syaratnya. | Alasan setiap pola gugur ditulis. | Boleh menggugurkan pola. Tidak boleh melonggarkan syarat. |
 | Pengawas Try-out | Skrip try-out (belum dibangun) | Menguji pola yang lolos saringan, sekali, di bagian TRY-OUT. | Hasil try-out dicatat apa adanya; gagal = masuk Jalur Perbaikan. | Hanya membaca bagian TRY-OUT; satu pola satu kali. |

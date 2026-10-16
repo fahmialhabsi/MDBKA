@@ -186,28 +186,28 @@ export const BRANCHES: readonly Branch[] = [
     struktur: [
       {
         jabatan: "Kepala Sekolah",
-        pemegang: "Program patternBook (belum dibangun)",
+        pemegang: "kepalaSekolah() (src/lib/kc3Kepala.ts) — AKTIF",
         tugas: "Membuat Pembagian Data 60/20/20, menjaga segel ujian, menyusun Formulir R \"Pola Calon\".",
         tanggungJawab: "Setiap pola yang diajukan sudah lolos latih dan try-out dengan angka yang dibekukan.",
         wewenang: `Tidak boleh membaca data ujian, mengubah angka setelah dibekukan, atau memasukkan pola ke Buku Aturan. ${TIDAK_ORDER}`,
       },
       {
         jabatan: "Penambang Fakta",
-        pemegang: "Skrip penambang (belum dibangun)",
+        pemegang: "tambangBadai()/polaBadai() (src/lib/kc3Penambang.ts) — AKTIF (bahan pertama: Peringatan Badai jadi pemicu arah)",
         tugas: "Membedah data latih per kondisi dari Buku Bahan Bakar (badai, jam, spread, tick volume, level, golongan): peluang dan rata-rata R.",
         tanggungJawab: "Semua kondisi yang dicoba dicatat, termasuk yang gagal.",
         wewenang: "Hanya membaca bagian LATIH.",
       },
       {
         jabatan: "Penyaring Kebetulan",
-        pemegang: "Aturan statistik tetap (belum dibangun)",
+        pemegang: "saringKebetulan() (src/lib/kc3Perbaikan.ts) — AKTIF (ambang naik sejalan jumlah pola dicoba, wajib konsisten tiap bulan LATIH)",
         tugas: "Membuang pola yang hanya bagus di sebagian data latih; makin banyak pola dicoba, makin ketat syaratnya.",
         tanggungJawab: "Alasan setiap pola gugur ditulis.",
         wewenang: "Boleh menggugurkan pola. Tidak boleh melonggarkan syarat.",
       },
       {
         jabatan: "Pengawas Try-out",
-        pemegang: "Skrip try-out (belum dibangun)",
+        pemegang: "pengawasTryout() (src/lib/kc3Perbaikan.ts) — AKTIF",
         tugas: "Menguji pola yang lolos saringan, sekali, di bagian TRY-OUT.",
         tanggungJawab: "Hasil try-out dicatat apa adanya; gagal = masuk Jalur Perbaikan.",
         wewenang: "Hanya membaca bagian TRY-OUT; satu pola satu kali.",
