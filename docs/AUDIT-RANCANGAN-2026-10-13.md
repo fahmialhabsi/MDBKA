@@ -155,3 +155,6 @@ Total langkah di semua rancangan sekarang 53 + 12 = 65.
 | R-2 | Skenario stres di panel risiko gabungan: rugi bila semua SL kena × 1,075 (SOP-09 langkah 3) | **Disetujui Fahmi** (10:47 WIT) — dikerjakan 15 Okt 2026 (test 763) |
 | R-3 | Evaluasi membaca mata uang akun (Exness demo = IDR) | **Disetujui Fahmi** (10:47 WIT) — dikerjakan 15 Okt 2026 (test 762) |
 | K-11 | Akun Exness demo 413925678 (milik saudara Fahmi) = **akun pembelajaran**: tujuannya mencari titik lemah dan titik baik sebagai bahan T-AUDIT, T-BELAJAR-RUGI dan T-KARTU. Datanya boleh dipakai untuk analisa dan evaluasi, tetapi **tidak dihitung sebagai bukti lampu 2/3** (bukan rangkaian setara Live, lot dan SL tidak mengikuti aturan MDBKA) | **Ditetapkan Fahmi** (11:10 WIT) |
+| CU-1 | Peringatan Badai 30 menit (M15: rentang 1 jam > 2× median) di pemindai, hanya peringatan; terbukti di Finex dan Exness (±60% vs 18%) | **Disetujui Fahmi** (16:00 WIT) — dikerjakan 15 Okt 2026 (test 767) |
+| LY-1 | Rancangan scalping Finex Forex / metode Lolosyiob **ditutup**: v1–v6 tidak berhasil di Finex dan Exness; tim/SOP/halaman scalping tidak dibangun | **Disetujui Fahmi** (20:55 WIT) |
+| SC-5 | Entri Buku Aturan "scalping" MIFX v1 → **DICABUT** | **Disetujui Fahmi** (20:55 WIT) — dikerjakan 15 Okt 2026 (test 768) |

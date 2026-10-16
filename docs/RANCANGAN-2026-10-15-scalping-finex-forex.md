@@ -1,6 +1,8 @@
 # Rancangan Metode Scalping Finex Forex — Halaman, Tim, SOP, Workflow (15 Okt 2026)
 
-**Status:** RANCANGAN, menunggu persetujuan Fahmi. Belum ada kode yang berubah.
+**Status:** **DITUTUP (LY-1, disetujui Fahmi 15 Okt 2026 20:55 WIT).** Metode Lolosyiob v1–v6 tidak berhasil di Finex dan Exness, sehingga tim, SOP, workflow dan halaman scalping **tidak dibangun**. Yang dipertahankan: Peringatan Badai 30 menit (CU-1, sudah terpasang). Entri Buku Aturan "scalping" MIFX v1 → **DICABUT** (SC-5). Isi di bawah disimpan sebagai arsip.
+
+~~Status lama: RANCANGAN, menunggu persetujuan Fahmi.~~
 **Pembaruan 15 Okt 2026 (siang):** metode pertama ditetapkan bernama **Lolosyiob** dengan analisa **Kerja Cepat**. Uji putaran 1 tidak berhasil karena n = 7. Tim dan SOP di bawah masih rancangan dan baru ditetapkan setelah uji ulang berhasil.
 **Dasar:** `docs/HANDOFF-SCALPING-FINEX-FOREX.md` (riset biaya & uji S1–S3), `docs/ANALISA-AKUN-PEMBELAJARAN-EXNESS-2026-10-15.md` (AP-4), `docs/SOP-2026-10-13-tim-mdbka.md` (tim, wewenang, format SOP), `docs/TINJAUAN-RISIKO-2026-10-15-toleransi-lampu2.md` (R-1/R-2).
 **Setelah disetujui:** tabel tim dan SOP di bawah dipindah T-BUKU ke dokumen SOP induk (A1, A3, C, D) lewat SOP-12.

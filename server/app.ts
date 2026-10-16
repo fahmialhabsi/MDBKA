@@ -26,6 +26,7 @@ import { createSessionRoutes } from "./routes/sessionRoutes";
 import { createKeputusanRoutes } from "./routes/keputusanRoutes";
 import { createSpecRoutes } from "./routes/specRoutes";
 import { createHistoryRoutes } from "./routes/historyRoutes";
+import { createCabangRoutes } from "./routes/cabangRoutes";
 import type { PositionsLogReader } from "./services/positionsLogReader";
 import type { BrokerCoverage, TickHistoryLogger } from "./services/tickHistory";
 
@@ -117,6 +118,8 @@ export function createApp(
   // S2 (13 Okt 2026): catatan shadow Hasil analisa (fondasi A8); tidak mengubah tampilan.
   app.use("/api/keputusan", createKeputusanRoutes());
   app.use("/api/specs", createSpecRoutes());
+  // C0 (16 Okt 2026): Kantor Cabang — Formulir R + keputusan Pusat (data/cabang/).
+  app.use("/api/cabang", createCabangRoutes());
   // Halaman History H2b: History MT5 per akun + Rupiah kurs tanggal transaksi.
   app.use("/api/history", createHistoryRoutes());
   app.use(

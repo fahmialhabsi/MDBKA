@@ -346,6 +346,8 @@ import { patternsDuring, seriesInsight, seriesLossCause } from "../src/lib/serie
 import { buildPatternCards, contextFromDecision, d1DirectionAt, fingerprint2, fingerprintNotes, sessionBucket, volRegime } from "../src/lib/patternCards";
 import { CAUTION_DAYS, cautionNotes } from "../src/lib/cautionNotes";
 import { STORM_K, stormWarning } from "../src/lib/stormWarning";
+import { BRANCHES, canDecide, parseBranchPage, parseDecisionInput, parseRecommendationInput, recommendationStatus } from "../src/lib/branchOffice";
+import { readBranch, saveDecision, saveRecommendation } from "../server/services/branchStore";
 import { LAMP2_LOSS_TOLERANCE_R, lampRows } from "../src/lib/greenLamps";
 import { readBacktestLamps, saveBacktestLamps } from "../server/services/lampStore";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
@@ -9190,7 +9192,10 @@ test("699. G-2 Buku Aturan awal: 4 strategi versi 1 berstatus UJI_DEMO; pembaca 
   for (const id of STRATEGY_IDS) {
     const entry = latestVersion(book.entries, id);
     assert(entry !== null && entry.nama === STRATEGIES[id].label, `nama ${id} harus sama dengan label strategi`);
-    assert(entry !== null && entry.status === "UJI_DEMO" && entry.versi === "1" && !allowedOnLive(entry), `${id} harus UJI_DEMO versi 1`);
+    // SC-5 (15 Okt 2026, disetujui Fahmi): entri "scalping" DICABUT (gagal uji 12 Okt + Lolosyiob v1–v6);
+    // strategi lain tetap UJI_DEMO. Uji lama diubah HANYA untuk pengecualian ini (aturan: tambah, jangan hapus).
+    const expected = id === "scalping" ? "DICABUT" : "UJI_DEMO";
+    assert(entry !== null && entry.status === expected && entry.versi === "1" && !allowedOnLive(entry), `${id} harus ${expected} versi 1`);
   }
   const notArray = parseRuleBook({});
   assert(notArray.entries.length === 0 && notArray.errors.length === 1, "bukan array harus ditolak");
@@ -10672,6 +10677,67 @@ test("767. CU-1 Peringatan Badai 30 menit: rentang 1 jam M15 > 2× median 96 jen
   const scan = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
   assert(scan.includes("useStorms(stormSymbols)") && scan.includes('w.status === "BADAI"') && scan.includes("scan-storm-"), "pemindai menampilkan baris badai");
   assert(!readSrc("src/lib/stormWarning.ts").includes("decisionEngine"), "tidak menyentuh mesin keputusan");
+});
+
+test("768. SC-5/LY-1: entri Buku Aturan scalping DICABUT dengan alasan + rujukan dokumen; tidak boleh di Live; rancangan scalping DITUTUP", () => {
+  const book = parseRuleBook(JSON.parse(readSrc("config/buku-aturan.json")) as unknown);
+  assert(book.errors.length === 0, book.errors.join("; "));
+  const sc = latestVersion(book.entries, "scalping");
+  assert(sc !== null && sc.status === "DICABUT" && !allowedOnLive(sc), "scalping DICABUT");
+  assert(sc !== null && sc.alasanPerubahan.includes("SC-5") && sc.alasanPerubahan.includes("LOLOSYIOB"), "alasan + rujukan");
+  for (const id of ["skor", "candle", "abc", "topdown"]) assert(latestVersion(book.entries, id)?.status === "UJI_DEMO", `${id} tetap UJI_DEMO`);
+  assert(readSrc("docs/RANCANGAN-2026-10-15-scalping-finex-forex.md").includes("DITUTUP (LY-1"), "rancangan scalping ditutup");
+});
+
+test("769. C0 Kantor Cabang: 5 cabang berstruktur; Formulir R wajib fakta+sumber, batas data, usulan, risiko; halaman /?halaman=cabang", () => {
+  assert(BRANCHES.map((b) => b.code).join(",") === "KC-1,KC-2,KC-3,KC-4,KC-5", "5 cabang urut");
+  assert(BRANCHES.map((b) => b.name).join("|") === "Pilih Pijakan|Jembatan MT5|Sekolah Merangkak|Ruang Ujian|Pembukuan & Pajak", "nama cabang");
+  for (const b of BRANCHES) assert(b.struktur.length >= 4 && b.struktur[0]?.jabatan.startsWith("Kepala") === true, `${b.code} punya kepala + struktur`);
+  assert(BRANCHES.find((b) => b.code === "KC-5")?.hasil.includes("Rp68.506") === true, "KC-5 cicilan Rp68.506");
+  const good = { judul: "Uji", fakta: [{ teks: "komisi Finex $1/lot", sumber: "preset Finex" }], batasData: "…", usulan: "catat", risiko: "tidak ada" };
+  assert(parseRecommendationInput(good).ok, "isian lengkap lolos");
+  const noSource = parseRecommendationInput({ ...good, fakta: [{ teks: "x", sumber: "" }] });
+  assert(!noSource.ok && noSource.error.includes("sumber"), "fakta tanpa sumber ditolak");
+  assert(!parseRecommendationInput({ ...good, fakta: [] }).ok, "tanpa fakta ditolak");
+  assert(!parseRecommendationInput({ ...good, risiko: " " }).ok, "risiko kosong ditolak");
+  assert(!parseDecisionInput({ keputusan: "YA" }).ok && parseDecisionInput({ keputusan: "TUNDA" }).ok, "keputusan hanya SETUJU/TOLAK/TUNDA");
+  assert(parseBranchPage("?halaman=cabang")?.code === null, "halaman Pusat");
+  assert(parseBranchPage("?halaman=cabang&kode=KC-5")?.code === "KC-5", "halaman KC-5");
+  assert(parseBranchPage("?halaman=cabang&kode=KC-9")?.code === null && parseBranchPage("?halaman=golongan") === null, "kode asing -> Pusat; halaman lain bukan cabang");
+});
+
+test("770. C0 keputusan Pusat: TUNDA boleh diikuti; SETUJU/TOLAK final dan tidak bisa ditimpa", () => {
+  const d = (keputusan: "SETUJU" | "TOLAK" | "TUNDA") => ({ keputusan, catatan: "", tanggalUtc: "2026-10-16T03:00:00.000Z" });
+  assert(recommendationStatus([]) === "MENUNGGU" && canDecide([]), "baru = menunggu");
+  assert(recommendationStatus([d("TUNDA")]) === "DITUNDA" && canDecide([d("TUNDA")]), "tunda boleh diputuskan lagi");
+  assert(recommendationStatus([d("TUNDA"), d("SETUJU")]) === "DISETUJUI" && !canDecide([d("TUNDA"), d("SETUJU")]), "setuju final");
+  assert(recommendationStatus([d("TOLAK"), d("SETUJU")]) === "DITOLAK", "keputusan final pertama yang berlaku");
+});
+
+test("771. C0 arsip data/cabang: Formulir R tidak pernah ditimpa; keputusan final ditolak 409; main.tsx memasang halaman cabang", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cabang-"));
+  const now = new Date("2026-10-16T03:05:00.000Z");
+  const input = { judul: "Cicilan", fakta: [{ teks: "Rp68.506 tiap tanggal 14", sumber: "Fahmi 16 Okt 2026" }], batasData: "jadwal resmi Jago belum ada", usulan: "catat", risiko: "-" };
+  const a = saveRecommendation(dir, "KC-5", input, now);
+  const b = saveRecommendation(dir, "KC-5", input, now);
+  assert(a.id === "R-KC-5-20261016T030500Z-001" && b.id === "R-KC-5-20261016T030500Z-002", `nomor urut ${a.id} ${b.id}`);
+  assert(readBranch(dir, "KC-5").length === 2 && readBranch(dir, "KC-1").length === 0, "arsip per cabang");
+  assert(saveDecision(dir, "KC-5", a.id, { keputusan: "TUNDA", catatan: "" }, now).ok, "tunda tersimpan");
+  assert(saveDecision(dir, "KC-5", a.id, { keputusan: "SETUJU", catatan: "ok" }, now).ok, "setuju tersimpan");
+  const again = saveDecision(dir, "KC-5", a.id, { keputusan: "TOLAK", catatan: "" }, now);
+  assert(!again.ok && again.status === 409, "keputusan final tidak bisa ditimpa");
+  const wrong = saveDecision(dir, "KC-1", a.id, { keputusan: "SETUJU", catatan: "" }, now);
+  assert(!wrong.ok && wrong.status === 400, "nomor cabang lain ditolak");
+  const ghost = saveDecision(dir, "KC-5", "R-KC-5-20261016T030500Z-099", { keputusan: "SETUJU", catatan: "" }, now);
+  assert(!ghost.ok && ghost.status === 404, "rekomendasi tak ada");
+  const stored = readBranch(dir, "KC-5").find((x) => x.rec.id === a.id);
+  assert(stored !== undefined && recommendationStatus(stored.decisions) === "DISETUJUI" && stored.decisions.length === 2, "riwayat keputusan utuh");
+  const main = readSrc("src/main.tsx");
+  assert(main.includes("parseBranchPage(window.location.search)") && main.includes("<BranchPage params={branchPage} />"), "halaman cabang dipasang");
+  assert(readSrc("server/app.ts").includes('app.use("/api/cabang", createCabangRoutes())'), "route /api/cabang dipasang");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

@@ -45,10 +45,10 @@
     "timeframe": null,
     "sumberData": [],
     "parameter": {},
-    "status": "UJI_DEMO",
+    "status": "DICABUT",
     "aktifSejak": "2026-10-13",
     "dibuatOleh": "G-2",
-    "alasanPerubahan": "Versi awal dari kode yang sudah ada; belum ada bukti lampu hijau.",
+    "alasanPerubahan": "SC-5 (disetujui Fahmi 15 Okt 2026): DICABUT. Uji 12 Okt TIDAK LAYAK (90 trade rugi di latih dan ujian); scalping Lolosyiob v1–v6 juga tidak berhasil di Finex dan Exness (docs/LOLOSYIOB-KERJA-CEPAT-2026-10-15.md, docs/LOLOSYIOB-EXNESS-2026-10-15.md).",
     "ujiSebelum": null,
     "ujiSesudah": null,
     "versiSebelumnya": null
