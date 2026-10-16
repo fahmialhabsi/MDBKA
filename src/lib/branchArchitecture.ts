@@ -9,8 +9,9 @@
  * KC-4 Kepala Ruang Ujian & Penguji Data Lama AKTIF (lampu 1 — K1-K7 di bagian UJIAN bersegel,
  * src/lib/kc4Kepala.ts) dan Auditor Trade AKTIF (sebab rugi: melawan sejak masuk / keluar karena
  * waktu, src/lib/kc4Auditor.ts) — gerbang terpisah, LULUS hanya bila keduanya lolos. Pengawas
- * Demo/Live Minimum (lampu 2/3) belum dibangun (butuh trade demo/live nyata berjalan, bukan data
- * historis).
+ * Demo AKTIF (17 Okt 2026, lampu 2: rekap trade akun demo + status lampu per golongan memakai
+ * lampRows() yang sudah ada, src/lib/kc4PengawasDemo.ts). Pengawas Live Minimum (lampu 3) belum
+ * dibangun (butuh trade live nyata berjalan).
  * KC-5 Kepala Cabang & Petugas Cicilan AKTIF (pengingat setoran Bank Jago + baca ringkasan Jurnal
  * Pajak yang sudah ada di luar kerangka KC, src/lib/kc5Cicilan.ts) — berjalan sendiri, tidak membaca
  * map cabang lain. Juru Buku & Petugas SPT belum dibangun (menunggu jadwal angsuran resmi dan NPWP
@@ -45,6 +46,7 @@ export type HasilKind =
   | "POLA_CALON" // KC-3: pola lolos latih + try-out, angka dibekukan
   | "CATATAN_PERBAIKAN" // KC-3: diagnosis + jalan Jalur Perbaikan
   | "VONIS_UJIAN" // KC-4: K1-K7 di bagian UJIAN bersegel, vonis LULUS/GAGAL + lampu 1
+  | "RANGKAIAN_DEMO" // KC-4: rekap trade akun DEMO broker terpilih + status lampu 2 per golongan
   | "LAPORAN_BULANAN"; // KC-5: status cicilan Bank Jago + ringkasan hasil trading tahun berjalan
 
 export const HASIL_OWNER: Readonly<Record<HasilKind, BranchCode>> = {
@@ -56,6 +58,7 @@ export const HASIL_OWNER: Readonly<Record<HasilKind, BranchCode>> = {
   POLA_CALON: "KC-3",
   CATATAN_PERBAIKAN: "KC-3",
   VONIS_UJIAN: "KC-4",
+  RANGKAIAN_DEMO: "KC-4",
   LAPORAN_BULANAN: "KC-5",
 };
 
@@ -172,6 +175,8 @@ export const PETUGAS: readonly PetugasSlot[] = [
   { id: "kc3-perbaikan", cabang: "KC-3", jabatan: "Penyaring Kebetulan & Pengawas Try-out", membaca: ["POLA_CALON"], menulis: "CATATAN_PERBAIKAN", status: "AKTIF" },
   { id: "kc4-kepala", cabang: "KC-4", jabatan: "Kepala Ruang Ujian & Penguji Data Lama", membaca: ["POLA_CALON"], menulis: "VONIS_UJIAN", status: "AKTIF" },
   { id: "kc4-auditor", cabang: "KC-4", jabatan: "Auditor Trade", membaca: ["POLA_CALON"], menulis: "VONIS_UJIAN", status: "AKTIF" },
+  // Membaca History MT5 + catatan entry akun demo langsung (bukan map cabang lain) -> membaca: [] (selaras kode nyata).
+  { id: "kc4-pengawas-demo", cabang: "KC-4", jabatan: "Pengawas Demo", membaca: [], menulis: "RANGKAIAN_DEMO", status: "AKTIF" },
   { id: "kc5-kepala", cabang: "KC-5", jabatan: "Kepala Cabang", membaca: [], menulis: "LAPORAN_BULANAN", status: "AKTIF" },
   { id: "kc5-cicilan", cabang: "KC-5", jabatan: "Petugas Cicilan", membaca: [], menulis: "LAPORAN_BULANAN", status: "AKTIF" },
 ];

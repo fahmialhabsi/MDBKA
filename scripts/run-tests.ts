@@ -348,7 +348,7 @@ import { CAUTION_DAYS, cautionNotes } from "../src/lib/cautionNotes";
 import { STORM_K, stormWarning } from "../src/lib/stormWarning";
 import { BRANCHES, canDecide, parseBranchPage, parseDecisionInput, parseRecommendationInput, recommendationStatus } from "../src/lib/branchOffice";
 import { deliverLampiran, readAllHasil, readBranch, readLatestHasil, saveDecision, saveHasil, saveRecommendation } from "../server/services/branchStore";
-import { bagianOf, bolehBaca, branchFlows, contractErrors, jalanBoleh, MAX_PERCOBAAN, PETUGAS, splitPeriods } from "../src/lib/branchArchitecture";
+import { bagianOf, bolehBaca, branchFlows, contractErrors, HASIL_OWNER, jalanBoleh, MAX_PERCOBAAN, PETUGAS, splitPeriods } from "../src/lib/branchArchitecture";
 import { DATA_CUKUP_HARI, demoSamaLive, kepalaCabang, type BrokerBahan } from "../src/lib/kc1Assessment";
 import { fileSpanDays, runKc1 } from "../server/services/kc1Runner";
 import { formulirKc2, KATALOG_FUNGSI, periksaMasalah, scanCandles } from "../src/lib/kc2Bridge";
@@ -391,7 +391,9 @@ import { Kc4Error, runKc4 } from "../server/services/kc4Runner";
 import { AUDITOR_AMBANG_PERSEN, auditTrade } from "../src/lib/kc4Auditor";
 import { formulirSetoran, H_PERINGATAN, jadwalSetoran, judulSetoran, PINJAMAN, statusSetoran } from "../src/lib/kc5Cicilan";
 import { runKc5 } from "../server/services/kc5Runner";
-import { LAMP2_LOSS_TOLERANCE_R, lampRows } from "../src/lib/greenLamps";
+import { LAMP2_LOSS_TOLERANCE_R, lampRows, type LampCard } from "../src/lib/greenLamps";
+import { formulirLampu2, susunRangkaianDemo, type DemoAkunInput } from "../src/lib/kc4PengawasDemo";
+import { simpanPengawasDemo } from "../server/services/kc4DemoRunner";
 import { readBacktestLamps, saveBacktestLamps } from "../server/services/lampStore";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
 import { evidencePace } from "../src/lib/evidencePace";
@@ -15100,6 +15102,70 @@ test("810. profitTarget: profit bersih di TP (rumus biaya = mesin keputusan) + r
   assert(readSrc("src/lib/symbolScanner.ts").includes("profitAtTpUsd") && readSrc("src/lib/symbolScanner.ts").includes('from "./profitTarget"'), "ScanPlan membawa profit di TP");
   assert(readSrc("src/components/analysis/SymbolScannerPanel.tsx").includes('data-testid="scan-profit-filter"') && readSrc("src/components/analysis/SymbolScannerPanel.tsx").includes("Profit di TP"), "pemindai: kolom + filter rentang");
   assert(readSrc("src/components/analysis/SignalDetailPage.tsx").includes('data-testid="detail-profit-tp"'), "halaman detail sinyal menampilkan profit di TP");
+});
+
+const kartuDemo = (n: number, r: number): LampCard[] =>
+  Array.from({ length: n }, () => ({ group: "FOREX", r, complete: true, setaraLive: true, jenisAkun: "demo" as const, dataViolation: false }));
+
+test("811. KC-4 Pengawas Demo murni: rekap trade akun demo (live dikecualikan, trade uji tidak dihitung) + Formulir R hanya bila lampu 2 punya vonis", () => {
+  const tr = (id: string, exit: "TP" | "SL" | "MANUAL", net: number, r: number | null, tutup: string) => ({
+    positionId: id, symbol: "XTIUSD", side: "BUY" as const, volume: 0.01, openTime: "2026.10.16 10:00:00", closeTime: tutup,
+    net, exit, rMultiple: r, group: "LOLOS", durationMin: 60,
+  });
+  const akun: DemoAkunInput[] = [
+    { login: "61823011", label: "Finex demo", mataUang: "USD", trades: [tr("1", "TP", 17.2, 1.5, "2026.10.16 19:34:03"), tr("2", "SL", -8, -1, "2026.10.16 21:00:00"), tr("3", "MANUAL", 1, null, "2026.10.16 22:00:00")] },
+    { login: "91811209", label: "Finex live", mataUang: "USD", trades: [tr("4", "TP", 5, 1, "2026.10.16 23:00:00")] },
+  ];
+  const keputusan = new Map([
+    ["1", { setaraLive: true, jenisAkun: "demo" as const }],
+    ["2", { setaraLive: false, jenisAkun: "demo" as const }],
+    ["4", { setaraLive: true, jenisAkun: "live" as const }],
+  ]);
+  const r = susunRangkaianDemo({ broker: "finex", akun, keputusan, lampCards: kartuDemo(5, 0.5) });
+  const s = r.ringkasan;
+  assert(s.n === 3 && s.tp === 1 && s.sl === 1 && s.manual === 1, `rekap keluar ${JSON.stringify(s)}`);
+  assert(s.setaraLive === 1 && s.tidakSetaraLive === 2 && s.dikecualikan === 1, `setara Live 1, sisanya tidak, live dikecualikan ${JSON.stringify(s)}`);
+  assert(s.rataR === 0.25 && s.nBerR === 2, `rata-rata R hanya dari trade ber-SL awal ${JSON.stringify(s)}`);
+  assert(r.trades[0]?.positionId === "3" && r.akun.length === 1 && r.akun[0]?.login === "61823011", "terbaru dulu; hanya akun demo");
+  assert(r.lampu2.length === 1 && r.lampu2[0]?.state === "BELUM" && r.lampu2[0].text.startsWith("5/20"), `lampu 2 dari lampRows ${JSON.stringify(r.lampu2)}`);
+  assert(formulirLampu2("finex", r.lampu2[0] as NonNullable<(typeof r.lampu2)[number]>, "2026-10-17") === null, "BELUM -> tidak ada Formulir R");
+
+  const hijau = susunRangkaianDemo({ broker: "finex", akun, keputusan, lampCards: kartuDemo(20, 0.5) }).lampu2[0];
+  assert(hijau?.state === "HIJAU", `20 rangkaian rata-rata +0,5R -> HIJAU ${JSON.stringify(hijau)}`);
+  const fh = formulirLampu2("finex", hijau as NonNullable<typeof hijau>, "2026-10-17");
+  assert(fh !== null && fh.judul === "Lampu 2 Forex (finex): HIJAU" && fh.usulan.includes("PERCOBAAN_LIVE") && fh.usulan.includes("persetujuan Pusat") && fh.risiko.includes("Tidak mengirim order"), JSON.stringify(fh));
+  const merah = susunRangkaianDemo({ broker: "finex", akun, keputusan, lampCards: kartuDemo(20, -0.2) }).lampu2[0];
+  const fm = merah === undefined ? null : formulirLampu2("finex", merah, "2026-10-17");
+  assert(merah?.state === "MERAH" && fm !== null && fm.judul.endsWith("MERAH") && fm.usulan.includes("merah"), JSON.stringify(merah));
+});
+
+test("812. KC-4 Pengawas Demo penjalan: simpan map RANGKAIAN_DEMO, Formulir R sekali per bukti (tidak dobel, bukti baru = laporan baru), kontrak cabang + wiring (readSrc)", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const dataDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "kc4-demo-")), "data");
+  const now = new Date("2026-10-17T05:00:00.000Z");
+  const dasar = { dataDir, now, broker: "finex", akun: [] as DemoAkunInput[], keputusan: new Map() };
+
+  const belum = simpanPengawasDemo({ ...dasar, lampCards: kartuDemo(5, 0.5) });
+  assert(belum.formulir.length === 0 && belum.rangkaian.lampu2[0]?.state === "BELUM", "BELUM -> map tersimpan tapi tanpa Formulir R");
+  const map = readLatestHasil(dataDir, "KC-4", "RANGKAIAN_DEMO");
+  assert(map !== null && (map.data as { broker?: unknown }).broker === "finex", "map RANGKAIAN_DEMO tersimpan di KC-4");
+
+  const pertama = simpanPengawasDemo({ ...dasar, lampCards: kartuDemo(20, 0.5) });
+  assert(pertama.formulir.length === 1 && pertama.formulir[0]?.cabang === "KC-4" && pertama.formulir[0].judul === "Lampu 2 Forex (finex): HIJAU", JSON.stringify(pertama.formulir));
+  const ulang = simpanPengawasDemo({ ...dasar, now: new Date("2026-10-17T06:00:00.000Z"), lampCards: kartuDemo(20, 0.5) });
+  assert(ulang.formulir.length === 0, "bukti identik -> tidak dikirim dobel");
+  const barlu = simpanPengawasDemo({ ...dasar, now: new Date("2026-10-17T07:00:00.000Z"), lampCards: kartuDemo(21, 0.5) });
+  assert(barlu.formulir.length === 1 && readBranch(dataDir, "KC-4").length === 2, "bukti baru (21 rangkaian) -> laporan baru");
+
+  assert(contractErrors().length === 0 && HASIL_OWNER.RANGKAIAN_DEMO === "KC-4", "kontrak: RANGKAIAN_DEMO milik KC-4");
+  const slot = PETUGAS.find((p) => p.id === "kc4-pengawas-demo");
+  assert(slot !== undefined && slot.status === "AKTIF" && slot.membaca.length === 0 && slot.menulis === "RANGKAIAN_DEMO", "petugas Pengawas Demo AKTIF, tidak membaca map cabang lain");
+  assert(
+    readSrc("server/routes/cabangRoutes.ts").includes('router.post("/KC-4/demo/jalankan"') && readSrc("src/components/branch/BranchPage.tsx").includes("<Kc4DemoPanel onDone={load} />"),
+    "route + panel Pengawas Demo terpasang",
+  );
 });
 
 testAsync("809. kc3WorkerRunner jalankanTambang: F-1 (beratDiThreadTerpisah) jalan di worker_threads terpisah dan hasilnya IDENTIK dengan panggilan langsung; bahan biasa (Badai) tidak lewat worker", async () => {

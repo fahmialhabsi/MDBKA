@@ -261,7 +261,13 @@ export const BRANCHES: readonly Branch[] = [
         tanggungJawab: "Hanya membuka bagian UJIAN sekali per pola; tidak pernah mengintip sebelum vonis dikunci.",
         wewenang: "Hanya menilai data historis. Tidak boleh mengubah K1–K7 atau mengirim order.",
       },
-      { jabatan: "Pengawas Demo", pemegang: "Rangkaian demo Finex (belum dibangun)", tugas: "Lampu 2", tanggungJawab: "Belum dirancang rinci — butuh trade demo nyata berjalan dulu.", wewenang: "Belum dirancang rinci" },
+      {
+        jabatan: "Pengawas Demo",
+        pemegang: "susunRangkaianDemo()/formulirLampu2() (src/lib/kc4PengawasDemo.ts) — AKTIF; status lampu dari lampRows() (greenLamps.ts), bukan hitungan baru",
+        tugas: "Lampu 2: merekap trade akun DEMO broker terpilih (History MT5 + catatan entry yang sudah dicatat tim lama) dan menyerahkannya ke KC-4 sebagai map RANGKAIAN_DEMO; mengirim Formulir R ke Pusat bila lampu 2 suatu golongan sudah HIJAU/MERAH.",
+        tanggungJawab: "Hanya trade setara Live yang dihitung lampu 2; trade uji (MDBKA-UJI) dan akun yang bukan demo terbukti tetap dicatat/dilaporkan tapi tidak dihitung. Bukti yang sama tidak dilaporkan dua kali.",
+        wewenang: "Hanya membaca hasil dan mencatat. Tidak boleh mengirim order, mengubah Buku Aturan, atau menaikkan status.",
+      },
       { jabatan: "Pengawas Live Minimum", pemegang: "Rangkaian live lot minimum (belum dibangun)", tugas: "Lampu 3, setelah lampu 1 & 2 hijau", tanggungJawab: "Belum dirancang rinci — butuh trade live nyata berjalan dulu.", wewenang: "Belum dirancang rinci" },
       {
         jabatan: "Auditor Trade",

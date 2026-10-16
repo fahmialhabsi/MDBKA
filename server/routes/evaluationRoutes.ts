@@ -191,14 +191,10 @@ export function entryDecisions(dataDir: string, broker: BrokerId): Map<string, E
   return out;
 }
 
-/** K5 (Tahap 17): kartu pola per akun dari History + candle H1/D1 Common\Files. */
-export function collectAccountCards(
-  commonDir: string,
-  tradesDir: string,
-  labels: Record<string, string>,
-): AccountCards[] {
+/** Pembaca candle H1/D1 Common\Files dengan cache per panggilan (dipakai kartu pola). */
+export function makeCandlesOf(commonDir: string): (tf: CandleTimeframe) => (symbol: string) => readonly Candle[] | null {
   const cache = new Map<string, readonly Candle[] | null>();
-  const candlesOf = (tf: CandleTimeframe) => (symbol: string): readonly Candle[] | null => {
+  return (tf) => (symbol) => {
     const key = `${tf}|${symbol}`;
     if (!cache.has(key)) {
       const found = readCandleCsvTf(commonDir, symbol, tf);
@@ -206,33 +202,49 @@ export function collectAccountCards(
     }
     return cache.get(key) ?? null;
   };
-  return collectAccountEvaluations(commonDir, tradesDir, labels).map((a) => {
-    const dec = a.broker === null ? new Map<string, EntryDecision>() : entryDecisions(dirname(tradesDir), a.broker);
-    const ctx = new Map([...dec].map(([k, v]) => [k, v.context]));
-    const views = buildPatternCards(a.evaluation.trades, a.excursions, candlesOf("H1"), candlesOf("D1"), (id) => ctx.get(id) ?? null);
-    const notes = fingerprintNotes(views);
-    return {
-      login: a.login,
-      label: a.label,
-      broker: a.broker,
-      total: views.length,
-      cards: views.slice(0, CARDS_PER_ACCOUNT),
-      notes,
-      notes2: fingerprintNotes(views, 2),
-      cautions: cautionNotes(views, notes, Date.now()),
-      lampCards: views.map((v) => {
-        const d = v.card.positions[0] === undefined ? undefined : dec.get(v.card.positions[0]);
-        return {
-          group: riskGroupOf(v.card.symbol).id,
-          r: v.card.r,
-          complete: v.card.complete,
-          setaraLive: d?.setaraLive ?? null,
-          jenisAkun: d?.jenisAkun ?? null,
-          dataViolation: d?.dataViolation ?? false,
-        };
-      }),
-    };
-  });
+}
+
+/** Kartu pola + bahan lampu untuk SATU akun yang evaluasinya sudah dihitung (dipakai ulang Pengawas Demo KC-4). */
+export function cardsForAccount(
+  a: AccountEvaluation,
+  dataDir: string,
+  candlesOf: (tf: CandleTimeframe) => (symbol: string) => readonly Candle[] | null,
+): AccountCards {
+  const dec = a.broker === null ? new Map<string, EntryDecision>() : entryDecisions(dataDir, a.broker);
+  const ctx = new Map([...dec].map(([k, v]) => [k, v.context]));
+  const views = buildPatternCards(a.evaluation.trades, a.excursions, candlesOf("H1"), candlesOf("D1"), (id) => ctx.get(id) ?? null);
+  const notes = fingerprintNotes(views);
+  return {
+    login: a.login,
+    label: a.label,
+    broker: a.broker,
+    total: views.length,
+    cards: views.slice(0, CARDS_PER_ACCOUNT),
+    notes,
+    notes2: fingerprintNotes(views, 2),
+    cautions: cautionNotes(views, notes, Date.now()),
+    lampCards: views.map((v) => {
+      const d = v.card.positions[0] === undefined ? undefined : dec.get(v.card.positions[0]);
+      return {
+        group: riskGroupOf(v.card.symbol).id,
+        r: v.card.r,
+        complete: v.card.complete,
+        setaraLive: d?.setaraLive ?? null,
+        jenisAkun: d?.jenisAkun ?? null,
+        dataViolation: d?.dataViolation ?? false,
+      };
+    }),
+  };
+}
+
+/** K5 (Tahap 17): kartu pola per akun dari History + candle H1/D1 Common\Files. */
+export function collectAccountCards(
+  commonDir: string,
+  tradesDir: string,
+  labels: Record<string, string>,
+): AccountCards[] {
+  const candlesOf = makeCandlesOf(commonDir);
+  return collectAccountEvaluations(commonDir, tradesDir, labels).map((a) => cardsForAccount(a, dirname(tradesDir), candlesOf));
 }
 
 export function createEvaluationRoutes(
