@@ -67,17 +67,27 @@ const rp = (v: number): string => `Rp${Math.round(v).toLocaleString("id-ID")}`;
 const dinilai = (g: string): g is GolonganDinilai => (GOLONGAN_DINILAI as readonly string[]).includes(g);
 
 // ---------- Petugas Prinsip Merangkak ----------
+/**
+ * Syarat jabatan (branchOffice.ts) juga minta kelipatan lot (volumeStep), bukan cuma lot minimum —
+ * dibaca & dilaporkan di sini per golongan. BELUM dijadikan syarat gugur: ambang kelipatan lot yang
+ * menghambat "merangkak" belum ditetapkan Fahmi (angka tidak ditebak), jadi baru informasional.
+ */
 export function petugasMerangkak(b: BrokerBahan): NilaiPrinsip {
   if (b.specsDemo === null) return { nilai: null, rincian: ["Spesifikasi akun demo tidak ada — lot minimum tidak bisa dibaca"], gugur: ["tidak ada spesifikasi akun demo"] };
   const perGol = new Map<string, number>();
+  const stepPerGol = new Map<string, number>();
   for (const s of b.specsDemo.specs) {
     const g = b.golonganOf(s.symbol);
     if (!dinilai(g) || !(s.volumeMin > 0)) continue;
     perGol.set(g, Math.min(perGol.get(g) ?? Infinity, s.volumeMin));
+    if (s.volumeStep > 0) stepPerGol.set(g, Math.min(stepPerGol.get(g) ?? Infinity, s.volumeStep));
   }
   const ada = [...perGol.entries()];
   const kecil = ada.filter(([, v]) => v <= LOT_MERANGKAK + 1e-9);
-  const rincian = ada.map(([g, v]) => `${g}: lot minimum ${v}`);
+  const rincian = ada.map(([g, v]) => {
+    const step = stepPerGol.get(g);
+    return `${g}: lot minimum ${v}, kelipatan lot ${step === undefined ? "…" : step}`;
+  });
   const gugur = kecil.length === 0 ? [`tidak ada golongan dengan lot minimum ${LOT_MERANGKAK}`] : [];
   const setoran = b.setoranMinRp.nilai;
   rincian.push(setoran === null ? `Setoran minimum: … (${b.setoranMinRp.sumber})` : `Setoran minimum ${rp(setoran)} (${b.setoranMinRp.sumber})`);

@@ -1,5 +1,6 @@
 import { recommendationStatus, type Recommendation } from "../../src/lib/branchOffice";
 import type { PembagianData, PolaCalon } from "../../src/lib/branchArchitecture";
+import { DATA_CUKUP_HARI } from "../../src/lib/kc1Assessment";
 import { formulirVonis, ujiK1K7, type HasilK1K7, type VonisUjian } from "../../src/lib/kc4Kepala";
 import { auditTrade, type HasilAuditor } from "../../src/lib/kc4Auditor";
 import { tambangBadai } from "../../src/lib/kc3Penambang";
@@ -9,8 +10,10 @@ import { readAllHasil, readBranch, readLatestHasil, saveHasil, saveRecommendatio
 /**
  * KC-4 (16 Okt 2026) — penjalan Kepala Ruang Ujian & Penguji Data Lama + Auditor Trade (lampu 1 saja;
  * lampu 2/3 belum dibangun — butuh trade demo/live nyata berjalan, bukan data historis).
- * Syarat jalan: (1) Pola Calon KC-3 sudah ada DAN Formulir R "lolos try-out"-nya sudah DISETUJUI Pusat;
- * (2) pola ini belum pernah diuji KC-4 sebelumnya (satu pola, satu kali uji — gagal = gugur).
+ * Syarat jalan: (1) rentang data bersama Pembagian Data KC-3 >= DATA_CUKUP_HARI (365 hari, HARD-GATE
+ * sejak audit A-2 16 Okt 2026 atas keputusan Fahmi — sebelumnya cuma advisory); (2) Pola Calon KC-3
+ * sudah ada DAN Formulir R "lolos try-out"-nya sudah DISETUJUI Pusat; (3) pola ini belum pernah diuji
+ * KC-4 sebelumnya (satu pola, satu kali uji — gagal = gugur).
  * Uji di bagian UJIAN bersegel (hanya KC-4 yang boleh membaca), memakai mesin tambang yang SAMA dengan
  * Penambang Fakta KC-3 (tambangBadai, kc3Penambang.ts): kriteria K1-K7 (kc4Kepala.ts) DAN Auditor
  * Trade (kc4Auditor.ts) — LULUS hanya bila KEDUANYA lolos (gerbang terpisah, bukan digabung jadi satu).
@@ -41,8 +44,16 @@ export function runKc4(opts: { readonly dataDir: string; readonly commonDir: str
   const simbolBroker = new Set((daftarData.files as readonly { simbol?: unknown }[]).map((f) => f.simbol).filter((s): s is string => typeof s === "string"));
 
   const pembagian = readLatestHasil(opts.dataDir, "KC-3", "PEMBAGIAN_DATA");
-  const split = pembagian?.data as PembagianData | null | undefined;
+  const split = pembagian?.data as (PembagianData & { readonly hariBersama?: number | null }) | null | undefined;
   if (split === null || split === undefined) throw new Kc4Error("Belum ada Pembagian Data KC-3 (jalankan KC-3 dulu).");
+  // Audit A-2 (16 Okt 2026): ambang DATA_CUKUP_HARI sebelumnya hanya advisory (Formulir R info) —
+  // Pusat bisa SETUJU Pola Calon meski rentang data pendek, lalu KC-4 tetap menguji dengan sampel UJIAN
+  // yang terlalu kecil untuk K1-K7 dipercaya. Atas keputusan Fahmi, sekarang hard-gate: KC-4 menolak
+  // jalan (bukan cuma mengingatkan) selama rentang bersama < DATA_CUKUP_HARI (365 hari).
+  if (split.hariBersama === undefined || split.hariBersama === null || split.hariBersama < DATA_CUKUP_HARI) {
+    const berapa = split.hariBersama === undefined || split.hariBersama === null ? "tidak diketahui" : `hanya ${Math.round(split.hariBersama)} hari`;
+    throw new Kc4Error(`Rentang data bersama ${berapa} (kurang dari ${DATA_CUKUP_HARI}); KC-4 tidak boleh menguji sampai KC-2 punya data H1 lebih panjang dan KC-3 dijalankan ulang.`);
+  }
 
   const polaHasil = readLatestHasil(opts.dataDir, "KC-3", "POLA_CALON");
   const pola = polaHasil?.data as PolaCalon | null | undefined;

@@ -151,16 +151,24 @@ export function jalanBoleh(percobaanKe: number, jalan: JalanPerbaikan): boolean 
 
 // ---------- Petugas KC-1..KC-4 ----------
 
+/**
+ * `membaca` di bawah HARUS selaras kode nyata penjalan (kc1Runner.ts/kc2Runner.ts/kc3Runner.ts) —
+ * audit A-2 (16 Okt 2026) menemukan 3 klaim `membaca` yang tak pernah benar-benar dipakai kode dan
+ * meluruskannya jadi [] (kc1-terbukti sempat baca DAFTAR_DATA langsung dari file MT5, bukan dari map
+ * KC-2; kc2-katalog & kc3-penambang belum pernah membaca CATATAN_PERBAIKAN/KATALOG_FUNGSI karena baru
+ * satu bahan yang ditambang). contractErrors() hanya menguji sisi `menulis`, bukan `membaca` — jadi
+ * kesenjangan ini tidak tertangkap test otomatis; periksa manual tiap kali menambah petugas baru.
+ */
 export const PETUGAS: readonly PetugasSlot[] = [
   { id: "kc1-kepala", cabang: "KC-1", jabatan: "Kepala Cabang (Penilai Akhir)", membaca: ["KARTU_BROKER"], menulis: "PILIHAN_BROKER", status: "AKTIF" },
   { id: "kc1-merangkak", cabang: "KC-1", jabatan: "Petugas Prinsip Merangkak", membaca: [], menulis: "KARTU_BROKER", status: "AKTIF" },
   { id: "kc1-daribawah", cabang: "KC-1", jabatan: "Petugas Prinsip Dari Bawah", membaca: [], menulis: "KARTU_BROKER", status: "AKTIF" },
   { id: "kc1-keatas", cabang: "KC-1", jabatan: "Petugas Prinsip Ke Atas", membaca: [], menulis: "KARTU_BROKER", status: "AKTIF" },
-  { id: "kc1-terbukti", cabang: "KC-1", jabatan: "Petugas Prinsip Terbukti", membaca: ["DAFTAR_DATA"], menulis: "KARTU_BROKER", status: "AKTIF" },
+  { id: "kc1-terbukti", cabang: "KC-1", jabatan: "Petugas Prinsip Terbukti", membaca: [], menulis: "KARTU_BROKER", status: "AKTIF" },
   { id: "kc2-kepala", cabang: "KC-2", jabatan: "Kepala Cabang", membaca: ["PILIHAN_BROKER"], menulis: "DAFTAR_DATA", status: "AKTIF" },
-  { id: "kc2-katalog", cabang: "KC-2", jabatan: "Petugas Katalog Fungsi", membaca: ["CATATAN_PERBAIKAN"], menulis: "KATALOG_FUNGSI", status: "AKTIF" },
+  { id: "kc2-katalog", cabang: "KC-2", jabatan: "Petugas Katalog Fungsi", membaca: [], menulis: "KATALOG_FUNGSI", status: "AKTIF" },
   { id: "kc3-kepala", cabang: "KC-3", jabatan: "Kepala Sekolah", membaca: ["DAFTAR_DATA", "PILIHAN_BROKER"], menulis: "PEMBAGIAN_DATA", status: "AKTIF" },
-  { id: "kc3-penambang", cabang: "KC-3", jabatan: "Penambang Fakta", membaca: ["PEMBAGIAN_DATA", "KATALOG_FUNGSI"], menulis: "POLA_CALON", status: "AKTIF" },
+  { id: "kc3-penambang", cabang: "KC-3", jabatan: "Penambang Fakta", membaca: ["PEMBAGIAN_DATA"], menulis: "POLA_CALON", status: "AKTIF" },
   { id: "kc3-perbaikan", cabang: "KC-3", jabatan: "Penyaring Kebetulan & Pengawas Try-out", membaca: ["POLA_CALON"], menulis: "CATATAN_PERBAIKAN", status: "AKTIF" },
   { id: "kc4-kepala", cabang: "KC-4", jabatan: "Kepala Ruang Ujian & Penguji Data Lama", membaca: ["POLA_CALON"], menulis: "VONIS_UJIAN", status: "AKTIF" },
   { id: "kc4-auditor", cabang: "KC-4", jabatan: "Auditor Trade", membaca: ["POLA_CALON"], menulis: "VONIS_UJIAN", status: "AKTIF" },

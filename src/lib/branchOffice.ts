@@ -53,7 +53,7 @@ export const BRANCHES: readonly Branch[] = [
       },
       {
         jabatan: "Petugas Prinsip Merangkak",
-        pemegang: "petugasMerangkak membaca MDBKA_Specs_<login demo>.csv — AKTIF; setoran minimum dari config/kc1-fakta-broker.json (dicatat Konsultan)",
+        pemegang: "petugasMerangkak membaca MDBKA_Specs_<login demo>.csv (lot minimum + kelipatan lot) — AKTIF; setoran minimum dari config/kc1-fakta-broker.json (dicatat Konsultan); kelipatan lot baru dilaporkan, belum jadi syarat gugur (ambang belum ditetapkan Fahmi)",
         syarat: "Bisa membaca lot minimum dan kelipatan lot tiap simbol dari MT5, serta setoran minimum akun dari sumber resmi broker.",
         calon: "SEBAGIAN",
         tugas: "Memeriksa apakah broker bisa dimulai sekecil mungkin: lot minimum 0,01 dan setoran awal kecil.",
@@ -80,7 +80,7 @@ export const BRANCHES: readonly Branch[] = [
       },
       {
         jabatan: "Petugas Prinsip Terbukti",
-        pemegang: "petugasTerbukti: banding spesifikasi demo vs live + panjang file *_LONG.csv (sementara dibaca langsung, sampai KC-2 aktif) — AKTIF",
+        pemegang: "petugasTerbukti: banding spesifikasi demo vs live + panjang file *_LONG.csv (dibaca langsung dari Common Files di kc1Runner.ts, BUKAN dari map DAFTAR_DATA KC-2 meski KC-2 kini AKTIF — audit A-2 16 Okt 2026; belum ditinjau ulang) — AKTIF",
         syarat: "Bisa membandingkan spesifikasi akun demo dan live, dan menilai apakah sejarah data cukup untuk latih 60% · try-out 20% · ujian 20%.",
         calon: "SEBAGIAN",
         tugas: "Memeriksa bahwa hasil latihan di akun demo berlaku juga di live: akun demo ada, spesifikasi demo = live, data sejarah cukup.",
@@ -154,7 +154,7 @@ export const BRANCHES: readonly Branch[] = [
       },
       {
         jabatan: "Petugas Katalog Fungsi",
-        pemegang: "Katalog tetap KATALOG_FUNGSI (src/lib/kc2Bridge.ts) — AKTIF; membaca map CATATAN_PERBAIKAN dari KC-3 bila ada",
+        pemegang: "Katalog tetap KATALOG_FUNGSI (src/lib/kc2Bridge.ts) — AKTIF; BELUM membaca map CATATAN_PERBAIKAN KC-3 (audit A-2 16 Okt 2026: katalog masih statis, belum bereaksi ke permintaan bahan nyata — baru satu bahan yang pernah ditambang KC-3)",
         tugas: "Mencatat fungsi MT5 yang tersedia dan yang dibutuhkan (mis. kalender berita historis, paket Python MetaTrader5).",
         tanggungJawab: "Setiap permintaan bahan dari KC-3 dijawab: tersedia / perlu dibuat / tidak mungkin.",
         wewenang: "Hanya mengusulkan; pembuatan EA/skrip baru menunggu keputusan Pusat.",
@@ -272,6 +272,7 @@ export const BRANCHES: readonly Branch[] = [
       },
     ],
     sop: [
+      "Tolak jalan bila rentang data bersama Pembagian Data KC-3 < 365 hari (hard-gate, audit A-2 16 Okt 2026) — data UJIAN terlalu pendek untuk K1-K7 dipercaya.",
       "Terima map POLA_CALON (KC-3) yang Formulir R \"lolos try-out\"-nya SUDAH DISETUJUI Pusat.",
       "Tolak jalan bila pola ini sudah pernah diuji sebelumnya (satu pola, satu kali uji).",
       "Buka bagian UJIAN bersegel (hanya KC-4 yang boleh), pindai dengan mesin tambang yang sama dengan KC-3.",

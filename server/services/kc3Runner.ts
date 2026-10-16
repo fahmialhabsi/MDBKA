@@ -2,13 +2,13 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseCsvCandles } from "../../src/lib/csvCandleParser";
 import type { Candle } from "../../src/calculations/swingDetector";
-import type { Recommendation, RecommendationInput } from "../../src/lib/branchOffice";
+import { recommendationStatus, type Recommendation, type RecommendationInput } from "../../src/lib/branchOffice";
 import type { CatatanPerbaikan, PolaCalon } from "../../src/lib/branchArchitecture";
 import { formulirKc3Pembagian, kepalaSekolah, type FileRentang, type HasilKepalaSekolah } from "../../src/lib/kc3Kepala";
 import { BADAI_MIN_TRADE, polaBadai, tambangBadai, type HasilPenambangBadai } from "../../src/lib/kc3Penambang";
-import { bulanRentang, catatanPerbaikan, formulirPolaCalon, pengawasTryout, saringKebetulan, type HasilSaring, type HasilTryout } from "../../src/lib/kc3Perbaikan";
+import { bulanRentang, catatanPerbaikan, formulirPolaCalon, pengawasTryout, saringKebetulan, type HasilSaring, type HasilTryout, type TahapPerbaikan } from "../../src/lib/kc3Perbaikan";
 import { candleTimeMs } from "../../src/lib/symbolScanner";
-import { readAllHasil, readLatestHasil, saveHasil, saveRecommendation } from "./branchStore";
+import { readAllHasil, readBranch, readLatestHasil, saveHasil, saveRecommendation } from "./branchStore";
 
 /**
  * KC-3 (16 Okt 2026) — penjalan Kepala Sekolah + Penambang Fakta + Penyaring Kebetulan/Pengawas Try-out.
@@ -91,6 +91,45 @@ function hitungPercobaanKe(dataDir: string, polaId: string): number {
   return n + 1;
 }
 
+/**
+ * CatatanPerbaikan TERAKHIR untuk satu polaId (lama ke baru dari readAllHasil, ambil yang terakhir);
+ * null = belum pernah dicatat. Dipakai untuk mendeteksi run ulang tanpa perubahan (lihat catatanBaruAtauLama()).
+ */
+function catatanTerakhir(dataDir: string, polaId: string): CatatanPerbaikan | null {
+  const semua = readAllHasil(dataDir, "KC-3", "CATATAN_PERBAIKAN")
+    .map((h) => h.data as CatatanPerbaikan | null)
+    .filter((c): c is CatatanPerbaikan => c !== null && c.polaId === polaId);
+  return semua.length === 0 ? null : (semua[semua.length - 1] as CatatanPerbaikan);
+}
+
+/**
+ * Audit A-2 (16 Okt 2026): sebelum fix ini, SETIAP kali KC-3 dijalankan ulang pada pola yang masih
+ * gagal dengan data yang SAMA, sistem mencatat satu "percobaan" Jalur Perbaikan baru — padahal belum
+ * ada perbaikan logika apa pun yang benar-benar dicoba. Klik tombol "Jalankan" berkali-kali saat
+ * debugging bisa menghabiskan MAX_PERCOBAAN (7) dan memaksa E_ARSIP dini. Fix: hanya catat percobaan
+ * baru bila diagnosis (alasan) BERBEDA dari CatatanPerbaikan terakhir untuk pola ini; selain itu, pakai
+ * ulang catatan lama (tidak menulis map baru, tidak menaikkan hitungan percobaan).
+ */
+function catatanBaruAtauLama(dataDir: string, polaId: string, tahap: TahapPerbaikan, alasan: string, now: Date): CatatanPerbaikan {
+  const sebelumnya = catatanTerakhir(dataDir, polaId);
+  if (sebelumnya !== null && sebelumnya.diagnosis === alasan) return sebelumnya;
+  const percobaanKe = hitungPercobaanKe(dataDir, polaId);
+  const catatan = catatanPerbaikan(polaId, percobaanKe, tahap, alasan);
+  saveHasil(dataDir, "KC-3", "CATATAN_PERBAIKAN", catatan, now);
+  return catatan;
+}
+
+/**
+ * Formulir R yang judulnya identik dan BELUM final diputuskan Pusat (MENUNGGU/DITUNDA) — hindari kirim
+ * dobel saat tombol "Jalankan" diklik berulang dengan data yang belum berubah (audit A-2, selaras pola
+ * idempoten KC-5). Bila Pusat sudah SETUJU/TOLAK Formulir R lama, masalah yang masih berlanjut boleh
+ * mendapat Formulir R baru (keputusan lama tidak ditimpa, hanya tidak menghalangi laporan berikutnya).
+ */
+function formulirPendingSerupa(dataDir: string, judul: string): Recommendation | null {
+  const ada = readBranch(dataDir, "KC-3").find((x) => x.rec.judul === judul && (recommendationStatus(x.decisions) === "MENUNGGU" || recommendationStatus(x.decisions) === "DITUNDA"));
+  return ada?.rec ?? null;
+}
+
 function formulirTambang(broker: string, teks: string, tanggal: string): RecommendationInput {
   return {
     judul: `Penambang Fakta KC-3 (${broker}): BADAI belum bisa ditambang`,
@@ -120,7 +159,7 @@ export function runKc3(opts: { readonly dataDir: string; readonly commonDir: str
     saveHasil(opts.dataDir, "KC-3", "PEMBAGIAN_DATA", { ...hasil.split, hariBersama: hasil.hariBersama }, opts.now);
   }
   const form = formulirKc3Pembagian(broker, hasil, tanggal);
-  const rec = form === null ? null : saveRecommendation(opts.dataDir, "KC-3", form, opts.now);
+  const rec = form === null ? null : (formulirPendingSerupa(opts.dataDir, form.judul) ?? saveRecommendation(opts.dataDir, "KC-3", form, opts.now));
 
   let tambang: HasilPenambangBadai | null = null;
   let tambangMasalah: string | null = null;
@@ -153,21 +192,19 @@ export function runKc3(opts: { readonly dataDir: string; readonly commonDir: str
           tryout = pengawasTryout(tambangBadai(tryoutBySimbol).trades);
           if (tryout.lolos) {
             saveHasil(opts.dataDir, "KC-3", "POLA_CALON", { ...pola, tryout: { n: tryout.n, rataR: tryout.rataR } }, opts.now);
-            polaRec = saveRecommendation(opts.dataDir, "KC-3", formulirPolaCalon(pola, tryout, broker, tanggal), opts.now);
+            const formPola = formulirPolaCalon(pola, tryout, broker, tanggal);
+            polaRec = formulirPendingSerupa(opts.dataDir, formPola.judul) ?? saveRecommendation(opts.dataDir, "KC-3", formPola, opts.now);
           } else {
-            const percobaanKe = hitungPercobaanKe(opts.dataDir, pola.id);
-            perbaikan = catatanPerbaikan(pola.id, percobaanKe, "TRYOUT_GAGAL", tryout.alasan);
-            saveHasil(opts.dataDir, "KC-3", "CATATAN_PERBAIKAN", perbaikan, opts.now);
+            perbaikan = catatanBaruAtauLama(opts.dataDir, pola.id, "TRYOUT_GAGAL", tryout.alasan, opts.now);
           }
         } else if (saring.status === "GAGAL" && saring.sebab !== undefined) {
-          const percobaanKe = hitungPercobaanKe(opts.dataDir, pola.id);
-          perbaikan = catatanPerbaikan(pola.id, percobaanKe, saring.sebab, saring.alasan);
-          saveHasil(opts.dataDir, "KC-3", "CATATAN_PERBAIKAN", perbaikan, opts.now);
+          perbaikan = catatanBaruAtauLama(opts.dataDir, pola.id, saring.sebab, saring.alasan, opts.now);
         }
       }
     }
     if (tambangMasalah !== null) {
-      tambangRec = saveRecommendation(opts.dataDir, "KC-3", formulirTambang(broker, tambangMasalah, tanggal), opts.now);
+      const formTambang = formulirTambang(broker, tambangMasalah, tanggal);
+      tambangRec = formulirPendingSerupa(opts.dataDir, formTambang.judul) ?? saveRecommendation(opts.dataDir, "KC-3", formTambang, opts.now);
     }
   }
 

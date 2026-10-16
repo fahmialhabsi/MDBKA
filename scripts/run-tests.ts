@@ -10768,11 +10768,14 @@ test("772. A-1 arsitektur KC-1..KC-3: kontrak map bersih, alur dihitung dari kon
   // saja) -> arsitektur kini KC-1..KC-4.
   // Diubah lagi 16 Okt 2026 19:00: KC-4 Auditor Trade + KC-5 Kepala Cabang & Petugas Cicilan dibangun
   // (AKTIF) -> arsitektur kini KC-1..KC-5.
+  // Diubah lagi 16 Okt 2026 (audit A-2): 3 klaim `membaca` yang tak pernah dipakai kode (kc1-terbukti
+  // <- DAFTAR_DATA, kc2-katalog <- CATATAN_PERBAIKAN, kc3-penambang <- KATALOG_FUNGSI) diluruskan jadi
+  // [] agar arsitektur = kode nyata (lihat komentar di atas PETUGAS, branchArchitecture.ts).
   assert(PETUGAS.every((p) => p.status === "AKTIF"), "semua petugas KC-1..KC-5 AKTIF");
   assert(PETUGAS.every((p) => ["KC-1", "KC-2", "KC-3", "KC-4", "KC-5"].includes(p.cabang)), "hanya KC-1..KC-5");
   const flows = branchFlows().map((f) => `${f.dari}>${f.ke}:${f.hasil}`).sort().join(" ");
   assert(
-    flows === "KC-1>KC-2:PILIHAN_BROKER KC-1>KC-3:PILIHAN_BROKER KC-2>KC-1:DAFTAR_DATA KC-2>KC-3:DAFTAR_DATA KC-2>KC-3:KATALOG_FUNGSI KC-3>KC-2:CATATAN_PERBAIKAN KC-3>KC-4:POLA_CALON",
+    flows === "KC-1>KC-2:PILIHAN_BROKER KC-1>KC-3:PILIHAN_BROKER KC-2>KC-3:DAFTAR_DATA KC-3>KC-4:POLA_CALON",
     flows,
   );
   const bad = contractErrors([{ id: "x", cabang: "KC-3", jabatan: "x", membaca: [], menulis: "PILIHAN_BROKER", status: "DITUNDA" }]);
@@ -11301,12 +11304,25 @@ test("788. KC-4 penjalan penuh: wajib Pola Calon disetujui Pusat + satu pola sek
 
   const split = kepalaSekolah("finex", files).split;
   if (split === null) throw new Error("konstruksi tes salah: split null");
+  // hariBersama 40 di sini sengaja TERPISAH dari rentang candle 40-hari di bawah (demi test cepat) —
+  // nilai ini yang dicek hard-gate DATA_CUKUP_HARI (audit A-2), bukan rentang candle fixture.
   saveHasil(dataDir, "KC-3", "PEMBAGIAN_DATA", { ...split, hariBersama: 40 }, now);
 
   const pola = { id: "KC3-BADAI-ARAH-1", kondisi: "uji", bahan: ["Peringatan Badai"], angkaBeku: { stormK: 2 }, latih: { n: 39, rataR: 0.3 }, tryout: { n: 10, rataR: 0.4 } };
   saveHasil(dataDir, "KC-3", "POLA_CALON", pola, now);
   const judulLolos = `Pola Calon KC-3 lolos try-out: ${pola.id}`;
   const recPola = saveRecommendation(dataDir, "KC-3", { judul: judulLolos, fakta: [], batasData: "", usulan: "", risiko: "" }, now);
+
+  let ditolakRentang = false;
+  try {
+    runKc4({ dataDir, commonDir, now });
+  } catch (e) {
+    ditolakRentang = e instanceof Kc4Error && e.message.includes("Rentang data bersama");
+  }
+  assert(ditolakRentang, "rentang data bersama < 365 hari -> KC-4 ditolak hard-gate (audit A-2), walau Pola Calon sudah ada");
+
+  // Rentang data cukup -> gate lewat; sisa test memverifikasi gerbang-gerbang berikutnya (persetujuan, sekali uji).
+  saveHasil(dataDir, "KC-3", "PEMBAGIAN_DATA", { ...split, hariBersama: 400 }, now);
 
   const writeSimbol = (simbol: string, mulaiMs: number): void => {
     let t = mulaiMs;
