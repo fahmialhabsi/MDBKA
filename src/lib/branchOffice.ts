@@ -9,8 +9,16 @@ export type BranchCode = "KC-1" | "KC-2" | "KC-3" | "KC-4" | "KC-5";
 
 export interface BranchPost {
   readonly jabatan: string;
+  /** Siapa yang memegang jabatan: program berbasis aturan (tanpa AI) atau orang. */
   readonly pemegang: string;
   readonly tugas: string;
+  readonly tanggungJawab: string;
+  /** Batas wewenang: apa yang BOLEH dan TIDAK BOLEH dilakukan. */
+  readonly wewenang: string;
+  /** Syarat agar boleh menduduki jabatan ini (kemampuan yang wajib dimiliki pemegang). */
+  readonly syarat?: string;
+  /** Apakah calon pemegang yang memenuhi syarat sudah ada di MDBKA. */
+  readonly calon?: "TERSEDIA" | "SEBAGIAN" | "BELUM_ADA";
 }
 
 export interface Branch {
@@ -19,46 +27,218 @@ export interface Branch {
   readonly misi: string;
   readonly hasil: string;
   readonly struktur: readonly BranchPost[];
+  /** SOP: langkah kerja berurutan. */
+  readonly sop: readonly string[];
+  /** Alur kerja: dari bahan masuk sampai hasil keluar. */
+  readonly alur: readonly string[];
 }
+
+const TIDAK_ORDER = "Tidak pernah mengirim order dan tidak memutuskan apa pun — hanya mengusulkan.";
 
 export const BRANCHES: readonly Branch[] = [
   {
     code: "KC-1",
     name: "Pilih Pijakan",
-    misi: "Memilih broker latih dan broker uji yang sesuai makna Merangkak Dari Bawah Ke Atas.",
-    hasil: "Rekomendasi broker latih (data sejarah) dan broker uji (demo/live) dengan alasan dan angka.",
+    misi: "Menetapkan SATU broker (Finex, OTB, MIFX, atau Exness) yang PALING DEKAT dengan prinsip MDBKA, untuk pelatihan (KC-3) sekaligus pengujian (KC-4) memakai AKUN DEMO.",
+    hasil: "Jawaban \"broker yang paling dekat dengan prinsip MDBKA\": satu broker terpilih + nilai kedekatan tiap prinsip + alasan dan angka.",
     struktur: [
-      { jabatan: "Kepala Cabang", pemegang: "brokerScorecard (belum dibangun)", tugas: "Menghitung 6 kriteria tetap dan menyusun Formulir R" },
-      { jabatan: "Petugas Legalitas", pemegang: "Daftar periksa manual Fahmi", tugas: "Menandai broker terdaftar Bappebti/JFX" },
-      { jabatan: "Petugas Biaya", pemegang: "specCompare + file Margin", tugas: "Biaya pulang-pergi per golongan dalam Rp" },
-      { jabatan: "Petugas Data", pemegang: "Pemeriksa file _LONG.csv (belum dibangun)", tugas: "Panjang sejarah, lubang data, jam server" },
+      {
+        jabatan: "Kepala Cabang (Penilai Akhir)",
+        pemegang: "Program kepalaCabang (src/lib/kc1Assessment.ts) — AKTIF",
+        syarat: "Menghitung dengan aturan tetap (bahan sama → hasil sama); tidak memihak broker mana pun; bisa membaca 4 Kartu Broker dan menulis Formulir R.",
+        calon: "TERSEDIA",
+        tugas: "Mengumpulkan nilai 4 prinsip dari para petugas untuk Finex, OTB, MIFX dan Exness, menggugurkan broker yang gagal syarat wajib, lalu menyusun satu Formulir R \"Broker Terpilih\".",
+        tanggungJawab: "Rekomendasi menjawab \"broker paling dekat prinsip MDBKA\" dengan angka bersumber; angka tak diketahui ditulis \"…\".",
+        wewenang: `Boleh mengusulkan satu broker. Tidak boleh mengubah nilai dari petugas, mengganti broker aplikasi, membuka akun, atau memindah dana. ${TIDAK_ORDER}`,
+      },
+      {
+        jabatan: "Petugas Prinsip Merangkak",
+        pemegang: "petugasMerangkak membaca MDBKA_Specs_<login demo>.csv — AKTIF; setoran minimum dari config/kc1-fakta-broker.json (dicatat Konsultan)",
+        syarat: "Bisa membaca lot minimum dan kelipatan lot tiap simbol dari MT5, serta setoran minimum akun dari sumber resmi broker.",
+        calon: "SEBAGIAN",
+        tugas: "Memeriksa apakah broker bisa dimulai sekecil mungkin: lot minimum 0,01 dan setoran awal kecil.",
+        tanggungJawab: "Menyebut simbol/golongan yang lot minimumnya lebih besar dari 0,01.",
+        wewenang: "Hanya menilai prinsip Merangkak. Lot minimum di atas 0,01 untuk semua golongan = gugur wajib.",
+      },
+      {
+        jabatan: "Petugas Prinsip Dari Bawah",
+        pemegang: "petugasDariBawah: MDBKA_Margin_<broker>.csv + preset komisi + kurs ECB — AKTIF",
+        syarat: "Bisa menghitung biaya pulang-pergi lot minimum (spread + komisi) per golongan dalam Rupiah dengan kurs ECB.",
+        calon: "TERSEDIA",
+        tugas: "Menghitung berapa persen modal kecil (±Rp500.000) yang habis untuk biaya satu trade di tiap golongan.",
+        tanggungJawab: "Menuliskan tanggal file Margin dan kurs yang dipakai.",
+        wewenang: "Hanya menghitung. Tidak boleh mengubah preset biaya broker.",
+      },
+      {
+        jabatan: "Petugas Prinsip Ke Atas",
+        pemegang: "petugasKeAtas membaca config/kc1-fakta-broker.json (bukti legal dicatat Konsultan, ditetapkan Pusat) — AKTIF",
+        syarat: "Bisa membuktikan status terdaftar broker dengan tautan resmi dan tanggal pemeriksaan, serta apakah broker yang sama punya akun live dengan aturan sama.",
+        calon: "SEBAGIAN",
+        tugas: "Memeriksa apakah broker bisa dipakai naik dari demo ke live tanpa pindah broker: legal di Indonesia dan punya akun live.",
+        tanggungJawab: "Status diperiksa ulang paling lambat tiap 6 bulan; tanpa bukti = \"belum terverifikasi\".",
+        wewenang: "Broker \"belum terverifikasi\" atau tidak legal = gugur wajib. Tidak menilai prinsip lain.",
+      },
+      {
+        jabatan: "Petugas Prinsip Terbukti",
+        pemegang: "petugasTerbukti: banding spesifikasi demo vs live + panjang file *_LONG.csv (sementara dibaca langsung, sampai KC-2 aktif) — AKTIF",
+        syarat: "Bisa membandingkan spesifikasi akun demo dan live, dan menilai apakah sejarah data cukup untuk latih 60% · try-out 20% · ujian 20%.",
+        calon: "SEBAGIAN",
+        tugas: "Memeriksa bahwa hasil latihan di akun demo berlaku juga di live: akun demo ada, spesifikasi demo = live, data sejarah cukup.",
+        tanggungJawab: "Menyebut perbedaan demo vs live dan golongan yang datanya kurang.",
+        wewenang: "Tanpa akun demo = gugur wajib. Tidak meminta ekspor data sendiri; permintaan data lewat KC-2.",
+      },
+    ],
+    sop: [
+      "Kepala Cabang membuka penilaian untuk 4 broker: Finex, OTB, MIFX, Exness (akun demo).",
+      "Petugas Merangkak menilai lot minimum dan setoran awal tiap broker.",
+      "Petugas Dari Bawah menghitung biaya satu trade per golongan dalam Rupiah dan persennya terhadap modal ±Rp500.000.",
+      "Petugas Ke Atas memeriksa legalitas dan ketersediaan akun live (tautan bukti + tanggal).",
+      "Petugas Terbukti memeriksa akun demo, kesamaan spesifikasi demo vs live, dan panjang data sejarah (dari KC-2).",
+      "Kepala Cabang menggugurkan broker yang gagal syarat wajib (tanpa demo, lot > 0,01, tidak legal, data kurang).",
+      "Dari yang tersisa, pilih yang paling dekat dengan keempat prinsip; bila seri, biaya terkecil yang menang.",
+      "Susun Formulir R \"Broker Terpilih\": satu broker + nilai tiap prinsip + alasan + batas data.",
+      "Pusat menetapkan Setuju/Tolak/Tunda; bila Setuju, map PILIHAN_BROKER dikirim ke KC-2 dan KC-3.",
+      "Ulangi tiap bulan, atau saat biaya/legalitas broker berubah.",
+    ],
+    alur: [
+      "Kepala Cabang membuka penilaian 4 broker",
+      "4 petugas prinsip menilai (Merangkak · Dari Bawah · Ke Atas · Terbukti) — bekerja bersamaan",
+      "4 Kartu Broker terisi",
+      "Saring wajib → broker gugur dicatat alasannya",
+      "Pilih yang paling dekat prinsip (seri → biaya terkecil)",
+      "Formulir R \"Broker Terpilih\"",
+      "Keputusan Pusat",
+      "Map PILIHAN_BROKER ke KC-2 dan KC-3",
     ],
   },
   {
     code: "KC-2",
     name: "Jembatan MT5",
-    misi: "Menjaga data dari MT5 tetap sehat dan mencari fungsi MT5 yang dibutuhkan cabang lain.",
-    hasil: "Laporan kesehatan data harian dan rekomendasi fungsi MT5 baru.",
+    misi: "Menyediakan data dari MT5 yang lengkap dan sehat untuk broker terpilih, serta mencari fungsi MT5 yang dibutuhkan.",
+    hasil: "Map DAFTAR_DATA (isi dan kesehatan file) dan KATALOG_FUNGSI (fungsi MT5 tersedia vs dibutuhkan).",
     struktur: [
-      { jabatan: "Kepala Cabang", pemegang: "bridgeHealth (belum dibangun)", tugas: "Menyusun laporan dan Formulir R" },
-      { jabatan: "Petugas Harga Live", pemegang: "EA MDBKAMultiLive", tugas: "Kutipan harga live" },
-      { jabatan: "Petugas Arsip Candle", pemegang: "ExportLongH1MDBKA + AutoExportMDBKAService", tugas: "Candle sejarah dan candle baru" },
-      { jabatan: "Petugas Spesifikasi", pemegang: "ExportMarginMDBKA, SymbolSpecs", tugas: "Spread, margin, ukuran kontrak" },
-      { jabatan: "Petugas Swap & History", pemegang: "MDBKASwapLogger, mt5Journal", tugas: "Swap per jam dan riwayat transaksi" },
-      { jabatan: "Petugas Katalog Fungsi", pemegang: "Daftar manual (belum dibangun)", tugas: "Fungsi MQL5 tersedia vs dibutuhkan" },
+      {
+        jabatan: "Kepala Cabang",
+        pemegang: "Program bridgeHealth (belum dibangun)",
+        tugas: "Menyusun Daftar Data broker terpilih dan Formulir R bila data macet atau perlu fungsi baru.",
+        tanggungJawab: "Data yang dipakai cabang lain jelas rentangnya, jumlah candle dan lubangnya.",
+        wewenang: `Boleh mengusulkan EA/skrip baru. Tidak boleh mengubah EA, skrip, atau .env tanpa izin Pusat. ${TIDAK_ORDER}`,
+      },
+      {
+        jabatan: "Petugas Harga Live",
+        pemegang: "EA MDBKAMultiLive (di terminal MT5)",
+        tugas: "Menulis harga bid/ask live semua simbol Market Watch.",
+        tanggungJawab: "Tetap terpasang di terminal; bila berhenti, gerbang data menahan semua sinyal.",
+        wewenang: "Hanya membaca dari MT5. Tidak pernah mengirim order.",
+      },
+      {
+        jabatan: "Petugas Arsip Candle",
+        pemegang: "Skrip ExportLongH1MDBKA (H4/H1/M15/M5/M1) + AutoExportMDBKAService",
+        tugas: "Mengekspor candle sejarah dan candle baru ke Common Files.",
+        tanggungJawab: "File lengkap tanpa lubang yang tidak dijelaskan; jam server dicatat.",
+        wewenang: "Hanya membaca dari MT5.",
+      },
+      {
+        jabatan: "Petugas Spesifikasi",
+        pemegang: "Skrip ExportMarginMDBKA + file SymbolSpecs",
+        tugas: "Mengekspor spread, margin dan ukuran kontrak tiap simbol.",
+        tanggungJawab: "File diperbarui sebelum KC-1 menghitung biaya.",
+        wewenang: "Hanya membaca dari MT5.",
+      },
+      {
+        jabatan: "Petugas Swap & History",
+        pemegang: "EA MDBKASwapLogger + pembaca mt5Journal",
+        tugas: "Mencatat swap per jam dan riwayat transaksi/terminal.",
+        tanggungJawab: "Catatan tidak diubah setelah ditulis.",
+        wewenang: "Hanya membaca dari MT5.",
+      },
+      {
+        jabatan: "Petugas Katalog Fungsi",
+        pemegang: "Daftar katalog (belum dibangun), membaca map CATATAN_PERBAIKAN dari KC-3",
+        tugas: "Mencatat fungsi MT5 yang tersedia dan yang dibutuhkan (mis. kalender berita historis, paket Python MetaTrader5).",
+        tanggungJawab: "Setiap permintaan bahan dari KC-3 dijawab: tersedia / perlu dibuat / tidak mungkin.",
+        wewenang: "Hanya mengusulkan; pembuatan EA/skrip baru menunggu keputusan Pusat.",
+      },
+    ],
+    sop: [
+      "Terima map PILIHAN_BROKER dari KC-1.",
+      "Periksa file data broker terpilih: rentang dari–sampai, jumlah candle, lubang, jam server.",
+      "Tulis map DAFTAR_DATA dan kirim ke KC-1 (Petugas Data) dan KC-3.",
+      "Terima permintaan bahan dari KC-3 (map CATATAN_PERBAIKAN).",
+      "Cek KATALOG_FUNGSI: tersedia → sediakan; belum ada → susun Formulir R usulan EA/skrip baru dengan satu pilihan jadi.",
+      "Pusat menetapkan; bila disetujui, Pelaksana Pembangunan membuat EA/skrip.",
+      "Data macet lebih dari 10 menit → Formulir R berisi langkah perbaikan.",
+    ],
+    alur: [
+      "PILIHAN_BROKER dari KC-1",
+      "Pemeriksaan file data MT5",
+      "Map DAFTAR_DATA ke KC-1 dan KC-3",
+      "Permintaan bahan dari KC-3",
+      "KATALOG_FUNGSI / Formulir R usulan fungsi baru",
+      "Keputusan Pusat",
     ],
   },
   {
     code: "KC-3",
     name: "Sekolah Merangkak",
     misi: "Melatih: menggali pola dari data latih lalu try-out, tanpa menyentuh data ujian.",
-    hasil: "Buku Pola Calon dengan angka yang dibekukan.",
+    hasil: "Map POLA_CALON (angka dibekukan) dan CATATAN_PERBAIKAN (Jalur Perbaikan bila pola gagal).",
     struktur: [
-      { jabatan: "Kepala Sekolah", pemegang: "patternBook (belum dibangun)", tugas: "Menjaga buku Pola Calon" },
-      { jabatan: "Penambang Fakta", pemegang: "Skrip penambang (belum dibangun)", tugas: "Membedah data latih per kondisi" },
-      { jabatan: "Penyaring Kebetulan", pemegang: "Aturan statistik tetap (belum dibangun)", tugas: "Membuang pola yang kebetulan" },
-      { jabatan: "Pengawas Try-out", pemegang: "Skrip try-out (belum dibangun)", tugas: "Menguji pola di potongan latih yang disisihkan" },
-      { jabatan: "Pustakawan", pemegang: "tradeAudit + arsip Lolosyiob", tugas: "Daftar kegagalan yang tidak boleh diulang" },
+      {
+        jabatan: "Kepala Sekolah",
+        pemegang: "Program patternBook (belum dibangun)",
+        tugas: "Membuat Pembagian Data 60/20/20, menjaga segel ujian, menyusun Formulir R \"Pola Calon\".",
+        tanggungJawab: "Setiap pola yang diajukan sudah lolos latih dan try-out dengan angka yang dibekukan.",
+        wewenang: `Tidak boleh membaca data ujian, mengubah angka setelah dibekukan, atau memasukkan pola ke Buku Aturan. ${TIDAK_ORDER}`,
+      },
+      {
+        jabatan: "Penambang Fakta",
+        pemegang: "Skrip penambang (belum dibangun)",
+        tugas: "Membedah data latih per kondisi dari Buku Bahan Bakar (badai, jam, spread, tick volume, level, golongan): peluang dan rata-rata R.",
+        tanggungJawab: "Semua kondisi yang dicoba dicatat, termasuk yang gagal.",
+        wewenang: "Hanya membaca bagian LATIH.",
+      },
+      {
+        jabatan: "Penyaring Kebetulan",
+        pemegang: "Aturan statistik tetap (belum dibangun)",
+        tugas: "Membuang pola yang hanya bagus di sebagian data latih; makin banyak pola dicoba, makin ketat syaratnya.",
+        tanggungJawab: "Alasan setiap pola gugur ditulis.",
+        wewenang: "Boleh menggugurkan pola. Tidak boleh melonggarkan syarat.",
+      },
+      {
+        jabatan: "Pengawas Try-out",
+        pemegang: "Skrip try-out (belum dibangun)",
+        tugas: "Menguji pola yang lolos saringan, sekali, di bagian TRY-OUT.",
+        tanggungJawab: "Hasil try-out dicatat apa adanya; gagal = masuk Jalur Perbaikan.",
+        wewenang: "Hanya membaca bagian TRY-OUT; satu pola satu kali.",
+      },
+      {
+        jabatan: "Pustakawan",
+        pemegang: "tradeAudit + arsip Lolosyiob/riset",
+        tugas: "Menjaga daftar \"jangan diulang\" dan memeriksa pola baru bukan ulangan pola yang sudah gagal.",
+        tanggungJawab: "Arsip kegagalan lengkap dengan tanggal dan angka.",
+        wewenang: "Boleh menolak pola yang sama dengan pola gagal.",
+      },
+    ],
+    sop: [
+      "Terima map PILIHAN_BROKER (KC-1) dan DAFTAR_DATA (KC-2).",
+      "Kepala Sekolah membekukan Pembagian Data: latih 60% · try-out 20% · ujian 20% (segel).",
+      "Penambang Fakta membedah bagian LATIH memakai bahan dari Buku Bahan Bakar.",
+      "Pustakawan memeriksa: bukan ulangan pola yang sudah gagal.",
+      "Penyaring Kebetulan menggugurkan pola yang tidak konsisten.",
+      "Angka pola yang tersisa dibekukan.",
+      "Pengawas Try-out menguji sekali di bagian TRY-OUT.",
+      "Lolos → Formulir R \"Pola Calon\" → keputusan Pusat → ke KC-4.",
+      "Gagal → Jalur Perbaikan: diagnosis, satu jalan (A–E), paling banyak 7 percobaan, lalu arsip.",
+    ],
+    alur: [
+      "PILIHAN_BROKER + DAFTAR_DATA masuk",
+      "Pembagian Data (segel ujian)",
+      "Tambang di LATIH",
+      "Cek arsip + saring kebetulan",
+      "Bekukan angka",
+      "Try-out",
+      "POLA_CALON ke Pusat lalu KC-4, atau CATATAN_PERBAIKAN",
     ],
   },
   {
@@ -67,12 +247,14 @@ export const BRANCHES: readonly Branch[] = [
     misi: "Menguji Pola Calon sekali di data ujian bersegel, lalu demo dan live lot minimum.",
     hasil: "Vonis LULUS/GAGAL per pola per golongan dan status lampu 1-2-3; ukuran Rp bersih per jam (target Rp5.000–Rp6.000).",
     struktur: [
-      { jabatan: "Kepala Ruang Ujian", pemegang: "greenLamps", tugas: "Menyusun vonis; satu pola diuji sekali" },
-      { jabatan: "Penguji Data Lama", pemegang: "backtest + backtestReport", tugas: "Lampu 1 (K1–K7, latih/ujian)" },
-      { jabatan: "Pengawas Demo", pemegang: "Rangkaian demo Finex", tugas: "Lampu 2" },
-      { jabatan: "Pengawas Live Minimum", pemegang: "Rangkaian live lot minimum", tugas: "Lampu 3, setelah lampu 1 & 2 hijau" },
-      { jabatan: "Auditor Trade", pemegang: "tradeAudit", tugas: "Sebab rugi per trade" },
+      { jabatan: "Kepala Ruang Ujian", pemegang: "greenLamps", tugas: "Menyusun vonis; satu pola diuji sekali", tanggungJawab: "Belum dirancang rinci", wewenang: TIDAK_ORDER },
+      { jabatan: "Penguji Data Lama", pemegang: "backtest + backtestReport", tugas: "Lampu 1 (K1–K7, latih/ujian)", tanggungJawab: "Belum dirancang rinci", wewenang: "Belum dirancang rinci" },
+      { jabatan: "Pengawas Demo", pemegang: "Rangkaian demo Finex", tugas: "Lampu 2", tanggungJawab: "Belum dirancang rinci", wewenang: "Belum dirancang rinci" },
+      { jabatan: "Pengawas Live Minimum", pemegang: "Rangkaian live lot minimum", tugas: "Lampu 3, setelah lampu 1 & 2 hijau", tanggungJawab: "Belum dirancang rinci", wewenang: "Belum dirancang rinci" },
+      { jabatan: "Auditor Trade", pemegang: "tradeAudit", tugas: "Sebab rugi per trade", tanggungJawab: "Belum dirancang rinci", wewenang: "Belum dirancang rinci" },
     ],
+    sop: ["Belum dirancang rinci (setelah KC-1..KC-3)."],
+    alur: ["Belum dirancang rinci"],
   },
   {
     code: "KC-5",
@@ -80,12 +262,14 @@ export const BRANCHES: readonly Branch[] = [
     misi: "Konsultan akuntansi: cicilan Bank Jago, buku besar pribadi, dan bahan SPT Tahunan.",
     hasil: "Pengingat setoran Rp68.506/bulan, laporan bulanan, bahan Lampiran utang SPT (Coretax).",
     struktur: [
-      { jabatan: "Kepala Cabang", pemegang: "ledger (belum dibangun)", tugas: "Laporan bulanan dan Formulir R" },
-      { jabatan: "Petugas Cicilan", pemegang: "Pengingat setoran (belum dibangun)", tugas: "Tanda LUNAS/BELUM tiap tanggal 14" },
-      { jabatan: "Juru Buku", pemegang: "Jurnal berpasangan (belum dibangun)", tugas: "Pokok, bunga, kas dari jadwal resmi" },
-      { jabatan: "Petugas Hasil Trading", pemegang: "Jurnal Pajak / History MT5", tugas: "Laba-rugi Finex live dalam Rp" },
-      { jabatan: "Petugas SPT", pemegang: "Penyusun lampiran (belum dibangun)", tugas: "Lampiran 1 Bagian B: utang akhir tahun" },
+      { jabatan: "Kepala Cabang", pemegang: "ledger (belum dibangun)", tugas: "Laporan bulanan dan Formulir R", tanggungJawab: "Belum dirancang rinci", wewenang: TIDAK_ORDER },
+      { jabatan: "Petugas Cicilan", pemegang: "Pengingat setoran (belum dibangun)", tugas: "Tanda LUNAS/BELUM tiap tanggal 14", tanggungJawab: "Belum dirancang rinci", wewenang: "Belum dirancang rinci" },
+      { jabatan: "Juru Buku", pemegang: "Jurnal berpasangan (belum dibangun)", tugas: "Pokok, bunga, kas dari jadwal resmi", tanggungJawab: "Belum dirancang rinci", wewenang: "Belum dirancang rinci" },
+      { jabatan: "Petugas Hasil Trading", pemegang: "Jurnal Pajak / History MT5", tugas: "Laba-rugi Finex live dalam Rp", tanggungJawab: "Belum dirancang rinci", wewenang: "Belum dirancang rinci" },
+      { jabatan: "Petugas SPT", pemegang: "Penyusun lampiran (belum dibangun)", tugas: "Lampiran 1 Bagian B: utang akhir tahun", tanggungJawab: "Belum dirancang rinci", wewenang: "Belum dirancang rinci" },
     ],
+    sop: ["Belum dirancang rinci (dikerjakan paling akhir)."],
+    alur: ["Belum dirancang rinci"],
   },
 ];
 
@@ -101,12 +285,20 @@ export interface RecFact {
 }
 
 /** Isian Formulir R dari cabang (sebelum diberi nomor oleh arsip). */
+/** Lampiran terstruktur: map hasil yang dikirim ke cabang lain HANYA bila Pusat SETUJU. */
+export interface RecLampiran {
+  readonly kind: "PILIHAN_BROKER";
+  readonly data: { readonly broker: string | null; readonly alasan: string };
+}
+
 export interface RecommendationInput {
   readonly judul: string;
   readonly fakta: readonly RecFact[];
   readonly batasData: string;
   readonly usulan: string;
   readonly risiko: string;
+  /** Hanya diisi petugas cabang (bukan lewat POST umum). */
+  readonly lampiran?: RecLampiran;
 }
 
 export interface Recommendation extends RecommendationInput {

@@ -1,0 +1,43 @@
+{
+  "skema": "kc1-fakta/1",
+  "catatan": "Fakta yang tidak bisa dibaca dari MT5. Diisi Konsultan dari sumber resmi/terbuka, ditetapkan Pusat. null = belum diketahui (bukan tebakan).",
+  "diperiksa": "2026-10-16",
+  "broker": [
+    {
+      "id": "finex",
+      "nama": "PT Finex Bisnis Solusi Futures",
+      "margin": "Finex",
+      "akunDemo": [{ "login": "61823011", "sumber": "MDBKA_Specs_61823011.csv (akun demo lab Finex)" }],
+      "akunLive": [{ "login": "91811209", "sumber": "equity.csv terminal Finex: TradeMode REAL (16 Okt 2026)" }],
+      "legal": { "nilai": true, "sumber": "detikFinance 23 Agu 2024, daftar pialang berjangka resmi Bappebti no. 25: https://finance.detik.com/bursa-dan-valas/d-7504663/daftar-pialang-berjangka-resmi-bappebti-jangan-gabung-investasi-bodong" },
+      "setoranMinUsd": { "nilai": 10, "sumber": "tradersunion.com/brokers/forex/view/finex/minimum-deposit (Okt 2026)" }
+    },
+    {
+      "id": "orbitraderberjangka",
+      "nama": "PT Orbi Trade Berjangka",
+      "margin": "OTB",
+      "akunDemo": [{ "login": "70930952", "sumber": "equity.csv terminal OTB: TradeMode DEMO (16 Okt 2026)" }],
+      "akunLive": [],
+      "legal": { "nilai": true, "sumber": "detikFinance 23 Agu 2024, daftar pialang berjangka resmi Bappebti no. 9: https://finance.detik.com/bursa-dan-valas/d-7504663/daftar-pialang-berjangka-resmi-bappebti-jangan-gabung-investasi-bodong" },
+      "setoranMinUsd": { "nilai": null, "sumber": "belum diperiksa" }
+    },
+    {
+      "id": "mifx",
+      "nama": "PT Monex Investindo Futures",
+      "margin": "MIFX",
+      "akunDemo": [{ "login": "1003997005", "sumber": "equity.csv terminal MIFX: TradeMode DEMO (16 Okt 2026)" }],
+      "akunLive": [],
+      "legal": { "nilai": true, "sumber": "detikFinance 23 Agu 2024, daftar pialang berjangka resmi Bappebti no. 45: https://finance.detik.com/bursa-dan-valas/d-7504663/daftar-pialang-berjangka-resmi-bappebti-jangan-gabung-investasi-bodong" },
+      "setoranMinUsd": { "nilai": null, "sumber": "belum diperiksa" }
+    },
+    {
+      "id": "exness",
+      "nama": "Exness Technologies Ltd",
+      "margin": "Exness",
+      "akunDemo": [{ "login": "414448299", "sumber": "equity.csv terminal Exness: TradeMode DEMO (16 Okt 2026)" }],
+      "akunLive": [],
+      "legal": { "nilai": false, "sumber": "tidak ada di daftar pialang berjangka resmi Bappebti (detikFinance 23 Agu 2024): https://finance.detik.com/bursa-dan-valas/d-7504663/daftar-pialang-berjangka-resmi-bappebti-jangan-gabung-investasi-bodong" },
+      "setoranMinUsd": { "nilai": null, "sumber": "belum diperiksa" }
+    }
+  ]
+}

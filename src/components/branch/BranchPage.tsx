@@ -12,6 +12,8 @@ import {
   type Recommendation,
   type RecStatus,
 } from "../../lib/branchOffice";
+import { branchFlows, PETUGAS } from "../../lib/branchArchitecture";
+import { Kc1Panel } from "./Kc1Panel";
 
 interface Summary {
   readonly code: BranchCode;
@@ -127,21 +129,78 @@ export function BranchPage({ params }: { params: BranchPageParams }) {
             <div className="overflow-x-auto">
               <table className="w-full text-left" data-testid="branch-structure">
                 <thead className="text-slate-400">
-                  <tr><th className="py-1 pr-3">Jabatan</th><th className="py-1 pr-3">Pemegang</th><th className="py-1">Tugas</th></tr>
+                  <tr><th className="py-1 pr-3">Jabatan</th><th className="py-1 pr-3">Pemegang</th>{branch.struktur.some((p) => p.syarat !== undefined) ? <><th className="py-1 pr-3">Syarat jabatan</th><th className="py-1 pr-3">Calon memenuhi?</th></> : null}<th className="py-1 pr-3">Tugas</th><th className="py-1 pr-3">Tanggung jawab</th><th className="py-1">Batas wewenang</th></tr>
                 </thead>
                 <tbody>
                   {branch.struktur.map((p) => (
                     <tr key={p.jabatan} className="border-t border-white/5">
-                      <td className="py-1 pr-3 font-semibold">{p.jabatan}</td>
-                      <td className="py-1 pr-3 text-slate-300">{p.pemegang}</td>
-                      <td className="py-1 text-slate-300">{p.tugas}</td>
+                      <td className="py-1 pr-3 align-top font-semibold">{p.jabatan}</td>
+                      <td className="py-1 pr-3 align-top text-slate-300">{p.pemegang}</td>
+                      {branch.struktur.some((x) => x.syarat !== undefined) ? (
+                        <>
+                          <td className="py-1 pr-3 align-top text-slate-300">{p.syarat ?? "—"}</td>
+                          <td className="py-1 pr-3 align-top">
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${p.calon === "TERSEDIA" ? "bg-emerald-500/15 text-emerald-300" : p.calon === "SEBAGIAN" ? "bg-amber-500/15 text-amber-300" : "bg-rose-500/15 text-rose-300"}`}>
+                              {p.calon === "TERSEDIA" ? "Tersedia" : p.calon === "SEBAGIAN" ? "Sebagian" : "Belum ada"}
+                            </span>
+                          </td>
+                        </>
+                      ) : null}
+                      <td className="py-1 pr-3 text-slate-300">{p.tugas}</td>
+                      <td className="py-1 pr-3 text-slate-300">{p.tanggungJawab}</td>
+                      <td className="py-1 text-slate-300">{p.wewenang}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div data-testid="branch-sop">
+                <p className="font-semibold">SOP</p>
+                <ol className="list-decimal space-y-0.5 pl-5 text-slate-300">
+                  {branch.sop.map((step) => <li key={step}>{step}</li>)}
+                </ol>
+              </div>
+              <div data-testid="branch-flow">
+                <p className="font-semibold">Alur kerja</p>
+                <ol className="space-y-1 text-slate-300">
+                  {branch.alur.map((step, i) => (
+                    <li key={step}>{i > 0 ? <span className="mr-1 text-emerald-400">↓</span> : null}{step}</li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+            {PETUGAS.some((p) => p.cabang === branch.code) ? (
+              <div className="space-y-2" data-testid="branch-architecture">
+                <p className="font-semibold">Arsitektur (map hasil antar-cabang)</p>
+                <ul className="list-disc pl-5 text-slate-300">
+                  {branchFlows().filter((f) => f.dari === branch.code || f.ke === branch.code).map((f) => (
+                    <li key={`${f.dari}-${f.ke}-${f.hasil}`}>{f.dari === branch.code ? `Mengirim ${f.hasil} ke ${f.ke}` : `Menerima ${f.hasil} dari ${f.dari}`}</li>
+                  ))}
+                </ul>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="text-slate-400">
+                      <tr><th className="py-1 pr-3">Petugas</th><th className="py-1 pr-3">Membaca</th><th className="py-1 pr-3">Menulis</th><th className="py-1">Status</th></tr>
+                    </thead>
+                    <tbody>
+                      {PETUGAS.filter((p) => p.cabang === branch.code).map((p) => (
+                        <tr key={p.id} className="border-t border-white/5">
+                          <td className="py-1 pr-3 font-semibold">{p.jabatan}</td>
+                          <td className="py-1 pr-3 text-slate-300">{p.membaca.length === 0 ? "—" : p.membaca.join(", ")}</td>
+                          <td className="py-1 pr-3 text-slate-300">{p.menulis}</td>
+                          <td className="py-1"><span className={`rounded-full px-2 py-0.5 text-xs ${p.status === "AKTIF" ? "bg-emerald-500/15 text-emerald-300" : "bg-slate-500/20 text-slate-300"}`}>{p.status}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
           </section>
         )}
+
+        {branch?.code === "KC-1" ? <Kc1Panel onDone={load} /> : null}
 
         <section className="space-y-3">
           <h2 className="text-lg font-bold">{branch === null ? "Meja Rekomendasi (menunggu keputusan)" : "Rekomendasi cabang ini"}</h2>

@@ -347,7 +347,10 @@ import { buildPatternCards, contextFromDecision, d1DirectionAt, fingerprint2, fi
 import { CAUTION_DAYS, cautionNotes } from "../src/lib/cautionNotes";
 import { STORM_K, stormWarning } from "../src/lib/stormWarning";
 import { BRANCHES, canDecide, parseBranchPage, parseDecisionInput, parseRecommendationInput, recommendationStatus } from "../src/lib/branchOffice";
-import { readBranch, saveDecision, saveRecommendation } from "../server/services/branchStore";
+import { deliverLampiran, readBranch, readLatestHasil, saveDecision, saveRecommendation } from "../server/services/branchStore";
+import { bagianOf, bolehBaca, branchFlows, contractErrors, jalanBoleh, PETUGAS, splitPeriods } from "../src/lib/branchArchitecture";
+import { DATA_CUKUP_HARI, demoSamaLive, kepalaCabang, type BrokerBahan } from "../src/lib/kc1Assessment";
+import { fileSpanDays, runKc1 } from "../server/services/kc1Runner";
 import { LAMP2_LOSS_TOLERANCE_R, lampRows } from "../src/lib/greenLamps";
 import { readBacktestLamps, saveBacktestLamps } from "../server/services/lampStore";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
@@ -10738,6 +10741,131 @@ test("771. C0 arsip data/cabang: Formulir R tidak pernah ditimpa; keputusan fina
   const main = readSrc("src/main.tsx");
   assert(main.includes("parseBranchPage(window.location.search)") && main.includes("<BranchPage params={branchPage} />"), "halaman cabang dipasang");
   assert(readSrc("server/app.ts").includes('app.use("/api/cabang", createCabangRoutes())'), "route /api/cabang dipasang");
+});
+
+test("772. A-1 arsitektur KC-1..KC-3: kontrak map bersih, alur dihitung dari kontrak, semua petugas DITUNDA", () => {
+  assert(contractErrors().length === 0, contractErrors().join("; "));
+  // Diubah 16 Okt 2026 13:05: KC-1 dibangun lengkap (petugas AKTIF); KC-2 & KC-3 tetap DITUNDA.
+  assert(PETUGAS.every((p) => p.status === (p.cabang === "KC-1" ? "AKTIF" : "DITUNDA")), "KC-1 aktif, lainnya ditunda");
+  assert(PETUGAS.every((p) => p.cabang === "KC-1" || p.cabang === "KC-2" || p.cabang === "KC-3"), "hanya KC-1..KC-3");
+  const flows = branchFlows().map((f) => `${f.dari}>${f.ke}:${f.hasil}`).sort().join(" ");
+  assert(flows === "KC-1>KC-2:PILIHAN_BROKER KC-1>KC-3:PILIHAN_BROKER KC-2>KC-1:DAFTAR_DATA KC-2>KC-3:DAFTAR_DATA KC-2>KC-3:KATALOG_FUNGSI KC-3>KC-2:CATATAN_PERBAIKAN", flows);
+  const bad = contractErrors([{ id: "x", cabang: "KC-3", jabatan: "x", membaca: [], menulis: "PILIHAN_BROKER", status: "DITUNDA" }]);
+  assert(bad.length === 1 && bad[0]?.includes("milik KC-1") === true, "menulis map cabang lain ditolak");
+  assert(readSrc("src/components/branch/BranchPage.tsx").includes('data-testid="branch-architecture"'), "halaman menampilkan arsitektur");
+});
+
+test("773. A-1 segel ujian: pembagian 60/20/20 menurut waktu; KC-1..KC-3 tidak boleh membaca UJIAN; percobaan ke-7 wajib arsip", () => {
+  const s = splitPeriods("finex", "2026-01-01T00:00:00.000Z", "2026-11-01T00:00:00.000Z");
+  assert(s !== null, "rentang sah");
+  if (s === null) return;
+  assert(s.latihSampai === "2026-07-02T09:36:00.000Z" && s.ujianDari === s.tryoutSampai && s.ujianDari === "2026-09-01T04:48:00.000Z", `${s.latihSampai} ${s.ujianDari}`);
+  assert(bagianOf(s, "2026-03-01T00:00:00.000Z") === "LATIH" && bagianOf(s, "2026-08-01T00:00:00.000Z") === "TRYOUT" && bagianOf(s, "2026-10-01T00:00:00.000Z") === "UJIAN", "bagian benar");
+  assert(bagianOf(s, "2025-12-31T00:00:00.000Z") === null && splitPeriods("finex", "2026-02-01", "2026-01-01") === null, "di luar / terbalik = null");
+  assert(!bolehBaca("KC-3", "UJIAN") && !bolehBaca("KC-1", "UJIAN") && bolehBaca("KC-4", "UJIAN") && bolehBaca("KC-3", "TRYOUT"), "segel ujian");
+  assert(jalanBoleh(3, "A_TAMBAH_BAHAN") && !jalanBoleh(7, "B_LOGIKA_TEPAT") && jalanBoleh(7, "E_ARSIP") && !jalanBoleh(0, "E_ARSIP"), "batas 7 percobaan");
+});
+
+test("774. Struktur KC-1..KC-3: tiap jabatan punya pemegang, tugas, tanggung jawab, batas wewenang; tiap cabang punya SOP dan alur kerja", () => {
+  for (const b of BRANCHES.filter((x) => x.code === "KC-1" || x.code === "KC-2" || x.code === "KC-3")) {
+    for (const p of b.struktur) {
+      assert([p.pemegang, p.tugas, p.tanggungJawab, p.wewenang].every((v) => v.trim() !== "" && !v.includes("Belum dirancang")), `${b.code} ${p.jabatan} lengkap`);
+    }
+    assert(b.sop.length >= 6 && b.alur.length >= 5, `${b.code} SOP ${b.sop.length} alur ${b.alur.length}`);
+    assert(b.struktur[0]?.wewenang.includes("Tidak pernah mengirim order") === true, `${b.code} kepala tidak mengirim order`);
+  }
+  const page = readSrc("src/components/branch/BranchPage.tsx");
+  assert(page.includes('data-testid="branch-sop"') && page.includes('data-testid="branch-flow"') && page.includes("Batas wewenang"), "halaman menampilkan SOP, alur, batas wewenang");
+  assert(readSrc("docs/STRUKTUR-ORGANISASI-KC1-KC3.md").includes("## KC-3 Sekolah Merangkak"), "dokumen struktur ada");
+});
+
+test("775. KC-1 menetapkan SATU broker untuk pelatihan sekaligus pengujian (keputusan Fahmi 16 Okt 2026)", () => {
+  const kc1 = BRANCHES.find((b) => b.code === "KC-1");
+  assert(kc1 !== undefined && kc1.misi.includes("SATU broker") && kc1.misi.includes("pelatihan (KC-3) sekaligus pengujian (KC-4)"), "misi satu broker");
+  // Tambahan 16 Okt 2026 12:57: latih + uji memakai AKUN DEMO; hasil = broker paling dekat prinsip MDBKA.
+  assert(kc1 !== undefined && kc1.misi.includes("AKUN DEMO") && kc1.hasil.includes("paling dekat dengan prinsip MDBKA"), "akun demo + prinsip");
+  // Diubah 16 Okt 2026 13:00: SOP KC-1 kini satu langkah per prinsip (petugas terpisah), jadi diperiksa di seluruh SOP, bukan satu langkah.
+  const sopAll = kc1 === undefined ? "" : kc1.sop.join(" ");
+  assert(["Merangkak", "Dari Bawah", "Ke Atas", "Terbukti"].every((w) => sopAll.includes(w)), "4 prinsip penilai");
+  const all = JSON.stringify(BRANCHES) + readSrc("src/lib/branchArchitecture.ts");
+  assert(!/broker latih|broker uji|brokerLatih|brokerUji/.test(all), "tidak ada lagi broker latih/uji terpisah");
+});
+
+test("776. KC-1 struktur 4 prinsip: Kepala + Merangkak/Dari Bawah/Ke Atas/Terbukti, tiap jabatan punya syarat dan status calon; slot arsitektur sama", () => {
+  const kc1 = BRANCHES.find((b) => b.code === "KC-1");
+  assert(kc1 !== undefined, "KC-1 ada");
+  if (kc1 === undefined) return;
+  const names = kc1.struktur.map((p) => p.jabatan);
+  assert(names.join("|") === "Kepala Cabang (Penilai Akhir)|Petugas Prinsip Merangkak|Petugas Prinsip Dari Bawah|Petugas Prinsip Ke Atas|Petugas Prinsip Terbukti", names.join("|"));
+  assert(kc1.struktur.every((p) => (p.syarat ?? "").length > 20 && p.calon !== undefined), "syarat + calon terisi");
+  // Diubah 16 Okt 2026 13:05: Kepala Cabang kini dibangun (kepalaCabang di kc1Assessment.ts) → TERSEDIA.
+  assert(kc1.struktur.find((p) => p.jabatan.includes("Dari Bawah"))?.calon === "TERSEDIA" && kc1.struktur[0]?.calon === "TERSEDIA", "status calon jujur");
+  const slots = PETUGAS.filter((p) => p.cabang === "KC-1").map((p) => p.jabatan);
+  assert(slots.join("|") === names.join("|"), `slot arsitektur ${slots.join("|")}`);
+  assert(readSrc("src/components/branch/BranchPage.tsx").includes("Syarat jabatan") && readSrc("src/components/branch/BranchPage.tsx").includes("Calon memenuhi?"), "halaman menampilkan syarat + calon");
+});
+
+test("777. KC-1 Kepala Cabang: gugur wajib (lot 0,01, legal, akun demo, data cukup); pilih nilai tertinggi; seri → biaya terkecil", () => {
+  const spec = (symbol: string, volumeMin: number) => ({ symbol, contractSize: 100000, tickSize: 0.00001, digits: 5, volumeMin, volumeStep: volumeMin, swapMode: 0, swapLong: 0, swapShort: 0, profitCurrency: "USD" });
+  const g = (s: string): string => (s.startsWith("XAU") ? "LOGAM" : "FOREX");
+  const make = (id: string, o: { lot?: number; legal?: boolean | null; demo?: boolean; hari?: number; rp?: number; live?: boolean }): BrokerBahan => ({
+    id, nama: id.toUpperCase(),
+    akunDemoAda: { nilai: o.demo ?? true, sumber: "uji" },
+    akunLiveAda: o.live === true ? { nilai: true, sumber: "uji" } : { nilai: null, sumber: "uji" },
+    legal: { nilai: o.legal === undefined ? true : o.legal, sumber: "uji" },
+    setoranMinRp: { nilai: 179_211, sumber: "uji" },
+    specsDemo: { specs: [spec("EURUSD", o.lot ?? 0.01), spec("XAUUSD", o.lot ?? 0.01)], sumber: "uji" },
+    specsLive: o.live === true ? { specs: [spec("EURUSD", o.lot ?? 0.01), spec("XAUUSD", o.lot ?? 0.01)], sumber: "uji" } : null,
+    biayaRp: [{ symbol: "EURUSD", golongan: "FOREX", rp: o.rp ?? 1600 }, { symbol: "XAUUSD", golongan: "LOGAM", rp: (o.rp ?? 1600) * 7 }],
+    biayaSumber: "uji",
+    sejarah: [{ symbol: "EURUSD", golongan: "FOREX", hari: o.hari ?? 400 }, { symbol: "XAUUSD", golongan: "LOGAM", hari: o.hari ?? 400 }],
+    golonganOf: g,
+  });
+  const h = kepalaCabang([make("a", { live: true }), make("b", { lot: 0.1 }), make("c", { legal: false }), make("d", { hari: 100 }), make("e", { demo: false })], "2026-10-16");
+  const by = (id: string) => h.kartu.find((k) => k.broker === id);
+  assert(h.terpilih === "a", `terpilih ${h.terpilih}`);
+  assert(by("b")?.gugur.some((x) => x.includes("lot minimum")) === true, "lot 0,1 gugur");
+  assert(by("c")?.gugur.includes("tidak terdaftar Bappebti") === true, "tidak legal gugur");
+  assert(by("d")?.gugur.some((x) => x.includes(`${DATA_CUKUP_HARI} hari`)) === true, "data kurang gugur");
+  assert(by("e")?.gugur.includes("tidak ada akun demo") === true, "tanpa demo gugur");
+  assert(h.formulir.judul === "Broker Terpilih: A" && h.formulir.fakta.length === 5 && h.formulir.usulan.includes("akun demo"), "Formulir R satu pilihan jadi");
+  const tie = kepalaCabang([make("x", { rp: 2000 }), make("y", { rp: 1000 })], "2026-10-16");
+  assert(tie.terpilih === "y", `biaya terkecil menang: ${tie.terpilih}`);
+  const none = kepalaCabang([make("b", { lot: 0.1 })], "2026-10-16");
+  assert(none.terpilih === null && none.formulir.judul.includes("belum ada broker"), "tidak ada yang lolos → tunda");
+  const diff = demoSamaLive([spec("EURUSD", 0.01)], [spec("EURUSD", 0.1)]);
+  assert(!diff.sama && diff.beda[0]?.includes("lot minimum") === true, "demo ≠ live terdeteksi");
+});
+
+test("778. KC-1 penjalan: baca Common Files + fakta broker, simpan Kartu Broker + Formulir R; map PILIHAN_BROKER hanya setelah Pusat SETUJU", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "kc1-"));
+  const common = path.join(root, "common");
+  const dataDir = path.join(root, "data");
+  fs.mkdirSync(common);
+  fs.writeFileSync(path.join(common, "MDBKA_Margin_Finex.csv"), "Symbol,Ask,Bid,Margin_Buy_1Lot,Margin_Sell_1Lot,Account_Leverage,Account_Currency,Exported\nEURUSD,1.10007,1.10000,220,220,500,USD,2026.10.06 10:41:00\n");
+  const head = "Symbol,ContractSize,TickSize,TickValue,Digits,VolumeMin,VolumeStep,SwapMode,SwapLong,SwapShort,ProfitCurrency,MarginCurrency,Company,Generated\n";
+  for (const login of ["111", "222"]) fs.writeFileSync(path.join(common, `MDBKA_Specs_${login}.csv`), head + "EURUSD,100000,0.00001,1,5,0.01,0.01,0,0,0,USD,EUR,PT. Finex,2026.10.16 06:31:15\n");
+  fs.writeFileSync(path.join(common, "MDBKA_EURUSD_H4_LONG.csv"), "time,open,high,low,close,tick_volume\n2024.01.02 00:00,1,1,1,1,1\n2026.10.15 00:00,1,1,1,1,1\n");
+  const span = fileSpanDays(path.join(common, "MDBKA_EURUSD_H4_LONG.csv"));
+  assert(span !== null && Math.round(span) === 1017, `rentang ${span}`);
+  const fakta = path.join(root, "fakta.json");
+  fs.writeFileSync(fakta, JSON.stringify({ broker: [{ id: "finex", nama: "PT Finex", margin: "Finex", akunDemo: [{ login: "111", sumber: "uji" }], akunLive: [{ login: "222", sumber: "uji" }], legal: { nilai: true, sumber: "uji" }, setoranMinUsd: { nilai: 10, sumber: "uji" } }] }));
+  const now = new Date("2026-10-16T04:10:00.000Z");
+  const r = runKc1({ dataDir, commonDir: common, faktaFile: fakta, rates: { EUR: 1, USD: 1.1 } as unknown as import("../src/services/fxRateService").ExchangeRates, usdIdr: 17921, now });
+  assert(r.hasil.terpilih === "finex" && r.rec.cabang === "KC-1" && r.rec.lampiran?.kind === "PILIHAN_BROKER", `terpilih ${r.hasil.terpilih}`);
+  const card = r.hasil.kartu[0];
+  assert(card !== undefined && card.terbukti.rincian.some((x) => x.includes("Demo = live")) && card.keAtas.nilai === 100, "kartu terisi dari file");
+  assert(readLatestHasil(dataDir, "KC-1", "KARTU_BROKER") !== null && readLatestHasil(dataDir, "KC-1", "PILIHAN_BROKER") === null, "pilihan belum dikirim sebelum SETUJU");
+  assert(saveDecision(dataDir, "KC-1", r.rec.id, { keputusan: "SETUJU", catatan: "" }, now).ok, "Pusat setuju");
+  assert(deliverLampiran(dataDir, "KC-1", r.rec.id, now) !== null, "lampiran dikirim");
+  const pick = readLatestHasil(dataDir, "KC-1", "PILIHAN_BROKER");
+  assert(pick !== null && JSON.stringify(pick.data).includes('"broker":"finex"'), "map PILIHAN_BROKER berisi broker terpilih");
+  const page = readSrc("src/components/branch/BranchPage.tsx");
+  assert(page.includes('<Kc1Panel onDone={load} />') && readSrc("src/components/branch/Kc1Panel.tsx").includes("Jalankan penilaian KC-1"), "panel KC-1 dipasang");
+  assert(readSrc("server/routes/cabangRoutes.ts").includes('router.post("/KC-1/jalankan"'), "route jalankan ada");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

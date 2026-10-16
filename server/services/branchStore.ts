@@ -97,3 +97,61 @@ export function readBranch(dataDir: string, code: BranchCode): StoredRecommendat
   }
   return out.sort((a, b) => b.rec.id.localeCompare(a.rec.id));
 }
+
+/**
+ * Map hasil cabang (A-1): data/cabang/<KC-n>/hasil/<JENIS>-<stamp>.json, ditulis sekali (tidak ditimpa).
+ */
+export function saveHasil(dataDir: string, code: BranchCode, kind: string, payload: unknown, now: Date): string {
+  if (!/^[A-Z_]{3,40}$/.test(kind)) throw new Error("jenis map tidak sah");
+  const dir = join(branchDir(dataDir, code), "hasil");
+  mkdirSync(dir, { recursive: true });
+  const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  for (let seq = 1; seq <= 999; seq += 1) {
+    const file = join(dir, `${kind}-${stamp}-${String(seq).padStart(3, "0")}.json`);
+    if (existsSync(file)) continue;
+    writeFileSync(file, JSON.stringify({ skema: "map-hasil/1", cabang: code, jenis: kind, tanggalUtc: now.toISOString(), data: payload }, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
+    return file;
+  }
+  throw new Error("terlalu banyak map dalam satu detik");
+}
+
+export interface StoredHasil {
+  readonly jenis: string;
+  readonly tanggalUtc: string;
+  readonly data: unknown;
+}
+
+/** Map hasil terbaru satu jenis; null = belum ada. */
+export function readLatestHasil(dataDir: string, code: BranchCode, kind: string): StoredHasil | null {
+  const dir = join(branchDir(dataDir, code), "hasil");
+  if (!existsSync(dir)) return null;
+  const names = readdirSync(dir).filter((n) => n.startsWith(`${kind}-`) && n.endsWith(".json")).sort();
+  for (const name of names.reverse()) {
+    try {
+      const j = JSON.parse(readFileSync(join(dir, name), "utf8")) as Partial<StoredHasil>;
+      if (typeof j.tanggalUtc === "string") return { jenis: kind, tanggalUtc: j.tanggalUtc, data: j.data ?? null };
+    } catch {
+      // berkas rusak dilewati
+    }
+  }
+  return null;
+}
+
+/** Rekomendasi satu nomor (untuk lampiran saat Pusat SETUJU). */
+export function readRecommendation(dataDir: string, code: BranchCode, id: string): Recommendation | null {
+  if (!isRecommendationId(id)) return null;
+  const file = join(branchDir(dataDir, code), `${id}.json`);
+  if (!existsSync(file)) return null;
+  try {
+    return (JSON.parse(readFileSync(file, "utf8")) as { rec?: Recommendation }).rec ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Setelah Pusat SETUJU: map lampiran rekomendasi ditulis sebagai map hasil cabang. Kembalikan path atau null. */
+export function deliverLampiran(dataDir: string, code: BranchCode, id: string, now: Date): string | null {
+  const rec = readRecommendation(dataDir, code, id);
+  if (rec?.lampiran === undefined) return null;
+  return saveHasil(dataDir, code, rec.lampiran.kind, { ...rec.lampiran.data, rekomendasi: rec.id }, now);
+}

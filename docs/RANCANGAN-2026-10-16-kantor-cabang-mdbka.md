@@ -9,6 +9,7 @@
 3. **Isi rekomendasi wajib seragam** (Formulir R):
    `No · Cabang · Tanggal · Fakta (angka + sumber file) · Batas data · Usulan · Risiko bila disetujui · Keputusan yang diminta (Setuju/Tolak/Tunda)`.
    Angka yang tidak diketahui ditulis "…", bukan ditebak.
+   **Formulir R wajib berisi SATU pilihan jadi dari tim** dalam bahasa sehari-hari (Fahmi 16 Okt 2026: Pusat tidak dimintai penilaian teknis). Pusat cukup menetapkan Setuju/Tolak/Tunda. Pertanyaan teknis seperti "pakai bahan apa?" diputuskan cabang sendiri dan ditulis sebagai usulan.
 4. **Arsip:** setiap rekomendasi dan keputusan Pusat disimpan di `data/cabang/<kode>/` (berkas JSON). Keputusan tidak boleh ditimpa.
 5. **Halaman:** setiap cabang punya halaman sendiri, `/?halaman=cabang&kode=KC-n`, mengikuti pola halaman yang sudah ada di `main.tsx` (App.tsx tidak disentuh).
 6. **Uang ditampilkan dalam Rupiah** dengan kurs ECB, sumber kurs selalu disebut.
@@ -28,8 +29,9 @@ KC-1 Pilih Pijakan ──► KC-2 Jembatan MT5 ──► KC-3 Sekolah Merangkak 
 KC-5 Pembukuan & Pajak ── berjalan sendiri, setiap bulan ──────────────────────────────────► Pusat
 ```
 
-## 4. KC-1 "Pilih Pijakan" — memilih broker latih dan uji
-**Hasil untuk Pusat:** rekomendasi *broker latih* (data sejarah) dan *broker uji* (demo/live), dengan alasan dan angka.
+## 4. KC-1 "Pilih Pijakan" — menetapkan satu broker
+**Hasil untuk Pusat:** jawaban **"broker apa yang paling dekat dengan prinsip MDBKA"** — satu broker (Finex/OTB/MIFX/Exness) untuk pelatihan sekaligus pengujian **memakai akun demo**, dengan nilai tiap prinsip, alasan dan angka (diputuskan Fahmi 16 Okt 2026).
+**Prinsip penilai:** Merangkak (lot 0,01, setoran kecil) · Dari Bawah (biaya kecil dibanding modal kecil) · Ke Atas (legal, bisa naik ke live tanpa pindah broker) · Terbukti (akun demo ada, demo = live, data sejarah cukup).
 | Jabatan | Pemegang (keahlian) | Tugas · tanggung jawab · wewenang |
 |---|---|---|
 | Kepala Cabang | `brokerScorecard` (baru) — menghitung skor dari kriteria tetap | Menyusun Formulir R; wewenang hanya mengusulkan |
@@ -38,7 +40,7 @@ KC-5 Pembukuan & Pajak ── berjalan sendiri, setiap bulan ──────�
 | Petugas Data | pemeriksa file `_LONG.csv` (baru) | Panjang sejarah per golongan, lubang data, jam server |
 
 **Kriteria tetap (sesuai makna MDBKA):**
-1. Legal untuk live (wajib untuk broker uji live).
+1. Legal untuk live (wajib — broker terpilih dipakai sampai live).
 2. Bisa merangkak: lot minimum 0,01 dan setoran kecil.
 3. Biaya kecil per trade (spread + komisi).
 4. Sejarah data panjang, cukup untuk latih + try-out + ujian.
@@ -47,7 +49,7 @@ KC-5 Pembukuan & Pajak ── berjalan sendiri, setiap bulan ──────�
 
 **Fakta yang sudah ada (bahan awal):** komisi Finex $1/lot, OTB $33/lot, Exness $0; spread XAUUSD median Finex $0,17, Exness $0,24; data H1 Forex Finex baru mulai Des 2025 (tidak cukup untuk latih); Exness punya M5 1 tahun. Status legal broker selain Finex: "…" (diperiksa Petugas Legalitas).
 
-**SOP KC-1:** (1) kumpulkan file Margin/Specs tiap broker → (2) hitung 6 kriteria → (3) broker gagal kriteria 1 hanya boleh jadi broker latih → (4) kirim Formulir R → (5) ulangi tiap bulan atau saat broker berubah biaya.
+**SOP KC-1:** (1) kumpulkan file Margin/Specs tiap broker → (2) hitung 6 kriteria → (3) broker gagal kriteria wajib gugur → (4) kirim Formulir R → (5) ulangi tiap bulan atau saat broker berubah biaya.
 
 ## 5. KC-2 "Jembatan MT5" — data dan fungsi dari MT5
 **Hasil untuk Pusat:** (a) laporan kesehatan data harian; (b) rekomendasi fungsi MT5 baru yang dibutuhkan cabang lain.
@@ -72,7 +74,7 @@ KC-5 Pembukuan & Pajak ── berjalan sendiri, setiap bulan ──────�
 | Pengawas Try-out | skrip try-out (baru) | Menguji pola di potongan latih yang disisihkan |
 | Pustakawan | `tradeAudit` + arsip Lolosyiob | Fakta kegagalan lama sebagai daftar "jangan diulang" |
 
-**SOP KC-3:** (1) terima data dari broker latih KC-1 lewat KC-2 → (2) bagi data: latih 60% · try-out 20% · ujian 20% (segel, hanya KC-4) → (3) tambang → saring → try-out → (4) gagal → Jalur Perbaikan (6a); lolos → bekukan angka → (5) Formulir R ke Pusat → (6) bila disetujui, serahkan ke KC-4.
+**SOP KC-3:** (1) terima data broker terpilih KC-1 lewat KC-2 → (2) bagi data: latih 60% · try-out 20% · ujian 20% (segel, hanya KC-4) → (3) tambang → saring → try-out → (4) gagal → Jalur Perbaikan (6a); lolos → bekukan angka → (5) Formulir R ke Pusat → (6) bila disetujui, serahkan ke KC-4.
 
 ### 6a. Jalur Perbaikan — bila data dan fakta belum bagus (diminta Fahmi 16 Okt 2026)
 Pola yang gagal **tidak langsung dibuang**. KC-3 wajib mendiagnosis dulu, lalu memilih **satu** jalan per percobaan.
@@ -99,7 +101,7 @@ Pola yang gagal **tidak langsung dibuang**. KC-3 wajib mendiagnosis dulu, lalu m
 **Aturan jalur perbaikan:**
 1. Satu percobaan = satu perubahan (satu bahan baru *atau* satu logika baru), angka dibekukan sebelum diuji.
 2. Setiap percobaan dicatat: diagnosis → jalan yang dipilih → hasil, agar kegagalan juga menjadi fakta.
-3. Bahan baru yang belum ada datanya → KC-3 mengirim Formulir R **"Permintaan Bahan Bakar"** ke Pusat; bila disetujui, KC-2 yang menyediakannya.
+3. Bahan baru yang belum ada datanya → KC-3 dan KC-2 memilih sendiri bahan yang paling menjanjikan, lalu mengirim **satu rekomendasi jadi** ("Tambah bahan X, karena …, biaya/risikonya …"); Pusat hanya menetapkan. Bila disetujui, KC-2 yang menyediakannya.
 4. Data ujian tetap bersegel; perbaikan hanya memakai data latih + try-out.
 
 ## 7. KC-4 "Ruang Ujian" — pengujian
@@ -137,12 +139,13 @@ Pola yang gagal **tidak langsung dibuang**. KC-3 wajib mendiagnosis dulu, lalu m
 - Pembagian pokok/bunga per bulan memakai jadwal angsuran resmi Bank Jago bila ada (efektif 52,91% menandakan bunga lebih besar di awal); tanpa jadwal → "…", bukan pembagian rata.
 - Karena dipakai untuk trading: KC-5 mencatat setoran ke Finex sebagai "Kas di broker" (aset), terpisah dari utang.
 
-## 9. Urutan pembangunan (merangkak, satu tahap satu langkah)
-1. Tahap C0: Formulir R + arsip `data/cabang/` + halaman daftar cabang (kosong).
-2. Tahap C5: KC-5, karena kewajiban bulanan nyata dan datanya sederhana.
-3. Tahap C2: KC-2, kesehatan data (mencegah kasus "0 trade" terulang).
-4. Tahap C1: KC-1, skor broker.
-5. Tahap C3 lalu C4: Sekolah Merangkak dan Ruang Ujian (tim Penambang Fakta).
+## 9. Urutan pembangunan (merangkak, satu tahap satu langkah; diubah Fahmi 16 Okt 2026: inti dulu, pembukuan paling akhir)
+1. Tahap C0: Formulir R + arsip `data/cabang/` + halaman cabang — SELESAI (commit 1734d34).
+2. Tahap C2: KC-2 Jembatan MT5, kesehatan data (mencegah kasus "0 trade" terulang).
+3. Tahap C1: KC-1 Pilih Pijakan, skor broker.
+4. Tahap C3: KC-3 Sekolah Merangkak (Penambang Fakta + Jalur Perbaikan).
+5. Tahap C4: KC-4 Ruang Ujian.
+6. Tahap C5: KC-5 Pembukuan & Pajak (paling akhir).
 
 ## Sumber
 - Lampiran utang SPT OP Coretax: https://news.ddtc.co.id/literasi/tips-trik/1816908/cara-isi-lampiran-utang-dalam-spt-tahunan-wp-orang-pribadi-via-coretax
