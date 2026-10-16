@@ -1,23 +1,26 @@
 import { recommendationStatus, type Recommendation } from "../../src/lib/branchOffice";
 import type { PembagianData, PolaCalon } from "../../src/lib/branchArchitecture";
 import { formulirVonis, ujiK1K7, type HasilK1K7, type VonisUjian } from "../../src/lib/kc4Kepala";
+import { auditTrade, type HasilAuditor } from "../../src/lib/kc4Auditor";
 import { tambangBadai } from "../../src/lib/kc3Penambang";
 import { bacaM15, saringBySimbol } from "./kc3Runner";
 import { readAllHasil, readBranch, readLatestHasil, saveHasil, saveRecommendation } from "./branchStore";
 
 /**
- * KC-4 (16 Okt 2026) — penjalan Kepala Ruang Ujian & Penguji Data Lama (lampu 1 saja; lampu 2/3 dan
- * Auditor Trade belum dibangun — butuh trade demo/live nyata berjalan, bukan data historis).
+ * KC-4 (16 Okt 2026) — penjalan Kepala Ruang Ujian & Penguji Data Lama + Auditor Trade (lampu 1 saja;
+ * lampu 2/3 belum dibangun — butuh trade demo/live nyata berjalan, bukan data historis).
  * Syarat jalan: (1) Pola Calon KC-3 sudah ada DAN Formulir R "lolos try-out"-nya sudah DISETUJUI Pusat;
  * (2) pola ini belum pernah diuji KC-4 sebelumnya (satu pola, satu kali uji — gagal = gugur).
  * Uji di bagian UJIAN bersegel (hanya KC-4 yang boleh membaca), memakai mesin tambang yang SAMA dengan
- * Penambang Fakta KC-3 (tambangBadai, kc3Penambang.ts), lalu kriteria K1-K7 (kc4Kepala.ts).
+ * Penambang Fakta KC-3 (tambangBadai, kc3Penambang.ts): kriteria K1-K7 (kc4Kepala.ts) DAN Auditor
+ * Trade (kc4Auditor.ts) — LULUS hanya bila KEDUANYA lolos (gerbang terpisah, bukan digabung jadi satu).
  * HANYA MEMBACA map cabang lain + file MT5; tidak mengubah EA/skrip/.env; tidak mengirim order.
  */
 export interface Kc4Run {
   readonly broker: string;
   readonly polaId: string;
   readonly k1k7: HasilK1K7;
+  readonly auditor: HasilAuditor;
   readonly vonis: VonisUjian;
   readonly rec: Recommendation;
 }
@@ -59,10 +62,11 @@ export function runKc4(opts: { readonly dataDir: string; readonly commonDir: str
   const latih = tambangBadai(latihBySimbol);
 
   const k1k7 = ujiK1K7(ujian.trades, latih.trades, split.ujianDari, split.sampai);
-  const vonis: VonisUjian = k1k7.lulus ? "LULUS" : "GAGAL";
+  const auditor = auditTrade(ujian.trades);
+  const vonis: VonisUjian = k1k7.lulus && !auditor.tolak ? "LULUS" : "GAGAL";
   const tanggal = opts.now.toISOString().slice(0, 10);
-  saveHasil(opts.dataDir, "KC-4", "VONIS_UJIAN", { polaId: pola.id, broker, k1k7, vonis }, opts.now);
-  const rec = saveRecommendation(opts.dataDir, "KC-4", formulirVonis(pola.id, broker, k1k7, vonis, tanggal), opts.now);
+  saveHasil(opts.dataDir, "KC-4", "VONIS_UJIAN", { polaId: pola.id, broker, k1k7, auditor, vonis }, opts.now);
+  const rec = saveRecommendation(opts.dataDir, "KC-4", formulirVonis(pola.id, broker, k1k7, auditor, vonis, tanggal), opts.now);
 
-  return { broker, polaId: pola.id, k1k7, vonis, rec };
+  return { broker, polaId: pola.id, k1k7, auditor, vonis, rec };
 }

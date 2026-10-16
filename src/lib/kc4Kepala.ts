@@ -13,6 +13,7 @@
 import { candleTimeMs } from "./symbolScanner";
 import type { BadaiTrade } from "./kc3Penambang";
 import type { RecommendationInput } from "./branchOffice";
+import type { HasilAuditor } from "./kc4Auditor";
 
 export const K1_MIN_N = 20;
 export const K3_MIN_PF = 1.2;
@@ -111,15 +112,17 @@ export function ujiK1K7(ujian: readonly BadaiTrade[], latih: readonly BadaiTrade
 
 export type VonisUjian = "LULUS" | "GAGAL";
 
-export function formulirVonis(polaId: string, broker: string, k: HasilK1K7, vonis: VonisUjian, tanggal: string): RecommendationInput {
+export function formulirVonis(polaId: string, broker: string, k: HasilK1K7, auditor: HasilAuditor, vonis: VonisUjian, tanggal: string): RecommendationInput {
+  const k1k7Teks = k.lulus ? "Semua K1-K7 lolos." : `K1-K7 gagal: ${k.gagal.join(", ")}.`;
+  const auditorTeks = auditor.tolak
+    ? `Auditor Trade menolak: ${auditor.sebab.join("; ")}.`
+    : `Auditor Trade: ${auditor.n === 0 ? "tanpa trade" : `melawan sejak masuk ${Math.round((auditor.persenMelawan ?? 0) * 100)}%, keluar karena waktu ${Math.round((auditor.persenWaktu ?? 0) * 100)}%`} — tidak menolak.`;
   return {
     judul: `Vonis Ujian KC-4 (${broker}): ${polaId} ${vonis}`,
     fakta: [
       { teks: `UJIAN: n=${k.n}, rata-rata R=${k.rataR ?? "…"}, PF=${k.rugiNol ? "tak terhingga (tanpa rugi)" : (k.profitFactor ?? "…")}, terburuk=${k.terburuk ?? "…"}R, blok positif ${k.blokPositif}/${BLOK_N}.`, sumber: `ujiK1K7() KC-4 ${tanggal}` },
-      {
-        teks: vonis === "LULUS" ? "Semua K1-K7 lolos." : `Gagal: ${k.gagal.join(", ")}.`,
-        sumber: "Kriteria K1-K7, docs/RANCANGAN-2026-10-16-strategi-versi-mdbka.md §2",
-      },
+      { teks: k1k7Teks, sumber: "Kriteria K1-K7, docs/RANCANGAN-2026-10-16-strategi-versi-mdbka.md §2" },
+      { teks: auditorTeks, sumber: `auditTrade() KC-4 ${tanggal}` },
     ],
     batasData: "Hanya rentang UJIAN bersegel (tidak pernah dibuka KC-1..KC-3); satu pola diuji SEKALI — gagal = gugur, tidak diuji ulang dengan angka sama.",
     usulan:

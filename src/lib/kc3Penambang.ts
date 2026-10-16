@@ -37,6 +37,8 @@ export interface BadaiTrade {
   readonly direction: "BELI" | "JUAL";
   readonly outcome: Exclude<BacktestOutcome, "TERBUKA">;
   readonly rMultiple: number;
+  /** MFE (titik untung tertinggi selama posisi berjalan, kelipatan R) — dipakai Auditor Trade KC-4. */
+  readonly mfeR: number;
 }
 
 interface Percobaan extends BadaiTrade {
@@ -63,12 +65,20 @@ function satuPercobaan(simbol: string, candles: readonly Candle[], at: number): 
   const exit = simulateTrade(plan, future, 0, null, null);
   if (exit === null || exit.outcome === "TERBUKA") return null;
   const priceResult = direction === "BELI" ? exit.exitPrice - entry : entry - exit.exitPrice;
+  // MFE: titik untung tertinggi (candle high/low, bukan hanya harga keluar) selama posisi berjalan.
+  const selamaPosisi = future.slice(0, exit.exitIndex + 1);
+  const terbaik =
+    direction === "BELI"
+      ? Math.max(entry, ...selamaPosisi.map((c) => c.high))
+      : Math.min(entry, ...selamaPosisi.map((c) => c.low));
+  const mfe = direction === "BELI" ? terbaik - entry : entry - terbaik;
   return {
     simbol,
     signalTime: String(now.time ?? ""),
     direction,
     outcome: exit.outcome,
     rMultiple: Math.round((priceResult / risk) * 100) / 100,
+    mfeR: Math.round((mfe / risk) * 100) / 100,
     exitIndex: exit.exitIndex,
   };
 }

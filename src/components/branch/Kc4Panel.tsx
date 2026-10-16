@@ -20,10 +20,21 @@ interface HasilK1K7 {
   readonly gagal: readonly string[];
 }
 
+interface HasilAuditor {
+  readonly n: number;
+  readonly melawanSejakMasuk: number;
+  readonly keluarKarenaWaktu: number;
+  readonly persenMelawan: number | null;
+  readonly persenWaktu: number | null;
+  readonly tolak: boolean;
+  readonly sebab: readonly string[];
+}
+
 interface VonisUjian {
   readonly polaId: string;
   readonly broker: string;
   readonly k1k7: HasilK1K7;
+  readonly auditor: HasilAuditor;
   readonly vonis: "LULUS" | "GAGAL";
 }
 
@@ -66,11 +77,12 @@ export function Kc4Panel({ onDone }: { onDone: () => void }) {
   };
 
   const k = vonis?.data.k1k7;
+  const a = vonis?.data.auditor;
 
   return (
     <section className="space-y-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.04] p-4 text-sm" data-testid="kc4-panel">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="font-semibold">Kepala Ruang Ujian & Penguji Data Lama (lampu 1 — K1–K7 di UJIAN bersegel)</p>
+        <p className="font-semibold">Kepala Ruang Ujian & Penguji Data Lama (lampu 1) + Auditor Trade</p>
         <button type="button" className="ml-auto min-h-11 rounded-xl bg-emerald-700 px-4 font-semibold disabled:opacity-50" disabled={busy} onClick={run}>
           {busy ? "Menguji…" : "Jalankan ujian KC-4"}
         </button>
@@ -98,6 +110,17 @@ export function Kc4Panel({ onDone }: { onDone: () => void }) {
               </tbody>
             </table>
           </div>
+          {a !== undefined ? (
+            <div className="border-t border-white/10 pt-2" data-testid="kc4-auditor">
+              <p className="font-semibold">Auditor Trade</p>
+              <p className={a.tolak ? "text-rose-300" : "text-slate-400"}>
+                {a.n === 0
+                  ? "Tanpa trade UJIAN."
+                  : `Melawan sejak masuk ${a.persenMelawan === null ? "…" : Math.round(a.persenMelawan * 100)}% (${a.melawanSejakMasuk}/${a.n}) · keluar karena waktu ${a.persenWaktu === null ? "…" : Math.round(a.persenWaktu * 100)}% (${a.keluarKarenaWaktu}/${a.n})`}
+                {a.tolak ? ` — MENOLAK: ${a.sebab.join("; ")}` : " — tidak menolak."}
+              </p>
+            </div>
+          ) : null}
         </div>
       )}
     </section>

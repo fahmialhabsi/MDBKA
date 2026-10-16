@@ -359,6 +359,7 @@ import { BADAI_ATR_PERIOD, BADAI_MIN_TRADE, BADAI_POLA_ID, BADAI_SL_ATR, BADAI_T
 import { bulanRentang, catatanPerbaikan, formulirPolaCalon, pengawasTryout, pilihJalan, saringKebetulan, titikImpas } from "../src/lib/kc3Perbaikan";
 import { bagiBlok, formulirVonis, ujiK1K7 } from "../src/lib/kc4Kepala";
 import { Kc4Error, runKc4 } from "../server/services/kc4Runner";
+import { AUDITOR_AMBANG_PERSEN, auditTrade } from "../src/lib/kc4Auditor";
 import { LAMP2_LOSS_TOLERANCE_R, lampRows } from "../src/lib/greenLamps";
 import { readBacktestLamps, saveBacktestLamps } from "../server/services/lampStore";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
@@ -11091,7 +11092,7 @@ test("785. KC-3 Penyaring Kebetulan & Pengawas Try-out murni: ambang naik, konsi
   assert(bulanRentang("2026-01-15T00:00:00.000Z", "2026-03-20T00:00:00.000Z").join(",") === "2026-01,2026-02,2026-03", bulanRentang("2026-01-15T00:00:00.000Z", "2026-03-20T00:00:00.000Z").join(","));
   assert(bulanRentang("2026-03-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z").length === 0, "rentang terbalik -> kosong");
 
-  const trade = (bulan: string, menang: boolean): BadaiTrade => ({ simbol: "EURUSD", signalTime: `2026.${bulan}.10 10:00`, direction: "BELI", outcome: menang ? "TP" : "SL", rMultiple: menang ? BADAI_TARGET_RR : -1 });
+  const trade = (bulan: string, menang: boolean): BadaiTrade => ({ simbol: "EURUSD", signalTime: `2026.${bulan}.10 10:00`, direction: "BELI", outcome: menang ? "TP" : "SL", rMultiple: menang ? BADAI_TARGET_RR : -1, mfeR: menang ? BADAI_TARGET_RR : 0 });
   const bulan3 = ["2026-01", "2026-02", "2026-03"];
   const banyak = (bulan: string, menang: boolean, n: number) => Array.from({ length: n }, () => trade(bulan, menang));
 
@@ -11201,6 +11202,7 @@ test("787. KC-4 Kepala Ruang Ujian & Penguji Data Lama murni: kriteria K1-K7 sam
     direction: "BELI",
     outcome: rMultiple > 0 ? "TP" : "SL",
     rMultiple,
+    mfeR: Math.max(0, rMultiple),
   });
 
   assert(bagiBlok([trade(0, 1), trade(25, 1), trade(170, 1)], dari, sampai).join(",") === "1,1,0,0,0,0,1", "bagiBlok: jam 0/25/170 -> blok 0/1/6");
@@ -11237,12 +11239,40 @@ test("787. KC-4 Kepala Ruang Ujian & Penguji Data Lama murni: kriteria K1-K7 sam
   const tanpaRugi = ujiK1K7(ujianLolos.map((t) => ({ ...t, rMultiple: Math.abs(t.rMultiple), outcome: "TP" as const })), latihPositif, dari, sampai);
   assert(tanpaRugi.rugiNol && tanpaRugi.profitFactor === null && tanpaRugi.k3, `tanpa rugi -> PF tak terhingga, K3 lolos ${JSON.stringify(tanpaRugi)}`);
 
-  const formLulus = formulirVonis("KC3-BADAI-ARAH-1", "finex", lolos, "LULUS", "2026-10-16");
+  const auditorLolos = auditTrade(ujianLolos);
+  const formLulus = formulirVonis("KC3-BADAI-ARAH-1", "finex", lolos, auditorLolos, "LULUS", "2026-10-16");
   assert(formLulus.judul.includes("LULUS") && formLulus.usulan.includes("UJI_DEMO") && formLulus.fakta[1]?.teks.includes("Semua K1-K7 lolos"), JSON.stringify(formLulus));
-  const formGagal = formulirVonis("KC3-BADAI-ARAH-1", "finex", k5Gagal, "GAGAL", "2026-10-16");
+  const formGagal = formulirVonis("KC3-BADAI-ARAH-1", "finex", k5Gagal, auditorLolos, "GAGAL", "2026-10-16");
   assert(formGagal.judul.includes("GAGAL") && formGagal.usulan.includes("arsipkan") && formGagal.fakta[1]?.teks.includes("K5"), JSON.stringify(formGagal));
-  const formTakTerhingga = formulirVonis("KC3-BADAI-ARAH-1", "finex", tanpaRugi, "LULUS", "2026-10-16");
+  const formTakTerhingga = formulirVonis("KC3-BADAI-ARAH-1", "finex", tanpaRugi, auditorLolos, "LULUS", "2026-10-16");
   assert(formTakTerhingga.fakta[0]?.teks.includes("tak terhingga"), JSON.stringify(formTakTerhingga));
+});
+
+test("789. KC-4 Auditor Trade murni: sebab rugi (melawan sejak masuk / keluar karena waktu), ambang 50%, gerbang terpisah dari K1-K7", () => {
+  const t = (rMultiple: number, mfeR: number, outcome: "TP" | "SL" | "WAKTU" = rMultiple > 0 ? "TP" : "SL"): BadaiTrade => ({
+    simbol: "EURUSD", signalTime: "2026.01.01 00:00", direction: "BELI", outcome, rMultiple, mfeR,
+  });
+
+  assert(auditTrade([]).n === 0 && auditTrade([]).persenMelawan === null && !auditTrade([]).tolak, "tanpa trade -> tidak menolak, persen null");
+
+  // 10 trade: 6 rugi "melawan sejak masuk" (MFE < 0,3R), 4 menang -> 60% > ambang 50% -> tolak.
+  const melawan = [...Array.from({ length: 6 }, () => t(-1, 0.1)), ...Array.from({ length: 4 }, () => t(1.5, 1.5))];
+  const hasilMelawan = auditTrade(melawan);
+  assert(hasilMelawan.melawanSejakMasuk === 6 && hasilMelawan.persenMelawan === 0.6 && hasilMelawan.tolak && hasilMelawan.sebab.some((s) => s.includes("melawan sejak masuk")), JSON.stringify(hasilMelawan));
+
+  // Rugi tapi MFE tinggi dulu (bukan "melawan sejak masuk", sempat untung lalu berbalik) -> tidak kena sebab ini.
+  const sempatUntung = [...Array.from({ length: 6 }, () => t(-1, 0.8)), ...Array.from({ length: 4 }, () => t(1.5, 1.5))];
+  assert(!auditTrade(sempatUntung).tolak, `rugi tapi sempat MFE tinggi -> bukan melawan sejak masuk ${JSON.stringify(auditTrade(sempatUntung))}`);
+
+  // Tepat di ambang (50%) -> BELUM ditolak (roadmap: "lebih dari separuh", bukan "setengah atau lebih").
+  const tepatSetengah = [...Array.from({ length: 5 }, () => t(-1, 0.1)), ...Array.from({ length: 5 }, () => t(1.5, 1.5))];
+  assert(!auditTrade(tepatSetengah).tolak, `tepat 50% belum ditolak (ambang > ${AUDITOR_AMBANG_PERSEN}) ${JSON.stringify(auditTrade(tepatSetengah))}`);
+
+  // Bahan BADAI tidak memakai batas waktu -> outcome WAKTU tidak pernah muncul dari kc3Penambang.ts,
+  // tapi fungsi ini tetap jujur menghitungnya seandainya ada (disiapkan untuk bahan masa depan).
+  const keluarWaktu = [...Array.from({ length: 6 }, () => t(0.1, 0.1, "WAKTU")), ...Array.from({ length: 4 }, () => t(1.5, 1.5))];
+  const hasilWaktu = auditTrade(keluarWaktu);
+  assert(hasilWaktu.keluarKarenaWaktu === 6 && hasilWaktu.persenWaktu === 0.6 && hasilWaktu.tolak && hasilWaktu.sebab.some((s) => s.includes("batas waktu")), JSON.stringify(hasilWaktu));
 });
 
 test("788. KC-4 penjalan penuh: wajib Pola Calon disetujui Pusat + satu pola sekali uji; UJIAN bersegel -> vonis LULUS + Formulir R", () => {

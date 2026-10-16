@@ -6,9 +6,11 @@
  * 16 Okt 2026) — KC-3: Kepala Sekolah (Pembagian Data), Penambang Fakta (bahan pertama: Peringatan
  * Badai jadi pemicu arah), Penyaring Kebetulan & Pengawas Try-out + Jalur Perbaikan
  * (src/lib/kc3Penambang.ts, src/lib/kc3Perbaikan.ts).
- * KC-4 Kepala Ruang Ujian & Penguji Data Lama AKTIF (lampu 1 saja — K1-K7 di bagian UJIAN bersegel,
- * src/lib/kc4Kepala.ts); Pengawas Demo/Live Minimum (lampu 2/3) dan Auditor Trade belum dibangun
- * (butuh trade demo/live nyata berjalan, bukan data historis).
+ * KC-4 Kepala Ruang Ujian & Penguji Data Lama AKTIF (lampu 1 — K1-K7 di bagian UJIAN bersegel,
+ * src/lib/kc4Kepala.ts) dan Auditor Trade AKTIF (sebab rugi: melawan sejak masuk / keluar karena
+ * waktu, src/lib/kc4Auditor.ts) — gerbang terpisah, LULUS hanya bila keduanya lolos. Pengawas
+ * Demo/Live Minimum (lampu 2/3) belum dibangun (butuh trade demo/live nyata berjalan, bukan data
+ * historis).
  * Angka tidak diketahui = null (bukan tebakan).
  */
 import type { BranchCode } from "./branchOffice";
@@ -155,6 +157,7 @@ export const PETUGAS: readonly PetugasSlot[] = [
   { id: "kc3-penambang", cabang: "KC-3", jabatan: "Penambang Fakta", membaca: ["PEMBAGIAN_DATA", "KATALOG_FUNGSI"], menulis: "POLA_CALON", status: "AKTIF" },
   { id: "kc3-perbaikan", cabang: "KC-3", jabatan: "Penyaring Kebetulan & Pengawas Try-out", membaca: ["POLA_CALON"], menulis: "CATATAN_PERBAIKAN", status: "AKTIF" },
   { id: "kc4-kepala", cabang: "KC-4", jabatan: "Kepala Ruang Ujian & Penguji Data Lama", membaca: ["POLA_CALON"], menulis: "VONIS_UJIAN", status: "AKTIF" },
+  { id: "kc4-auditor", cabang: "KC-4", jabatan: "Auditor Trade", membaca: ["POLA_CALON"], menulis: "VONIS_UJIAN", status: "AKTIF" },
 ];
 
 /** Alur antar-cabang dari kontrak petugas: [dari cabang, ke cabang, jenis hasil]. */
