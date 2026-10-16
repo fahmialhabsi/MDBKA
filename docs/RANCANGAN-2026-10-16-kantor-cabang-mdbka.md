@@ -84,6 +84,11 @@ KC-5 Pembukuan & Pajak ── berjalan sendiri, setiap bulan ──────�
 | Pengawas Live Minimum | rangkaian live lot minimum (lampu 3) | Hanya setelah lampu 1 & 2 hijau |
 | Auditor Trade | `tradeAudit` (+ usulan AUDIT-1) | Sebab rugi; tolak pola yang >50% rugi "melawan sejak masuk" atau >50% keluar karena waktu |
 
+**Target Pusat (Fahmi, 16 Okt 2026):** minimal 1 simbol menghasilkan **Rp5.000–Rp6.000 per jam** bersih; saat target tercapai Fahmi menutup posisi manual di MT5.
+- KC-4 mengukur "Rp bersih per jam terbuka" per simbol dan menguji aturan keluar "tutup di +Rp5.000" sebagai aturan keluar tersendiri (bukan hanya TP harga).
+- Gambaran lot 0,01 (kurs Rp17.921): EURUSD Rp5.000 ≈ 2,8 pip; XAUUSD Rp5.000 ≈ gerak $0,28, padahal biaya spread+komisi ≈ $0,18 (≈64% target).
+- Dengan modal ±Rp500.000, Rp5.000/jam = 1% modal per jam; belum ada strategi uji yang mencapai rata-rata positif.
+
 **SOP KC-4:** (1) terima Pola Calon yang disetujui Pusat → (2) uji di data ujian bersegel → (3) lulus K1–K7 → Buku Aturan UJI_DEMO (lampu 2) → (4) Formulir R vonis → (5) gagal = arsip, tidak diuji ulang dengan angka lain.
 
 ## 8. KC-5 "Pembukuan & Pajak" — konsultan akuntansi
@@ -91,7 +96,7 @@ KC-5 Pembukuan & Pajak ── berjalan sendiri, setiap bulan ──────�
 | Jabatan | Pemegang (keahlian) | Tugas · tanggung jawab · wewenang |
 |---|---|---|
 | Kepala Cabang | `ledger` (baru) | Menyusun laporan bulanan dan Formulir R |
-| Petugas Cicilan | pengingat setoran (baru) | Setoran Bank Jago Rp250.000/bulan; tanda LUNAS/BELUM per bulan |
+| Petugas Cicilan | pengingat setoran (baru) | Setoran Bank Jago Rp68.506/bulan (dikonfirmasi Fahmi 16 Okt 2026); tanda LUNAS/BELUM per bulan |
 | Juru Buku | jurnal berpasangan (baru) | Setoran cicilan: Debit Utang Bank Jago (pokok) + Debit Beban Bunga / Kredit Kas; pokok & bunga diisi dari rincian Bank Jago, bukan ditebak |
 | Petugas Hasil Trading | Jurnal Pajak / History MT5 (rencana 06–07 Okt) | Laba-rugi trading Finex live dalam Rp (kurs ECB tanggal transaksi) |
 | Petugas SPT | penyusun lampiran (baru) | Bahan Lampiran 1 Bagian B "Utang pada Akhir Tahun Pajak" (Coretax): jenis utang, NIK/NPWP kreditur, nama kreditur, negara, tahun peminjaman, saldo akhir tahun termasuk bunga |
@@ -100,7 +105,7 @@ KC-5 Pembukuan & Pajak ── berjalan sendiri, setiap bulan ──────�
 **Batas:** KC-5 bukan konsultan pajak resmi; apakah bunga pinjaman pribadi mengurangi pajak tidak diputuskan cabang (rujuk DJP/konsultan pajak).
 **Data pinjaman (dari Fahmi, 16 Okt 2026):** pokok Rp500.000 · cair 14 Okt 2026 · tenor 9 bulan · bayar tiap tanggal 14, Nov 2026 – Jul 2027 · bunga flat 2,59%/bulan (efektif 52,91%/tahun) · total bayar Rp616.553 · tujuan: trading.
 - Hitungan flat: bunga Rp12.950/bulan × 9 = Rp116.550; cicilan ≈ Rp68.506/bulan (Rp616.553 ÷ 9). Selisih Rp3 = pembulatan bank.
-- **Belum cocok:** angka setoran "Rp250.000/bulan" yang disebut sebelumnya ≠ Rp68.506 — dikonfirmasi ke Fahmi dulu.
+- Dikonfirmasi Fahmi 16 Okt 2026: setoran yang benar Rp68.506/bulan (angka Rp250.000 sebelumnya keliru).
 - Pembagian pokok/bunga per bulan memakai jadwal angsuran resmi Bank Jago bila ada (efektif 52,91% menandakan bunga lebih besar di awal); tanpa jadwal → "…", bukan pembagian rata.
 - Karena dipakai untuk trading: KC-5 mencatat setoran ke Finex sebagai "Kas di broker" (aset), terpisah dari utang.
 
