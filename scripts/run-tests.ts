@@ -347,10 +347,12 @@ import { buildPatternCards, contextFromDecision, d1DirectionAt, fingerprint2, fi
 import { CAUTION_DAYS, cautionNotes } from "../src/lib/cautionNotes";
 import { STORM_K, stormWarning } from "../src/lib/stormWarning";
 import { BRANCHES, canDecide, parseBranchPage, parseDecisionInput, parseRecommendationInput, recommendationStatus } from "../src/lib/branchOffice";
-import { deliverLampiran, readBranch, readLatestHasil, saveDecision, saveRecommendation } from "../server/services/branchStore";
+import { deliverLampiran, readBranch, readLatestHasil, saveDecision, saveHasil, saveRecommendation } from "../server/services/branchStore";
 import { bagianOf, bolehBaca, branchFlows, contractErrors, jalanBoleh, PETUGAS, splitPeriods } from "../src/lib/branchArchitecture";
 import { DATA_CUKUP_HARI, demoSamaLive, kepalaCabang, type BrokerBahan } from "../src/lib/kc1Assessment";
 import { fileSpanDays, runKc1 } from "../server/services/kc1Runner";
+import { formulirKc2, KATALOG_FUNGSI, periksaMasalah, scanCandles } from "../src/lib/kc2Bridge";
+import { runKc2 } from "../server/services/kc2Runner";
 import { LAMP2_LOSS_TOLERANCE_R, lampRows } from "../src/lib/greenLamps";
 import { readBacktestLamps, saveBacktestLamps } from "../server/services/lampStore";
 import { adxWilder, bollinger, lastFractals, readTickVolumes, volumeRatio, wave1Context } from "../src/lib/indicatorsWave1";
@@ -10746,7 +10748,8 @@ test("771. C0 arsip data/cabang: Formulir R tidak pernah ditimpa; keputusan fina
 test("772. A-1 arsitektur KC-1..KC-3: kontrak map bersih, alur dihitung dari kontrak, semua petugas DITUNDA", () => {
   assert(contractErrors().length === 0, contractErrors().join("; "));
   // Diubah 16 Okt 2026 13:05: KC-1 dibangun lengkap (petugas AKTIF); KC-2 & KC-3 tetap DITUNDA.
-  assert(PETUGAS.every((p) => p.status === (p.cabang === "KC-1" ? "AKTIF" : "DITUNDA")), "KC-1 aktif, lainnya ditunda");
+  // Diubah lagi 16 Okt 2026 14:00: KC-2 ikut dibangun (petugas AKTIF); KC-3 tetap DITUNDA.
+  assert(PETUGAS.every((p) => p.status === (p.cabang === "KC-3" ? "DITUNDA" : "AKTIF")), "KC-1 & KC-2 aktif, KC-3 ditunda");
   assert(PETUGAS.every((p) => p.cabang === "KC-1" || p.cabang === "KC-2" || p.cabang === "KC-3"), "hanya KC-1..KC-3");
   const flows = branchFlows().map((f) => `${f.dari}>${f.ke}:${f.hasil}`).sort().join(" ");
   assert(flows === "KC-1>KC-2:PILIHAN_BROKER KC-1>KC-3:PILIHAN_BROKER KC-2>KC-1:DAFTAR_DATA KC-2>KC-3:DAFTAR_DATA KC-2>KC-3:KATALOG_FUNGSI KC-3>KC-2:CATATAN_PERBAIKAN", flows);
@@ -10866,6 +10869,53 @@ test("778. KC-1 penjalan: baca Common Files + fakta broker, simpan Kartu Broker 
   const page = readSrc("src/components/branch/BranchPage.tsx");
   assert(page.includes('<Kc1Panel onDone={load} />') && readSrc("src/components/branch/Kc1Panel.tsx").includes("Jalankan penilaian KC-1"), "panel KC-1 dipasang");
   assert(readSrc("server/routes/cabangRoutes.ts").includes('router.post("/KC-1/jalankan"'), "route jalankan ada");
+});
+
+test("779. KC-2 pemindai candle: hitung rentang, jumlah, lubang > 24 jam di luar akhir pekan; temuan + langkah perbaikan jadi", () => {
+  const csv = ["time,open,high,low,close,tick_volume", "2026.01.02 22:00,1,1,1,1,1", "2026.01.05 01:00,1,1,1,1,1", "2026.01.05 02:00,1,1,1,1,1", "2026.01.08 02:00,1,1,1,1,1"].join("\r\n");
+  const f = scanCandles(csv, "EURUSD", "FOREX", "H1");
+  assert(f.jumlahCandle === 4 && f.lubang === 1 && f.dari === "2026-01-02 22:00", `scan ${JSON.stringify(f)}`);
+  const kes = { broker: "finex", brokerNama: "PT Finex", marginUmurHari: 10, specsDemoUmurHari: 1, candleOtomatisUmurJam: 0.5, akhirPekan: false };
+  const m = periksaMasalah([f], kes);
+  const kode = m.map((x) => x.kode).join(",");
+  assert(kode === "H1_PENDEK,LUBANG,MARGIN_BASI", kode);
+  assert(m[0]?.langkah.includes("InpCandleCount=13000") === true && m[0]?.langkah.includes("Max bars") === true, "langkah ekspor ulang jadi");
+  const sehat = periksaMasalah([{ ...f, hari: 400, lubang: 0 }], { ...kes, marginUmurHari: 1 });
+  assert(sehat.length === 0 && formulirKc2(kes, sehat, [], "2026-10-16") === null, "tanpa temuan → tanpa Formulir R");
+  const weekend = periksaMasalah([{ ...f, hari: 400, lubang: 0 }], { ...kes, marginUmurHari: 1, candleOtomatisUmurJam: 40, akhirPekan: true });
+  assert(weekend.length === 0, "akhir pekan: candle otomatis berhenti bukan masalah");
+  const form = formulirKc2(kes, m, [], "2026-10-16");
+  assert(form !== null && form.usulan.includes("(1)") && form.usulan.includes("(3)") && form.risiko.includes("tidak mengirim order"), "Formulir R satu usulan berlangkah");
+  assert(KATALOG_FUNGSI.some((k) => k.status === "TERSEDIA_BELUM_DIPAKAI" && k.nama.includes("historis")), "katalog mencatat kalender historis belum dipakai");
+});
+
+test("780. KC-2 penjalan: wajib PILIHAN_BROKER dari KC-1; pindai file broker terpilih saja; simpan DAFTAR_DATA + KATALOG_FUNGSI + Formulir R", () => {
+  const os = require("node:os") as unknown as { tmpdir(): string };
+  const fs = require("node:fs") as unknown as typeof import("node:fs");
+  const path = require("node:path") as unknown as typeof import("node:path");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "kc2-"));
+  const common = path.join(root, "common");
+  const dataDir = path.join(root, "data");
+  fs.mkdirSync(common);
+  const fakta = path.join(root, "fakta.json");
+  fs.writeFileSync(fakta, JSON.stringify({ broker: [{ id: "finex", nama: "PT Finex", margin: "Finex", akunDemo: [{ login: "111", sumber: "uji" }], akunLive: [], legal: { nilai: true, sumber: "uji" }, setoranMinUsd: { nilai: 10, sumber: "uji" } }] }));
+  const now = new Date("2026-10-16T05:00:00.000Z");
+  let blocked = false;
+  try {
+    runKc2({ dataDir, commonDir: common, faktaFile: fakta, now });
+  } catch (e) {
+    blocked = e instanceof Error && e.message.includes("PILIHAN_BROKER");
+  }
+  assert(blocked, "tanpa broker terpilih KC-2 berhenti");
+  saveHasil(dataDir, "KC-1", "PILIHAN_BROKER", { broker: "finex", alasan: "uji", rekomendasi: "R-KC-1-20261016T045429Z-001" }, now);
+  fs.writeFileSync(path.join(common, "MDBKA_Margin_Finex.csv"), "Symbol,Ask,Bid,Margin_Buy_1Lot,Margin_Sell_1Lot,Account_Leverage,Account_Currency,Exported\nEURUSD,1.10007,1.10000,220,220,500,USD,2026.10.06 10:41:00\n");
+  fs.writeFileSync(path.join(common, "MDBKA_EURUSD_H1_LONG.csv"), "time,open,high,low,close,tick_volume\n2025.12.11 20:00,1,1,1,1,1\n2026.10.15 06:00,1,1,1,1,1\n");
+  fs.writeFileSync(path.join(common, "MDBKA_EURUSD_ORB_H1_LONG.csv"), "time,open,high,low,close,tick_volume\n2020.01.01 00:00,1,1,1,1,1\n");
+  const r = runKc2({ dataDir, commonDir: common, faktaFile: fakta, now });
+  assert(r.broker === "finex" && r.ringkasan.find((x) => x.timeframe === "H1")?.simbol === 1, "hanya file broker terpilih");
+  assert(r.masalah.some((m) => m.kode === "H1_PENDEK") && r.rec !== null && r.rec.cabang === "KC-2", "Formulir R KC-2 dibuat");
+  assert(readLatestHasil(dataDir, "KC-2", "DAFTAR_DATA") !== null && readLatestHasil(dataDir, "KC-2", "KATALOG_FUNGSI") !== null, "map KC-2 tersimpan");
+  assert(readSrc("src/components/branch/BranchPage.tsx").includes("<Kc2Panel onDone={load} />") && readSrc("server/routes/cabangRoutes.ts").includes('router.post("/KC-2/jalankan"'), "panel + route KC-2");
 });
 
 test("288. parseECBXml() extract USD=1.0831 dari XML", () => {

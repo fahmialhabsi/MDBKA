@@ -14,6 +14,7 @@ import {
 } from "../../lib/branchOffice";
 import { branchFlows, PETUGAS } from "../../lib/branchArchitecture";
 import { Kc1Panel } from "./Kc1Panel";
+import { Kc2Panel } from "./Kc2Panel";
 
 interface Summary {
   readonly code: BranchCode;
@@ -201,6 +202,7 @@ export function BranchPage({ params }: { params: BranchPageParams }) {
         )}
 
         {branch?.code === "KC-1" ? <Kc1Panel onDone={load} /> : null}
+        {branch?.code === "KC-2" ? <Kc2Panel onDone={load} /> : null}
 
         <section className="space-y-3">
           <h2 className="text-lg font-bold">{branch === null ? "Meja Rekomendasi (menunggu keputusan)" : "Rekomendasi cabang ini"}</h2>

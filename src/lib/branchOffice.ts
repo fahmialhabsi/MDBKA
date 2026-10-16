@@ -119,7 +119,7 @@ export const BRANCHES: readonly Branch[] = [
     struktur: [
       {
         jabatan: "Kepala Cabang",
-        pemegang: "Program bridgeHealth (belum dibangun)",
+        pemegang: "Program runKc2 (src/lib/kc2Bridge.ts) — AKTIF",
         tugas: "Menyusun Daftar Data broker terpilih dan Formulir R bila data macet atau perlu fungsi baru.",
         tanggungJawab: "Data yang dipakai cabang lain jelas rentangnya, jumlah candle dan lubangnya.",
         wewenang: `Boleh mengusulkan EA/skrip baru. Tidak boleh mengubah EA, skrip, atau .env tanpa izin Pusat. ${TIDAK_ORDER}`,
@@ -154,7 +154,7 @@ export const BRANCHES: readonly Branch[] = [
       },
       {
         jabatan: "Petugas Katalog Fungsi",
-        pemegang: "Daftar katalog (belum dibangun), membaca map CATATAN_PERBAIKAN dari KC-3",
+        pemegang: "Katalog tetap KATALOG_FUNGSI (src/lib/kc2Bridge.ts) — AKTIF; membaca map CATATAN_PERBAIKAN dari KC-3 bila ada",
         tugas: "Mencatat fungsi MT5 yang tersedia dan yang dibutuhkan (mis. kalender berita historis, paket Python MetaTrader5).",
         tanggungJawab: "Setiap permintaan bahan dari KC-3 dijawab: tersedia / perlu dibuat / tidak mungkin.",
         wewenang: "Hanya mengusulkan; pembuatan EA/skrip baru menunggu keputusan Pusat.",

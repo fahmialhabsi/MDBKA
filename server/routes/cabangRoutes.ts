@@ -9,6 +9,7 @@ import {
 } from "../../src/lib/branchOffice";
 import { deliverLampiran, readBranch, readLatestHasil, saveDecision, saveRecommendation } from "../services/branchStore";
 import { runKc1 } from "../services/kc1Runner";
+import { Kc2Error, runKc2 } from "../services/kc2Runner";
 import { resolveCommonFilesDir } from "./marginRoutes";
 import { getCachedEcbRates } from "./fxRoutes";
 import { readUsdIdrBook, usdIdrOn } from "../services/ecbHistory";
@@ -21,6 +22,7 @@ import { FALLBACK_RATES, usdIdrRate } from "../../src/services/fxRateService";
  * POST /api/cabang/:kode/rekomendasi       cabang mengirim Formulir R
  * POST /api/cabang/:kode/:id/keputusan     Pusat memutuskan (SETUJU/TOLAK final, TUNDA boleh diikuti)
  * POST /api/cabang/KC-1/jalankan           KC-1: 4 petugas prinsip + Kepala menilai broker → Formulir R
+ * POST /api/cabang/KC-2/jalankan           KC-2: daftar + kesehatan data broker terpilih → map + Formulir R
  * GET  /api/cabang/:kode/hasil/:jenis      map hasil terbaru (mis. KC-1/hasil/KARTU_BROKER)
  */
 export function createCabangRoutes(
@@ -45,6 +47,15 @@ export function createCabangRoutes(
       res.status(201).json({ rec: r.rec, kartu: r.hasil.kartu, terpilih: r.hasil.terpilih });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  router.post("/KC-2/jalankan", (_req, res) => {
+    try {
+      const r = runKc2({ dataDir, commonDir: commonDir(), faktaFile, now: now() });
+      res.status(201).json(r);
+    } catch (e) {
+      res.status(e instanceof Kc2Error ? 409 : 500).json({ error: e instanceof Error ? e.message : String(e) });
     }
   });
 
