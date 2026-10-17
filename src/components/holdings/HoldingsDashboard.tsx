@@ -33,6 +33,7 @@ import { useTradeSessions } from "../../hooks/useTradeSessions";
 import { useTrailCandles } from "../../hooks/useTrailCandles";
 import { structureBreak, trailSuggestion } from "../../lib/trailStop";
 import { CYCLE_MINUTES, monitorCycle, WINDOW_HOURS } from "../../lib/monitorCycle";
+import { jarakHarga, jarakText } from "../../lib/pipDistance";
 
 const SIGNAL_STYLE: Record<ExitSignal, { label: string; className: string }> = {
   EXIT_TAKE_PROFIT: {
@@ -315,6 +316,31 @@ function HoldingCard({
           </span>
         </div>
       </div>
+
+      {/* 17 Okt 2026: rincian level — jarak pip (Forex) / poin dari entry + Rupiah bila SL/TP kena. */}
+      {!exited && (
+        <div
+          data-testid={`holding-levels-${holding.id}`}
+          className="mt-2 grid grid-cols-[2.5rem_repeat(3,minmax(0,1fr))] gap-x-3 gap-y-1 rounded-lg bg-white/[0.03] p-2 text-xs"
+        >
+          <span />
+          <span className="text-slate-500">Harga</span>
+          <span className="text-slate-500">Jarak dari entry {holding.entryPrice}</span>
+          <span className="text-slate-500">Bila kena</span>
+          <span className="font-semibold text-rose-300">SL</span>
+          <span className="text-white">{holding.sl > 0 ? holding.sl : "-"}</span>
+          <span className="text-white">{holding.sl > 0 ? jarakText(jarakHarga(holding.symbol, holding.entryPrice, holding.sl)) : "-"}</span>
+          <span className="font-semibold text-rose-300">
+            {evaluation?.risk === null || evaluation?.risk === undefined ? "-" : rupiah(-Math.abs(evaluation.risk), evaluation.planCurrency, kurs)}
+          </span>
+          <span className="font-semibold text-emerald-300">TP</span>
+          <span className="text-white">{holding.tp > 0 ? holding.tp : "-"}</span>
+          <span className="text-white">{holding.tp > 0 ? jarakText(jarakHarga(holding.symbol, holding.entryPrice, holding.tp)) : "-"}</span>
+          <span className="font-semibold text-emerald-300">
+            {evaluation?.reward === null || evaluation?.reward === undefined ? "-" : rupiah(Math.abs(evaluation.reward), evaluation.planCurrency, kurs)}
+          </span>
+        </div>
+      )}
 
       {marketNotice !== null && (
         <div

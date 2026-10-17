@@ -410,9 +410,12 @@ import {
   COPY_LOCK_SECONDS,
   copyButtonsView,
   copyLockState,
+  lockSlCopied,
   planDriftShare,
   startCopyLock,
 } from "../src/lib/copyGuard";
+import { jarakHarga, jarakText } from "../src/lib/pipDistance";
+import { mejaTradingUrl, parseMejaTradingPage } from "../src/lib/mejaTradingView";
 import {
   excursionCell,
   usdPerPriceUnit,
@@ -783,6 +786,11 @@ test("32. saat mismatch, level lama tidak dipakai (onDetected dilewati)", () => 
 const fs = require("node:fs");
 function readSrc(rel: string): string {
   return fs.readFileSync(process.cwd() + "/" + rel, "utf8");
+}
+
+/** Pemindai: logika di hook bersama (useSymbolScan), tampilan di panel — wiring dibaca dari keduanya. */
+function scannerSrc(): string {
+  return readSrc("src/components/analysis/SymbolScannerPanel.tsx") + "\n" + readSrc("src/hooks/useSymbolScan.ts");
 }
 
 test("33. CsvFileConnector: tombol, fallback, cleanup, reload terkunci koneksi", () => {
@@ -6570,7 +6578,7 @@ test("536. wiring taruhan ganda: pemindai, panel, pencatat entry (readSrc)", () 
   const sc = readSrc("src/lib/symbolScanner.ts");
   assert(sc.includes('status: "DITAHAN_KORELASI"') && sc.includes("findDoubleBet(symbol, result.decision, input.openPositions)"), "pemindai belum memblok");
   assert(sc.includes('decision: "TUNGGU"'), "keputusan harus TUNGGU saat ditahan");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes("useBrokerPositions(brokerId)") && panel.includes("openPositions,"), "panel tanpa posisi terbuka");
   assert(panel.includes('label: "Taruhan ganda"'), "label status hilang");
   const log = readSrc("server/services/tradeEntryLog.ts");
@@ -6578,7 +6586,7 @@ test("536. wiring taruhan ganda: pemindai, panel, pencatat entry (readSrc)", () 
 });
 
 test("537. status pemindai = tombol: hanya LOLOS aktif, buka Hasil analisa (readSrc)", () => {
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes('disabled={row.status !== "LOLOS" || onOpenAnalysis === undefined}'), "selain LOLOS harus disabled");
   assert(panel.includes("onOpenAnalysis?.(row.symbol);"), "klik tidak membuka analisa");
   const app = readSrc("src/App.tsx");
@@ -6636,7 +6644,7 @@ test("540. jeda menahan Hasil analisa & pemindai (TUNGGU, tanpa SL/TP/lot)", () 
   assert(applyLossPauseHold(jual, { paused: false, streak: 2, until: null, reason: null }) === jual, "tanpa jeda tidak diubah");
   const sc = readSrc("src/lib/symbolScanner.ts");
   assert(sc.includes('status: "DITAHAN_JEDA"') && sc.includes("reason: input.pauseReason"), "pemindai belum menahan jeda");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes("pauseReason,") && panel.includes('label: "Jeda rugi"') && panel.includes("scan-loss-pause"), "panel jeda");
   const app = readSrc("src/App.tsx");
   assert(app.includes("applyLossPauseHold(applySpecHold(result, market.symbol, specHolds), lossPause)") && app.includes("useLossPause(activeBrokerId"), "App belum memakai jeda");
@@ -7129,12 +7137,12 @@ test("573. pemindai: status DITAHAN_BERITA setelah jeda, sebelum taruhan ganda (
     { symbol: "B", status: "TUNGGU", decision: "TUNGGU", direction: "TUNGGU", held: false, score: 0, reason: "", costShareOfRisk: null, candles: 200 },
     { symbol: "A", status: "DITAHAN_BERITA", decision: "TUNGGU", direction: "BELI", held: true, score: 4, reason: "", costShareOfRisk: null, candles: 200 },
   ])[0].symbol === "A", "berita di atas TUNGGU");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes('DITAHAN_BERITA: { label: "Dekat berita"') && panel.includes("{counts.DITAHAN_BERITA} dekat berita"), "panel belum tampil");
 });
 
 test("574. pemindai memakai kalender broker aktif (K4b, readSrc)", () => {
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes("/api/calendar?broker=${brokerId}"), "kalender belum diambil");
   assert(panel.includes("calendar.broker === brokerId ? calendar.events : null"), "kalender broker lain bisa terpakai");
   assert(panel.includes("newsEvents,") && panel.includes("newsNow: nowServer ?? undefined"), "kalender belum diteruskan ke pemindai");
@@ -7204,7 +7212,7 @@ test("577. daftar berita Tinggi mendatang (K6)", () => {
   assert(jauh[0].when === "dalam 3 hari 14 jam", jauh[0].when);
   assert(upcomingHighNews(ev, "2026.10.14 16:01:00").length === 1, "lewat jendela harus hilang");
   assert(upcomingHighNews(null, "2026.10.14 15:45:00").length === 0 && upcomingHighNews(ev, null).length === 0, "tanpa data");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes('data-testid="scan-news-upcoming"') && panel.includes("upcomingHighNews(newsEvents, nowServer)"), "daftar belum tampil");
 });
 
@@ -7389,7 +7397,7 @@ test("588. halaman detail sinyal: URL, hitung ulang semua satpam, Salin SL/TP ha
 });
 
 test("589. tombol Lolos membuka detail di tab baru (P3) + header tabel History tetap (sticky)", () => {
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes('window.open(signalPageUrl(brokerId, row.symbol, equity), "_blank", "noopener");'), "tombol Lolos belum membuka detail");
   const page = readSrc("src/components/history/HistoryPage.tsx");
   assert(page.includes("overflow-x-clip rounded-2xl") && !page.includes("max-h-[75vh]") && page.includes("<thead className=\"sticky top-0 z-10"), "header History belum tetap");
@@ -7699,7 +7707,7 @@ test("605. Satpam Sesi S3: tahan entry jelang tutup / saham jelang libur akhir p
   assert(findSessionHold("EURUSD_ORB", "2026.10.09 23:57:00", all) !== null, "forex Jumat setelah 22:55 tutup = ditahan");
   const sc = readSrc("src/lib/symbolScanner.ts");
   assert(sc.includes('status: "DITAHAN_SESI"') && sc.includes("findSessionHold(symbol"), "pemindai belum memakai satpam sesi");
-  assert(readSrc("src/components/analysis/SymbolScannerPanel.tsx").includes("useTradeSessions(brokerId)"), "panel");
+  assert(scannerSrc().includes("useTradeSessions(brokerId)"), "panel");
   assert(readSrc("src/components/analysis/SignalDetailPage.tsx").includes("/api/sessions?broker="), "detail");
   assert(readSrc("server/index.ts").includes("getSessions: () => readSessionsForBroker("), "catatan entry");
 });
@@ -7754,7 +7762,7 @@ test("608. tombol [SL]/[TP] di kolom Arah pemindai: hanya Lolos, TP ikut kunci, 
   const habis = copyButtonsView(lock, copyLockState(lock, q(0.57875), 10_000), false);
   assert(!habis.tpEnabled && habis.slLabel === "SL" && (habis.note ?? "").includes("habis"), JSON.stringify(habis));
   assert(copyButtonsView(null, null, true).note?.includes("Buy/Sell") === true, "selesai: pengingat Buy/Sell");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes('row.status === "LOLOS" && row.plan !== null') && panel.includes("<ScanCopyButtons"), "tombol hanya baris Lolos");
   assert(panel.includes('return row.status === "LOLOS" ? (row.plan ?? null) : null;'), "hitung ulang wajib masih Lolos");
   const btn = readSrc("src/components/analysis/ScanCopyButtons.tsx");
@@ -7824,7 +7832,7 @@ test("611. V2c pemindai: DITAHAN_SPEK paling awal (sebelum jeda), hanya diff TAH
     { symbol: "B", status: "TUNGGU", decision: "TUNGGU", direction: "TUNGGU", held: false, score: 0, reason: "", costShareOfRisk: null, candles: 200 },
     { symbol: "A", status: "DITAHAN_SPEK", decision: "TUNGGU", direction: "BELI", held: true, score: 4, reason: "", costShareOfRisk: null, candles: 200 },
   ])[0].symbol === "A", "spek di atas TUNGGU");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes("/api/specs?broker=${brokerId}") && panel.includes("specBook.broker === brokerId ? specBook.holds : null"), "spesifikasi broker aktif");
   assert(panel.includes('DITAHAN_SPEK: { label: "Spesifikasi berubah"') && panel.includes("specHolds,"), "panel/tampilan");
 });
@@ -7964,7 +7972,7 @@ test("621. O2 pemindai: status DITAHAN_BUKA (setelah sesi, sebelum taruhan ganda
     { symbol: "B", status: "TUNGGU", decision: "TUNGGU", direction: "TUNGGU", held: false, score: 0, reason: "", costShareOfRisk: null, candles: 200 },
     { symbol: "A", status: "DITAHAN_BUKA", decision: "TUNGGU", direction: "BELI", held: true, score: 4, reason: "", costShareOfRisk: null, candles: 200 },
   ])[0].symbol === "A", "pembukaan di atas TUNGGU");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes('DITAHAN_BUKA: { label: "Pembukaan bursa"') && panel.includes("openingNowMs: scanAtMs"), "panel");
 });
 
@@ -8665,7 +8673,7 @@ test("664. F5 pemindai: Lolos + terbukti rugi = DITAHAN_BUKTI tanpa rencana SL/T
 });
 
 test("665. F4/F5 terpasang di semua layar: pemindai, detail sinyal, kartu atas, Hasil analisa (3 broker, demo+live)", () => {
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes("proof: lolosStats,") && panel.includes('DITAHAN_BUKTI: { label: "Terbukti rugi · ditahan"'), "pemindai");
   assert(readSrc("src/components/analysis/SignalDetailPage.tsx").includes('proof: mergeGroupStats('), "detail sinyal (Salin SL/TP)");
   const app = readSrc("src/App.tsx");
@@ -9379,7 +9387,7 @@ test("705. A7-6 test kembar: snapshot setara → scanSymbol identik; pemindai, d
   const rec = keputusanFromScan(a, ra, { keputusanId: "k-1", jalur: "pemindai", waktuUtc: "2026-10-08T06:15:00Z", waktuServer: null, sidikJariSnapshot: null, tiket: null });
   assert(rec.hasil.status === ra.status && rec.hasil.keputusan === (ra.decision ?? "TUNGGU") && rec.tiket === null && rec.sumber === "live", "baris keputusan mengikuti hasil scanSymbol");
   for (const rel of [
-    "src/components/analysis/SymbolScannerPanel.tsx",
+    "src/hooks/useSymbolScan.ts",
     "src/components/analysis/SignalDetailPage.tsx",
     "server/services/tradeEntryLog.ts",
     "src/lib/backtest.ts",
@@ -10067,7 +10075,7 @@ test("732. F2 gerbang menahan sinyal (status DATA) di pemindai, pencatat entry, 
   } finally {
     nfs.rmSync(dir, { recursive: true, force: true });
   }
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes("const dataQualityReason = useDataQuality(brokerId);") && panel.includes("        dataQualityReason,"), "pemindai memakai gerbang");
   assert(!readSrc("src/App.tsx").includes("useDataQuality"), "Hasil analisa tidak disentuh (aturan mutlak 1)");
   assert(readSrc("server/index.ts").includes('app.get("/api/data-quality"'), "endpoint gerbang");
@@ -10181,7 +10189,7 @@ test("737. Tahap 13 J2: catatan entry menandai setara Live; server & pemindai me
   const idx = readSrc("server/index.ts");
   assert(idx.includes("!pauseLocks(modeNow().mode) ? null : checkLossStreak(") && idx.includes("getSetaraLive: () => isLiveEquivalent(modeNow().mode),"), "server memakai mode A");
   assert(idx.includes('app.post("/api/trading-mode"') && idx.includes("tradesForBroker(activeOnly(collectAccountEvaluations("), "endpoint mode + K-4");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes("const pauseLocked = lossPause.paused && pauseLocks(tradingMode.state.mode);") && panel.includes('data-testid="scan-mode"'), "pemindai: saklar + jeda tidak mengunci di Demo");
   assert(!readSrc("src/App.tsx").includes("useTradingMode"), "Hasil analisa tidak diubah (aturan mutlak 1)");
 });
@@ -10196,7 +10204,7 @@ test("738. LAB-2 trade uji: hanya akun terbukti demo + mode Demo; hanya penjaga 
   assert(labTicket({ ...d.row, status: "DITAHAN_SESI" }, d.setup, 0.01) === null, "sesi tanpa detail = KERAS (aman)");
   assert(labTicket({ ...d.row, held: false }, d.setup, 0.01) === null && labTicket(d.row, null, 0.01) === null, "tanpa tahanan/setup = bukan trade uji");
   assert(isLabComment("mdbka-uji") && isLabComment("[MDBKA-UJI] 1") && !isLabComment("[sl 1.30]"), "pengenal komentar");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes("const labOn = labAllowed(tradingMode.state.jenisAkun, tradingMode.state.mode);") && panel.includes('data-testid="lab-trades"'), "daftar trade uji di pemindai");
 });
 test("739. LAB-3 trade ber-komentar MDBKA-UJI di History = kelompok UJI (dipisah dari bukti LOLOS)", () => {
@@ -10336,7 +10344,7 @@ test("744. T2 catatan entry & evaluasi: entry bertanda addOn = kelompok TAMBAH (
   assert(log.includes("opts.getAddOnAllowed?.() === true") && log.includes("...(row.addOn === true ? { addOn: true } : {}),"), "catatan entry belum membawa tanda TAMBAH");
   const idx = readSrc("server/index.ts");
   assert((idx.match(/getAddOnAllowed: \(\) => modeNow\(\)\.mode === "DEMO",/g) ?? []).length === 2 && idx.includes("priceOpen: p.priceOpen, sl: p.sl"), "server: entry + bayangan memakai mode efektif Demo");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes('addOnAllowed: tradingMode.state.mode === "DEMO",') && panel.includes("${p.priceOpen}:${p.sl}"), "pemindai UI belum memakai syarat masuk lagi");
 });
 test("745. E1/E2 risiko gabungan: rugi bila semua SL kena (USD + Rupiah + % equity); tanpa SL & nilai poin tak diketahui dipisah, bukan angka karangan", () => {
@@ -10359,7 +10367,7 @@ test("745. E1/E2 risiko gabungan: rugi bila semua SL kena (USD + Rupiah + % equi
   assert(kosong.lossAllSlUsd === 0 && kosong.lossAllSlIdr === null && kosong.shareOfEquity === null, "tanpa kurs/equity = null");
   assert(scanPointValueUsd("GBPUSD", "finex", FALLBACK_RATES) === 100000 && scanPointValueUsd("XAUUSD", "finex", FALLBACK_RATES) === 100, "nilai poin dari preset yang sama dengan pemindai");
   assert(scanPointValueUsd("GBPUSD", "finex", null) === null && scanPointValueUsd("ZZZQQQ", "finex", FALLBACK_RATES) === null && scanPointValueUsd("ZZZ", "mifx", FALLBACK_RATES) === null, "kurs/spesifikasi tidak ada = null");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes('data-testid="scan-combined-risk"') && panel.includes("scanPointValueUsd(sym, brokerId, fxRates)"), "panel risiko gabungan di pemindai");
 });
 test("746. F5 EA AutoExportMDBKA: ekspor M15/D1/W1 tertutup per candle baru; file H1 lama tetap; tanpa order", () => {
@@ -10608,7 +10616,7 @@ test("759. PR-2 catatan waspada: rangkaian rugi ≤ 14 hari per simbol + sebab (
   const out = cautionNotes(views, fingerprintNotes(views), now);
   assert(CAUTION_DAYS === 14 && out.length === 1 && out[0]?.symbol === "AUDJPY" && out[0]?.cardName === "Pupare Rebus #0002", JSON.stringify(out));
   assert(out[0]?.causes.join() === "BERBALIK_SETELAH_0_5R,MELAWAN_ARAH_D1" && (out[0]?.text ?? "").includes("Titik impas lebih awal atau geser SL") && (out[0]?.text ?? "").includes("Terapkan penyaring arah D1") && (out[0]?.text ?? "").endsWith("Hanya peringatan, tidak menahan."), out[0]?.text ?? "");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes("const cautions = useCautions(brokerId);") && panel.includes("data-testid={`scan-caution-${row.symbol}`}") && panel.includes("{row.reason}"), "catatan tampil di bawah alasan, status tidak berubah");
   assert(readSrc("server/routes/evaluationRoutes.ts").includes('router.get("/cautions"'), "route catatan waspada");
 });
@@ -10687,7 +10695,7 @@ test("763. R-2 skenario stres risiko gabungan: rugi semua SL × 1,075 (slippage 
   assert(r.stressShareOfEquity !== null && Math.abs(r.stressShareOfEquity - 0.01075) < 1e-12, "porsi equity stres");
   const aman = combinedRisk([{ ticket: "2", symbol: "GBPUSD", side: "BUY", volume: 0.1, priceOpen: 1.3, sl: 1.301 }], pv, null, null);
   assert(aman.stressLossUsd === 0 && aman.stressLossIdr === null && aman.stressShareOfEquity === null, "SL terkunci = tanpa rugi stres");
-  const panel = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const panel = scannerSrc();
   assert(panel.includes('data-testid="scan-combined-stress"') && panel.includes("risk.stressLossUsd.toFixed(2)"), "baris stres di panel risiko gabungan");
 });
 test("764. R-1 cadangan slippage: pemindai/entry/bayangan memakai batas golongan ÷1,1; Hasil analisa (App) tetap riskCapFor; selisihnya dicatat shadow DITAHAN_RISIKO", () => {
@@ -10736,7 +10744,7 @@ test("767. CU-1 Peringatan Badai 30 menit: rentang 1 jam M15 > 2× median 96 jen
   assert(stormWarning(flat(20, 1)).status === "DATA_KURANG" && stormWarning(flat(140, 0)).status === "DATA_KURANG", "data kurang / datar = tidak dinilai");
   const route = readSrc("server/routes/candlesRoutes.ts");
   assert(route.indexOf('router.get("/storm"') > 0 && route.indexOf('router.get("/storm"') < route.indexOf('router.get("/:symbol"') && route.includes('readCandleCsvTf(commonDir, symbol, "M15")'), "rute storm sebelum /:symbol, dari CSV M15");
-  const scan = readSrc("src/components/analysis/SymbolScannerPanel.tsx");
+  const scan = scannerSrc();
   assert(scan.includes("useStorms(stormSymbols)") && scan.includes('w.status === "BADAI"') && scan.includes("scan-storm-"), "pemindai menampilkan baris badai");
   assert(!readSrc("src/lib/stormWarning.ts").includes("decisionEngine"), "tidak menyentuh mesin keputusan");
 });
@@ -15101,7 +15109,7 @@ test("810. profitTarget: profit bersih di TP (rumus biaya = mesin keputusan) + r
   assert(profitRangeOf(null) === "TAK_ADA" && profitRangeOf(Number.NaN) === "TAK_ADA", "tak bisa dihitung -> TAK_ADA");
 
   assert(readSrc("src/lib/symbolScanner.ts").includes("profitAtTpUsd") && readSrc("src/lib/symbolScanner.ts").includes('from "./profitTarget"'), "ScanPlan membawa profit di TP");
-  assert(readSrc("src/components/analysis/SymbolScannerPanel.tsx").includes('data-testid="scan-profit-filter"') && readSrc("src/components/analysis/SymbolScannerPanel.tsx").includes("Profit di TP"), "pemindai: kolom + filter rentang");
+  assert(scannerSrc().includes('data-testid="scan-profit-filter"') && scannerSrc().includes("Profit di TP"), "pemindai: kolom + filter rentang");
   assert(readSrc("src/components/analysis/SignalDetailPage.tsx").includes('data-testid="detail-profit-tp"'), "halaman detail sinyal menampilkan profit di TP");
 });
 
@@ -15167,6 +15175,41 @@ test("812. KC-4 Pengawas Demo penjalan: simpan map RANGKAIAN_DEMO, Formulir R se
     readSrc("server/routes/cabangRoutes.ts").includes('router.post("/KC-4/demo/jalankan"') && readSrc("src/components/branch/BranchPage.tsx").includes("<Kc4DemoPanel onDone={load} />"),
     "route + panel Pengawas Demo terpasang",
   );
+});
+
+test("814. Meja Trading: tombol [Entry] memulai kunci 10 dtk yang sama (SL/TP dari rencana terkunci), alur lama SL dulu tetap; pip Forex = 10 tick, lainnya poin; URL halaman + wiring (readSrc)", () => {
+  const q = (bid: number, ask: number) => ({ timestamp: "2026.10.17 10:00:00", symbol: "AUDCHF", bid, ask });
+  const jual = { direction: "JUAL" as const, entry: 0.57871, stopLoss: 0.57947, takeProfit: 0.57757, suggestedLot: 0.01, riskAtMinLot: 0.95, maxRiskUsd: 1.95, riskDistance: 0.00076, targetDistance: 0.00114 };
+
+  const lama = startCopyLock("AUDCHF", jual, 1_000_000);
+  const vLama = copyButtonsView(lama, copyLockState(lama, q(0.57871, 0.57877), 1_003_000), false);
+  assert(lockSlCopied(lama) && vLama.slLabel === "SL ✓" && vLama.tpEnabled && vLama.entryLabel === "Entry · 7 dtk" && vLama.entryFromLock && !vLama.slFromLock, `alur lama (SL dulu) tidak berubah: ${JSON.stringify(vLama)}`);
+
+  const viaEntry = startCopyLock("AUDCHF", jual, 1_000_000, "ENTRY");
+  const v1 = copyButtonsView(viaEntry, copyLockState(viaEntry, q(0.57871, 0.57877), 1_002_000), false);
+  assert(v1.entryLabel === "Entry ✓" && v1.slLabel === "SL · 8 dtk" && v1.slFromLock && !v1.tpEnabled && v1.note === "Tempel Entry ke kolom Price, lalu tekan SL", `mulai dari Entry: SL dari kunci, TP menunggu SL ${JSON.stringify(v1)}`);
+  const setelahSl = { ...viaEntry, slCopied: true };
+  const v2 = copyButtonsView(setelahSl, copyLockState(setelahSl, q(0.57871, 0.57877), 1_004_000), false);
+  assert(v2.slLabel === "SL ✓" && v2.tpEnabled && v2.tpLabel === "TP · 6 dtk" && !v2.slFromLock, `setelah SL: TP aktif dari rencana yang sama ${JSON.stringify(v2)}`);
+  const geser = copyButtonsView(viaEntry, copyLockState(viaEntry, q(0.57893, 0.57899), 1_002_000), false);
+  assert(geser.entryLabel === "Entry ulang" && !geser.entryFromLock && !geser.tpEnabled && geser.tone === "merah", "harga bergeser -> semua dihitung ulang");
+  assert(copyButtonsView(null, null, true, true).note === "Entry, SL & TP tersalin — tekan Place di MT5 sekarang" && copyButtonsView(null, null, true).note === "SL & TP tersalin — tekan Buy/Sell di MT5 sekarang", "pesan selesai sesuai alur");
+
+  const eur = jarakHarga("EURUSD", 1.1, 1.1025);
+  const gj = jarakHarga("GBPJPY", 210.596, 209.833);
+  const xau = jarakHarga("XAUUSD", 2000, 2001);
+  assert(eur?.satuan === "pip" && eur.nilai === 25, `EURUSD 0,0025 = 25 pip ${JSON.stringify(eur)}`);
+  assert(gj?.satuan === "pip" && gj.nilai === 76.3, `GBPJPY 0,763 = 76,3 pip ${JSON.stringify(gj)}`);
+  assert(xau?.satuan === "poin" && xau.nilai === 1 / tickSizeForSymbol("XAUUSD"), `emas dalam poin (1 tick) ${JSON.stringify(xau)}`);
+  assert(jarakHarga("EURUSD", 0, 1.1) === null && jarakText(null) === "-" && jarakText(gj) === "76,3 pip", "harga tidak sah -> null; teks id-ID");
+
+  assert(mejaTradingUrl("exness") === "/?halaman=meja&broker=exness" && parseMejaTradingPage("?halaman=meja&broker=exness")?.broker === "exness", "URL halaman Meja Trading");
+  assert(parseMejaTradingPage("?halaman=meja&broker=xyz")?.broker === "finex" && parseMejaTradingPage("?halaman=cabang") === null, "broker tak dikenal -> finex; halaman lain -> null");
+
+  const meja = readSrc("src/components/meja/MejaTradingPage.tsx");
+  assert(meja.includes("useSymbolScan(") && meja.includes("<ScanCopyButtons") && meja.includes("<AutoPositionsSection") && meja.includes("<MiniCandleChart"), "halaman memakai pemindai, tombol salin, dan posisi yang SAMA dengan dashboard");
+  assert(readSrc("src/main.tsx").includes("parseMejaTradingPage(") && readSrc("src/App.tsx").includes("mejaTradingUrl(activeBrokerId)"), "rute halaman + tombol header");
+  assert(readSrc("src/components/analysis/ScanCopyButtons.tsx").includes("scan-copy-entry-") && readSrc("src/components/holdings/HoldingsDashboard.tsx").includes("holding-levels-"), "tombol Entry + rincian level posisi terpasang");
 });
 
 testAsync("813. backup otomatis: jalan hanya bila data berubah + lewat jarak minimum + ruang cukup; jadwal tidak bertumpuk & kegagalan dilog; pengingat dashboard dihapus (readSrc)", async () => {

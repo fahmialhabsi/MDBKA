@@ -5,15 +5,19 @@ import {
   COPY_LOCK_SECONDS,
   copyButtonsView,
   copyLockState,
+  lockSlCopied,
   startCopyLock,
   type CopyLock,
+  type CopyStart,
 } from "../../lib/copyGuard";
 import type { ScanPlan } from "../../lib/symbolScanner";
 import { formatPrice } from "../../lib/tickSize";
 import type { BrokerId } from "../../types/broker";
 
 /**
- * Tombol [SL] [TP] di kolom Arah pemindai (penetapan Fahmi 10 Okt 2026).
+ * Tombol [Entry] [SL] [TP] di kolom Arah pemindai (SL/TP: penetapan Fahmi 10 Okt 2026; Entry
+ * ditambah 17 Okt 2026 untuk kolom Price Buy Stop/Sell Limit — disalin apa adanya dari rencana).
+ * [Entry] boleh memulai kunci yang sama dengan [SL]: SL & TP lalu diambil dari rencana terkunci itu.
  * [SL] = ambil harga live TERBARU, hitung ulang rencana (semua satpam ikut),
  * salin SL lalu kunci rencana 10 dtk. [TP] memakai rencana terkunci yang sama
  * selama harga belum bergeser > 10% jarak SL (lib/copyGuard.ts).
@@ -52,6 +56,7 @@ export function ScanCopyButtons({ brokerId, symbol, recompute }: Props) {
   const [quote, setQuote] = useState<LiveQuoteLike | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [done, setDone] = useState(false);
+  const [doneWithEntry, setDoneWithEntry] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   // Selama kunci berlaku: harga live + jam tiap 1 dtk.
@@ -84,12 +89,15 @@ export function ScanCopyButtons({ brokerId, symbol, recompute }: Props) {
   }, [done]);
 
   const state = lock === null ? null : copyLockState(lock, quote, now);
-  const view = copyButtonsView(lock, state, done);
+  const view = copyButtonsView(lock, state, done, doneWithEntry);
   const note = message ?? view.note;
+  const lockValid = lock !== null && state !== null && state.phase === "SIAP_TP";
 
-  const onSl = async (): Promise<void> => {
+  /** Harga live terbaru -> hitung ulang rencana (semua satpam) -> salin satu angka -> mulai kunci baru. */
+  const startFresh = async (first: CopyStart): Promise<void> => {
     setMessage(null);
     setDone(false);
+    setDoneWithEntry(false);
     const q = await fetchLatestQuote(brokerId, symbol);
     if (q === null) {
       setLock(null);
@@ -102,22 +110,49 @@ export function ScanCopyButtons({ brokerId, symbol, recompute }: Props) {
       setMessage("Dengan harga terbaru simbol ini tidak lolos lagi — jangan entry");
       return;
     }
-    if (!(await writeClipboard(formatPrice(plan.stopLoss, symbol)))) {
+    if (!(await writeClipboard(formatPrice(first === "ENTRY" ? plan.entry : plan.stopLoss, symbol)))) {
       setMessage("Gagal menyalin ke clipboard");
       return;
     }
     const t = Date.now();
     setQuote(q);
     setNow(t);
-    setLock(startCopyLock(symbol, plan, t));
+    setLock(startCopyLock(symbol, plan, t, first));
+  };
+
+  const onEntry = async (): Promise<void> => {
+    if (lock !== null && lockValid && view.entryFromLock) {
+      if (!(await writeClipboard(formatPrice(lock.plan.entry, symbol)))) {
+        setMessage("Gagal menyalin ke clipboard");
+        return;
+      }
+      setMessage(null);
+      setLock({ ...lock, entryCopied: true });
+      return;
+    }
+    await startFresh("ENTRY");
+  };
+
+  const onSl = async (): Promise<void> => {
+    if (lock !== null && lockValid && view.slFromLock) {
+      if (!(await writeClipboard(formatPrice(lock.plan.stopLoss, symbol)))) {
+        setMessage("Gagal menyalin ke clipboard");
+        return;
+      }
+      setMessage(null);
+      setLock({ ...lock, slCopied: true });
+      return;
+    }
+    await startFresh("SL");
   };
 
   const onTp = async (): Promise<void> => {
-    if (lock === null || state === null || state.phase !== "SIAP_TP") return;
+    if (lock === null || !lockValid || !lockSlCopied(lock)) return;
     if (!(await writeClipboard(formatPrice(lock.plan.takeProfit, symbol)))) {
       setMessage("Gagal menyalin ke clipboard");
       return;
     }
+    setDoneWithEntry(lock.entryCopied === true);
     setLock(null);
     setDone(true);
   };
@@ -132,6 +167,15 @@ export function ScanCopyButtons({ brokerId, symbol, recompute }: Props) {
   return (
     <span className="ml-2 inline-flex flex-col gap-1 align-middle">
       <span className="inline-flex gap-1">
+        <button
+          type="button"
+          data-testid={`scan-copy-entry-${symbol}`}
+          onClick={() => void onEntry()}
+          title={view.entryFromLock ? "Salin Entry dari rencana terkunci" : "Hitung ulang dengan harga live lalu salin Entry (kunci 10 dtk) — untuk kolom Price Buy Stop/Sell Limit"}
+          className="rounded-md border border-slate-300/40 bg-white/10 px-2 py-0.5 text-xs font-semibold text-slate-100 hover:bg-white/20"
+        >
+          {view.entryLabel}
+        </button>
         <button
           type="button"
           data-testid={`scan-copy-sl-${symbol}`}

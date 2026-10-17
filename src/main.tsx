@@ -11,6 +11,8 @@ import { GroupPage } from "./components/group/GroupPage";
 import { parseGroupPage } from "./lib/groupPageView";
 import { BranchPage } from "./components/branch/BranchPage";
 import { parseBranchPage } from "./lib/branchOffice";
+import { MejaTradingPage } from "./components/meja/MejaTradingPage";
+import { parseMejaTradingPage } from "./lib/mejaTradingView";
 import "./index.css";
 
 if (import.meta.env.DEV) {
@@ -27,11 +29,15 @@ const calculatorPage = parseCalculatorPage(window.location.search);
 const groupPage = parseGroupPage(window.location.search);
 // C0: `/?halaman=cabang[&kode=KC-n]` (Kantor Pusat + Kantor Cabang).
 const branchPage = parseBranchPage(window.location.search);
+// Meja Trading (17 Okt 2026): `/?halaman=meja[&broker=…]`.
+const mejaPage = parseMejaTradingPage(window.location.search);
 
 ReactDOM.createRoot(document.getElementById("root" )!).render(
   <React.StrictMode>
     {historyPage !== null ? (
       <HistoryPage broker={historyPage.broker} />
+    ) : mejaPage !== null ? (
+      <MejaTradingPage broker={mejaPage.broker} />
     ) : branchPage !== null ? (
       <BranchPage params={branchPage} />
     ) : groupPage !== null ? (

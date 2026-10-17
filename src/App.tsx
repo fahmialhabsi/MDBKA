@@ -11,6 +11,7 @@ import {
   BarChart3,
   Briefcase,
   Building2,
+  CandlestickChart,
   History,
   Landmark,
   ShieldCheck,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { branchPageUrl } from "./lib/branchOffice";
+import { mejaTradingUrl } from "./lib/mejaTradingView";
 import { StatusKesehatanStrip } from "./components/dashboard/StatusKesehatanStrip";
 import BrokerSettingsForm from "./components/analysis/BrokerSettingsForm";
 import ExtractedDataForm from "./components/extraction/ExtractedDataForm";
@@ -940,13 +942,23 @@ export default function App() {
             <h1 className="text-lg font-bold leading-tight">
               Merangkak Dari Bawah Ke Atas
             </h1>
-            <a
-              href={branchPageUrl(null)}
-              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/15 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-white/5"
-            >
-              <Building2 size={14} className="text-emerald-400" />
-              Kantor Cabang
-            </a>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={branchPageUrl(null)}
+                className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/15 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-white/5"
+              >
+                <Building2 size={14} className="text-emerald-400" />
+                Kantor Cabang
+              </a>
+              <a
+                href={mejaTradingUrl(activeBrokerId)}
+                data-testid="header-meja-trading"
+                className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/15 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-white/5"
+              >
+                <CandlestickChart size={14} className="text-sky-400" />
+                Meja Trading
+              </a>
+            </div>
             <StatusKesehatanStrip />
           </div>
           <ServerClock

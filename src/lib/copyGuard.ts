@@ -20,6 +20,20 @@ export interface CopyLock {
   readonly symbol: string;
   readonly plan: ScanPlan;
   readonly startedMs: number;
+  /**
+   * 17 Okt 2026: tombol [Entry] (kolom Price Buy Stop/Sell Limit MT5) bisa memulai kunci yang sama.
+   * Kunci dimulai [SL] (alur lama) = slCopied true; dimulai [Entry] = entryCopied true, SL & TP lalu
+   * diambil dari rencana terkunci yang SAMA. Absen = perilaku lama (SL sudah disalin, Entry belum).
+   */
+  readonly entryCopied?: boolean;
+  readonly slCopied?: boolean;
+}
+
+export type CopyStart = "ENTRY" | "SL";
+
+/** Kunci dimulai tombol mana (bawaan SL = alur lama). */
+export function lockSlCopied(lock: CopyLock): boolean {
+  return lock.slCopied !== false;
 }
 
 export type CopyLockPhase = "SIAP_TP" | "HABIS" | "BERGESER";
@@ -42,8 +56,8 @@ export function planDriftShare(plan: ScanPlan, quote: LiveQuoteLike | null): num
   return Math.abs(price - plan.entry) / slDistance;
 }
 
-export function startCopyLock(symbol: string, plan: ScanPlan, nowMs: number): CopyLock {
-  return { symbol, plan, startedMs: nowMs };
+export function startCopyLock(symbol: string, plan: ScanPlan, nowMs: number, first: CopyStart = "SL"): CopyLock {
+  return { symbol, plan, startedMs: nowMs, entryCopied: first === "ENTRY", slCopied: first === "SL" };
 }
 
 export function copyLockState(lock: CopyLock, quote: LiveQuoteLike | null, nowMs: number): CopyLockState {
@@ -66,9 +80,13 @@ export function copyLockState(lock: CopyLock, quote: LiveQuoteLike | null, nowMs
 export type CopyTone = "netral" | "siap" | "merah";
 
 export interface CopyButtonsView {
+  readonly entryLabel: string;
   readonly slLabel: string;
   readonly tpLabel: string;
   readonly tpEnabled: boolean;
+  /** true = tombol itu menyalin dari rencana TERKUNCI; false = hitung ulang harga live lalu mulai kunci baru. */
+  readonly entryFromLock: boolean;
+  readonly slFromLock: boolean;
   readonly tone: CopyTone;
   /** Penjelasan singkat di bawah tombol (null = tidak ada). */
   readonly note: string | null;
@@ -86,18 +104,39 @@ export function copyButtonsView(
   lock: CopyLock | null,
   state: CopyLockState | null,
   done: boolean,
+  doneWithEntry: boolean = false,
 ): CopyButtonsView {
+  const awal = { entryFromLock: false, slFromLock: false };
   if (done) {
-    return { slLabel: "SL ✓", tpLabel: "TP ✓", tpEnabled: false, tone: "siap", note: "SL & TP tersalin — tekan Buy/Sell di MT5 sekarang" };
+    return {
+      ...awal,
+      entryLabel: doneWithEntry ? "Entry ✓" : "Entry",
+      slLabel: "SL ✓",
+      tpLabel: "TP ✓",
+      tpEnabled: false,
+      tone: "siap",
+      note: doneWithEntry ? "Entry, SL & TP tersalin — tekan Place di MT5 sekarang" : "SL & TP tersalin — tekan Buy/Sell di MT5 sekarang",
+    };
   }
   if (lock === null || state === null) {
-    return { slLabel: "SL", tpLabel: "TP", tpEnabled: false, tone: "netral", note: null };
+    return { ...awal, entryLabel: "Entry", slLabel: "SL", tpLabel: "TP", tpEnabled: false, tone: "netral", note: null };
   }
   if (state.phase === "HABIS") {
-    return { slLabel: "SL", tpLabel: "TP", tpEnabled: false, tone: "netral", note: state.reason };
+    return { ...awal, entryLabel: "Entry", slLabel: "SL", tpLabel: "TP", tpEnabled: false, tone: "netral", note: state.reason };
   }
   if (state.phase === "BERGESER") {
-    return { slLabel: "SL ulang", tpLabel: "harga bergeser — salin ulang", tpEnabled: false, tone: "merah", note: state.reason };
+    return { ...awal, entryLabel: "Entry ulang", slLabel: "SL ulang", tpLabel: "harga bergeser — salin ulang", tpEnabled: false, tone: "merah", note: state.reason };
   }
-  return { slLabel: "SL ✓", tpLabel: `TP · ${state.remainingSec} dtk`, tpEnabled: true, tone: "siap", note: null };
+  const n = state.remainingSec;
+  const slDone = lockSlCopied(lock);
+  return {
+    entryLabel: lock.entryCopied === true ? "Entry ✓" : `Entry · ${n} dtk`,
+    slLabel: slDone ? "SL ✓" : `SL · ${n} dtk`,
+    tpLabel: slDone ? `TP · ${n} dtk` : "TP",
+    tpEnabled: slDone,
+    entryFromLock: true,
+    slFromLock: !slDone,
+    tone: "siap",
+    note: slDone ? null : "Tempel Entry ke kolom Price, lalu tekan SL",
+  };
 }
