@@ -17,7 +17,23 @@ import { runKc5 } from "../services/kc5Runner";
 import { resolveCommonFilesDir } from "./marginRoutes";
 import { getCachedEcbRates } from "./fxRoutes";
 import { readUsdIdrBook, usdIdrOn } from "../services/ecbHistory";
-import { FALLBACK_RATES, usdIdrRate } from "../../src/services/fxRateService";
+import { FALLBACK_RATES, usdIdrRate, type ExchangeRates } from "../../src/services/fxRateService";
+
+/**
+ * Audit A-4 (17 Okt 2026): rates.IDR dari ECB apa adanya SELALU undefined (ECB tidak menerbitkan
+ * kurs IDR) -> usdIdrRate(rates) null -> riskCapFor() kembalikan usd:null -> SEMUA sinyal ditahan
+ * (fail-safe "ditahan; tanpa batas Rupiah tidak ada sinyal lolos", riskGroup.ts baris 118-119).
+ * Handler KC-1 sudah merekonstruksi rates.IDR dari buku kurs nyata (data/fx/ecb-usdidr.json) sebelum
+ * dipakai; KC-3/KC-4 TIDAK, sehingga F-1 (lewat runBacktest() di dalamnya) selalu n=0 — bukan karena
+ * saksi 1+2 terlalu ketat (ditemukan analisa sebab-rugi 17 Okt). Dipakai ulang di sini (reuse pola KC-1),
+ * KC-1 sendiri tidak diubah.
+ */
+function ratesDenganIdr(dataDir: string, t: Date): ExchangeRates {
+  const rates = getCachedEcbRates() ?? FALLBACK_RATES;
+  const book = usdIdrOn(readUsdIdrBook(join(dataDir, "fx", "ecb-usdidr.json")), t.toISOString().slice(0, 10));
+  const usdIdr = book?.rate ?? usdIdrRate(rates);
+  return usdIdr === null ? rates : { ...rates, IDR: usdIdr * rates.USD };
+}
 
 /**
  * C0 (16 Okt 2026) — Kantor Cabang.
@@ -70,7 +86,7 @@ export function createCabangRoutes(
 
   router.post("/KC-3/jalankan", async (_req, res) => {
     try {
-      const rates = getCachedEcbRates() ?? FALLBACK_RATES;
+      const rates = ratesDenganIdr(dataDir, now());
       const r = await runKc3({ dataDir, commonDir: commonDir(), now: now(), faktaFile, rates });
       res.status(201).json(r);
     } catch (e) {
@@ -84,7 +100,7 @@ export function createCabangRoutes(
 
   router.post("/KC-4/jalankan", async (_req, res) => {
     try {
-      const rates = getCachedEcbRates() ?? FALLBACK_RATES;
+      const rates = ratesDenganIdr(dataDir, now());
       const r = await runKc4({ dataDir, commonDir: commonDir(), now: now(), faktaFile, rates });
       res.status(201).json(r);
     } catch (e) {
